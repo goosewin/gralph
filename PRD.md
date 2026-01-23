@@ -328,7 +328,7 @@ ralph-cli/
 ### Unit 03: State Management (`lib/state.sh`)
 - [x] Implement `init_state()` - create state file if missing
 - [x] Implement `get_session()` - read session by name
-- [ ] Implement `set_session()` - upsert session
+- [x] Implement `set_session()` - upsert session
 - [ ] Implement `delete_session()` - remove session
 - [ ] Implement `list_sessions()` - get all sessions
 - [ ] Implement `cleanup_stale()` - remove sessions with dead PIDs

@@ -69,3 +69,81 @@ get_session() {
     echo "$session"
     return 0
 }
+
+# set_session() - Upsert session (update if exists, insert if not)
+# Arguments:
+#   $1 - Session name (required)
+#   Remaining args are key=value pairs for session properties:
+#     dir, task_file, pid, tmux_session, started_at, iteration,
+#     max_iterations, status, last_task_count, completion_marker, log_file
+# Example:
+#   set_session "myapp" dir="/path/to/project" status="running" iteration=5
+# Returns:
+#   0 on success, 1 on failure
+set_session() {
+    local name="$1"
+    shift
+
+    if [[ -z "$name" ]]; then
+        echo "Error: Session name is required" >&2
+        return 1
+    fi
+
+    # Ensure state is initialized
+    if ! init_state; then
+        return 1
+    fi
+
+    # Build the session object from arguments
+    local session_json
+    local existing_session
+
+    # Get existing session if it exists, or create empty object
+    existing_session=$(jq -r ".sessions[\"$name\"] // {}" "$RLOOP_STATE_FILE" 2>/dev/null)
+    if [[ -z "$existing_session" ]] || [[ "$existing_session" == "null" ]]; then
+        existing_session="{}"
+    fi
+
+    # Always set the name field
+    session_json=$(echo "$existing_session" | jq --arg name "$name" '. + {name: $name}')
+
+    # Parse key=value arguments and add to session JSON
+    for arg in "$@"; do
+        if [[ "$arg" =~ ^([a-z_]+)=(.*)$ ]]; then
+            local key="${BASH_REMATCH[1]}"
+            local value="${BASH_REMATCH[2]}"
+
+            # Determine if value should be a number or string
+            if [[ "$value" =~ ^[0-9]+$ ]]; then
+                # Integer value
+                session_json=$(echo "$session_json" | jq --arg k "$key" --argjson v "$value" '. + {($k): $v}')
+            elif [[ "$value" == "true" ]] || [[ "$value" == "false" ]]; then
+                # Boolean value
+                session_json=$(echo "$session_json" | jq --arg k "$key" --argjson v "$value" '. + {($k): $v}')
+            else
+                # String value
+                session_json=$(echo "$session_json" | jq --arg k "$key" --arg v "$value" '. + {($k): $v}')
+            fi
+        else
+            echo "Warning: Ignoring invalid argument format: $arg (expected key=value)" >&2
+        fi
+    done
+
+    # Update the state file with the new/updated session
+    local new_state
+    new_state=$(jq --arg name "$name" --argjson session "$session_json" \
+        '.sessions[$name] = $session' "$RLOOP_STATE_FILE" 2>/dev/null)
+
+    if [[ $? -ne 0 ]] || [[ -z "$new_state" ]]; then
+        echo "Error: Failed to construct new state JSON" >&2
+        return 1
+    fi
+
+    # Write the updated state back to the file
+    if ! echo "$new_state" > "$RLOOP_STATE_FILE"; then
+        echo "Error: Failed to write state file" >&2
+        return 1
+    fi
+
+    return 0
+}
