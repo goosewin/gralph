@@ -154,20 +154,211 @@ COMMANDS:
   stop --all          Stop all loops
   status              Show status of all loops
   logs <name>         View logs for a loop
-  resume              Resume crashed/stopped loops
+  resume [name]       Resume crashed/stopped loops
   config              Manage configuration
   server              Start status API server
   version             Show version
-
-START OPTIONS:
-  --name, -n          Session name (default: directory name)
-  --max-iterations    Max iterations before giving up (default: 30)
-  --task-file, -f     Task file path (default: PRD.md)
-  --completion-marker Completion promise text (default: COMPLETE)
-  --model, -m         Claude model override
-  --webhook           Notification webhook URL
-  --no-tmux           Run in foreground (blocks)
+  help                Show help message
 ```
+
+### Command: `start`
+
+Start a new ralph loop in a specified directory.
+
+```bash
+rloop start <directory> [options]
+```
+
+**Arguments:**
+- `<directory>` - Path to the project directory (required)
+
+**Options:**
+| Option | Short | Description | Default |
+|--------|-------|-------------|---------|
+| `--name` | `-n` | Session name for tracking | Directory basename |
+| `--max-iterations` | | Maximum loop iterations | 30 |
+| `--task-file` | `-f` | Path to task file relative to project | PRD.md |
+| `--completion-marker` | | Completion promise text | COMPLETE |
+| `--model` | `-m` | Claude model to use | (from config) |
+| `--webhook` | | Notification webhook URL | (none) |
+| `--no-tmux` | | Run in foreground (blocking) | false |
+
+**Examples:**
+```bash
+# Start with defaults
+rloop start .
+
+# Start with custom name and iterations
+rloop start ~/projects/myapp --name myapp --max-iterations 50
+
+# Use different task file
+rloop start . --task-file TODO.md
+
+# Run in foreground (for debugging)
+rloop start . --no-tmux
+```
+
+### Command: `stop`
+
+Stop a running ralph loop.
+
+```bash
+rloop stop <name>
+rloop stop --all
+```
+
+**Arguments:**
+- `<name>` - Session name to stop (required unless using --all)
+
+**Options:**
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--all` | `-a` | Stop all running sessions |
+
+**Examples:**
+```bash
+# Stop specific session
+rloop stop myapp
+
+# Stop all sessions
+rloop stop --all
+```
+
+### Command: `status`
+
+Show status of all ralph loop sessions.
+
+```bash
+rloop status
+```
+
+**Output columns:**
+- **NAME** - Session name
+- **DIR** - Project directory path
+- **ITERATION** - Current iteration / max iterations
+- **STATUS** - running (yellow), complete (green), failed/stopped (red)
+- **REMAINING** - Number of unchecked tasks
+
+**Example output:**
+```
+NAME          DIR                      ITERATION  STATUS     REMAINING
+--------      -----------------------  ---------- ---------- ----------
+api-server    ~/projects/backend       12/50      running    8 tasks
+web-ui        ~/projects/frontend      30/30      complete   0 tasks
+mobile-app    ~/projects/mobile        15/40      failed     5 tasks
+```
+
+### Command: `logs`
+
+View logs for a ralph loop session.
+
+```bash
+rloop logs <name> [options]
+```
+
+**Arguments:**
+- `<name>` - Session name (required)
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--follow` | Continuously stream new log entries (like `tail -f`) |
+
+**Examples:**
+```bash
+# View last 100 log lines
+rloop logs myapp
+
+# Follow logs in real-time
+rloop logs myapp --follow
+```
+
+### Command: `resume`
+
+Resume crashed or stopped loops. Finds sessions that were marked as running but whose processes are no longer alive, and restarts them.
+
+```bash
+rloop resume [name]
+```
+
+**Arguments:**
+- `[name]` - Optional specific session to resume. If omitted, resumes all resumable sessions.
+
+**Resumable states:**
+- Sessions marked "running" with dead PIDs
+- Sessions marked "stale"
+- Sessions marked "stopped"
+
+**Examples:**
+```bash
+# Resume all crashed sessions
+rloop resume
+
+# Resume specific session
+rloop resume myapp
+```
+
+### Command: `server`
+
+Start an HTTP status server for remote monitoring.
+
+```bash
+rloop server [options]
+```
+
+**Options:**
+| Option | Short | Description | Default |
+|--------|-------|-------------|---------|
+| `--port` | `-p` | Port number to listen on | 8080 |
+| `--token` | `-t` | Bearer token for authentication | (none, open access) |
+
+**API Endpoints:**
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/status` | List all sessions |
+| GET | `/status/:name` | Get specific session |
+| POST | `/stop/:name` | Stop a session |
+
+**Examples:**
+```bash
+# Start server on default port
+rloop server
+
+# Start with authentication
+rloop server --port 8080 --token "my-secret-token"
+
+# Query from remote
+curl -H "Authorization: Bearer my-secret-token" http://server:8080/status
+```
+
+### Command: `config`
+
+Manage rloop configuration (planned feature).
+
+```bash
+rloop config get <key>
+rloop config set <key> <value>
+```
+
+### Command: `version`
+
+Show rloop version.
+
+```bash
+rloop version
+```
+
+**Aliases:** `--version`, `-v`
+
+### Command: `help`
+
+Show help message with usage information.
+
+```bash
+rloop help
+```
+
+**Aliases:** `--help`, `-h`
 
 ## How It Works
 
