@@ -186,6 +186,142 @@ The loop only terminates when:
 
 This prevents premature termination when Claude mentions the promise without actually completing.
 
+## Usage Examples
+
+### Example 1: Basic Single Project Loop
+
+Start a loop on a project with a PRD file:
+
+```bash
+# Navigate to your project
+cd ~/projects/my-webapp
+
+# Start the loop (uses PRD.md by default)
+rloop start .
+
+# Check progress
+rloop status
+
+# View live logs
+rloop logs my-webapp --follow
+```
+
+### Example 2: Multiple Concurrent Projects
+
+Run several projects simultaneously on a VPS:
+
+```bash
+# Start multiple projects with custom names
+rloop start ~/projects/backend --name api-server --max-iterations 50
+rloop start ~/projects/frontend --name web-ui --max-iterations 30
+rloop start ~/projects/mobile --name mobile-app --max-iterations 40
+
+# Check all at once
+rloop status
+
+# Output:
+# NAME          DIR                      ITERATION  STATUS     REMAINING
+# api-server    ~/projects/backend       12/50      running    8 tasks
+# web-ui        ~/projects/frontend      5/30       running    15 tasks
+# mobile-app    ~/projects/mobile        3/40       running    22 tasks
+```
+
+### Example 3: Custom Task File and Completion Marker
+
+Use a different task file or completion marker:
+
+```bash
+# Use TODO.md instead of PRD.md
+rloop start . --task-file TODO.md
+
+# Use a custom completion marker
+rloop start . --completion-marker "ALL_DONE"
+
+# Combined
+rloop start ~/projects/app \
+  --name myapp \
+  --task-file TASKS.md \
+  --completion-marker "FINISHED" \
+  --max-iterations 100
+```
+
+### Example 4: Remote VPS Monitoring
+
+Run loops on a VPS and monitor from anywhere:
+
+```bash
+# On your VPS: start the status server
+rloop server --port 8080 --token "your-secret-token"
+
+# On your VPS: start your loops
+rloop start ~/projects/app1 --name app1
+rloop start ~/projects/app2 --name app2
+
+# From your laptop or phone: check status
+curl -H "Authorization: Bearer your-secret-token" \
+  http://your-vps-ip:8080/status
+
+# Stop a session remotely
+curl -X POST -H "Authorization: Bearer your-secret-token" \
+  http://your-vps-ip:8080/stop/app1
+```
+
+### Example 5: Webhook Notifications
+
+Get notified when loops complete:
+
+```bash
+# Discord webhook
+rloop start . --webhook "https://discord.com/api/webhooks/123/abc"
+
+# Slack webhook
+rloop start . --webhook "https://hooks.slack.com/services/T00/B00/xxx"
+
+# Or set globally
+rloop config set notifications.webhook "https://discord.com/api/webhooks/123/abc"
+```
+
+### Example 6: Recovery After Reboot
+
+Resume loops after a server restart:
+
+```bash
+# After reboot, check what was running
+rloop status
+
+# Resume all previously running sessions
+rloop resume
+
+# Or resume specific session
+rloop resume myapp
+```
+
+### Example 7: Foreground Mode (No tmux)
+
+Run in foreground for debugging or CI/CD:
+
+```bash
+# Run without tmux (blocks until complete)
+rloop start . --no-tmux
+
+# Useful for:
+# - Debugging loop behavior
+# - CI/CD pipelines
+# - Single-iteration testing
+```
+
+### Example 8: Model Override
+
+Use a different Claude model:
+
+```bash
+# Use Claude Opus for more complex tasks
+rloop start . --model claude-opus-4-20250514
+
+# Or set as default in config
+rloop config set defaults.model claude-opus-4-20250514
+```
+
 ## License
 
 MIT
