@@ -385,7 +385,7 @@ ralph-cli/
 
 ### Unit 08: Status Server (Optional, `lib/server.sh`)
 - [x] Implement simple HTTP server using netcat/socat
-- [ ] GET /status - return JSON of all sessions
+- [x] GET /status - return JSON of all sessions
 - [ ] GET /status/:name - return specific session
 - [ ] POST /stop/:name - stop a session
 - [ ] Bearer token authentication
