@@ -322,7 +322,7 @@ ralph-cli/
   - [x] Check completion after each
   - [x] Handle max iterations
   - [x] Update state after each iteration
-- [ ] Add configurable prompt template
+- [x] Add configurable prompt template
 - [ ] Add model override support
 
 ### Unit 03: State Management (`lib/state.sh`)

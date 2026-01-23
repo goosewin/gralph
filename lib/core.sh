@@ -8,6 +8,56 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JQ_STREAM_TEXT='select(.type == "assistant").message.content[]? | select(.type == "text").text // empty | gsub("\n"; "\r\n") | . + "\r\n\n"'
 JQ_FINAL_RESULT='select(.type == "result").result // empty'
 
+# Default prompt template with placeholder variables:
+#   {task_file}          - Name of the task file (e.g., PRD.md)
+#   {completion_marker}  - The completion promise marker (e.g., COMPLETE)
+#   {iteration}          - Current iteration number
+#   {max_iterations}     - Maximum iterations allowed
+DEFAULT_PROMPT_TEMPLATE='Read {task_file} carefully. Find any task marked '\''- [ ]'\'' (unchecked).
+
+If unchecked tasks exist:
+- Complete ONE task fully
+- Mark it '\''- [x]'\'' in {task_file}
+- Commit changes
+- Exit normally (do NOT output completion promise)
+
+If ZERO '\''- [ ]'\'' remain (all complete):
+- Verify by searching the file
+- Output ONLY: <promise>{completion_marker}</promise>
+
+CRITICAL: Never mention the promise unless outputting it as the completion signal.
+
+Iteration: {iteration}/{max_iterations}'
+
+# render_prompt_template() - Substitute variables in a prompt template
+#
+# Arguments:
+#   $1 - Template string (required)
+#   $2 - Task file name (required)
+#   $3 - Completion marker (required)
+#   $4 - Current iteration (required)
+#   $5 - Max iterations (required)
+#
+# Returns:
+#   Prints the rendered prompt to stdout
+#
+render_prompt_template() {
+    local template="$1"
+    local task_file="$2"
+    local completion_marker="$3"
+    local iteration="$4"
+    local max_iterations="$5"
+
+    # Substitute all template variables
+    local rendered="$template"
+    rendered="${rendered//\{task_file\}/$task_file}"
+    rendered="${rendered//\{completion_marker\}/$completion_marker}"
+    rendered="${rendered//\{iteration\}/$iteration}"
+    rendered="${rendered//\{max_iterations\}/$max_iterations}"
+
+    echo "$rendered"
+}
+
 # run_iteration() - Execute a single Claude Code iteration
 #
 # Arguments:
@@ -18,6 +68,7 @@ JQ_FINAL_RESULT='select(.type == "result").result // empty'
 #   $5 - Completion marker (default: COMPLETE)
 #   $6 - Model override (optional)
 #   $7 - Log file path (optional)
+#   $8 - Prompt template (optional, uses DEFAULT_PROMPT_TEMPLATE if not provided)
 #
 # Returns:
 #   0 - Iteration completed successfully
@@ -35,6 +86,7 @@ run_iteration() {
     local completion_marker="${5:-COMPLETE}"
     local model="$6"
     local log_file="$7"
+    local prompt_template="${8:-$DEFAULT_PROMPT_TEMPLATE}"
 
     # Validate required arguments
     if [[ -z "$project_dir" ]]; then
@@ -68,23 +120,9 @@ run_iteration() {
     tmpfile=$(mktemp)
     trap "rm -f '$tmpfile'" RETURN
 
-    # Build the prompt
+    # Build the prompt using template
     local prompt
-    prompt="Read $task_file carefully. Find any task marked '- [ ]' (unchecked).
-
-If unchecked tasks exist:
-- Complete ONE task fully
-- Mark it '- [x]' in $task_file
-- Commit changes
-- Exit normally (do NOT output completion promise)
-
-If ZERO '- [ ]' remain (all complete):
-- Verify by searching the file
-- Output ONLY: <promise>$completion_marker</promise>
-
-CRITICAL: Never mention the promise unless outputting it as the completion signal.
-
-Iteration: $iteration/$max_iterations"
+    prompt=$(render_prompt_template "$prompt_template" "$task_file" "$completion_marker" "$iteration" "$max_iterations")
 
     # Build claude command arguments
     local claude_args=(
@@ -232,6 +270,7 @@ check_completion() {
 #   $4 - Completion marker (default: COMPLETE)
 #   $5 - Model override (optional)
 #   $6 - Session name (optional, for state updates)
+#   $7 - Prompt template (optional, uses DEFAULT_PROMPT_TEMPLATE if not provided)
 #
 # Returns:
 #   0 - All tasks completed successfully
@@ -248,6 +287,7 @@ run_loop() {
     local completion_marker="${4:-COMPLETE}"
     local model="$5"
     local session_name="$6"
+    local prompt_template="${7:-$DEFAULT_PROMPT_TEMPLATE}"
 
     # Validate required arguments
     if [[ -z "$project_dir" ]]; then
@@ -319,7 +359,8 @@ run_loop() {
             "$max_iterations" \
             "$completion_marker" \
             "$model" \
-            "$log_file"
+            "$log_file" \
+            "$prompt_template"
 
         local iteration_exit_code=$?
 
