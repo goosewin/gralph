@@ -378,7 +378,7 @@ ralph-cli/
 ### Unit 07: Notifications (`lib/notify.sh`)
 - [x] Implement `send_webhook()` - POST to webhook URL
 - [x] Implement `notify_complete()` - format completion message
-- [ ] Implement `notify_failed()` - format failure message
+- [x] Implement `notify_failed()` - format failure message
 - [ ] Support Discord webhook format
 - [ ] Support Slack webhook format
 - [ ] Support generic JSON POST
