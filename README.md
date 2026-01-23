@@ -587,6 +587,27 @@ rloop server --port 8080 --token "my-secret-token"
 curl -H "Authorization: Bearer my-secret-token" http://server:8080/status
 ```
 
+### Command: `backends`
+
+List available AI backends and their installation status.
+
+```bash
+rloop backends
+```
+
+**Output example:**
+```
+Available AI backends:
+
+  claude (installed)
+      Models: claude-sonnet-4-20250514 claude-opus-4-20250514 claude-haiku-3-5-20241022
+
+  opencode (not installed)
+      Install: See https://opencode.ai/docs/cli/ for installation
+
+Usage: rloop start <dir> --backend <name>
+```
+
 ### Command: `config`
 
 Manage rloop configuration (planned feature).
