@@ -148,6 +148,40 @@ set_session() {
     return 0
 }
 
+# list_sessions() - Get all sessions from state file
+# Arguments:
+#   None
+# Outputs:
+#   Prints JSON array of all sessions to stdout
+#   Each session object includes its name as a field
+# Returns:
+#   0 on success (even if no sessions), 1 on error
+list_sessions() {
+    # Ensure state is initialized
+    if ! init_state; then
+        return 1
+    fi
+
+    # Extract all sessions as a JSON array
+    local sessions
+    sessions=$(jq -r '[.sessions | to_entries[] | .value]' "$RLOOP_STATE_FILE" 2>/dev/null)
+    local exit_code=$?
+
+    if [[ $exit_code -ne 0 ]]; then
+        echo "Error: Failed to read sessions from state file" >&2
+        return 1
+    fi
+
+    # Handle empty sessions case
+    if [[ -z "$sessions" ]] || [[ "$sessions" == "null" ]]; then
+        echo "[]"
+        return 0
+    fi
+
+    echo "$sessions"
+    return 0
+}
+
 # delete_session() - Remove session from state file
 # Arguments:
 #   $1 - Session name to delete
