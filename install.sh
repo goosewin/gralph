@@ -29,7 +29,9 @@ echo_error() {
 # =============================================================================
 
 # Required dependencies per NFR-1 in PRD.md
-REQUIRED_DEPS=("claude" "jq" "tmux")
+# Note: Either 'claude' or 'opencode' is required (at least one backend)
+REQUIRED_DEPS=("jq" "tmux")
+BACKEND_DEPS=("claude" "opencode")
 OPTIONAL_DEPS=("curl")
 
 # Check if a command exists
@@ -62,6 +64,9 @@ get_install_hint() {
     case "$dep" in
         claude)
             echo "npm install -g @anthropic-ai/claude-code"
+            ;;
+        opencode)
+            echo "See https://opencode.ai/docs/cli/ for installation"
             ;;
         jq)
             case "$pkg_mgr" in
@@ -114,6 +119,12 @@ install_dependency() {
                 echo "      Install Node.js first: https://nodejs.org/"
                 return 1
             fi
+            ;;
+        opencode)
+            # OpenCode installation varies by platform
+            echo_error "OpenCode auto-install not supported."
+            echo "      See https://opencode.ai/docs/cli/ for installation instructions."
+            return 1
             ;;
         jq|tmux|curl)
             case "$pkg_mgr" in
@@ -210,6 +221,8 @@ prompt_install_missing() {
 check_dependencies() {
     local missing_required=()
     local missing_optional=()
+    local available_backends=()
+    local missing_backends=()
 
     echo_info "Checking required dependencies..."
 
@@ -220,6 +233,18 @@ check_dependencies() {
         else
             echo_error "  ✗ $dep not found"
             missing_required+=("$dep")
+        fi
+    done
+
+    # Check backend dependencies (at least one required)
+    echo_info "Checking AI backend dependencies (at least one required)..."
+    for dep in "${BACKEND_DEPS[@]}"; do
+        if check_command "$dep"; then
+            echo_info "  ✓ $dep found"
+            available_backends+=("$dep")
+        else
+            echo_warn "  - $dep not found"
+            missing_backends+=("$dep")
         fi
     done
 
@@ -251,6 +276,35 @@ check_dependencies() {
             echo ""
             return 1
         fi
+    fi
+
+    # Handle missing backend dependencies
+    if [ ${#available_backends[@]} -eq 0 ]; then
+        echo ""
+        echo_error "No AI backend found. At least one is required:"
+        echo_error "  - claude (Claude Code): $(get_install_hint "claude")"
+        echo_error "  - opencode (OpenCode): $(get_install_hint "opencode")"
+        echo ""
+        echo_info "Would you like to install Claude Code (requires npm)?"
+        read -p "Install Claude Code? [y/N] " -n 1 -r
+        echo ""
+
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            if install_dependency "claude"; then
+                available_backends+=("claude")
+            else
+                echo ""
+                echo_error "Please install at least one AI backend manually."
+                return 1
+            fi
+        else
+            echo ""
+            echo_error "Please install at least one AI backend manually."
+            return 1
+        fi
+    else
+        echo ""
+        echo_info "Available backends: ${available_backends[*]}"
     fi
 
     # Handle missing optional dependencies
@@ -538,6 +592,29 @@ copy_lib_files() {
             fi
         fi
     done
+
+    # Copy backends directory
+    if [ -d "$source_lib/backends" ]; then
+        local backends_dir="$LIB_DIR/backends"
+        if ! mkdir -p "$backends_dir"; then
+            echo_error "  ✗ Failed to create $backends_dir"
+            return 1
+        fi
+
+        for file in "$source_lib/backends"/*.sh; do
+            if [ -f "$file" ]; then
+                local filename=$(basename "$file")
+                if cp "$file" "$backends_dir/$filename"; then
+                    chmod +x "$backends_dir/$filename"
+                    echo_info "  ✓ Copied backends/$filename"
+                    ((copied++))
+                else
+                    echo_error "  ✗ Failed to copy backends/$filename"
+                    ((failed++))
+                fi
+            fi
+        done
+    fi
 
     if [ $failed -gt 0 ]; then
         echo_error "Failed to copy $failed file(s)"
