@@ -784,3 +784,55 @@ fi
 
 # Print completion instructions if needed
 print_completion_instructions
+
+# =============================================================================
+# Print success message with usage examples
+# =============================================================================
+
+print_success_message() {
+    echo ""
+    echo "============================================================"
+    echo -e "${GREEN}✓ rloop installed successfully!${NC}"
+    echo "============================================================"
+    echo ""
+    echo "Installation summary:"
+    echo "  Binary:       $INSTALL_PATH/rloop"
+    echo "  Libraries:    $LIB_DIR/"
+    echo "  Config:       $CONFIG_DIR/config.yaml"
+    echo "  Completions:  $COMPLETIONS_DIR/"
+    echo ""
+    echo "Quick start:"
+    echo ""
+    echo "  # Start a loop in the current directory"
+    echo "  rloop start ."
+    echo ""
+    echo "  # Start with custom options"
+    echo "  rloop start ~/my-project --name myapp --max-iterations 50"
+    echo ""
+    echo "  # Check status of running loops"
+    echo "  rloop status"
+    echo ""
+    echo "  # View logs for a running loop"
+    echo "  rloop logs myapp --follow"
+    echo ""
+    echo "  # Stop a running loop"
+    echo "  rloop stop myapp"
+    echo ""
+    echo "  # Resume loops after reboot/crash"
+    echo "  rloop resume"
+    echo ""
+    echo "Documentation:"
+    echo "  rloop --help              Show all commands and options"
+    echo "  rloop <command> --help    Show help for a specific command"
+    echo ""
+
+    if [ "$NEEDS_PATH_UPDATE" = true ]; then
+        echo_warn "Remember to update your PATH (see instructions above)"
+        echo ""
+    fi
+
+    echo "Happy coding! 🚀"
+    echo ""
+}
+
+print_success_message
