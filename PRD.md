@@ -304,7 +304,7 @@ ralph-cli/
 - [x] Create directory structure per File Structure section
 - [x] Create README.md with installation instructions
 - [x] Create LICENSE (MIT)
-- [ ] Create .gitignore
+- [x] Create .gitignore
 
 ### Unit 02: Core Loop Engine (`lib/core.sh`)
 - [ ] Implement `run_iteration()` function

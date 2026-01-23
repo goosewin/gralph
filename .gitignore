@@ -1,0 +1,48 @@
+# Ralph Loop CLI - .gitignore
+
+# State and runtime files
+.rloop/
+*.log
+*.tmp
+*.pid
+
+# Configuration with secrets
+config/local.yaml
+*.secret.yaml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-*
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Node (if using npm packaging)
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Build artifacts
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
