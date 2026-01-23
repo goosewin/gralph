@@ -223,3 +223,78 @@ delete_session() {
 
     return 0
 }
+
+# cleanup_stale() - Remove sessions with dead PIDs
+# Finds sessions marked as "running" whose PIDs no longer exist
+# and either removes them or marks them as "stale"
+# Arguments:
+#   $1 - (optional) "remove" to delete stale sessions, otherwise marks as "stale"
+# Outputs:
+#   Prints names of cleaned up sessions to stdout (one per line)
+# Returns:
+#   0 on success (even if no stale sessions found), 1 on error
+cleanup_stale() {
+    local mode="${1:-mark}"  # "remove" or "mark"
+
+    # Ensure state is initialized
+    if ! init_state; then
+        return 1
+    fi
+
+    # Get all sessions
+    local sessions
+    sessions=$(list_sessions)
+    if [[ $? -ne 0 ]]; then
+        return 1
+    fi
+
+    # Track cleaned up sessions
+    local cleaned_count=0
+
+    # Iterate through sessions looking for stale ones
+    local session_names
+    session_names=$(echo "$sessions" | jq -r '.[].name // empty' 2>/dev/null)
+
+    for name in $session_names; do
+        # Get session details
+        local session
+        session=$(get_session "$name")
+        if [[ $? -ne 0 ]]; then
+            continue
+        fi
+
+        local status pid
+        status=$(echo "$session" | jq -r '.status // empty' 2>/dev/null)
+        pid=$(echo "$session" | jq -r '.pid // empty' 2>/dev/null)
+
+        # Only check sessions that are marked as "running"
+        if [[ "$status" != "running" ]]; then
+            continue
+        fi
+
+        # Skip if no PID recorded
+        if [[ -z "$pid" ]] || [[ "$pid" == "null" ]]; then
+            continue
+        fi
+
+        # Check if PID is still alive
+        if kill -0 "$pid" 2>/dev/null; then
+            # Process is still running, skip
+            continue
+        fi
+
+        # PID is dead - session is stale
+        echo "$name"
+        cleaned_count=$((cleaned_count + 1))
+
+        if [[ "$mode" == "remove" ]]; then
+            # Remove the stale session entirely
+            delete_session "$name" >/dev/null 2>&1
+        else
+            # Mark the session as stale
+            set_session "$name" status="stale" >/dev/null 2>&1
+        fi
+    done
+
+    return 0
+}

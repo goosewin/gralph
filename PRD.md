@@ -331,7 +331,7 @@ ralph-cli/
 - [x] Implement `set_session()` - upsert session
 - [x] Implement `delete_session()` - remove session
 - [x] Implement `list_sessions()` - get all sessions
-- [ ] Implement `cleanup_stale()` - remove sessions with dead PIDs
+- [x] Implement `cleanup_stale()` - remove sessions with dead PIDs
 - [ ] Use file locking for concurrent access
 
 ### Unit 04: CLI Commands (`bin/rloop`)
