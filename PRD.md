@@ -401,7 +401,7 @@ ralph-cli/
 - [x] Test on macOS
 
 ### Unit 10: Release Automation
-- [ ] Create GitHub Actions workflow
+- [x] Create GitHub Actions workflow
 - [ ] Auto-create release on version tag
 - [ ] Attach install script to release
 - [ ] Update version in rloop script
