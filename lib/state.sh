@@ -4,6 +4,72 @@
 # State file location
 RLOOP_STATE_DIR="${RLOOP_STATE_DIR:-$HOME/.config/rloop}"
 RLOOP_STATE_FILE="${RLOOP_STATE_FILE:-$RLOOP_STATE_DIR/state.json}"
+RLOOP_LOCK_FILE="${RLOOP_LOCK_FILE:-$RLOOP_STATE_DIR/state.lock}"
+
+# Lock timeout in seconds (default 10 seconds)
+RLOOP_LOCK_TIMEOUT="${RLOOP_LOCK_TIMEOUT:-10}"
+
+# File descriptor for lock file (using 200 to avoid conflicts with common FDs)
+RLOOP_LOCK_FD=200
+
+# _acquire_lock() - Acquire exclusive lock on state file
+# Uses flock for POSIX-compliant file locking
+# Arguments:
+#   $1 - (optional) timeout in seconds (default: RLOOP_LOCK_TIMEOUT)
+# Returns:
+#   0 on success, 1 on failure (lock not acquired within timeout)
+_acquire_lock() {
+    local timeout="${1:-$RLOOP_LOCK_TIMEOUT}"
+
+    # Ensure lock directory exists
+    if [[ ! -d "$RLOOP_STATE_DIR" ]]; then
+        mkdir -p "$RLOOP_STATE_DIR" 2>/dev/null || return 1
+    fi
+
+    # Open lock file on designated FD
+    eval "exec $RLOOP_LOCK_FD>\"$RLOOP_LOCK_FILE\""
+
+    # Try to acquire exclusive lock with timeout
+    if ! flock -x -w "$timeout" "$RLOOP_LOCK_FD" 2>/dev/null; then
+        echo "Error: Failed to acquire state lock within ${timeout}s" >&2
+        return 1
+    fi
+
+    return 0
+}
+
+# _release_lock() - Release exclusive lock on state file
+# Returns:
+#   0 on success
+_release_lock() {
+    # Release the lock by closing the file descriptor
+    eval "exec $RLOOP_LOCK_FD>&-" 2>/dev/null
+    return 0
+}
+
+# _with_lock() - Execute a function while holding the state lock
+# Arguments:
+#   $1 - Function name to execute
+#   $@ - Arguments to pass to the function
+# Returns:
+#   Return value of the executed function, or 1 if lock acquisition fails
+_with_lock() {
+    local func="$1"
+    shift
+
+    if ! _acquire_lock; then
+        return 1
+    fi
+
+    # Execute the function and capture its return code
+    local result
+    "$func" "$@"
+    result=$?
+
+    _release_lock
+
+    return $result
+}
 
 # init_state() - Create state file and directory if missing
 # Creates ~/.config/rloop/ directory and initializes empty state.json
@@ -70,17 +136,9 @@ get_session() {
     return 0
 }
 
-# set_session() - Upsert session (update if exists, insert if not)
-# Arguments:
-#   $1 - Session name (required)
-#   Remaining args are key=value pairs for session properties:
-#     dir, task_file, pid, tmux_session, started_at, iteration,
-#     max_iterations, status, last_task_count, completion_marker, log_file
-# Example:
-#   set_session "myapp" dir="/path/to/project" status="running" iteration=5
-# Returns:
-#   0 on success, 1 on failure
-set_session() {
+# _set_session_unlocked() - Internal: Upsert session without locking
+# Called by set_session() which handles locking
+_set_session_unlocked() {
     local name="$1"
     shift
 
@@ -148,6 +206,21 @@ set_session() {
     return 0
 }
 
+# set_session() - Upsert session (update if exists, insert if not)
+# Uses file locking to ensure concurrent access safety
+# Arguments:
+#   $1 - Session name (required)
+#   Remaining args are key=value pairs for session properties:
+#     dir, task_file, pid, tmux_session, started_at, iteration,
+#     max_iterations, status, last_task_count, completion_marker, log_file
+# Example:
+#   set_session "myapp" dir="/path/to/project" status="running" iteration=5
+# Returns:
+#   0 on success, 1 on failure
+set_session() {
+    _with_lock _set_session_unlocked "$@"
+}
+
 # list_sessions() - Get all sessions from state file
 # Arguments:
 #   None
@@ -182,12 +255,9 @@ list_sessions() {
     return 0
 }
 
-# delete_session() - Remove session from state file
-# Arguments:
-#   $1 - Session name to delete
-# Returns:
-#   0 on success, 1 if session not found or error
-delete_session() {
+# _delete_session_unlocked() - Internal: Remove session without locking
+# Called by delete_session() which handles locking
+_delete_session_unlocked() {
     local name="$1"
 
     if [[ -z "$name" ]]; then
@@ -224,16 +294,19 @@ delete_session() {
     return 0
 }
 
-# cleanup_stale() - Remove sessions with dead PIDs
-# Finds sessions marked as "running" whose PIDs no longer exist
-# and either removes them or marks them as "stale"
+# delete_session() - Remove session from state file
+# Uses file locking to ensure concurrent access safety
 # Arguments:
-#   $1 - (optional) "remove" to delete stale sessions, otherwise marks as "stale"
-# Outputs:
-#   Prints names of cleaned up sessions to stdout (one per line)
+#   $1 - Session name to delete
 # Returns:
-#   0 on success (even if no stale sessions found), 1 on error
-cleanup_stale() {
+#   0 on success, 1 if session not found or error
+delete_session() {
+    _with_lock _delete_session_unlocked "$@"
+}
+
+# _cleanup_stale_unlocked() - Internal: Cleanup stale sessions without locking
+# Called by cleanup_stale() which handles locking
+_cleanup_stale_unlocked() {
     local mode="${1:-mark}"  # "remove" or "mark"
 
     # Ensure state is initialized
@@ -241,11 +314,17 @@ cleanup_stale() {
         return 1
     fi
 
-    # Get all sessions
+    # Get all sessions (read-only, no lock needed for list_sessions)
     local sessions
-    sessions=$(list_sessions)
+    sessions=$(jq -r '[.sessions | to_entries[] | .value]' "$RLOOP_STATE_FILE" 2>/dev/null)
     if [[ $? -ne 0 ]]; then
+        echo "Error: Failed to read sessions from state file" >&2
         return 1
+    fi
+
+    # Handle empty sessions case
+    if [[ -z "$sessions" ]] || [[ "$sessions" == "null" ]]; then
+        return 0
     fi
 
     # Track cleaned up sessions
@@ -256,10 +335,10 @@ cleanup_stale() {
     session_names=$(echo "$sessions" | jq -r '.[].name // empty' 2>/dev/null)
 
     for name in $session_names; do
-        # Get session details
+        # Get session details directly from our already-read sessions
         local session
-        session=$(get_session "$name")
-        if [[ $? -ne 0 ]]; then
+        session=$(echo "$sessions" | jq -r ".[] | select(.name == \"$name\")" 2>/dev/null)
+        if [[ -z "$session" ]]; then
             continue
         fi
 
@@ -288,13 +367,27 @@ cleanup_stale() {
         cleaned_count=$((cleaned_count + 1))
 
         if [[ "$mode" == "remove" ]]; then
-            # Remove the stale session entirely
-            delete_session "$name" >/dev/null 2>&1
+            # Remove the stale session entirely (use unlocked version since we hold the lock)
+            _delete_session_unlocked "$name" >/dev/null 2>&1
         else
-            # Mark the session as stale
-            set_session "$name" status="stale" >/dev/null 2>&1
+            # Mark the session as stale (use unlocked version since we hold the lock)
+            _set_session_unlocked "$name" status="stale" >/dev/null 2>&1
         fi
     done
 
     return 0
+}
+
+# cleanup_stale() - Remove sessions with dead PIDs
+# Uses file locking to ensure concurrent access safety
+# Finds sessions marked as "running" whose PIDs no longer exist
+# and either removes them or marks them as "stale"
+# Arguments:
+#   $1 - (optional) "remove" to delete stale sessions, otherwise marks as "stale"
+# Outputs:
+#   Prints names of cleaned up sessions to stdout (one per line)
+# Returns:
+#   0 on success (even if no stale sessions found), 1 on error
+cleanup_stale() {
+    _with_lock _cleanup_stale_unlocked "$@"
 }

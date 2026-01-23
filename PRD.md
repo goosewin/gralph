@@ -332,7 +332,7 @@ ralph-cli/
 - [x] Implement `delete_session()` - remove session
 - [x] Implement `list_sessions()` - get all sessions
 - [x] Implement `cleanup_stale()` - remove sessions with dead PIDs
-- [ ] Use file locking for concurrent access
+- [x] Use file locking for concurrent access
 
 ### Unit 04: CLI Commands (`bin/rloop`)
 - [ ] Implement argument parsing
