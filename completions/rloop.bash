@@ -19,7 +19,7 @@ _rloop_completions() {
     local commands="start stop status logs resume config server version help"
 
     # Options for start command
-    local start_opts="--name -n --max-iterations --task-file -f --completion-marker --model -m --webhook --no-tmux --help -h"
+    local start_opts="--name -n --max-iterations --task-file -f --completion-marker --backend -b --model -m --webhook --no-tmux --help -h"
 
     # Options for stop command
     local stop_opts="--all -a --help -h"
@@ -74,9 +74,18 @@ _rloop_completions() {
                     COMPREPLY=($(compgen -W "COMPLETE DONE FINISHED ALL_DONE" -- "$cur"))
                     return 0
                     ;;
+                -b|--backend)
+                    # Suggest available backends
+                    COMPREPLY=($(compgen -W "claude opencode" -- "$cur"))
+                    return 0
+                    ;;
                 -m|--model)
-                    # Suggest Claude models
-                    COMPREPLY=($(compgen -W "claude-sonnet-4-20250514 claude-opus-4-20250514 claude-haiku-3-5-20241022" -- "$cur"))
+                    # Suggest models for both backends
+                    # Claude models
+                    local claude_models="claude-sonnet-4-20250514 claude-opus-4-20250514 claude-haiku-3-5-20241022"
+                    # OpenCode models (provider/model format)
+                    local opencode_models="anthropic/claude-sonnet-4-20250514 anthropic/claude-opus-4-20250514 openai/gpt-4o google/gemini-2.0-flash deepseek/deepseek-chat"
+                    COMPREPLY=($(compgen -W "$claude_models $opencode_models" -- "$cur"))
                     return 0
                     ;;
                 --webhook)
