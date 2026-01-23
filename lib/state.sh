@@ -36,3 +36,36 @@ init_state() {
 
     return 0
 }
+
+# get_session() - Read session by name from state file
+# Arguments:
+#   $1 - Session name to retrieve
+# Outputs:
+#   Prints JSON object of session to stdout if found
+# Returns:
+#   0 if session found, 1 if not found or error
+get_session() {
+    local name="$1"
+
+    if [[ -z "$name" ]]; then
+        echo "Error: Session name is required" >&2
+        return 1
+    fi
+
+    # Ensure state is initialized
+    if ! init_state; then
+        return 1
+    fi
+
+    # Read session from state file using jq
+    local session
+    session=$(jq -e ".sessions[\"$name\"]" "$RLOOP_STATE_FILE" 2>/dev/null)
+    local exit_code=$?
+
+    if [[ $exit_code -ne 0 ]] || [[ "$session" == "null" ]]; then
+        return 1
+    fi
+
+    echo "$session"
+    return 0
+}
