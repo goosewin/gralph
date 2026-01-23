@@ -397,7 +397,7 @@ ralph-cli/
 - [x] Document configuration options
 - [x] Add troubleshooting section
 - [x] Create example PRD.md template
-- [ ] Test on fresh Ubuntu 24.04
+- [x] Test on fresh Ubuntu 24.04
 - [ ] Test on macOS
 
 ### Unit 10: Release Automation
