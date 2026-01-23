@@ -1,0 +1,20 @@
+# Default configuration for rloop
+defaults:
+  max_iterations: 30
+  task_file: PRD.md
+  completion_marker: COMPLETE
+  model: claude-sonnet-4-20250514
+
+claude:
+  flags:
+    - --dangerously-skip-permissions
+  env:
+    IS_SANDBOX: "1"
+
+notifications:
+  on_complete: true
+  # webhook: https://hooks.example.com/notify
+
+logging:
+  level: info
+  retain_days: 7

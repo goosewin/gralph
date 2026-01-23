@@ -1,0 +1,11 @@
+#!/bin/bash
+# rloop - Autonomous AI coding loops
+# Version: 0.1.0
+
+set -e
+
+VERSION="0.1.0"
+
+# Placeholder for main CLI - to be implemented in Unit 04
+echo "rloop v$VERSION - Not yet implemented"
+echo "See PRD.md for planned functionality"
