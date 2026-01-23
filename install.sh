@@ -554,6 +554,75 @@ if ! copy_lib_files; then
     exit 1
 fi
 
+# =============================================================================
+# Create default config
+# =============================================================================
+
+create_default_config() {
+    local source_config="$SCRIPT_DIR/config/default.yaml"
+    local dest_config="$CONFIG_DIR/config.yaml"
+
+    echo_info "Setting up configuration..."
+
+    # Ensure config directory exists (should already exist from lib copy)
+    if ! mkdir -p "$CONFIG_DIR"; then
+        echo_error "  ✗ Failed to create $CONFIG_DIR"
+        return 1
+    fi
+
+    # Check if config already exists
+    if [ -f "$dest_config" ]; then
+        echo_info "  ✓ Config already exists at $dest_config (keeping existing)"
+        return 0
+    fi
+
+    # Verify source config exists
+    if [ ! -f "$source_config" ]; then
+        echo_warn "  Default config not found at $source_config"
+        echo_warn "  Creating minimal default config..."
+
+        # Create minimal default config inline
+        cat > "$dest_config" << 'YAML_EOF'
+# rloop configuration
+defaults:
+  max_iterations: 30
+  task_file: PRD.md
+  completion_marker: COMPLETE
+  model: claude-sonnet-4-20250514
+
+claude:
+  flags:
+    - --dangerously-skip-permissions
+  env:
+    IS_SANDBOX: "1"
+
+notifications:
+  on_complete: true
+
+logging:
+  level: info
+  retain_days: 7
+YAML_EOF
+        echo_info "  ✓ Created default config at $dest_config"
+        return 0
+    fi
+
+    # Copy default config
+    if cp "$source_config" "$dest_config"; then
+        echo_info "  ✓ Created config at $dest_config"
+        return 0
+    else
+        echo_error "  ✗ Failed to create config file"
+        return 1
+    fi
+}
+
+echo ""
+if ! create_default_config; then
+    echo_error "Failed to create default config."
+    exit 1
+fi
+
 echo ""
 echo_warn "Remaining installation steps not yet implemented."
 echo "See PRD.md Unit 06 for remaining tasks."

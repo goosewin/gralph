@@ -371,7 +371,7 @@ ralph-cli/
 - [x] Determine install path (~/.local/bin or /usr/local/bin)
 - [x] Copy bin/rloop to install path
 - [x] Copy lib/ to ~/.config/rloop/lib/
-- [ ] Create default config
+- [x] Create default config
 - [ ] Install shell completions
 - [ ] Print success message with usage examples
 
