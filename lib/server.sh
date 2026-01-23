@@ -58,9 +58,12 @@ _send_response() {
     printf "HTTP/1.1 %s %s\r\n" "$status_code" "$status_text"
     printf "Content-Type: %s\r\n" "$content_type"
     printf "Content-Length: %d\r\n" "$body_length"
+    # CORS headers for browser access
     printf "Access-Control-Allow-Origin: *\r\n"
     printf "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
     printf "Access-Control-Allow-Headers: Authorization, Content-Type\r\n"
+    printf "Access-Control-Expose-Headers: Content-Length, Content-Type\r\n"
+    printf "Access-Control-Max-Age: 86400\r\n"
     printf "Connection: close\r\n"
     printf "\r\n"
     printf "%s" "$body"
