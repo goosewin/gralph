@@ -135,3 +135,90 @@ Iteration: $iteration/$max_iterations"
     # Return based on Claude's exit code
     return $claude_exit_code
 }
+
+# count_remaining_tasks() - Count unchecked tasks in a file
+#
+# Arguments:
+#   $1 - Task file path (required)
+#
+# Returns:
+#   Prints the count of remaining tasks to stdout
+#
+count_remaining_tasks() {
+    local task_file="$1"
+
+    if [[ -z "$task_file" ]]; then
+        echo "0"
+        return
+    fi
+
+    if [[ ! -f "$task_file" ]]; then
+        echo "0"
+        return
+    fi
+
+    # Count lines matching '- [ ]' pattern (unchecked checkbox)
+    # Using grep -c with || echo "0" to handle no matches case
+    grep -cE '^\s*- \[ \]' "$task_file" 2>/dev/null || echo "0"
+}
+
+# check_completion() - Check if loop should be considered complete
+#
+# Arguments:
+#   $1 - Task file path (required)
+#   $2 - Claude output/result text (required)
+#   $3 - Completion marker (default: COMPLETE)
+#
+# Returns:
+#   0 - Completion detected (zero tasks AND valid promise at end)
+#   1 - Not complete (tasks remain OR no valid promise)
+#
+# Logic:
+#   1. Count remaining '- [ ]' tasks in file
+#   2. If count > 0, return 1 (not complete)
+#   3. Check if promise appears at END of output (last 500 chars)
+#   4. Verify promise is not negated (e.g., "cannot output <promise>...")
+#   5. Return 0 only if both conditions met
+#
+check_completion() {
+    local task_file="$1"
+    local result="$2"
+    local completion_marker="${3:-COMPLETE}"
+
+    # Validate required arguments
+    if [[ -z "$task_file" ]]; then
+        echo "Error: task_file is required" >&2
+        return 1
+    fi
+    if [[ -z "$result" ]]; then
+        # No output means not complete
+        return 1
+    fi
+
+    # Count remaining tasks
+    local remaining
+    remaining=$(count_remaining_tasks "$task_file")
+
+    # Must have zero remaining tasks
+    if [[ "$remaining" -gt 0 ]]; then
+        return 1
+    fi
+
+    # Promise must appear at the end (last 500 chars), not just mentioned
+    local tail_result
+    tail_result=$(echo "$result" | tail -c 500)
+
+    # Check if promise pattern exists in tail
+    if ! echo "$tail_result" | grep -qE "<promise>$completion_marker</promise>"; then
+        return 1
+    fi
+
+    # Verify it's not negated (common patterns like "cannot", "won't", etc.)
+    # Check if negation words appear before the promise in the tail
+    if echo "$tail_result" | grep -qiE "(cannot|can't|won't|will not|do not|don't|should not|shouldn't|must not|mustn't)[^<]*<promise>"; then
+        return 1
+    fi
+
+    # All checks passed - genuine completion
+    return 0
+}

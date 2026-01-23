@@ -312,10 +312,10 @@ ralph-cli/
   - [x] Capture output to temp file
   - [x] Stream output to log and stdout
   - [x] Extract result from JSON stream
-- [ ] Implement `check_completion()` function
-  - [ ] Count `- [ ]` in task file
-  - [ ] Verify promise appears at END of output (not mentioned)
-  - [ ] Return true only if both conditions met
+- [x] Implement `check_completion()` function
+  - [x] Count `- [ ]` in task file
+  - [x] Verify promise appears at END of output (not mentioned)
+  - [x] Return true only if both conditions met
 - [ ] Implement `run_loop()` function
   - [ ] Initialize iteration counter
   - [ ] Call run_iteration in loop
