@@ -366,7 +366,7 @@ ralph-cli/
 - [x] Support environment variable overrides (RLOOP_MAX_ITERATIONS, etc.)
 
 ### Unit 06: Installation Script (`install.sh`)
-- [ ] Check for required dependencies (claude, jq, tmux)
+- [x] Check for required dependencies (claude, jq, tmux)
 - [ ] Prompt to install missing (apt/brew)
 - [ ] Determine install path (~/.local/bin or /usr/local/bin)
 - [ ] Copy bin/rloop to install path
