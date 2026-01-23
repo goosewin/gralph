@@ -282,9 +282,199 @@ parse_args() {
     done
 }
 
-# Placeholder command functions (to be implemented)
+# Source library files
+source_libs() {
+    if [[ -f "$LIB_DIR/state.sh" ]]; then
+        source "$LIB_DIR/state.sh"
+    else
+        die "Library not found: $LIB_DIR/state.sh"
+    fi
+    if [[ -f "$LIB_DIR/core.sh" ]]; then
+        source "$LIB_DIR/core.sh"
+    else
+        die "Library not found: $LIB_DIR/core.sh"
+    fi
+}
+
+# cmd_start() - Start a new ralph loop
+# Validates inputs, creates tmux session, and saves state
 cmd_start() {
-    die "cmd_start not yet implemented"
+    # Get directory from positional args
+    local target_dir="${POSITIONAL_ARGS[0]}"
+
+    if [[ -z "$target_dir" ]]; then
+        die "Directory is required. Usage: rloop start <directory>"
+    fi
+
+    # Validate directory exists
+    if [[ ! -d "$target_dir" ]]; then
+        die "Directory does not exist: $target_dir"
+    fi
+
+    # Resolve to absolute path
+    target_dir=$(cd "$target_dir" && pwd)
+
+    # Validate task file exists
+    local task_file_path="$target_dir/$OPT_TASK_FILE"
+    if [[ ! -f "$task_file_path" ]]; then
+        die "Task file does not exist: $task_file_path"
+    fi
+
+    # Determine session name (default to directory basename)
+    local session_name="${OPT_NAME:-$(basename "$target_dir")}"
+
+    # Sanitize session name for tmux (replace invalid chars with -)
+    session_name=$(echo "$session_name" | sed 's/[^a-zA-Z0-9_-]/-/g')
+
+    # Source library files
+    source_libs
+
+    # Initialize state
+    if ! init_state; then
+        die "Failed to initialize state"
+    fi
+
+    # Check for existing session with same name
+    if get_session "$session_name" > /dev/null 2>&1; then
+        local existing_status
+        existing_status=$(get_session "$session_name" | jq -r '.status // "unknown"')
+        if [[ "$existing_status" == "running" ]]; then
+            # Check if the PID is actually alive
+            local existing_pid
+            existing_pid=$(get_session "$session_name" | jq -r '.pid // ""')
+            if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
+                die "Session '$session_name' is already running (PID: $existing_pid). Use 'rloop stop $session_name' first."
+            else
+                warn "Session '$session_name' exists but appears stale. Restarting..."
+            fi
+        fi
+    fi
+
+    # Create .rloop directory in project
+    local rloop_dir="$target_dir/.rloop"
+    mkdir -p "$rloop_dir"
+
+    local log_file="$rloop_dir/ralph.log"
+    local tmux_session="rloop-$session_name"
+
+    # Get initial task count
+    local initial_count
+    initial_count=$(grep -cE '^\s*- \[ \]' "$task_file_path" 2>/dev/null || echo "0")
+
+    info "Starting ralph loop..."
+    info "  Directory: $target_dir"
+    info "  Session: $session_name"
+    info "  Task file: $OPT_TASK_FILE"
+    info "  Max iterations: $OPT_MAX_ITERATIONS"
+    info "  Completion marker: $OPT_COMPLETION_MARKER"
+    info "  Remaining tasks: $initial_count"
+    if [[ -n "$OPT_MODEL" ]]; then
+        info "  Model: $OPT_MODEL"
+    fi
+
+    if [[ "$OPT_NO_TMUX" == "true" ]]; then
+        # Run in foreground (blocking)
+        info "Running in foreground mode..."
+
+        # Save state with PID of this process
+        set_session "$session_name" \
+            "dir=$target_dir" \
+            "task_file=$OPT_TASK_FILE" \
+            "pid=$$" \
+            "tmux_session=" \
+            "started_at=$(date -Iseconds)" \
+            "iteration=1" \
+            "max_iterations=$OPT_MAX_ITERATIONS" \
+            "status=running" \
+            "last_task_count=$initial_count" \
+            "completion_marker=$OPT_COMPLETION_MARKER" \
+            "log_file=$log_file" \
+            "model=$OPT_MODEL" \
+            "webhook=$OPT_WEBHOOK"
+
+        # Run the loop directly
+        run_loop \
+            "$target_dir" \
+            "$OPT_TASK_FILE" \
+            "$OPT_MAX_ITERATIONS" \
+            "$OPT_COMPLETION_MARKER" \
+            "$OPT_MODEL" \
+            "$session_name"
+
+        local exit_code=$?
+
+        # Update state based on result
+        if [[ $exit_code -eq 0 ]]; then
+            set_session "$session_name" "status=complete"
+        else
+            set_session "$session_name" "status=failed"
+        fi
+
+        return $exit_code
+    else
+        # Run in tmux session (background)
+
+        # Check if tmux is available
+        if ! command -v tmux &> /dev/null; then
+            die "tmux is required for background mode. Install tmux or use --no-tmux flag."
+        fi
+
+        # Kill existing tmux session if it exists
+        tmux kill-session -t "$tmux_session" 2>/dev/null || true
+
+        # Build the command to run in tmux
+        # We need to source the libs and call run_loop
+        local rloop_cmd="source '$LIB_DIR/state.sh' && source '$LIB_DIR/core.sh' && "
+        rloop_cmd+="RLOOP_STATE_CALLBACK=_update_session_state "
+        rloop_cmd+="_update_session_state() { "
+        rloop_cmd+="  set_session \"\$1\" iteration=\"\$2\" status=\"\$3\" last_task_count=\"\$4\"; "
+        rloop_cmd+="}; "
+        rloop_cmd+="run_loop "
+        rloop_cmd+="'$target_dir' "
+        rloop_cmd+="'$OPT_TASK_FILE' "
+        rloop_cmd+="'$OPT_MAX_ITERATIONS' "
+        rloop_cmd+="'$OPT_COMPLETION_MARKER' "
+        rloop_cmd+="'$OPT_MODEL' "
+        rloop_cmd+="'$session_name'; "
+        rloop_cmd+="exit_code=\$?; "
+        rloop_cmd+="if [ \$exit_code -eq 0 ]; then "
+        rloop_cmd+="  set_session '$session_name' status=complete; "
+        rloop_cmd+="else "
+        rloop_cmd+="  set_session '$session_name' status=failed; "
+        rloop_cmd+="fi"
+
+        # Start tmux session
+        tmux new-session -d -s "$tmux_session" "bash -c '$rloop_cmd'"
+
+        # Get the PID of the tmux session's shell
+        local tmux_pid
+        tmux_pid=$(tmux list-panes -t "$tmux_session" -F '#{pane_pid}' 2>/dev/null | head -1)
+
+        # Save state
+        set_session "$session_name" \
+            "dir=$target_dir" \
+            "task_file=$OPT_TASK_FILE" \
+            "pid=$tmux_pid" \
+            "tmux_session=$tmux_session" \
+            "started_at=$(date -Iseconds)" \
+            "iteration=1" \
+            "max_iterations=$OPT_MAX_ITERATIONS" \
+            "status=running" \
+            "last_task_count=$initial_count" \
+            "completion_marker=$OPT_COMPLETION_MARKER" \
+            "log_file=$log_file" \
+            "model=$OPT_MODEL" \
+            "webhook=$OPT_WEBHOOK"
+
+        success "Ralph loop started in tmux session: $tmux_session"
+        echo ""
+        echo "Useful commands:"
+        echo "  rloop status            - View all running loops"
+        echo "  rloop logs $session_name      - View logs"
+        echo "  rloop logs $session_name --follow - Follow logs"
+        echo "  rloop stop $session_name      - Stop this loop"
+        echo "  tmux attach -t $tmux_session  - Attach to tmux session"
+    fi
 }
 
 cmd_stop() {
