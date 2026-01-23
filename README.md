@@ -1,11 +1,12 @@
 # Ralph Loop CLI (`rloop`)
 
-Autonomous AI coding loops using Claude Code. Spawns fresh Claude Code sessions iteratively until all tasks in a PRD are complete.
+Autonomous AI coding loops using Claude Code or OpenCode. Spawns fresh AI coding sessions iteratively until all tasks in a PRD are complete.
 
 Named after the "Ralph Wiggum" technique - persistent iteration despite setbacks.
 
 ## Features
 
+- **Multi-backend support** - Use Claude Code or OpenCode as your AI coding assistant
 - **Robust completion detection** - Only detects genuine completion, not mentions of the completion promise
 - **Multi-project support** - Run multiple concurrent loops
 - **State persistence** - Resume after crash/reboot
@@ -14,7 +15,9 @@ Named after the "Ralph Wiggum" technique - persistent iteration despite setbacks
 
 ## Requirements
 
-- `claude` CLI (Claude Code)
+- At least one AI backend:
+  - `claude` CLI (Claude Code) - `npm install -g @anthropic-ai/claude-code`
+  - `opencode` CLI (OpenCode) - See https://opencode.ai/docs/cli/
 - `jq` for JSON parsing
 - `tmux` for session management
 - `bash` 4.0+
@@ -58,6 +61,69 @@ cd ralph-cli
 2. Copy `bin/rloop` to a directory in your PATH (e.g., `~/.local/bin/` or `/usr/local/bin/`)
 3. Copy `lib/` to `~/.config/rloop/lib/`
 4. Create config directory: `mkdir -p ~/.config/rloop`
+
+## Backends
+
+rloop supports multiple AI coding assistants through a pluggable backend system.
+
+### Claude Code (Default)
+
+[Claude Code](https://claude.ai/claude-code) is Anthropic's official CLI for Claude.
+
+```bash
+# Install Claude Code
+npm install -g @anthropic-ai/claude-code
+
+# Use Claude Code (default)
+rloop start .
+
+# Or explicitly specify
+rloop start . --backend claude
+```
+
+**Models:**
+- `claude-sonnet-4-20250514` (default)
+- `claude-opus-4-20250514`
+- `claude-haiku-3-5-20241022`
+
+### OpenCode
+
+[OpenCode](https://opencode.ai) is an open-source AI coding CLI that supports multiple providers.
+
+```bash
+# Install OpenCode (see https://opencode.ai/docs/cli/)
+
+# Use OpenCode
+rloop start . --backend opencode
+
+# OpenCode models use provider/model format
+rloop start . --backend opencode --model anthropic/claude-sonnet-4-20250514
+rloop start . --backend opencode --model openai/gpt-4o
+```
+
+**Models (format: provider/model):**
+- `anthropic/claude-sonnet-4-20250514` (default for opencode)
+- `anthropic/claude-opus-4-20250514`
+- `openai/gpt-4o`
+- `google/gemini-2.0-flash`
+- `deepseek/deepseek-chat`
+
+### Setting Default Backend
+
+Set the default backend in your config file:
+
+```yaml
+# ~/.config/rloop/config.yaml
+defaults:
+  backend: opencode
+  model: openai/gpt-4o
+```
+
+Or via environment variable:
+
+```bash
+export RLOOP_DEFAULTS_BACKEND=opencode
+```
 
 ## Usage
 
@@ -169,11 +235,12 @@ Default values for loop behavior.
 | `defaults.max_iterations` | integer | `30` | Maximum number of loop iterations before giving up. Prevents infinite loops. |
 | `defaults.task_file` | string | `PRD.md` | Path to the task file relative to project directory. |
 | `defaults.completion_marker` | string | `COMPLETE` | The text used in `<promise>MARKER</promise>` to signal completion. |
-| `defaults.model` | string | `claude-sonnet-4-20250514` | Claude model to use for each iteration. |
+| `defaults.backend` | string | `claude` | AI backend to use: `claude` or `opencode`. |
+| `defaults.model` | string | `claude-sonnet-4-20250514` | Model to use. Format depends on backend (see Backends section). |
 
 ### Section: `claude`
 
-Settings passed to the Claude CLI.
+Settings for the Claude Code backend.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -190,6 +257,21 @@ claude:
   env:
     IS_SANDBOX: "1"
     CUSTOM_VAR: "value"
+```
+
+### Section: `opencode`
+
+Settings for the OpenCode backend.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `opencode.default_model` | string | `anthropic/claude-sonnet-4-20250514` | Default model in provider/model format. |
+
+**Example:**
+
+```yaml
+opencode:
+  default_model: openai/gpt-4o
 ```
 
 ### Section: `notifications`
@@ -239,6 +321,7 @@ All configuration keys can be overridden using environment variables. The conver
 | `defaults.max_iterations` | `RLOOP_DEFAULTS_MAX_ITERATIONS` |
 | `defaults.task_file` | `RLOOP_DEFAULTS_TASK_FILE` |
 | `defaults.completion_marker` | `RLOOP_DEFAULTS_COMPLETION_MARKER` |
+| `defaults.backend` | `RLOOP_DEFAULTS_BACKEND` |
 | `notifications.webhook` | `RLOOP_NOTIFICATIONS_WEBHOOK` |
 | `logging.level` | `RLOOP_LOGGING_LEVEL` |
 
@@ -272,6 +355,7 @@ defaults:
   max_iterations: 50          # Allow more iterations
   task_file: PRD.md           # Default task file
   completion_marker: COMPLETE # Completion signal
+  backend: claude             # AI backend (claude or opencode)
   model: claude-sonnet-4-20250514
 
 claude:
@@ -279,6 +363,9 @@ claude:
     - --dangerously-skip-permissions
   env:
     IS_SANDBOX: "1"
+
+opencode:
+  default_model: anthropic/claude-sonnet-4-20250514
 
 notifications:
   on_complete: true
@@ -295,7 +382,8 @@ logging:
 defaults:
   max_iterations: 100         # This project needs more iterations
   task_file: TASKS.md         # Use different task file
-  model: claude-opus-4-20250514  # Use Opus for this complex project
+  backend: opencode           # Use OpenCode for this project
+  model: openai/gpt-4o        # Use GPT-4o via OpenCode
 
 notifications:
   webhook: https://hooks.slack.com/services/T00/B00/xxx  # Different webhook
@@ -340,13 +428,14 @@ rloop start <directory> [options]
 | `--max-iterations` | | Maximum loop iterations | 30 |
 | `--task-file` | `-f` | Path to task file relative to project | PRD.md |
 | `--completion-marker` | | Completion promise text | COMPLETE |
-| `--model` | `-m` | Claude model to use | (from config) |
+| `--backend` | `-b` | AI backend to use (claude or opencode) | claude |
+| `--model` | `-m` | Model to use (format depends on backend) | (from config) |
 | `--webhook` | | Notification webhook URL | (none) |
 | `--no-tmux` | | Run in foreground (blocking) | false |
 
 **Examples:**
 ```bash
-# Start with defaults
+# Start with defaults (uses Claude Code)
 rloop start .
 
 # Start with custom name and iterations
@@ -354,6 +443,12 @@ rloop start ~/projects/myapp --name myapp --max-iterations 50
 
 # Use different task file
 rloop start . --task-file TODO.md
+
+# Use OpenCode backend
+rloop start . --backend opencode
+
+# Use OpenCode with specific model
+rloop start . --backend opencode --model openai/gpt-4o
 
 # Run in foreground (for debugging)
 rloop start . --no-tmux
@@ -672,6 +767,28 @@ rloop start . --model claude-opus-4-20250514
 
 # Or set as default in config
 rloop config set defaults.model claude-opus-4-20250514
+```
+
+### Example 9: Using OpenCode Backend
+
+Use OpenCode instead of Claude Code:
+
+```bash
+# Use OpenCode with default model
+rloop start . --backend opencode
+
+# Use OpenCode with GPT-4o
+rloop start . --backend opencode --model openai/gpt-4o
+
+# Use OpenCode with Gemini
+rloop start . --backend opencode --model google/gemini-2.0-flash
+
+# Use OpenCode with DeepSeek
+rloop start . --backend opencode --model deepseek/deepseek-chat
+
+# Set OpenCode as default in config
+rloop config set defaults.backend opencode
+rloop config set defaults.model openai/gpt-4o
 ```
 
 ## Troubleshooting
