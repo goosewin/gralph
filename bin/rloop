@@ -782,8 +782,153 @@ cmd_logs() {
     fi
 }
 
+# cmd_resume() - Resume crashed/stopped loops
+# Finds sessions marked running with dead PIDs and restarts their tmux sessions
 cmd_resume() {
-    die "cmd_resume not yet implemented"
+    # Source library files
+    source_libs
+
+    # Ensure state is initialized
+    if ! init_state; then
+        die "Failed to initialize state"
+    fi
+
+    # Get optional session name from positional args
+    local target_session="${POSITIONAL_ARGS[0]}"
+
+    # Get all sessions
+    local sessions
+    sessions=$(list_sessions)
+
+    if [[ -z "$sessions" ]] || [[ "$sessions" == "[]" ]]; then
+        info "No sessions found"
+        return 0
+    fi
+
+    local resumed_count=0
+    local session_names
+
+    if [[ -n "$target_session" ]]; then
+        # Resume specific session
+        session_names="$target_session"
+    else
+        # Resume all stale/stopped sessions
+        session_names=$(echo "$sessions" | jq -r '.[].name // empty' 2>/dev/null)
+    fi
+
+    for session_name in $session_names; do
+        local session
+        if ! session=$(get_session "$session_name"); then
+            if [[ -n "$target_session" ]]; then
+                die "Session not found: $session_name"
+            fi
+            continue
+        fi
+
+        local status pid dir task_file max_iterations completion_marker model webhook iteration
+        status=$(echo "$session" | jq -r '.status // "unknown"')
+        pid=$(echo "$session" | jq -r '.pid // empty')
+        dir=$(echo "$session" | jq -r '.dir // empty')
+        task_file=$(echo "$session" | jq -r '.task_file // "PRD.md"')
+        max_iterations=$(echo "$session" | jq -r '.max_iterations // 30')
+        completion_marker=$(echo "$session" | jq -r '.completion_marker // "COMPLETE"')
+        model=$(echo "$session" | jq -r '.model // empty')
+        webhook=$(echo "$session" | jq -r '.webhook // empty')
+        iteration=$(echo "$session" | jq -r '.iteration // 1')
+
+        # Check if session should be resumed
+        local should_resume=false
+
+        if [[ "$status" == "running" ]]; then
+            # Check if PID is dead
+            if [[ -z "$pid" ]] || [[ "$pid" == "null" ]] || ! kill -0 "$pid" 2>/dev/null; then
+                should_resume=true
+            fi
+        elif [[ "$status" == "stale" ]] || [[ "$status" == "stopped" ]]; then
+            should_resume=true
+        fi
+
+        if [[ "$should_resume" != "true" ]]; then
+            if [[ -n "$target_session" ]]; then
+                warn "Session '$session_name' is already running (PID: $pid) or completed (status: $status)"
+            fi
+            continue
+        fi
+
+        # Validate directory exists
+        if [[ ! -d "$dir" ]]; then
+            warn "Skipping '$session_name': directory no longer exists: $dir"
+            continue
+        fi
+
+        # Validate task file exists
+        if [[ ! -f "$dir/$task_file" ]]; then
+            warn "Skipping '$session_name': task file not found: $dir/$task_file"
+            continue
+        fi
+
+        info "Resuming session: $session_name (was at iteration $iteration)"
+
+        local tmux_session="rloop-$session_name"
+        local log_file="$dir/.rloop/ralph.log"
+        local rloop_dir="$dir/.rloop"
+
+        # Ensure .rloop directory exists
+        mkdir -p "$rloop_dir"
+
+        # Get current task count
+        local current_count
+        current_count=$(grep -cE '^\s*- \[ \]' "$dir/$task_file" 2>/dev/null || echo "0")
+
+        # Kill any existing tmux session with the same name
+        tmux kill-session -t "$tmux_session" 2>/dev/null || true
+
+        # Build the command to run in tmux
+        local rloop_cmd="source '$LIB_DIR/state.sh' && source '$LIB_DIR/core.sh' && "
+        rloop_cmd+="RLOOP_STATE_CALLBACK=_update_session_state "
+        rloop_cmd+="_update_session_state() { "
+        rloop_cmd+="  set_session \"\$1\" iteration=\"\$2\" status=\"\$3\" last_task_count=\"\$4\"; "
+        rloop_cmd+="}; "
+        rloop_cmd+="run_loop "
+        rloop_cmd+="'$dir' "
+        rloop_cmd+="'$task_file' "
+        rloop_cmd+="'$max_iterations' "
+        rloop_cmd+="'$completion_marker' "
+        rloop_cmd+="'$model' "
+        rloop_cmd+="'$session_name'; "
+        rloop_cmd+="exit_code=\$?; "
+        rloop_cmd+="if [ \$exit_code -eq 0 ]; then "
+        rloop_cmd+="  set_session '$session_name' status=complete; "
+        rloop_cmd+="else "
+        rloop_cmd+="  set_session '$session_name' status=failed; "
+        rloop_cmd+="fi"
+
+        # Start tmux session
+        tmux new-session -d -s "$tmux_session" "bash -c '$rloop_cmd'"
+
+        # Get the PID of the tmux session's shell
+        local tmux_pid
+        tmux_pid=$(tmux list-panes -t "$tmux_session" -F '#{pane_pid}' 2>/dev/null | head -1)
+
+        # Update state with new PID and status
+        set_session "$session_name" \
+            "pid=$tmux_pid" \
+            "tmux_session=$tmux_session" \
+            "status=running" \
+            "last_task_count=$current_count"
+
+        resumed_count=$((resumed_count + 1))
+        success "Resumed session: $session_name in tmux session: $tmux_session"
+    done
+
+    if [[ $resumed_count -eq 0 ]]; then
+        info "No sessions to resume"
+    else
+        echo ""
+        success "Resumed $resumed_count session(s)"
+        echo ""
+        echo "Commands: rloop status, rloop logs <name>, rloop stop <name>"
+    fi
 }
 
 cmd_config() {
