@@ -477,8 +477,125 @@ cmd_start() {
     fi
 }
 
+# cmd_stop() - Stop a running ralph loop
+# Finds session by name, kills tmux session, updates state
 cmd_stop() {
-    die "cmd_stop not yet implemented"
+    # Source library files
+    source_libs
+
+    # Ensure state is initialized
+    if ! init_state; then
+        die "Failed to initialize state"
+    fi
+
+    # Handle --all flag
+    if [[ "$OPT_ALL" == "true" ]]; then
+        local sessions
+        sessions=$(list_sessions)
+
+        if [[ -z "$sessions" ]] || [[ "$sessions" == "[]" ]]; then
+            info "No sessions found"
+            return 0
+        fi
+
+        local stopped_count=0
+        local session_names
+        session_names=$(echo "$sessions" | jq -r '.[].name // empty' 2>/dev/null)
+
+        for session_name in $session_names; do
+            local session
+            session=$(get_session "$session_name")
+            if [[ -z "$session" ]]; then
+                continue
+            fi
+
+            local status
+            status=$(echo "$session" | jq -r '.status // "unknown"')
+
+            # Skip already stopped/completed sessions
+            if [[ "$status" != "running" ]]; then
+                continue
+            fi
+
+            local tmux_session
+            tmux_session=$(echo "$session" | jq -r '.tmux_session // empty')
+
+            # Kill tmux session if it exists
+            if [[ -n "$tmux_session" ]]; then
+                if tmux kill-session -t "$tmux_session" 2>/dev/null; then
+                    info "Killed tmux session: $tmux_session"
+                fi
+            else
+                # Foreground mode - kill by PID
+                local pid
+                pid=$(echo "$session" | jq -r '.pid // empty')
+                if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+                    kill "$pid" 2>/dev/null || true
+                    info "Killed process: $pid"
+                fi
+            fi
+
+            # Update state to stopped
+            set_session "$session_name" status="stopped"
+            stopped_count=$((stopped_count + 1))
+            info "Stopped session: $session_name"
+        done
+
+        if [[ $stopped_count -eq 0 ]]; then
+            info "No running sessions to stop"
+        else
+            success "Stopped $stopped_count session(s)"
+        fi
+        return 0
+    fi
+
+    # Single session stop mode
+    local session_name="${POSITIONAL_ARGS[0]}"
+
+    if [[ -z "$session_name" ]]; then
+        die "Session name is required. Usage: rloop stop <name> or rloop stop --all"
+    fi
+
+    # Find session by name
+    local session
+    if ! session=$(get_session "$session_name"); then
+        die "Session not found: $session_name"
+    fi
+
+    local status
+    status=$(echo "$session" | jq -r '.status // "unknown"')
+
+    # Warn if not running
+    if [[ "$status" != "running" ]]; then
+        warn "Session '$session_name' is not running (status: $status)"
+    fi
+
+    local tmux_session
+    tmux_session=$(echo "$session" | jq -r '.tmux_session // empty')
+
+    # Kill tmux session if it exists
+    if [[ -n "$tmux_session" ]]; then
+        if tmux kill-session -t "$tmux_session" 2>/dev/null; then
+            info "Killed tmux session: $tmux_session"
+        else
+            warn "Tmux session '$tmux_session' not found (may have already exited)"
+        fi
+    else
+        # Foreground mode - kill by PID
+        local pid
+        pid=$(echo "$session" | jq -r '.pid // empty')
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            kill "$pid" 2>/dev/null || true
+            info "Killed process: $pid"
+        else
+            warn "Process not found (may have already exited)"
+        fi
+    fi
+
+    # Update state to stopped
+    set_session "$session_name" status="stopped"
+
+    success "Stopped session: $session_name"
 }
 
 cmd_status() {

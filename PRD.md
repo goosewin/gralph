@@ -342,10 +342,10 @@ ralph-cli/
   - [x] Check for existing session with same name
   - [x] Start tmux session with loop
   - [x] Save state
-- [ ] Implement `cmd_stop()`
-  - [ ] Find session by name
-  - [ ] Kill tmux session
-  - [ ] Update state
+- [x] Implement `cmd_stop()`
+  - [x] Find session by name
+  - [x] Kill tmux session
+  - [x] Update state
 - [ ] Implement `cmd_status()`
   - [ ] List all sessions
   - [ ] Show table with iteration/status/remaining
