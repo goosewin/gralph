@@ -316,12 +316,12 @@ ralph-cli/
   - [x] Count `- [ ]` in task file
   - [x] Verify promise appears at END of output (not mentioned)
   - [x] Return true only if both conditions met
-- [ ] Implement `run_loop()` function
-  - [ ] Initialize iteration counter
-  - [ ] Call run_iteration in loop
-  - [ ] Check completion after each
-  - [ ] Handle max iterations
-  - [ ] Update state after each iteration
+- [x] Implement `run_loop()` function
+  - [x] Initialize iteration counter
+  - [x] Call run_iteration in loop
+  - [x] Check completion after each
+  - [x] Handle max iterations
+  - [x] Update state after each iteration
 - [ ] Add configurable prompt template
 - [ ] Add model override support
 

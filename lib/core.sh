@@ -222,3 +222,154 @@ check_completion() {
     # All checks passed - genuine completion
     return 0
 }
+
+# run_loop() - Execute the main ralph loop
+#
+# Arguments:
+#   $1 - Project directory (required)
+#   $2 - Task file path relative to project (default: PRD.md)
+#   $3 - Max iterations (default: 30)
+#   $4 - Completion marker (default: COMPLETE)
+#   $5 - Model override (optional)
+#   $6 - Session name (optional, for state updates)
+#
+# Returns:
+#   0 - All tasks completed successfully
+#   1 - Max iterations reached or error occurred
+#
+# Environment:
+#   RLOOP_STATE_CALLBACK - Optional function name to call for state updates
+#                          Called with: session_name iteration status remaining_tasks
+#
+run_loop() {
+    local project_dir="$1"
+    local task_file="${2:-PRD.md}"
+    local max_iterations="${3:-30}"
+    local completion_marker="${4:-COMPLETE}"
+    local model="$5"
+    local session_name="$6"
+
+    # Validate required arguments
+    if [[ -z "$project_dir" ]]; then
+        echo "Error: project_dir is required" >&2
+        return 1
+    fi
+
+    # Resolve to absolute path
+    project_dir=$(cd "$project_dir" && pwd)
+
+    # Validate project directory exists
+    if [[ ! -d "$project_dir" ]]; then
+        echo "Error: Project directory does not exist: $project_dir" >&2
+        return 1
+    fi
+
+    # Validate task file exists
+    local full_task_path="$project_dir/$task_file"
+    if [[ ! -f "$full_task_path" ]]; then
+        echo "Error: Task file does not exist: $full_task_path" >&2
+        return 1
+    fi
+
+    # Set up logging
+    local rloop_dir="$project_dir/.rloop"
+    mkdir -p "$rloop_dir"
+    local log_file="$rloop_dir/ralph.log"
+
+    # Initialize iteration counter
+    local iteration=1
+
+    # Log startup information
+    echo "Starting ralph loop in $project_dir" | tee "$log_file"
+    echo "Task file: $task_file" | tee -a "$log_file"
+    echo "Max iterations: $max_iterations" | tee -a "$log_file"
+    echo "Completion marker: $completion_marker" | tee -a "$log_file"
+    if [[ -n "$model" ]]; then
+        echo "Model: $model" | tee -a "$log_file"
+    fi
+    echo "Started at: $(date -Iseconds)" | tee -a "$log_file"
+
+    local initial_remaining
+    initial_remaining=$(count_remaining_tasks "$full_task_path")
+    echo "Initial remaining tasks: $initial_remaining" | tee -a "$log_file"
+
+    # Main loop
+    while [[ $iteration -le $max_iterations ]]; do
+        local remaining_before
+        remaining_before=$(count_remaining_tasks "$full_task_path")
+
+        echo "" | tee -a "$log_file"
+        echo "=== Iteration $iteration/$max_iterations (Remaining: $remaining_before) ===" | tee -a "$log_file"
+
+        # Update state if callback is defined
+        if [[ -n "$RLOOP_STATE_CALLBACK" ]] && declare -f "$RLOOP_STATE_CALLBACK" > /dev/null; then
+            "$RLOOP_STATE_CALLBACK" "$session_name" "$iteration" "running" "$remaining_before"
+        fi
+
+        # Check if already complete before running iteration
+        if [[ "$remaining_before" -eq 0 ]]; then
+            echo "Zero tasks remaining before iteration, verifying completion..." | tee -a "$log_file"
+        fi
+
+        # Run single iteration
+        run_iteration \
+            "$project_dir" \
+            "$task_file" \
+            "$iteration" \
+            "$max_iterations" \
+            "$completion_marker" \
+            "$model" \
+            "$log_file"
+
+        local iteration_exit_code=$?
+
+        # Get the result from the iteration
+        local result="$RLOOP_ITERATION_RESULT"
+
+        # Check for genuine completion
+        if check_completion "$full_task_path" "$result" "$completion_marker"; then
+            echo "" | tee -a "$log_file"
+            echo "✅ Ralph complete after $iteration iterations." | tee -a "$log_file"
+            echo "FINISHED: $(date -Iseconds)" | tee -a "$log_file"
+
+            # Update state if callback is defined
+            if [[ -n "$RLOOP_STATE_CALLBACK" ]] && declare -f "$RLOOP_STATE_CALLBACK" > /dev/null; then
+                "$RLOOP_STATE_CALLBACK" "$session_name" "$iteration" "complete" "0"
+            fi
+
+            return 0
+        fi
+
+        # Log remaining tasks after iteration
+        local remaining_after
+        remaining_after=$(count_remaining_tasks "$full_task_path")
+        echo "Tasks remaining after iteration: $remaining_after" | tee -a "$log_file"
+
+        # Update state with new task count
+        if [[ -n "$RLOOP_STATE_CALLBACK" ]] && declare -f "$RLOOP_STATE_CALLBACK" > /dev/null; then
+            "$RLOOP_STATE_CALLBACK" "$session_name" "$iteration" "running" "$remaining_after"
+        fi
+
+        # Increment iteration counter
+        ((iteration++))
+
+        # Small delay between iterations to avoid hammering the API
+        sleep 2
+    done
+
+    # Max iterations reached
+    local final_remaining
+    final_remaining=$(count_remaining_tasks "$full_task_path")
+
+    echo "" | tee -a "$log_file"
+    echo "⚠️ Hit max iterations ($max_iterations)" | tee -a "$log_file"
+    echo "Remaining tasks: $final_remaining" | tee -a "$log_file"
+    echo "FINISHED: $(date -Iseconds)" | tee -a "$log_file"
+
+    # Update state if callback is defined
+    if [[ -n "$RLOOP_STATE_CALLBACK" ]] && declare -f "$RLOOP_STATE_CALLBACK" > /dev/null; then
+        "$RLOOP_STATE_CALLBACK" "$session_name" "$max_iterations" "max_iterations" "$final_remaining"
+    fi
+
+    return 1
+}
