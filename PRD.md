@@ -307,11 +307,11 @@ ralph-cli/
 - [x] Create .gitignore
 
 ### Unit 02: Core Loop Engine (`lib/core.sh`)
-- [ ] Implement `run_iteration()` function
-  - [ ] Spawn Claude Code with proper flags
-  - [ ] Capture output to temp file
-  - [ ] Stream output to log and stdout
-  - [ ] Extract result from JSON stream
+- [x] Implement `run_iteration()` function
+  - [x] Spawn Claude Code with proper flags
+  - [x] Capture output to temp file
+  - [x] Stream output to log and stdout
+  - [x] Extract result from JSON stream
 - [ ] Implement `check_completion()` function
   - [ ] Count `- [ ]` in task file
   - [ ] Verify promise appears at END of output (not mentioned)
