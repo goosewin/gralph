@@ -720,8 +720,66 @@ cmd_status() {
     echo "Commands: rloop logs <name>, rloop stop <name>, rloop resume"
 }
 
+# cmd_logs() - View logs for a ralph loop session
+# Tails the log file, supports --follow flag
 cmd_logs() {
-    die "cmd_logs not yet implemented"
+    # Source library files
+    source_libs
+
+    # Ensure state is initialized
+    if ! init_state; then
+        die "Failed to initialize state"
+    fi
+
+    # Get session name from positional args
+    local session_name="${POSITIONAL_ARGS[0]}"
+
+    if [[ -z "$session_name" ]]; then
+        die "Session name is required. Usage: rloop logs <name> [--follow]"
+    fi
+
+    # Find session by name
+    local session
+    if ! session=$(get_session "$session_name"); then
+        die "Session not found: $session_name"
+    fi
+
+    # Get log file path
+    local log_file
+    log_file=$(echo "$session" | jq -r '.log_file // empty')
+
+    if [[ -z "$log_file" ]]; then
+        # Try to construct log file path from session dir
+        local session_dir
+        session_dir=$(echo "$session" | jq -r '.dir // empty')
+        if [[ -n "$session_dir" ]]; then
+            log_file="$session_dir/.rloop/ralph.log"
+        fi
+    fi
+
+    if [[ -z "$log_file" ]]; then
+        die "Cannot determine log file path for session: $session_name"
+    fi
+
+    if [[ ! -f "$log_file" ]]; then
+        die "Log file does not exist: $log_file"
+    fi
+
+    # Display session info
+    local status
+    status=$(echo "$session" | jq -r '.status // "unknown"')
+    info "Session: $session_name (status: $status)"
+    info "Log file: $log_file"
+    echo ""
+
+    # Tail the log file
+    if [[ "$OPT_FOLLOW" == "true" ]]; then
+        # Follow mode - continuous tail
+        tail -f "$log_file"
+    else
+        # Default mode - show last 100 lines
+        tail -n 100 "$log_file"
+    fi
 }
 
 cmd_resume() {

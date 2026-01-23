@@ -350,9 +350,9 @@ ralph-cli/
   - [x] List all sessions
   - [x] Show table with iteration/status/remaining
   - [x] Color coding (green=complete, yellow=running, red=failed)
-- [ ] Implement `cmd_logs()`
-  - [ ] Tail log file
-  - [ ] Support --follow flag
+- [x] Implement `cmd_logs()`
+  - [x] Tail log file
+  - [x] Support --follow flag
 - [ ] Implement `cmd_resume()`
   - [ ] Find sessions marked running with dead PIDs
   - [ ] Restart their tmux sessions
