@@ -368,7 +368,7 @@ ralph-cli/
 ### Unit 06: Installation Script (`install.sh`)
 - [x] Check for required dependencies (claude, jq, tmux)
 - [x] Prompt to install missing (apt/brew)
-- [ ] Determine install path (~/.local/bin or /usr/local/bin)
+- [x] Determine install path (~/.local/bin or /usr/local/bin)
 - [ ] Copy bin/rloop to install path
 - [ ] Copy lib/ to ~/.config/rloop/lib/
 - [ ] Create default config

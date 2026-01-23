@@ -279,8 +279,153 @@ check_dependencies() {
 }
 
 # =============================================================================
+# Install Path Determination
+# =============================================================================
+
+# Check if a directory is in PATH
+is_in_path() {
+    local dir="$1"
+    [[ ":$PATH:" == *":$dir:"* ]]
+}
+
+# Check if we can write to a directory (or create it)
+can_write_to() {
+    local dir="$1"
+    if [ -d "$dir" ]; then
+        [ -w "$dir" ]
+    else
+        # Check if parent is writable (could create dir)
+        local parent=$(dirname "$dir")
+        [ -d "$parent" ] && [ -w "$parent" ]
+    fi
+}
+
+# Determine the best install path
+# Priority:
+#   1. ~/.local/bin if in PATH (user-local, no sudo)
+#   2. /usr/local/bin if writable (system-wide)
+#   3. Create ~/.local/bin and add to PATH
+determine_install_path() {
+    local user_bin="$HOME/.local/bin"
+    local system_bin="/usr/local/bin"
+
+    echo_info "Determining install path..."
+
+    # Option 1: ~/.local/bin already in PATH
+    if is_in_path "$user_bin"; then
+        if can_write_to "$user_bin"; then
+            echo_info "  ✓ $user_bin is in PATH and writable"
+            INSTALL_PATH="$user_bin"
+            NEEDS_PATH_UPDATE=false
+            return 0
+        fi
+    fi
+
+    # Option 2: /usr/local/bin is writable (running as root or has permissions)
+    if can_write_to "$system_bin" && is_in_path "$system_bin"; then
+        echo_info "  ✓ $system_bin is writable"
+        INSTALL_PATH="$system_bin"
+        NEEDS_PATH_UPDATE=false
+        return 0
+    fi
+
+    # Option 3: ~/.local/bin exists but not in PATH
+    if [ -d "$user_bin" ] && can_write_to "$user_bin"; then
+        echo_warn "  $user_bin exists but is not in PATH"
+        INSTALL_PATH="$user_bin"
+        NEEDS_PATH_UPDATE=true
+        return 0
+    fi
+
+    # Option 4: Create ~/.local/bin
+    if can_write_to "$HOME/.local" || can_write_to "$HOME"; then
+        echo_info "  Creating $user_bin..."
+        mkdir -p "$user_bin"
+        INSTALL_PATH="$user_bin"
+        NEEDS_PATH_UPDATE=true
+        return 0
+    fi
+
+    # Fallback: Ask user
+    echo ""
+    echo_warn "Could not determine a writable install path."
+    echo "      Options:"
+    echo "        1) Use sudo to install to $system_bin"
+    echo "        2) Specify a custom path"
+    echo ""
+    read -p "Choice [1/2]: " -n 1 -r
+    echo ""
+
+    case "$REPLY" in
+        1)
+            INSTALL_PATH="$system_bin"
+            USE_SUDO=true
+            NEEDS_PATH_UPDATE=false
+            ;;
+        2)
+            read -p "Enter install path: " custom_path
+            custom_path="${custom_path/#\~/$HOME}"  # Expand ~
+            if [ -z "$custom_path" ]; then
+                echo_error "No path specified."
+                return 1
+            fi
+            mkdir -p "$custom_path" 2>/dev/null || {
+                echo_error "Cannot create $custom_path"
+                return 1
+            }
+            INSTALL_PATH="$custom_path"
+            NEEDS_PATH_UPDATE=! is_in_path "$custom_path"
+            ;;
+        *)
+            echo_error "Invalid choice."
+            return 1
+            ;;
+    esac
+
+    return 0
+}
+
+# Print PATH update instructions for various shells
+print_path_instructions() {
+    local install_dir="$1"
+
+    echo ""
+    echo_warn "Add the following to your shell configuration:"
+    echo ""
+
+    # Detect current shell
+    local shell_name=$(basename "$SHELL")
+
+    case "$shell_name" in
+        bash)
+            echo "    # Add to ~/.bashrc or ~/.bash_profile:"
+            echo "    export PATH=\"$install_dir:\$PATH\""
+            ;;
+        zsh)
+            echo "    # Add to ~/.zshrc:"
+            echo "    export PATH=\"$install_dir:\$PATH\""
+            ;;
+        fish)
+            echo "    # Add to ~/.config/fish/config.fish:"
+            echo "    set -gx PATH $install_dir \$PATH"
+            ;;
+        *)
+            echo "    export PATH=\"$install_dir:\$PATH\""
+            ;;
+    esac
+
+    echo ""
+    echo "    Then run: source ~/.<shell>rc  (or start a new terminal)"
+}
+
+# =============================================================================
 # Main Installation (to be implemented in subsequent tasks)
 # =============================================================================
+
+# Global variables set by determine_install_path
+INSTALL_PATH=""
+NEEDS_PATH_UPDATE=false
+USE_SUDO=false
 
 echo "rloop installer"
 echo "==============="
@@ -292,6 +437,27 @@ if ! check_dependencies; then
     exit 1
 fi
 
+# Determine install path
 echo ""
-echo_warn "Installation steps not yet implemented."
+if ! determine_install_path; then
+    echo_error "Could not determine install path."
+    exit 1
+fi
+
+echo ""
+echo_info "Install path: $INSTALL_PATH"
+if [ "$NEEDS_PATH_UPDATE" = true ]; then
+    echo_warn "Note: $INSTALL_PATH is not in your PATH"
+fi
+if [ "$USE_SUDO" = true ]; then
+    echo_warn "Note: Will use sudo for installation"
+fi
+
+echo ""
+echo_warn "Remaining installation steps not yet implemented."
 echo "See PRD.md Unit 06 for remaining tasks."
+
+# Print PATH update instructions if needed
+if [ "$NEEDS_PATH_UPDATE" = true ]; then
+    print_path_instructions "$INSTALL_PATH"
+fi
