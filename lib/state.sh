@@ -147,3 +147,45 @@ set_session() {
 
     return 0
 }
+
+# delete_session() - Remove session from state file
+# Arguments:
+#   $1 - Session name to delete
+# Returns:
+#   0 on success, 1 if session not found or error
+delete_session() {
+    local name="$1"
+
+    if [[ -z "$name" ]]; then
+        echo "Error: Session name is required" >&2
+        return 1
+    fi
+
+    # Ensure state is initialized
+    if ! init_state; then
+        return 1
+    fi
+
+    # Check if session exists
+    if ! jq -e ".sessions[\"$name\"]" "$RLOOP_STATE_FILE" >/dev/null 2>&1; then
+        echo "Error: Session '$name' not found" >&2
+        return 1
+    fi
+
+    # Remove the session from the state file
+    local new_state
+    new_state=$(jq --arg name "$name" 'del(.sessions[$name])' "$RLOOP_STATE_FILE" 2>/dev/null)
+
+    if [[ $? -ne 0 ]] || [[ -z "$new_state" ]]; then
+        echo "Error: Failed to construct new state JSON" >&2
+        return 1
+    fi
+
+    # Write the updated state back to the file
+    if ! echo "$new_state" > "$RLOOP_STATE_FILE"; then
+        echo "Error: Failed to write state file" >&2
+        return 1
+    fi
+
+    return 0
+}
