@@ -140,6 +140,151 @@ Create `.rloop.yaml` in your project directory to override global settings.
 - `RLOOP_TASK_FILE` - Override task file path
 - `RLOOP_COMPLETION_MARKER` - Override completion marker
 
+## Configuration Options Reference
+
+This section documents all available configuration options in detail.
+
+### Section: `defaults`
+
+Default values for loop behavior.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `defaults.max_iterations` | integer | `30` | Maximum number of loop iterations before giving up. Prevents infinite loops. |
+| `defaults.task_file` | string | `PRD.md` | Path to the task file relative to project directory. |
+| `defaults.completion_marker` | string | `COMPLETE` | The text used in `<promise>MARKER</promise>` to signal completion. |
+| `defaults.model` | string | `claude-sonnet-4-20250514` | Claude model to use for each iteration. |
+
+### Section: `claude`
+
+Settings passed to the Claude CLI.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `claude.flags` | array | `["--dangerously-skip-permissions"]` | CLI flags passed to `claude` command. |
+| `claude.env` | object | `{ IS_SANDBOX: "1" }` | Environment variables set when running Claude. |
+
+**Example:**
+
+```yaml
+claude:
+  flags:
+    - --dangerously-skip-permissions
+    - --verbose
+  env:
+    IS_SANDBOX: "1"
+    CUSTOM_VAR: "value"
+```
+
+### Section: `notifications`
+
+Notification settings for loop events.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `notifications.on_complete` | boolean | `true` | Send notification when loop completes successfully. |
+| `notifications.webhook` | string | (none) | Webhook URL for notifications (Discord, Slack, or generic JSON POST). |
+
+**Webhook formats supported:**
+- **Discord**: URLs containing `discord.com/api/webhooks/`
+- **Slack**: URLs containing `hooks.slack.com/services/`
+- **Generic**: Any other URL receives a JSON POST
+
+**Example:**
+
+```yaml
+notifications:
+  on_complete: true
+  webhook: https://discord.com/api/webhooks/123456/abcdef
+```
+
+### Section: `logging`
+
+Log file management settings.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `logging.level` | string | `info` | Log verbosity level (`debug`, `info`, `warn`, `error`). |
+| `logging.retain_days` | integer | `7` | Number of days to keep old log files before cleanup. |
+
+### Environment Variable Overrides
+
+All configuration keys can be overridden using environment variables. The conversion rule is:
+
+1. Take the full dotted key (e.g., `defaults.max_iterations`)
+2. Prefix with `RLOOP_`
+3. Convert to uppercase
+4. Replace dots with underscores
+
+**Examples:**
+
+| Config Key | Environment Variable |
+|------------|---------------------|
+| `defaults.max_iterations` | `RLOOP_DEFAULTS_MAX_ITERATIONS` |
+| `defaults.task_file` | `RLOOP_DEFAULTS_TASK_FILE` |
+| `defaults.completion_marker` | `RLOOP_DEFAULTS_COMPLETION_MARKER` |
+| `notifications.webhook` | `RLOOP_NOTIFICATIONS_WEBHOOK` |
+| `logging.level` | `RLOOP_LOGGING_LEVEL` |
+
+**Usage:**
+
+```bash
+# Override max iterations for a single run
+RLOOP_DEFAULTS_MAX_ITERATIONS=100 rloop start .
+
+# Export for all runs in this shell
+export RLOOP_NOTIFICATIONS_WEBHOOK="https://hooks.slack.com/services/xxx"
+rloop start .
+```
+
+### Configuration Precedence
+
+Configuration values are loaded in the following order (later sources override earlier):
+
+1. **Default config** (`~/.config/rloop/config/default.yaml` or bundled default)
+2. **Global config** (`~/.config/rloop/config.yaml`)
+3. **Project config** (`.rloop.yaml` in project directory)
+4. **Environment variables** (`RLOOP_*`)
+5. **CLI arguments** (e.g., `--max-iterations`)
+
+### Complete Configuration Example
+
+```yaml
+# ~/.config/rloop/config.yaml - Global configuration
+
+defaults:
+  max_iterations: 50          # Allow more iterations
+  task_file: PRD.md           # Default task file
+  completion_marker: COMPLETE # Completion signal
+  model: claude-sonnet-4-20250514
+
+claude:
+  flags:
+    - --dangerously-skip-permissions
+  env:
+    IS_SANDBOX: "1"
+
+notifications:
+  on_complete: true
+  webhook: https://discord.com/api/webhooks/123/abc
+
+logging:
+  level: info
+  retain_days: 7
+```
+
+```yaml
+# ~/projects/myapp/.rloop.yaml - Project-specific overrides
+
+defaults:
+  max_iterations: 100         # This project needs more iterations
+  task_file: TASKS.md         # Use different task file
+  model: claude-opus-4-20250514  # Use Opus for this complex project
+
+notifications:
+  webhook: https://hooks.slack.com/services/T00/B00/xxx  # Different webhook
+```
+
 ## CLI Reference
 
 ```
