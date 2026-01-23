@@ -598,8 +598,126 @@ cmd_stop() {
     success "Stopped session: $session_name"
 }
 
+# cmd_status() - Show status of all ralph loops
+# Lists all sessions in a formatted table with color coding
 cmd_status() {
-    die "cmd_status not yet implemented"
+    # Source library files
+    source_libs
+
+    # Ensure state is initialized
+    if ! init_state; then
+        die "Failed to initialize state"
+    fi
+
+    # Clean up stale sessions first (mark them, don't remove)
+    cleanup_stale >/dev/null 2>&1
+
+    # Get all sessions
+    local sessions
+    sessions=$(list_sessions)
+
+    if [[ -z "$sessions" ]] || [[ "$sessions" == "[]" ]]; then
+        info "No sessions found"
+        echo ""
+        echo "Start a new loop with: rloop start <directory>"
+        return 0
+    fi
+
+    # Calculate column widths (minimum widths for headers)
+    local name_width=8
+    local dir_width=30
+    local iter_width=10
+    local status_width=10
+    local remaining_width=10
+
+    # Find max widths from data
+    local session_count
+    session_count=$(echo "$sessions" | jq -r 'length')
+
+    for ((i=0; i<session_count; i++)); do
+        local name dir
+        name=$(echo "$sessions" | jq -r ".[$i].name // \"\"")
+        dir=$(echo "$sessions" | jq -r ".[$i].dir // \"\"")
+
+        # Truncate long dirs for display
+        if [[ ${#dir} -gt 40 ]]; then
+            dir="...${dir: -37}"
+        fi
+
+        [[ ${#name} -gt $name_width ]] && name_width=${#name}
+        [[ ${#dir} -gt $dir_width ]] && dir_width=${#dir}
+    done
+
+    # Print header
+    printf "${BLUE}%-${name_width}s  %-${dir_width}s  %-${iter_width}s  %-${status_width}s  %-${remaining_width}s${NC}\n" \
+        "NAME" "DIR" "ITERATION" "STATUS" "REMAINING"
+    printf "%-${name_width}s  %-${dir_width}s  %-${iter_width}s  %-${status_width}s  %-${remaining_width}s\n" \
+        "$(printf '%*s' "$name_width" '' | tr ' ' '-')" \
+        "$(printf '%*s' "$dir_width" '' | tr ' ' '-')" \
+        "$(printf '%*s' "$iter_width" '' | tr ' ' '-')" \
+        "$(printf '%*s' "$status_width" '' | tr ' ' '-')" \
+        "$(printf '%*s' "$remaining_width" '' | tr ' ' '-')"
+
+    # Print each session row
+    for ((i=0; i<session_count; i++)); do
+        local name dir iteration max_iterations status last_task_count task_file
+        name=$(echo "$sessions" | jq -r ".[$i].name // \"unknown\"")
+        dir=$(echo "$sessions" | jq -r ".[$i].dir // \"\"")
+        iteration=$(echo "$sessions" | jq -r ".[$i].iteration // 0")
+        max_iterations=$(echo "$sessions" | jq -r ".[$i].max_iterations // 0")
+        status=$(echo "$sessions" | jq -r ".[$i].status // \"unknown\"")
+        last_task_count=$(echo "$sessions" | jq -r ".[$i].last_task_count // \"?\"")
+        task_file=$(echo "$sessions" | jq -r ".[$i].task_file // \"PRD.md\"")
+
+        # Try to get current remaining count if directory exists
+        local current_remaining="$last_task_count"
+        if [[ -d "$dir" ]] && [[ -f "$dir/$task_file" ]]; then
+            current_remaining=$(grep -cE '^\s*- \[ \]' "$dir/$task_file" 2>/dev/null || echo "$last_task_count")
+        fi
+
+        # Truncate long dirs for display
+        local display_dir="$dir"
+        if [[ ${#display_dir} -gt 40 ]]; then
+            display_dir="...${display_dir: -37}"
+        fi
+
+        # Format iteration as "current/max"
+        local iter_display="${iteration}/${max_iterations}"
+
+        # Format remaining tasks
+        local remaining_display
+        if [[ "$current_remaining" == "0" ]]; then
+            remaining_display="0 tasks"
+        elif [[ "$current_remaining" == "1" ]]; then
+            remaining_display="1 task"
+        else
+            remaining_display="${current_remaining} tasks"
+        fi
+
+        # Determine color based on status
+        local status_color
+        case "$status" in
+            complete|completed)
+                status_color="$GREEN"
+                ;;
+            running)
+                status_color="$YELLOW"
+                ;;
+            failed|stale|stopped)
+                status_color="$RED"
+                ;;
+            *)
+                status_color="$NC"
+                ;;
+        esac
+
+        # Print row with colored status
+        printf "%-${name_width}s  %-${dir_width}s  %-${iter_width}s  ${status_color}%-${status_width}s${NC}  %-${remaining_width}s\n" \
+            "$name" "$display_dir" "$iter_display" "$status" "$remaining_display"
+    done
+
+    echo ""
+    echo "Commands: rloop logs <name>, rloop stop <name>, rloop resume"
 }
 
 cmd_logs() {
