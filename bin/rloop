@@ -6,6 +6,354 @@ set -e
 
 VERSION="0.1.0"
 
-# Placeholder for main CLI - to be implemented in Unit 04
-echo "rloop v$VERSION - Not yet implemented"
-echo "See PRD.md for planned functionality"
+# Determine script and library directories
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${SCRIPT_DIR}/../lib"
+
+# Alternative lib location when installed
+if [[ ! -d "$LIB_DIR" ]] && [[ -d "${HOME}/.config/rloop/lib" ]]; then
+    LIB_DIR="${HOME}/.config/rloop/lib"
+fi
+
+# Default configuration values
+DEFAULT_MAX_ITERATIONS=30
+DEFAULT_TASK_FILE="PRD.md"
+DEFAULT_COMPLETION_MARKER="COMPLETE"
+DEFAULT_MODEL=""
+
+# ANSI color codes
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Print usage information
+usage() {
+    cat << 'EOF'
+rloop - Autonomous AI coding loops
+
+USAGE:
+  rloop <command> [options]
+
+COMMANDS:
+  start <dir>         Start a new ralph loop
+  stop <name>         Stop a running loop
+  stop --all          Stop all loops
+  status              Show status of all loops
+  logs <name>         View logs for a loop
+  resume [name]       Resume crashed/stopped loops
+  config              Manage configuration
+  server              Start status API server
+  version             Show version
+  help                Show this help message
+
+START OPTIONS:
+  --name, -n          Session name (default: directory name)
+  --max-iterations    Max iterations before giving up (default: 30)
+  --task-file, -f     Task file path (default: PRD.md)
+  --completion-marker Completion promise text (default: COMPLETE)
+  --model, -m         Claude model override
+  --webhook           Notification webhook URL
+  --no-tmux           Run in foreground (blocks)
+
+EXAMPLES:
+  rloop start .
+  rloop start ~/project --name myapp --max-iterations 50
+  rloop status
+  rloop logs myapp --follow
+  rloop stop myapp
+EOF
+}
+
+# Print error message and exit
+die() {
+    echo -e "${RED}Error:${NC} $1" >&2
+    exit 1
+}
+
+# Print warning message
+warn() {
+    echo -e "${YELLOW}Warning:${NC} $1" >&2
+}
+
+# Print info message
+info() {
+    echo -e "${BLUE}Info:${NC} $1"
+}
+
+# Print success message
+success() {
+    echo -e "${GREEN}Success:${NC} $1"
+}
+
+# Parse command line arguments
+# Sets global variables based on parsed arguments
+parse_args() {
+    # Global argument storage
+    COMMAND=""
+    POSITIONAL_ARGS=()
+
+    # Start command options
+    OPT_NAME=""
+    OPT_MAX_ITERATIONS="$DEFAULT_MAX_ITERATIONS"
+    OPT_TASK_FILE="$DEFAULT_TASK_FILE"
+    OPT_COMPLETION_MARKER="$DEFAULT_COMPLETION_MARKER"
+    OPT_MODEL="$DEFAULT_MODEL"
+    OPT_WEBHOOK=""
+    OPT_NO_TMUX=false
+
+    # Stop command options
+    OPT_ALL=false
+
+    # Logs command options
+    OPT_FOLLOW=false
+
+    # Server command options
+    OPT_PORT=""
+    OPT_TOKEN=""
+
+    # No arguments provided
+    if [[ $# -eq 0 ]]; then
+        usage
+        exit 0
+    fi
+
+    # First argument is the command
+    COMMAND="$1"
+    shift
+
+    # Parse remaining arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            # Help flags
+            -h|--help)
+                usage
+                exit 0
+                ;;
+
+            # Name option (start command)
+            -n|--name)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --name requires a value"
+                fi
+                OPT_NAME="$2"
+                shift 2
+                ;;
+            --name=*)
+                OPT_NAME="${1#*=}"
+                shift
+                ;;
+
+            # Max iterations option (start command)
+            --max-iterations)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --max-iterations requires a value"
+                fi
+                if ! [[ "$2" =~ ^[0-9]+$ ]]; then
+                    die "Option --max-iterations must be a positive integer"
+                fi
+                OPT_MAX_ITERATIONS="$2"
+                shift 2
+                ;;
+            --max-iterations=*)
+                local val="${1#*=}"
+                if ! [[ "$val" =~ ^[0-9]+$ ]]; then
+                    die "Option --max-iterations must be a positive integer"
+                fi
+                OPT_MAX_ITERATIONS="$val"
+                shift
+                ;;
+
+            # Task file option (start command)
+            -f|--task-file)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --task-file requires a value"
+                fi
+                OPT_TASK_FILE="$2"
+                shift 2
+                ;;
+            --task-file=*)
+                OPT_TASK_FILE="${1#*=}"
+                shift
+                ;;
+
+            # Completion marker option (start command)
+            --completion-marker)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --completion-marker requires a value"
+                fi
+                OPT_COMPLETION_MARKER="$2"
+                shift 2
+                ;;
+            --completion-marker=*)
+                OPT_COMPLETION_MARKER="${1#*=}"
+                shift
+                ;;
+
+            # Model option (start command)
+            -m|--model)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --model requires a value"
+                fi
+                OPT_MODEL="$2"
+                shift 2
+                ;;
+            --model=*)
+                OPT_MODEL="${1#*=}"
+                shift
+                ;;
+
+            # Webhook option (start command)
+            --webhook)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --webhook requires a value"
+                fi
+                OPT_WEBHOOK="$2"
+                shift 2
+                ;;
+            --webhook=*)
+                OPT_WEBHOOK="${1#*=}"
+                shift
+                ;;
+
+            # No tmux flag (start command)
+            --no-tmux)
+                OPT_NO_TMUX=true
+                shift
+                ;;
+
+            # All flag (stop command)
+            --all|-a)
+                OPT_ALL=true
+                shift
+                ;;
+
+            # Follow flag (logs command)
+            --follow)
+                OPT_FOLLOW=true
+                shift
+                ;;
+
+            # Port option (server command)
+            --port|-p)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --port requires a value"
+                fi
+                if ! [[ "$2" =~ ^[0-9]+$ ]]; then
+                    die "Option --port must be a positive integer"
+                fi
+                OPT_PORT="$2"
+                shift 2
+                ;;
+            --port=*)
+                local val="${1#*=}"
+                if ! [[ "$val" =~ ^[0-9]+$ ]]; then
+                    die "Option --port must be a positive integer"
+                fi
+                OPT_PORT="$val"
+                shift
+                ;;
+
+            # Token option (server command)
+            --token|-t)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --token requires a value"
+                fi
+                OPT_TOKEN="$2"
+                shift 2
+                ;;
+            --token=*)
+                OPT_TOKEN="${1#*=}"
+                shift
+                ;;
+
+            # Unknown option
+            -*)
+                die "Unknown option: $1"
+                ;;
+
+            # Positional argument
+            *)
+                POSITIONAL_ARGS+=("$1")
+                shift
+                ;;
+        esac
+    done
+}
+
+# Placeholder command functions (to be implemented)
+cmd_start() {
+    die "cmd_start not yet implemented"
+}
+
+cmd_stop() {
+    die "cmd_stop not yet implemented"
+}
+
+cmd_status() {
+    die "cmd_status not yet implemented"
+}
+
+cmd_logs() {
+    die "cmd_logs not yet implemented"
+}
+
+cmd_resume() {
+    die "cmd_resume not yet implemented"
+}
+
+cmd_config() {
+    die "cmd_config not yet implemented"
+}
+
+cmd_server() {
+    die "cmd_server not yet implemented"
+}
+
+cmd_version() {
+    echo "rloop v$VERSION"
+}
+
+# Main entry point
+main() {
+    parse_args "$@"
+
+    case "$COMMAND" in
+        start)
+            cmd_start
+            ;;
+        stop)
+            cmd_stop
+            ;;
+        status)
+            cmd_status
+            ;;
+        logs)
+            cmd_logs
+            ;;
+        resume)
+            cmd_resume
+            ;;
+        config)
+            cmd_config
+            ;;
+        server)
+            cmd_server
+            ;;
+        version|--version|-v)
+            cmd_version
+            ;;
+        help|--help|-h)
+            usage
+            ;;
+        "")
+            usage
+            ;;
+        *)
+            die "Unknown command: $COMMAND. Run 'rloop help' for usage."
+            ;;
+    esac
+}
+
+main "$@"
