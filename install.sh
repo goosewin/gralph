@@ -453,6 +453,50 @@ if [ "$USE_SUDO" = true ]; then
     echo_warn "Note: Will use sudo for installation"
 fi
 
+# =============================================================================
+# Copy rloop binary to install path
+# =============================================================================
+
+copy_rloop_binary() {
+    local source_bin="$SCRIPT_DIR/bin/rloop"
+    local dest_bin="$INSTALL_PATH/rloop"
+
+    # Verify source exists
+    if [ ! -f "$source_bin" ]; then
+        echo_error "Source binary not found: $source_bin"
+        return 1
+    fi
+
+    echo_info "Installing rloop binary..."
+
+    # Copy with or without sudo
+    if [ "$USE_SUDO" = true ]; then
+        if sudo cp "$source_bin" "$dest_bin"; then
+            sudo chmod +x "$dest_bin"
+            echo_info "  ✓ Copied to $dest_bin (with sudo)"
+        else
+            echo_error "  ✗ Failed to copy rloop binary"
+            return 1
+        fi
+    else
+        if cp "$source_bin" "$dest_bin"; then
+            chmod +x "$dest_bin"
+            echo_info "  ✓ Copied to $dest_bin"
+        else
+            echo_error "  ✗ Failed to copy rloop binary"
+            return 1
+        fi
+    fi
+
+    return 0
+}
+
+echo ""
+if ! copy_rloop_binary; then
+    echo_error "Failed to install rloop binary."
+    exit 1
+fi
+
 echo ""
 echo_warn "Remaining installation steps not yet implemented."
 echo "See PRD.md Unit 06 for remaining tasks."

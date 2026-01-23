@@ -369,7 +369,7 @@ ralph-cli/
 - [x] Check for required dependencies (claude, jq, tmux)
 - [x] Prompt to install missing (apt/brew)
 - [x] Determine install path (~/.local/bin or /usr/local/bin)
-- [ ] Copy bin/rloop to install path
+- [x] Copy bin/rloop to install path
 - [ ] Copy lib/ to ~/.config/rloop/lib/
 - [ ] Create default config
 - [ ] Install shell completions
