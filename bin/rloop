@@ -936,7 +936,20 @@ cmd_config() {
 }
 
 cmd_server() {
-    die "cmd_server not yet implemented"
+    # Source server library
+    if [[ -f "$LIB_DIR/server.sh" ]]; then
+        source "$LIB_DIR/state.sh"
+        source "$LIB_DIR/server.sh"
+    else
+        die "Library not found: $LIB_DIR/server.sh"
+    fi
+
+    # Get port and token from parsed options
+    local port="${OPT_PORT:-8080}"
+    local token="${OPT_TOKEN:-}"
+
+    # Start the server
+    start_server "$port" "$token"
 }
 
 cmd_version() {
