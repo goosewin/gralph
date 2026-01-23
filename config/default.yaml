@@ -3,13 +3,25 @@ defaults:
   max_iterations: 30
   task_file: PRD.md
   completion_marker: COMPLETE
+  # Backend: claude or opencode
+  backend: claude
+  # Model depends on backend:
+  #   claude: claude-sonnet-4-20250514, claude-opus-4-20250514
+  #   opencode: anthropic/claude-sonnet-4-20250514, openai/gpt-4o, etc.
   model: claude-sonnet-4-20250514
 
+# Claude Code backend settings
 claude:
   flags:
     - --dangerously-skip-permissions
   env:
     IS_SANDBOX: "1"
+
+# OpenCode backend settings
+opencode:
+  # Model format: provider/model (e.g., anthropic/claude-sonnet-4-20250514)
+  # Leave empty to use opencode's default
+  default_model: anthropic/claude-sonnet-4-20250514
 
 notifications:
   on_complete: true

@@ -4,9 +4,43 @@
 # Source dependencies
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# jq filters for parsing Claude JSON stream output
-JQ_STREAM_TEXT='select(.type == "assistant").message.content[]? | select(.type == "text").text // empty | gsub("\n"; "\r\n") | . + "\r\n\n"'
-JQ_FINAL_RESULT='select(.type == "result").result // empty'
+# Source backend abstraction layer
+if [[ -f "$SCRIPT_DIR/backends/common.sh" ]]; then
+    source "$SCRIPT_DIR/backends/common.sh"
+fi
+
+# Default backend (can be overridden via config or CLI)
+RLOOP_BACKEND="${RLOOP_BACKEND:-claude}"
+
+# init_backend() - Initialize the backend for use
+#
+# Arguments:
+#   $1 - backend name (optional, uses RLOOP_BACKEND if not specified)
+#
+# Returns:
+#   0 on success, 1 on failure
+init_backend() {
+    local backend="${1:-$RLOOP_BACKEND}"
+
+    # Load the backend
+    if ! load_backend "$backend"; then
+        return 1
+    fi
+
+    # Validate the backend has all required functions
+    if ! validate_backend; then
+        return 1
+    fi
+
+    # Check if backend CLI is installed
+    if ! backend_check_installed; then
+        echo "Error: Backend '$backend' CLI is not installed" >&2
+        echo "Install with: $(backend_get_install_hint)" >&2
+        return 1
+    fi
+
+    return 0
+}
 
 # Default prompt template with placeholder variables:
 #   {task_file}          - Name of the task file (e.g., PRD.md)
@@ -58,7 +92,7 @@ render_prompt_template() {
     echo "$rendered"
 }
 
-# run_iteration() - Execute a single Claude Code iteration
+# run_iteration() - Execute a single AI coding iteration
 #
 # Arguments:
 #   $1 - Project directory (required)
@@ -77,6 +111,9 @@ render_prompt_template() {
 # Output:
 #   Writes full result to RLOOP_ITERATION_RESULT variable
 #   Streams output to stdout and log file
+#
+# Note:
+#   Requires init_backend() to be called first, or RLOOP_BACKEND to be set
 #
 run_iteration() {
     local project_dir="$1"
@@ -115,6 +152,13 @@ run_iteration() {
         return 1
     fi
 
+    # Ensure backend is loaded
+    if [[ -z "$RLOOP_CURRENT_BACKEND" ]]; then
+        if ! init_backend "$RLOOP_BACKEND"; then
+            return 1
+        fi
+    fi
+
     # Create temp file for capturing output
     local tmpfile
     tmpfile=$(mktemp)
@@ -124,54 +168,30 @@ run_iteration() {
     local prompt
     prompt=$(render_prompt_template "$prompt_template" "$task_file" "$completion_marker" "$iteration" "$max_iterations")
 
-    # Build claude command arguments
-    local claude_args=(
-        --dangerously-skip-permissions
-        --verbose
-        --print
-        --output-format stream-json
-    )
-
-    # Add model override if specified
-    if [[ -n "$model" ]]; then
-        claude_args+=(--model "$model")
-    fi
-
-    # Add the prompt
-    claude_args+=(-p "$prompt")
-
-    # Change to project directory and run Claude
+    # Change to project directory and run backend
     pushd "$project_dir" > /dev/null || return 1
 
-    # Execute Claude and capture/stream output
-    # - Capture full JSON to tmpfile
-    # - Stream human-readable text to stdout and log
+    # Execute backend and capture/stream output
+    local backend_exit_code
     if [[ -n "$log_file" ]]; then
-        IS_SANDBOX=1 claude "${claude_args[@]}" 2>&1 \
-            | grep --line-buffered '^{' \
-            | tee "$tmpfile" \
-            | jq --unbuffered -rj "$JQ_STREAM_TEXT" \
-            | tee -a "$log_file"
+        backend_run_iteration "$prompt" "$model" "$tmpfile" | tee -a "$log_file"
+        backend_exit_code=${PIPESTATUS[0]}
     else
-        IS_SANDBOX=1 claude "${claude_args[@]}" 2>&1 \
-            | grep --line-buffered '^{' \
-            | tee "$tmpfile" \
-            | jq --unbuffered -rj "$JQ_STREAM_TEXT"
+        backend_run_iteration "$prompt" "$model" "$tmpfile"
+        backend_exit_code=$?
     fi
-
-    local claude_exit_code=${PIPESTATUS[0]}
 
     popd > /dev/null || return 1
 
-    # Extract the final result from the JSON stream
+    # Extract the final result using backend's parser
     local result
-    result=$(jq -r "$JQ_FINAL_RESULT" "$tmpfile" 2>/dev/null || cat "$tmpfile")
+    result=$(backend_parse_text "$tmpfile")
 
     # Export result for caller to access
     export RLOOP_ITERATION_RESULT="$result"
 
-    # Return based on Claude's exit code
-    return $claude_exit_code
+    # Return based on backend's exit code
+    return $backend_exit_code
 }
 
 # count_remaining_tasks() - Count unchecked tasks in a file

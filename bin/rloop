@@ -53,7 +53,8 @@ START OPTIONS:
   --max-iterations    Max iterations before giving up (default: 30)
   --task-file, -f     Task file path (default: PRD.md)
   --completion-marker Completion promise text (default: COMPLETE)
-  --model, -m         Claude model override
+  --backend, -b       AI backend: claude or opencode (default: claude)
+  --model, -m         Model override (format depends on backend)
   --webhook           Notification webhook URL
   --no-tmux           Run in foreground (blocks)
 
@@ -99,6 +100,7 @@ parse_args() {
     OPT_MAX_ITERATIONS="$DEFAULT_MAX_ITERATIONS"
     OPT_TASK_FILE="$DEFAULT_TASK_FILE"
     OPT_COMPLETION_MARKER="$DEFAULT_COMPLETION_MARKER"
+    OPT_BACKEND=""
     OPT_MODEL="$DEFAULT_MODEL"
     OPT_WEBHOOK=""
     OPT_NO_TMUX=false
@@ -188,6 +190,26 @@ parse_args() {
                 ;;
             --completion-marker=*)
                 OPT_COMPLETION_MARKER="${1#*=}"
+                shift
+                ;;
+
+            # Backend option (start command)
+            -b|--backend)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --backend requires a value"
+                fi
+                if [[ "$2" != "claude" ]] && [[ "$2" != "opencode" ]]; then
+                    die "Option --backend must be 'claude' or 'opencode'"
+                fi
+                OPT_BACKEND="$2"
+                shift 2
+                ;;
+            --backend=*)
+                local val="${1#*=}"
+                if [[ "$val" != "claude" ]] && [[ "$val" != "opencode" ]]; then
+                    die "Option --backend must be 'claude' or 'opencode'"
+                fi
+                OPT_BACKEND="$val"
                 shift
                 ;;
 
@@ -289,6 +311,11 @@ source_libs() {
     else
         die "Library not found: $LIB_DIR/state.sh"
     fi
+    if [[ -f "$LIB_DIR/backends/common.sh" ]]; then
+        source "$LIB_DIR/backends/common.sh"
+    else
+        die "Library not found: $LIB_DIR/backends/common.sh"
+    fi
     if [[ -f "$LIB_DIR/core.sh" ]]; then
         source "$LIB_DIR/core.sh"
     else
@@ -361,12 +388,21 @@ cmd_start() {
     local initial_count
     initial_count=$(grep -cE '^\s*- \[ \]' "$task_file_path" 2>/dev/null || echo "0")
 
+    # Determine backend (CLI option > config > default)
+    local backend="${OPT_BACKEND:-claude}"
+
+    # Initialize and validate backend
+    if ! init_backend "$backend"; then
+        die "Failed to initialize backend: $backend"
+    fi
+
     info "Starting ralph loop..."
     info "  Directory: $target_dir"
     info "  Session: $session_name"
     info "  Task file: $OPT_TASK_FILE"
     info "  Max iterations: $OPT_MAX_ITERATIONS"
     info "  Completion marker: $OPT_COMPLETION_MARKER"
+    info "  Backend: $backend"
     info "  Remaining tasks: $initial_count"
     if [[ -n "$OPT_MODEL" ]]; then
         info "  Model: $OPT_MODEL"
@@ -389,8 +425,12 @@ cmd_start() {
             "last_task_count=$initial_count" \
             "completion_marker=$OPT_COMPLETION_MARKER" \
             "log_file=$log_file" \
+            "backend=$backend" \
             "model=$OPT_MODEL" \
             "webhook=$OPT_WEBHOOK"
+
+        # Set backend for the loop
+        export RLOOP_BACKEND="$backend"
 
         # Run the loop directly
         run_loop \
@@ -424,7 +464,9 @@ cmd_start() {
 
         # Build the command to run in tmux
         # We need to source the libs and call run_loop
-        local rloop_cmd="source '$LIB_DIR/state.sh' && source '$LIB_DIR/core.sh' && "
+        local rloop_cmd="source '$LIB_DIR/state.sh' && source '$LIB_DIR/backends/common.sh' && source '$LIB_DIR/core.sh' && "
+        rloop_cmd+="export RLOOP_BACKEND='$backend' && "
+        rloop_cmd+="init_backend '$backend' && "
         rloop_cmd+="RLOOP_STATE_CALLBACK=_update_session_state "
         rloop_cmd+="_update_session_state() { "
         rloop_cmd+="  set_session \"\$1\" iteration=\"\$2\" status=\"\$3\" last_task_count=\"\$4\"; "
@@ -463,6 +505,7 @@ cmd_start() {
             "last_task_count=$initial_count" \
             "completion_marker=$OPT_COMPLETION_MARKER" \
             "log_file=$log_file" \
+            "backend=$backend" \
             "model=$OPT_MODEL" \
             "webhook=$OPT_WEBHOOK"
 
@@ -825,13 +868,14 @@ cmd_resume() {
             continue
         fi
 
-        local status pid dir task_file max_iterations completion_marker model webhook iteration
+        local status pid dir task_file max_iterations completion_marker backend model webhook iteration
         status=$(echo "$session" | jq -r '.status // "unknown"')
         pid=$(echo "$session" | jq -r '.pid // empty')
         dir=$(echo "$session" | jq -r '.dir // empty')
         task_file=$(echo "$session" | jq -r '.task_file // "PRD.md"')
         max_iterations=$(echo "$session" | jq -r '.max_iterations // 30')
         completion_marker=$(echo "$session" | jq -r '.completion_marker // "COMPLETE"')
+        backend=$(echo "$session" | jq -r '.backend // "claude"')
         model=$(echo "$session" | jq -r '.model // empty')
         webhook=$(echo "$session" | jq -r '.webhook // empty')
         iteration=$(echo "$session" | jq -r '.iteration // 1')
@@ -884,7 +928,9 @@ cmd_resume() {
         tmux kill-session -t "$tmux_session" 2>/dev/null || true
 
         # Build the command to run in tmux
-        local rloop_cmd="source '$LIB_DIR/state.sh' && source '$LIB_DIR/core.sh' && "
+        local rloop_cmd="source '$LIB_DIR/state.sh' && source '$LIB_DIR/backends/common.sh' && source '$LIB_DIR/core.sh' && "
+        rloop_cmd+="export RLOOP_BACKEND='$backend' && "
+        rloop_cmd+="init_backend '$backend' && "
         rloop_cmd+="RLOOP_STATE_CALLBACK=_update_session_state "
         rloop_cmd+="_update_session_state() { "
         rloop_cmd+="  set_session \"\$1\" iteration=\"\$2\" status=\"\$3\" last_task_count=\"\$4\"; "
