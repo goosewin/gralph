@@ -387,7 +387,7 @@ ralph-cli/
 - [x] Implement simple HTTP server using netcat/socat
 - [x] GET /status - return JSON of all sessions
 - [x] GET /status/:name - return specific session
-- [ ] POST /stop/:name - stop a session
+- [x] POST /stop/:name - stop a session
 - [ ] Bearer token authentication
 - [ ] CORS headers for browser access
 
