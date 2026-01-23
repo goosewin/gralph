@@ -79,6 +79,184 @@ format_discord_complete() {
 EOF
 }
 
+# format_slack_complete - Format completion notification for Slack
+# Arguments:
+#   $1 - session name
+#   $2 - project directory
+#   $3 - iterations
+#   $4 - duration string
+#   $5 - timestamp
+# Returns:
+#   Prints JSON payload formatted for Slack webhooks
+format_slack_complete() {
+  local session_name="$1"
+  local project_dir="$2"
+  local iterations="$3"
+  local duration_str="$4"
+  local timestamp="$5"
+
+  # Escape strings for JSON
+  local escaped_name escaped_dir
+  escaped_name=$(echo "$session_name" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  escaped_dir=$(echo "$project_dir" | sed 's/\\/\\\\/g; s/"/\\"/g')
+
+  cat <<EOF
+{
+  "attachments": [{
+    "color": "#57F287",
+    "blocks": [
+      {
+        "type": "header",
+        "text": {
+          "type": "plain_text",
+          "text": "✅ Ralph Loop Complete",
+          "emoji": true
+        }
+      },
+      {
+        "type": "section",
+        "text": {
+          "type": "mrkdwn",
+          "text": "Session *${escaped_name}* has finished all tasks successfully."
+        }
+      },
+      {
+        "type": "section",
+        "fields": [
+          {
+            "type": "mrkdwn",
+            "text": "*Project:*\n\`${escaped_dir}\`"
+          },
+          {
+            "type": "mrkdwn",
+            "text": "*Iterations:*\n${iterations}"
+          },
+          {
+            "type": "mrkdwn",
+            "text": "*Duration:*\n${duration_str}"
+          }
+        ]
+      },
+      {
+        "type": "context",
+        "elements": [
+          {
+            "type": "mrkdwn",
+            "text": "Ralph Loop CLI • ${timestamp}"
+          }
+        ]
+      }
+    ]
+  }]
+}
+EOF
+}
+
+# format_slack_failed - Format failure notification for Slack
+# Arguments:
+#   $1 - session name
+#   $2 - project directory
+#   $3 - failure reason
+#   $4 - iterations
+#   $5 - max iterations
+#   $6 - remaining tasks
+#   $7 - duration string
+#   $8 - timestamp
+# Returns:
+#   Prints JSON payload formatted for Slack webhooks
+format_slack_failed() {
+  local session_name="$1"
+  local project_dir="$2"
+  local failure_reason="$3"
+  local iterations="$4"
+  local max_iterations="$5"
+  local remaining_tasks="$6"
+  local duration_str="$7"
+  local timestamp="$8"
+
+  # Escape strings for JSON
+  local escaped_name escaped_dir escaped_reason
+  escaped_name=$(echo "$session_name" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  escaped_dir=$(echo "$project_dir" | sed 's/\\/\\\\/g; s/"/\\"/g')
+  escaped_reason=$(echo "$failure_reason" | sed 's/\\/\\\\/g; s/"/\\"/g')
+
+  # Build human-readable description based on failure reason
+  local description
+  case "$failure_reason" in
+    max_iterations)
+      description="Session *${escaped_name}* hit maximum iterations limit."
+      ;;
+    error)
+      description="Session *${escaped_name}* encountered an error."
+      ;;
+    manual_stop)
+      description="Session *${escaped_name}* was manually stopped."
+      ;;
+    *)
+      description="Session *${escaped_name}* failed: ${escaped_reason}"
+      ;;
+  esac
+
+  cat <<EOF
+{
+  "attachments": [{
+    "color": "#ED4245",
+    "blocks": [
+      {
+        "type": "header",
+        "text": {
+          "type": "plain_text",
+          "text": "❌ Ralph Loop Failed",
+          "emoji": true
+        }
+      },
+      {
+        "type": "section",
+        "text": {
+          "type": "mrkdwn",
+          "text": "${description}"
+        }
+      },
+      {
+        "type": "section",
+        "fields": [
+          {
+            "type": "mrkdwn",
+            "text": "*Project:*\n\`${escaped_dir}\`"
+          },
+          {
+            "type": "mrkdwn",
+            "text": "*Reason:*\n${escaped_reason}"
+          },
+          {
+            "type": "mrkdwn",
+            "text": "*Iterations:*\n${iterations}/${max_iterations}"
+          },
+          {
+            "type": "mrkdwn",
+            "text": "*Remaining Tasks:*\n${remaining_tasks}"
+          },
+          {
+            "type": "mrkdwn",
+            "text": "*Duration:*\n${duration_str}"
+          }
+        ]
+      },
+      {
+        "type": "context",
+        "elements": [
+          {
+            "type": "mrkdwn",
+            "text": "Ralph Loop CLI • ${timestamp}"
+          }
+        ]
+      }
+    ]
+  }]
+}
+EOF
+}
+
 # format_discord_failed - Format failure notification for Discord
 # Arguments:
 #   $1 - session name
@@ -281,6 +459,9 @@ notify_complete() {
     discord)
       payload=$(format_discord_complete "$session_name" "$project_dir" "$iterations" "$duration_str" "$timestamp")
       ;;
+    slack)
+      payload=$(format_slack_complete "$session_name" "$project_dir" "$iterations" "$duration_str" "$timestamp")
+      ;;
     *)
       # Generic JSON payload (default)
       payload=$(cat <<EOF
@@ -387,6 +568,9 @@ notify_failed() {
   case "$webhook_type" in
     discord)
       payload=$(format_discord_failed "$session_name" "$project_dir" "$failure_reason" "$iterations" "$max_iterations" "$remaining_tasks" "$duration_str" "$timestamp")
+      ;;
+    slack)
+      payload=$(format_slack_failed "$session_name" "$project_dir" "$failure_reason" "$iterations" "$max_iterations" "$remaining_tasks" "$duration_str" "$timestamp")
       ;;
     *)
       # Generic JSON payload (default)

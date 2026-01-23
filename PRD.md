@@ -380,7 +380,7 @@ ralph-cli/
 - [x] Implement `notify_complete()` - format completion message
 - [x] Implement `notify_failed()` - format failure message
 - [x] Support Discord webhook format
-- [ ] Support Slack webhook format
+- [x] Support Slack webhook format
 - [ ] Support generic JSON POST
 
 ### Unit 08: Status Server (Optional, `lib/server.sh`)
