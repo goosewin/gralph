@@ -19,6 +19,22 @@ Named after the "Ralph Wiggum" technique - persistent iteration despite setbacks
 - `tmux` for session management
 - `bash` 4.0+
 - `curl` (optional, for notifications)
+- `flock` (optional, for safer concurrent state access - built-in on Linux, available via Homebrew on macOS)
+
+### Platform Support
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| Linux | ✅ Fully supported | Primary development platform |
+| macOS 12+ | ✅ Supported | Requires Homebrew dependencies |
+| WSL2 | ⚠️ Best effort | Should work like Linux |
+
+**macOS Users:** Install dependencies via Homebrew:
+```bash
+brew install bash jq tmux
+```
+
+See `tests/macos-compatibility.md` for detailed platform notes.
 
 ## Installation
 

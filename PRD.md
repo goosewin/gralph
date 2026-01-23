@@ -398,7 +398,7 @@ ralph-cli/
 - [x] Add troubleshooting section
 - [x] Create example PRD.md template
 - [x] Test on fresh Ubuntu 24.04
-- [ ] Test on macOS
+- [x] Test on macOS
 
 ### Unit 10: Release Automation
 - [ ] Create GitHub Actions workflow
