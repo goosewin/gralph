@@ -43,6 +43,7 @@ COMMANDS:
   status              Show status of all loops
   logs <name>         View logs for a loop
   resume [name]       Resume crashed/stopped loops
+  backends            List available AI backends
   config              Manage configuration
   server              Start status API server
   version             Show version
@@ -977,6 +978,37 @@ cmd_resume() {
     fi
 }
 
+cmd_backends() {
+    # Source library files
+    source_libs
+
+    echo "Available AI backends:"
+    echo ""
+
+    local backends
+    backends=$(list_available_backends)
+
+    for backend in $backends; do
+        echo -n "  $backend"
+
+        # Try to load backend to check if installed
+        if load_backend "$backend" 2>/dev/null; then
+            if backend_check_installed; then
+                echo -e " ${GREEN}(installed)${NC}"
+                echo "      Models: $(backend_get_models)"
+            else
+                echo -e " ${YELLOW}(not installed)${NC}"
+                echo "      Install: $(backend_get_install_hint)"
+            fi
+        else
+            echo -e " ${RED}(error loading)${NC}"
+        fi
+        echo ""
+    done
+
+    echo "Usage: rloop start <dir> --backend <name>"
+}
+
 cmd_config() {
     die "cmd_config not yet implemented"
 }
@@ -1021,6 +1053,9 @@ main() {
             ;;
         resume)
             cmd_resume
+            ;;
+        backends)
+            cmd_backends
             ;;
         config)
             cmd_config

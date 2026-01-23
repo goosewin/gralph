@@ -17,6 +17,7 @@ _rloop() {
         'status:Show status of all loops'
         'logs:View logs for a loop'
         'resume:Resume crashed/stopped loops'
+        'backends:List available AI backends'
         'config:Manage configuration'
         'server:Start status API server'
         'version:Show version'
@@ -89,7 +90,7 @@ _rloop() {
                     )
                     _describe -t config_cmds 'config subcommands' config_cmds
                     ;;
-                status|version|help)
+                backends|status|version|help)
                     # No further arguments
                     ;;
             esac

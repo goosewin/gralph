@@ -16,7 +16,7 @@ _rloop_completions() {
     }
 
     # Main commands
-    local commands="start stop status logs resume config server version help"
+    local commands="start stop status logs resume backends config server version help"
 
     # Options for start command
     local start_opts="--name -n --max-iterations --task-file -f --completion-marker --backend -b --model -m --webhook --no-tmux --help -h"
