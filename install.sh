@@ -623,11 +623,164 @@ if ! create_default_config; then
     exit 1
 fi
 
+# =============================================================================
+# Install shell completions
+# =============================================================================
+
+COMPLETIONS_DIR="$CONFIG_DIR/completions"
+
+install_shell_completions() {
+    local source_completions="$SCRIPT_DIR/completions"
+
+    echo_info "Installing shell completions..."
+
+    # Verify source completions directory exists
+    if [ ! -d "$source_completions" ]; then
+        echo_warn "  Completions directory not found: $source_completions"
+        echo_warn "  Skipping shell completions installation"
+        return 0
+    fi
+
+    # Create completions directory in config
+    if ! mkdir -p "$COMPLETIONS_DIR"; then
+        echo_warn "  Failed to create $COMPLETIONS_DIR"
+        echo_warn "  Skipping shell completions installation"
+        return 0
+    fi
+
+    # Copy bash completion
+    if [ -f "$source_completions/rloop.bash" ]; then
+        if cp "$source_completions/rloop.bash" "$COMPLETIONS_DIR/rloop.bash"; then
+            echo_info "  ✓ Copied bash completions"
+        else
+            echo_warn "  ✗ Failed to copy bash completions"
+        fi
+    fi
+
+    # Copy zsh completion
+    if [ -f "$source_completions/rloop.zsh" ]; then
+        if cp "$source_completions/rloop.zsh" "$COMPLETIONS_DIR/_rloop"; then
+            echo_info "  ✓ Copied zsh completions"
+        else
+            echo_warn "  ✗ Failed to copy zsh completions"
+        fi
+    fi
+
+    # Detect shell and provide setup instructions
+    local shell_name=$(basename "$SHELL")
+
+    # Try to install to system directories if possible
+    local bash_installed=false
+    local zsh_installed=false
+
+    # Bash: Try /etc/bash_completion.d or ~/.local/share/bash-completion/completions
+    if [ -f "$COMPLETIONS_DIR/rloop.bash" ]; then
+        local bash_system_dir="/etc/bash_completion.d"
+        local bash_user_dir="$HOME/.local/share/bash-completion/completions"
+
+        if [ -d "$bash_system_dir" ] && [ -w "$bash_system_dir" ]; then
+            if cp "$COMPLETIONS_DIR/rloop.bash" "$bash_system_dir/rloop"; then
+                echo_info "  ✓ Installed bash completions to $bash_system_dir"
+                bash_installed=true
+            fi
+        elif [ "$USE_SUDO" = true ] && [ -d "$bash_system_dir" ]; then
+            if sudo cp "$COMPLETIONS_DIR/rloop.bash" "$bash_system_dir/rloop"; then
+                echo_info "  ✓ Installed bash completions to $bash_system_dir (with sudo)"
+                bash_installed=true
+            fi
+        fi
+
+        if [ "$bash_installed" = false ]; then
+            mkdir -p "$bash_user_dir" 2>/dev/null
+            if [ -d "$bash_user_dir" ] && cp "$COMPLETIONS_DIR/rloop.bash" "$bash_user_dir/rloop" 2>/dev/null; then
+                echo_info "  ✓ Installed bash completions to $bash_user_dir"
+                bash_installed=true
+            fi
+        fi
+    fi
+
+    # Zsh: Try /usr/local/share/zsh/site-functions or user fpath
+    if [ -f "$COMPLETIONS_DIR/_rloop" ]; then
+        local zsh_system_dir="/usr/local/share/zsh/site-functions"
+        local zsh_user_dir="$HOME/.zsh/completions"
+
+        if [ -d "$zsh_system_dir" ] && [ -w "$zsh_system_dir" ]; then
+            if cp "$COMPLETIONS_DIR/_rloop" "$zsh_system_dir/_rloop"; then
+                echo_info "  ✓ Installed zsh completions to $zsh_system_dir"
+                zsh_installed=true
+            fi
+        elif [ "$USE_SUDO" = true ] && [ -d "$zsh_system_dir" ]; then
+            if sudo cp "$COMPLETIONS_DIR/_rloop" "$zsh_system_dir/_rloop"; then
+                echo_info "  ✓ Installed zsh completions to $zsh_system_dir (with sudo)"
+                zsh_installed=true
+            fi
+        fi
+
+        if [ "$zsh_installed" = false ]; then
+            mkdir -p "$zsh_user_dir" 2>/dev/null
+            if [ -d "$zsh_user_dir" ] && cp "$COMPLETIONS_DIR/_rloop" "$zsh_user_dir/_rloop" 2>/dev/null; then
+                echo_info "  ✓ Installed zsh completions to $zsh_user_dir"
+                zsh_installed=true
+            fi
+        fi
+    fi
+
+    # Store installation status for later instructions
+    BASH_COMPLETION_INSTALLED=$bash_installed
+    ZSH_COMPLETION_INSTALLED=$zsh_installed
+
+    return 0
+}
+
+# Print shell completion setup instructions
+print_completion_instructions() {
+    local shell_name=$(basename "$SHELL")
+
+    # Only print if completions weren't auto-installed
+    if [ "$BASH_COMPLETION_INSTALLED" = true ] && [ "$ZSH_COMPLETION_INSTALLED" = true ]; then
+        return 0
+    fi
+
+    echo ""
+    echo_info "Shell completion setup:"
+
+    case "$shell_name" in
+        bash)
+            if [ "$BASH_COMPLETION_INSTALLED" != true ]; then
+                echo ""
+                echo "    # Add to ~/.bashrc:"
+                echo "    source $COMPLETIONS_DIR/rloop.bash"
+            fi
+            ;;
+        zsh)
+            if [ "$ZSH_COMPLETION_INSTALLED" != true ]; then
+                echo ""
+                echo "    # Add to ~/.zshrc (before compinit):"
+                echo "    fpath=($COMPLETIONS_DIR \$fpath)"
+                echo "    autoload -Uz compinit && compinit"
+            fi
+            ;;
+        *)
+            echo ""
+            echo "    For bash, add to ~/.bashrc:"
+            echo "      source $COMPLETIONS_DIR/rloop.bash"
+            echo ""
+            echo "    For zsh, add to ~/.zshrc (before compinit):"
+            echo "      fpath=($COMPLETIONS_DIR \$fpath)"
+            ;;
+    esac
+}
+
+BASH_COMPLETION_INSTALLED=false
+ZSH_COMPLETION_INSTALLED=false
+
 echo ""
-echo_warn "Remaining installation steps not yet implemented."
-echo "See PRD.md Unit 06 for remaining tasks."
+install_shell_completions
 
 # Print PATH update instructions if needed
 if [ "$NEEDS_PATH_UPDATE" = true ]; then
     print_path_instructions "$INSTALL_PATH"
 fi
+
+# Print completion instructions if needed
+print_completion_instructions
