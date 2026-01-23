@@ -370,7 +370,7 @@ ralph-cli/
 - [x] Prompt to install missing (apt/brew)
 - [x] Determine install path (~/.local/bin or /usr/local/bin)
 - [x] Copy bin/rloop to install path
-- [ ] Copy lib/ to ~/.config/rloop/lib/
+- [x] Copy lib/ to ~/.config/rloop/lib/
 - [ ] Create default config
 - [ ] Install shell completions
 - [ ] Print success message with usage examples

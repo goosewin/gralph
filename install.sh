@@ -497,6 +497,63 @@ if ! copy_rloop_binary; then
     exit 1
 fi
 
+# =============================================================================
+# Copy lib/ to ~/.config/rloop/lib/
+# =============================================================================
+
+CONFIG_DIR="$HOME/.config/rloop"
+LIB_DIR="$CONFIG_DIR/lib"
+
+copy_lib_files() {
+    local source_lib="$SCRIPT_DIR/lib"
+
+    # Verify source lib directory exists
+    if [ ! -d "$source_lib" ]; then
+        echo_error "Source lib directory not found: $source_lib"
+        return 1
+    fi
+
+    echo_info "Installing library files..."
+
+    # Create config directory structure
+    if ! mkdir -p "$LIB_DIR"; then
+        echo_error "  ✗ Failed to create $LIB_DIR"
+        return 1
+    fi
+    echo_info "  ✓ Created $CONFIG_DIR"
+
+    # Copy all .sh files from lib/
+    local copied=0
+    local failed=0
+    for file in "$source_lib"/*.sh; do
+        if [ -f "$file" ]; then
+            local filename=$(basename "$file")
+            if cp "$file" "$LIB_DIR/$filename"; then
+                chmod +x "$LIB_DIR/$filename"
+                echo_info "  ✓ Copied $filename"
+                ((copied++))
+            else
+                echo_error "  ✗ Failed to copy $filename"
+                ((failed++))
+            fi
+        fi
+    done
+
+    if [ $failed -gt 0 ]; then
+        echo_error "Failed to copy $failed file(s)"
+        return 1
+    fi
+
+    echo_info "  ✓ Installed $copied library files to $LIB_DIR"
+    return 0
+}
+
+echo ""
+if ! copy_lib_files; then
+    echo_error "Failed to install library files."
+    exit 1
+fi
+
 echo ""
 echo_warn "Remaining installation steps not yet implemented."
 echo "See PRD.md Unit 06 for remaining tasks."
