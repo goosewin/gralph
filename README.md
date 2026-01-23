@@ -658,6 +658,250 @@ rloop start . --model claude-opus-4-20250514
 rloop config set defaults.model claude-opus-4-20250514
 ```
 
+## Troubleshooting
+
+### Common Issues
+
+#### Loop terminates immediately without doing work
+
+**Symptom:** The loop exits after the first iteration without completing any tasks.
+
+**Causes and solutions:**
+
+1. **Task file not found**
+   ```bash
+   # Verify task file exists
+   ls -la PRD.md
+
+   # Or specify correct path
+   rloop start . --task-file TASKS.md
+   ```
+
+2. **No unchecked tasks in file**
+   ```bash
+   # Check for unchecked tasks
+   grep -c '^\s*- \[ \]' PRD.md
+
+   # Should return > 0 if tasks remain
+   ```
+
+3. **Claude API authentication issues**
+   ```bash
+   # Verify claude CLI works
+   claude --version
+   claude --print -p "hello"
+   ```
+
+#### Loop keeps running but never completes tasks
+
+**Symptom:** Iterations increase but task count stays the same.
+
+**Causes and solutions:**
+
+1. **Tasks are too complex** - Break tasks into smaller, more specific items
+2. **Ambiguous task descriptions** - Make tasks clear and actionable
+3. **Missing dependencies** - Ensure required files/packages exist
+4. **Check logs for errors:**
+   ```bash
+   rloop logs <session-name>
+   ```
+
+#### "Session already exists" error
+
+**Symptom:** `Error: Session 'myapp' already exists`
+
+**Solution:**
+```bash
+# Stop the existing session first
+rloop stop myapp
+
+# Or use a different name
+rloop start . --name myapp-v2
+```
+
+#### tmux session not found
+
+**Symptom:** `Error: tmux session not found` when checking status
+
+**Causes:**
+
+1. **tmux not installed:**
+   ```bash
+   # Install tmux
+   sudo apt install tmux  # Ubuntu/Debian
+   brew install tmux      # macOS
+   ```
+
+2. **Session crashed** - Use resume to restart:
+   ```bash
+   rloop resume myapp
+   ```
+
+#### Status server not responding
+
+**Symptom:** `curl: (7) Failed to connect` when querying status server
+
+**Solutions:**
+
+1. **Check if server is running:**
+   ```bash
+   ps aux | grep "rloop server"
+   ```
+
+2. **Check port availability:**
+   ```bash
+   # Is port in use?
+   lsof -i :8080
+
+   # Try different port
+   rloop server --port 9090
+   ```
+
+3. **Firewall blocking connections:**
+   ```bash
+   # Allow port through firewall
+   sudo ufw allow 8080/tcp
+   ```
+
+#### Webhooks not firing
+
+**Symptom:** No notifications received on completion
+
+**Solutions:**
+
+1. **Verify webhook URL is correct:**
+   ```bash
+   # Test webhook manually
+   curl -X POST "https://discord.com/api/webhooks/..." \
+     -H "Content-Type: application/json" \
+     -d '{"content": "Test message"}'
+   ```
+
+2. **Check curl is installed:**
+   ```bash
+   which curl || sudo apt install curl
+   ```
+
+3. **Check network connectivity from server**
+
+#### Permission denied errors
+
+**Symptom:** `Permission denied` when starting loop
+
+**Solutions:**
+
+1. **Check rloop is executable:**
+   ```bash
+   chmod +x ~/.local/bin/rloop
+   ```
+
+2. **Check lib files are readable:**
+   ```bash
+   chmod -R 755 ~/.config/rloop/lib/
+   ```
+
+3. **Check project directory is writable:**
+   ```bash
+   ls -la ~/projects/myapp/
+   ```
+
+#### JSON parse errors in logs
+
+**Symptom:** `jq: parse error` messages in output
+
+**Causes:**
+
+1. **jq not installed:**
+   ```bash
+   sudo apt install jq  # Ubuntu/Debian
+   brew install jq      # macOS
+   ```
+
+2. **Claude output contains invalid JSON** - Usually transient, loop will retry
+
+#### Loop stuck at max iterations
+
+**Symptom:** Loop hits max iterations without completing
+
+**Solutions:**
+
+1. **Increase max iterations:**
+   ```bash
+   rloop start . --max-iterations 100
+   ```
+
+2. **Check remaining task complexity:**
+   ```bash
+   grep '^\s*- \[ \]' PRD.md
+   ```
+
+3. **Review logs for repeated errors:**
+   ```bash
+   rloop logs myapp | grep -i error
+   ```
+
+### Debugging Tips
+
+#### Enable verbose logging
+
+```bash
+# Set debug log level in config
+RLOOP_LOGGING_LEVEL=debug rloop start .
+```
+
+#### Run in foreground mode
+
+For easier debugging, run without tmux:
+
+```bash
+rloop start . --no-tmux
+```
+
+#### Inspect state file
+
+```bash
+# View current state
+cat ~/.config/rloop/state.json | jq .
+
+# Find specific session
+jq '.sessions.myapp' ~/.config/rloop/state.json
+```
+
+#### Check tmux session directly
+
+```bash
+# List rloop tmux sessions
+tmux list-sessions | grep rloop
+
+# Attach to session
+tmux attach -t rloop-myapp
+```
+
+#### Clean up stale state
+
+If state file becomes corrupted or out of sync:
+
+```bash
+# Backup current state
+cp ~/.config/rloop/state.json ~/.config/rloop/state.json.bak
+
+# Remove specific session from state
+jq 'del(.sessions.myapp)' ~/.config/rloop/state.json > tmp.json && \
+  mv tmp.json ~/.config/rloop/state.json
+
+# Or reset entirely (stops all sessions first)
+rloop stop --all
+rm ~/.config/rloop/state.json
+```
+
+### Getting Help
+
+If you continue to experience issues:
+
+1. **Check the logs** - Most issues are visible in `rloop logs <name>`
+2. **Verify dependencies** - Run `./install.sh` to check all requirements
+3. **Open an issue** - Include logs and system info (OS, bash version, etc.)
+
 ## License
 
 MIT

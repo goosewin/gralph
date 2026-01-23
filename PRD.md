@@ -395,7 +395,7 @@ ralph-cli/
 - [x] Write usage examples in README
 - [x] Document all CLI commands
 - [x] Document configuration options
-- [ ] Add troubleshooting section
+- [x] Add troubleshooting section
 - [ ] Create example PRD.md template
 - [ ] Test on fresh Ubuntu 24.04
 - [ ] Test on macOS
