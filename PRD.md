@@ -389,7 +389,7 @@ ralph-cli/
 - [ ] GET /status/:name - return specific session
 - [ ] POST /stop/:name - stop a session
  - [x] Bearer token authentication
-- [ ] CORS headers for browser access
+ - [x] CORS headers for browser access
 
 ### Unit 09: Testing & Documentation
 - [ ] Write usage examples in README
