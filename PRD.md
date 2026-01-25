@@ -356,7 +356,7 @@ ralph-cli/
 - [ ] Implement `cmd_resume()`
   - [ ] Find sessions marked running with dead PIDs
   - [ ] Restart their tmux sessions
-- [ ] Implement `cmd_version()`
+- [x] Implement `cmd_version()`
 
 ### Unit 05: Configuration (`lib/config.sh`)
 - [ ] Implement `load_config()` - merge default + global + project configs
