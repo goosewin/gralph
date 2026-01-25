@@ -1,5 +1,5 @@
 #!/bin/bash
-# core.sh - Core loop logic for ralph loop
+# core.sh - Core loop logic for gralph
 
 # Source dependencies
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,17 +10,17 @@ if [[ -f "$SCRIPT_DIR/backends/common.sh" ]]; then
 fi
 
 # Default backend (can be overridden via config or CLI)
-RLOOP_BACKEND="${RLOOP_BACKEND:-claude}"
+GRALPH_BACKEND="${GRALPH_BACKEND:-claude}"
 
 # init_backend() - Initialize the backend for use
 #
 # Arguments:
-#   $1 - backend name (optional, uses RLOOP_BACKEND if not specified)
+#   $1 - backend name (optional, uses GRALPH_BACKEND if not specified)
 #
 # Returns:
 #   0 on success, 1 on failure
 init_backend() {
-    local backend="${1:-$RLOOP_BACKEND}"
+    local backend="${1:-$GRALPH_BACKEND}"
 
     # Load the backend
     if ! load_backend "$backend"; then
@@ -109,11 +109,11 @@ render_prompt_template() {
 #   1 - Iteration failed
 #
 # Output:
-#   Writes full result to RLOOP_ITERATION_RESULT variable
+#   Writes full result to GRALPH_ITERATION_RESULT variable
 #   Streams output to stdout and log file
 #
 # Note:
-#   Requires init_backend() to be called first, or RLOOP_BACKEND to be set
+#   Requires init_backend() to be called first, or GRALPH_BACKEND to be set
 #
 run_iteration() {
     local project_dir="$1"
@@ -153,8 +153,8 @@ run_iteration() {
     fi
 
     # Ensure backend is loaded
-    if [[ -z "$RLOOP_CURRENT_BACKEND" ]]; then
-        if ! init_backend "$RLOOP_BACKEND"; then
+    if [[ -z "$GRALPH_CURRENT_BACKEND" ]]; then
+        if ! init_backend "$GRALPH_BACKEND"; then
             return 1
         fi
     fi
@@ -167,10 +167,10 @@ run_iteration() {
     # Resolve prompt template (argument > file override > default)
     if [[ -z "$prompt_template" ]]; then
         local template_path=""
-        if [[ -n "$RLOOP_PROMPT_TEMPLATE_FILE" ]] && [[ -f "$RLOOP_PROMPT_TEMPLATE_FILE" ]]; then
-            template_path="$RLOOP_PROMPT_TEMPLATE_FILE"
+        if [[ -n "$GRALPH_PROMPT_TEMPLATE_FILE" ]] && [[ -f "$GRALPH_PROMPT_TEMPLATE_FILE" ]]; then
+            template_path="$GRALPH_PROMPT_TEMPLATE_FILE"
         else
-            template_path="$project_dir/.rloop/prompt-template.txt"
+            template_path="$project_dir/.gralph/prompt-template.txt"
         fi
 
         if [[ -n "$template_path" ]] && [[ -f "$template_path" ]]; then
@@ -204,7 +204,7 @@ run_iteration() {
     result=$(backend_parse_text "$tmpfile")
 
     # Export result for caller to access
-    export RLOOP_ITERATION_RESULT="$result"
+    export GRALPH_ITERATION_RESULT="$result"
 
     # Return based on backend's exit code
     return $backend_exit_code
@@ -305,7 +305,7 @@ check_completion() {
     return 0
 }
 
-# run_loop() - Execute the main ralph loop
+# run_loop() - Execute the main gralph loop
 #
 # Arguments:
 #   $1 - Project directory (required)
@@ -321,7 +321,7 @@ check_completion() {
 #   1 - Max iterations reached or error occurred
 #
 # Environment:
-#   RLOOP_STATE_CALLBACK - Optional function name to call for state updates
+#   GRALPH_STATE_CALLBACK - Optional function name to call for state updates
 #                          Called with: session_name iteration status remaining_tasks
 #
 run_loop() {
@@ -360,15 +360,15 @@ run_loop() {
     fi
 
     # Set up logging
-    local rloop_dir="$project_dir/.rloop"
-    mkdir -p "$rloop_dir"
-    local log_file="$rloop_dir/ralph.log"
+    local gralph_dir="$project_dir/.gralph"
+    mkdir -p "$gralph_dir"
+    local log_file="$gralph_dir/gralph.log"
 
     # Initialize iteration counter
     local iteration=1
 
     # Log startup information
-    echo "Starting ralph loop in $project_dir" | tee "$log_file"
+    echo "Starting gralph loop in $project_dir" | tee "$log_file"
     echo "Task file: $task_file" | tee -a "$log_file"
     echo "Max iterations: $max_iterations" | tee -a "$log_file"
     echo "Completion marker: $completion_marker" | tee -a "$log_file"
@@ -390,8 +390,8 @@ run_loop() {
         echo "=== Iteration $iteration/$max_iterations (Remaining: $remaining_before) ===" | tee -a "$log_file"
 
         # Update state if callback is defined
-        if [[ -n "$RLOOP_STATE_CALLBACK" ]] && declare -f "$RLOOP_STATE_CALLBACK" > /dev/null; then
-            "$RLOOP_STATE_CALLBACK" "$session_name" "$iteration" "running" "$remaining_before"
+        if [[ -n "$GRALPH_STATE_CALLBACK" ]] && declare -f "$GRALPH_STATE_CALLBACK" > /dev/null; then
+            "$GRALPH_STATE_CALLBACK" "$session_name" "$iteration" "running" "$remaining_before"
         fi
 
         # Check if already complete before running iteration
@@ -413,17 +413,17 @@ run_loop() {
         local iteration_exit_code=$?
 
         # Get the result from the iteration
-        local result="$RLOOP_ITERATION_RESULT"
+        local result="$GRALPH_ITERATION_RESULT"
 
         # Check for genuine completion
         if check_completion "$full_task_path" "$result" "$completion_marker"; then
             echo "" | tee -a "$log_file"
-            echo "✅ Ralph complete after $iteration iterations." | tee -a "$log_file"
+            echo "Gralph complete after $iteration iterations." | tee -a "$log_file"
             echo "FINISHED: $(date -Iseconds)" | tee -a "$log_file"
 
             # Update state if callback is defined
-            if [[ -n "$RLOOP_STATE_CALLBACK" ]] && declare -f "$RLOOP_STATE_CALLBACK" > /dev/null; then
-                "$RLOOP_STATE_CALLBACK" "$session_name" "$iteration" "complete" "0"
+            if [[ -n "$GRALPH_STATE_CALLBACK" ]] && declare -f "$GRALPH_STATE_CALLBACK" > /dev/null; then
+                "$GRALPH_STATE_CALLBACK" "$session_name" "$iteration" "complete" "0"
             fi
 
             return 0
@@ -435,8 +435,8 @@ run_loop() {
         echo "Tasks remaining after iteration: $remaining_after" | tee -a "$log_file"
 
         # Update state with new task count
-        if [[ -n "$RLOOP_STATE_CALLBACK" ]] && declare -f "$RLOOP_STATE_CALLBACK" > /dev/null; then
-            "$RLOOP_STATE_CALLBACK" "$session_name" "$iteration" "running" "$remaining_after"
+        if [[ -n "$GRALPH_STATE_CALLBACK" ]] && declare -f "$GRALPH_STATE_CALLBACK" > /dev/null; then
+            "$GRALPH_STATE_CALLBACK" "$session_name" "$iteration" "running" "$remaining_after"
         fi
 
         # Increment iteration counter
@@ -453,13 +453,13 @@ run_loop() {
     final_remaining=$(count_remaining_tasks "$full_task_path")
 
     echo "" | tee -a "$log_file"
-    echo "⚠️ Hit max iterations ($max_iterations)" | tee -a "$log_file"
+    echo "Hit max iterations ($max_iterations)" | tee -a "$log_file"
     echo "Remaining tasks: $final_remaining" | tee -a "$log_file"
     echo "FINISHED: $(date -Iseconds)" | tee -a "$log_file"
 
     # Update state if callback is defined
-    if [[ -n "$RLOOP_STATE_CALLBACK" ]] && declare -f "$RLOOP_STATE_CALLBACK" > /dev/null; then
-        "$RLOOP_STATE_CALLBACK" "$session_name" "$max_iterations" "max_iterations" "$final_remaining"
+    if [[ -n "$GRALPH_STATE_CALLBACK" ]] && declare -f "$GRALPH_STATE_CALLBACK" > /dev/null; then
+        "$GRALPH_STATE_CALLBACK" "$session_name" "$max_iterations" "max_iterations" "$final_remaining"
     fi
 
     return 1

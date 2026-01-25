@@ -23,8 +23,8 @@ if [[ "$bash_major_version" -lt 4 ]]; then
     exit 1
 fi
 
-./bin/rloop version | grep -q '^rloop v'
-./bin/rloop help >/dev/null
-./bin/rloop status >/dev/null
+./bin/gralph version | grep -q '^gralph v'
+./bin/gralph help >/dev/null
+./bin/gralph status >/dev/null
 
 echo "macOS smoke test passed."

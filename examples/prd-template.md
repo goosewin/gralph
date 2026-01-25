@@ -34,17 +34,17 @@ Brief description of the project and its purpose.
 
 ---
 
-## Usage with rloop
+## Usage with gralph
 
 ```bash
 # Start the autonomous loop
-rloop start . --task-file PRD.md --max-iterations 30
+gralph start . --task-file PRD.md --max-iterations 30
 
 # Monitor progress
-rloop status
+gralph status
 
 # View logs
-rloop logs [project-name] --follow
+gralph logs [project-name] --follow
 ```
 
 ## Notes

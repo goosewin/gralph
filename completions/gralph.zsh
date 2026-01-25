@@ -1,18 +1,18 @@
-#compdef rloop
+#compdef gralph
 #
-# Zsh completions for rloop
+# Zsh completions for gralph
 #
 # Installation:
 #   - Copy to a directory in your $fpath (e.g., ~/.zsh/completions/)
-#   - Or add to /usr/local/share/zsh/site-functions/_rloop
+#   - Or add to /usr/local/share/zsh/site-functions/_gralph
 #   - Ensure 'compinit' is called in your .zshrc
 
-_rloop() {
+_gralph() {
     local -a commands
     local -a start_opts stop_opts logs_opts server_opts
 
     commands=(
-        'start:Start a new ralph loop'
+        'start:Start a new gralph loop'
         'stop:Stop a running loop'
         'status:Show status of all loops'
         'logs:View logs for a loop'
@@ -58,7 +58,7 @@ _rloop() {
 
     case $state in
         command)
-            _describe -t commands 'rloop commands' commands
+            _describe -t commands 'gralph commands' commands
             ;;
         args)
             case $words[1] in
@@ -68,15 +68,15 @@ _rloop() {
                     ;;
                 stop)
                     _arguments $stop_opts \
-                        '1:session:_rloop_sessions'
+                        '1:session:_gralph_sessions'
                     ;;
                 logs)
                     _arguments $logs_opts \
-                        '1:session:_rloop_sessions'
+                        '1:session:_gralph_sessions'
                     ;;
                 resume)
                     _arguments \
-                        '1:session:_rloop_sessions'
+                        '1:session:_gralph_sessions'
                     ;;
                 server)
                     _arguments $server_opts
@@ -99,14 +99,14 @@ _rloop() {
 }
 
 # Helper function to get session names
-_rloop_sessions() {
+_gralph_sessions() {
     local -a sessions
-    local state_file="${HOME}/.config/rloop/state.json"
+    local state_file="${HOME}/.config/gralph/state.json"
 
     if [[ -f "$state_file" ]] && (( $+commands[jq] )); then
         sessions=(${(f)"$(jq -r '.sessions | keys[]' "$state_file" 2>/dev/null)"})
         if [[ -n "$sessions" ]]; then
-            _describe -t sessions 'rloop sessions' sessions
+            _describe -t sessions 'gralph sessions' sessions
             return
         fi
     fi
@@ -114,4 +114,4 @@ _rloop_sessions() {
     _message 'no sessions found'
 }
 
-_rloop "$@"
+_gralph "$@"

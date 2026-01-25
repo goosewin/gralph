@@ -1,4 +1,4 @@
-# Default configuration for rloop
+# Default configuration for gralph
 defaults:
   max_iterations: 30
   task_file: PRD.md

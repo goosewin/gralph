@@ -1,36 +1,36 @@
 #!/bin/bash
-# state.sh - State management for rloop sessions
+# state.sh - State management for gralph sessions
 
 # State file location
-RLOOP_STATE_DIR="${RLOOP_STATE_DIR:-$HOME/.config/rloop}"
-RLOOP_STATE_FILE="${RLOOP_STATE_FILE:-$RLOOP_STATE_DIR/state.json}"
-RLOOP_LOCK_FILE="${RLOOP_LOCK_FILE:-$RLOOP_STATE_DIR/state.lock}"
+GRALPH_STATE_DIR="${GRALPH_STATE_DIR:-$HOME/.config/gralph}"
+GRALPH_STATE_FILE="${GRALPH_STATE_FILE:-$GRALPH_STATE_DIR/state.json}"
+GRALPH_LOCK_FILE="${GRALPH_LOCK_FILE:-$GRALPH_STATE_DIR/state.lock}"
 
 # Lock timeout in seconds (default 10 seconds)
-RLOOP_LOCK_TIMEOUT="${RLOOP_LOCK_TIMEOUT:-10}"
+GRALPH_LOCK_TIMEOUT="${GRALPH_LOCK_TIMEOUT:-10}"
 
 # File descriptor for lock file (using 200 to avoid conflicts with common FDs)
-RLOOP_LOCK_FD=200
+GRALPH_LOCK_FD=200
 
 # _acquire_lock() - Acquire exclusive lock on state file
 # Uses flock for POSIX-compliant file locking
 # Arguments:
-#   $1 - (optional) timeout in seconds (default: RLOOP_LOCK_TIMEOUT)
+#   $1 - (optional) timeout in seconds (default: GRALPH_LOCK_TIMEOUT)
 # Returns:
 #   0 on success, 1 on failure (lock not acquired within timeout)
 _acquire_lock() {
-    local timeout="${1:-$RLOOP_LOCK_TIMEOUT}"
+    local timeout="${1:-$GRALPH_LOCK_TIMEOUT}"
 
     # Ensure lock directory exists
-    if [[ ! -d "$RLOOP_STATE_DIR" ]]; then
-        mkdir -p "$RLOOP_STATE_DIR" 2>/dev/null || return 1
+    if [[ ! -d "$GRALPH_STATE_DIR" ]]; then
+        mkdir -p "$GRALPH_STATE_DIR" 2>/dev/null || return 1
     fi
 
     # Open lock file on designated FD
-    eval "exec $RLOOP_LOCK_FD>\"$RLOOP_LOCK_FILE\""
+    eval "exec $GRALPH_LOCK_FD>\"$GRALPH_LOCK_FILE\""
 
     # Try to acquire exclusive lock with timeout
-    if ! flock -x -w "$timeout" "$RLOOP_LOCK_FD" 2>/dev/null; then
+    if ! flock -x -w "$timeout" "$GRALPH_LOCK_FD" 2>/dev/null; then
         echo "Error: Failed to acquire state lock within ${timeout}s" >&2
         return 1
     fi
@@ -43,7 +43,7 @@ _acquire_lock() {
 #   0 on success
 _release_lock() {
     # Release the lock by closing the file descriptor
-    eval "exec $RLOOP_LOCK_FD>&-" 2>/dev/null
+    eval "exec $GRALPH_LOCK_FD>&-" 2>/dev/null
     return 0
 }
 
@@ -72,29 +72,29 @@ _with_lock() {
 }
 
 # init_state() - Create state file and directory if missing
-# Creates ~/.config/rloop/ directory and initializes empty state.json
+# Creates ~/.config/gralph/ directory and initializes empty state.json
 # Returns 0 on success, 1 on failure
 init_state() {
     # Create config directory if it doesn't exist
-    if [[ ! -d "$RLOOP_STATE_DIR" ]]; then
-        if ! mkdir -p "$RLOOP_STATE_DIR"; then
-            echo "Error: Failed to create state directory: $RLOOP_STATE_DIR" >&2
+    if [[ ! -d "$GRALPH_STATE_DIR" ]]; then
+        if ! mkdir -p "$GRALPH_STATE_DIR"; then
+            echo "Error: Failed to create state directory: $GRALPH_STATE_DIR" >&2
             return 1
         fi
     fi
 
     # Create state file with empty sessions object if it doesn't exist
-    if [[ ! -f "$RLOOP_STATE_FILE" ]]; then
-        if ! echo '{"sessions":{}}' > "$RLOOP_STATE_FILE"; then
-            echo "Error: Failed to create state file: $RLOOP_STATE_FILE" >&2
+    if [[ ! -f "$GRALPH_STATE_FILE" ]]; then
+        if ! echo '{"sessions":{}}' > "$GRALPH_STATE_FILE"; then
+            echo "Error: Failed to create state file: $GRALPH_STATE_FILE" >&2
             return 1
         fi
     fi
 
     # Validate state file is valid JSON
-    if ! jq empty "$RLOOP_STATE_FILE" 2>/dev/null; then
+    if ! jq empty "$GRALPH_STATE_FILE" 2>/dev/null; then
         echo "Warning: State file is invalid JSON, reinitializing..." >&2
-        if ! echo '{"sessions":{}}' > "$RLOOP_STATE_FILE"; then
+        if ! echo '{"sessions":{}}' > "$GRALPH_STATE_FILE"; then
             echo "Error: Failed to reinitialize state file" >&2
             return 1
         fi
@@ -125,7 +125,7 @@ get_session() {
 
     # Read session from state file using jq
     local session
-    session=$(jq -e ".sessions[\"$name\"]" "$RLOOP_STATE_FILE" 2>/dev/null)
+    session=$(jq -e ".sessions[\"$name\"]" "$GRALPH_STATE_FILE" 2>/dev/null)
     local exit_code=$?
 
     if [[ $exit_code -ne 0 ]] || [[ "$session" == "null" ]]; then
@@ -157,7 +157,7 @@ _set_session_unlocked() {
     local existing_session
 
     # Get existing session if it exists, or create empty object
-    existing_session=$(jq -r ".sessions[\"$name\"] // {}" "$RLOOP_STATE_FILE" 2>/dev/null)
+    existing_session=$(jq -r ".sessions[\"$name\"] // {}" "$GRALPH_STATE_FILE" 2>/dev/null)
     if [[ -z "$existing_session" ]] || [[ "$existing_session" == "null" ]]; then
         existing_session="{}"
     fi
@@ -190,7 +190,7 @@ _set_session_unlocked() {
     # Update the state file with the new/updated session
     local new_state
     new_state=$(jq --arg name "$name" --argjson session "$session_json" \
-        '.sessions[$name] = $session' "$RLOOP_STATE_FILE" 2>/dev/null)
+        '.sessions[$name] = $session' "$GRALPH_STATE_FILE" 2>/dev/null)
 
     if [[ $? -ne 0 ]] || [[ -z "$new_state" ]]; then
         echo "Error: Failed to construct new state JSON" >&2
@@ -198,7 +198,7 @@ _set_session_unlocked() {
     fi
 
     # Write the updated state back to the file
-    if ! echo "$new_state" > "$RLOOP_STATE_FILE"; then
+    if ! echo "$new_state" > "$GRALPH_STATE_FILE"; then
         echo "Error: Failed to write state file" >&2
         return 1
     fi
@@ -237,7 +237,7 @@ list_sessions() {
 
     # Extract all sessions as a JSON array
     local sessions
-    sessions=$(jq -r '[.sessions | to_entries[] | (.value + {name: .key})]' "$RLOOP_STATE_FILE" 2>/dev/null)
+    sessions=$(jq -r '[.sessions | to_entries[] | (.value + {name: .key})]' "$GRALPH_STATE_FILE" 2>/dev/null)
     local exit_code=$?
 
     if [[ $exit_code -ne 0 ]]; then
@@ -271,14 +271,14 @@ _delete_session_unlocked() {
     fi
 
     # Check if session exists
-    if ! jq -e ".sessions[\"$name\"]" "$RLOOP_STATE_FILE" >/dev/null 2>&1; then
+    if ! jq -e ".sessions[\"$name\"]" "$GRALPH_STATE_FILE" >/dev/null 2>&1; then
         echo "Error: Session '$name' not found" >&2
         return 1
     fi
 
     # Remove the session from the state file
     local new_state
-    new_state=$(jq --arg name "$name" 'del(.sessions[$name])' "$RLOOP_STATE_FILE" 2>/dev/null)
+    new_state=$(jq --arg name "$name" 'del(.sessions[$name])' "$GRALPH_STATE_FILE" 2>/dev/null)
 
     if [[ $? -ne 0 ]] || [[ -z "$new_state" ]]; then
         echo "Error: Failed to construct new state JSON" >&2
@@ -286,7 +286,7 @@ _delete_session_unlocked() {
     fi
 
     # Write the updated state back to the file
-    if ! echo "$new_state" > "$RLOOP_STATE_FILE"; then
+    if ! echo "$new_state" > "$GRALPH_STATE_FILE"; then
         echo "Error: Failed to write state file" >&2
         return 1
     fi
@@ -316,7 +316,7 @@ _cleanup_stale_unlocked() {
 
     # Get all sessions (read-only, no lock needed for list_sessions)
     local sessions
-    sessions=$(jq -r '[.sessions | to_entries[] | .value]' "$RLOOP_STATE_FILE" 2>/dev/null)
+    sessions=$(jq -r '[.sessions | to_entries[] | .value]' "$GRALPH_STATE_FILE" 2>/dev/null)
     if [[ $? -ne 0 ]]; then
         echo "Error: Failed to read sessions from state file" >&2
         return 1

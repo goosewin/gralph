@@ -1,7 +1,7 @@
-# Ralph Loop CLI - .gitignore
+# Gralph CLI - .gitignore
 
 # State and runtime files
-.rloop/
+.gralph/
 *.log
 *.tmp
 *.pid

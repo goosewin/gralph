@@ -1,26 +1,26 @@
 #!/bin/bash
-# config.sh - Configuration management for rloop
+# config.sh - Configuration management for gralph
 
 # Configuration directories and files
-RLOOP_CONFIG_DIR="${RLOOP_CONFIG_DIR:-$HOME/.config/rloop}"
-RLOOP_GLOBAL_CONFIG="${RLOOP_GLOBAL_CONFIG:-$RLOOP_CONFIG_DIR/config.yaml}"
+GRALPH_CONFIG_DIR="${GRALPH_CONFIG_DIR:-$HOME/.config/gralph}"
+GRALPH_GLOBAL_CONFIG="${GRALPH_GLOBAL_CONFIG:-$GRALPH_CONFIG_DIR/config.yaml}"
 
 # Determine script directory for default config location
 _SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _DEFAULT_CONFIG_DIR="${_SCRIPT_DIR}/../config"
 
 # Alternative default config location when installed
-if [[ ! -d "$_DEFAULT_CONFIG_DIR" ]] && [[ -d "${HOME}/.config/rloop/config" ]]; then
-    _DEFAULT_CONFIG_DIR="${HOME}/.config/rloop/config"
+if [[ ! -d "$_DEFAULT_CONFIG_DIR" ]] && [[ -d "${HOME}/.config/gralph/config" ]]; then
+    _DEFAULT_CONFIG_DIR="${HOME}/.config/gralph/config"
 fi
 
-RLOOP_DEFAULT_CONFIG="${RLOOP_DEFAULT_CONFIG:-$_DEFAULT_CONFIG_DIR/default.yaml}"
+GRALPH_DEFAULT_CONFIG="${GRALPH_DEFAULT_CONFIG:-$_DEFAULT_CONFIG_DIR/default.yaml}"
 
 # Project config filename (to be prepended with project dir)
-RLOOP_PROJECT_CONFIG_NAME="${RLOOP_PROJECT_CONFIG_NAME:-.rloop.yaml}"
+GRALPH_PROJECT_CONFIG_NAME="${GRALPH_PROJECT_CONFIG_NAME:-.gralph.yaml}"
 
 # Cache for loaded configuration (associative array)
-declare -gA _RLOOP_CONFIG_CACHE
+declare -gA _GRALPH_CONFIG_CACHE
 
 # _yaml_to_flat() - Convert YAML to flat key=value format
 # Handles simple YAML (nested objects, strings, numbers, booleans)
@@ -118,13 +118,13 @@ _yaml_to_flat() {
 #   $@ - Config file paths in order of priority (lowest to highest)
 _merge_configs() {
     # Clear the cache
-    _RLOOP_CONFIG_CACHE=()
+    _GRALPH_CONFIG_CACHE=()
 
     for config_file in "$@"; do
         if [[ -f "$config_file" ]]; then
             while IFS='=' read -r key value; do
                 if [[ -n "$key" ]]; then
-                    _RLOOP_CONFIG_CACHE["$key"]="$value"
+                    _GRALPH_CONFIG_CACHE["$key"]="$value"
                 fi
             done < <(_yaml_to_flat "$config_file")
         fi
@@ -138,27 +138,27 @@ _merge_configs() {
 # Returns:
 #   0 on success
 # Side effects:
-#   Populates _RLOOP_CONFIG_CACHE associative array
+#   Populates _GRALPH_CONFIG_CACHE associative array
 load_config() {
     local project_dir="${1:-}"
     local project_config=""
 
     # Determine project config path if project dir provided
     if [[ -n "$project_dir" ]] && [[ -d "$project_dir" ]]; then
-        project_config="$project_dir/$RLOOP_PROJECT_CONFIG_NAME"
+        project_config="$project_dir/$GRALPH_PROJECT_CONFIG_NAME"
     fi
 
     # Build list of config files to merge (in order of priority)
     local config_files=()
 
     # 1. Default config (lowest priority)
-    if [[ -f "$RLOOP_DEFAULT_CONFIG" ]]; then
-        config_files+=("$RLOOP_DEFAULT_CONFIG")
+    if [[ -f "$GRALPH_DEFAULT_CONFIG" ]]; then
+        config_files+=("$GRALPH_DEFAULT_CONFIG")
     fi
 
     # 2. Global config
-    if [[ -f "$RLOOP_GLOBAL_CONFIG" ]]; then
-        config_files+=("$RLOOP_GLOBAL_CONFIG")
+    if [[ -f "$GRALPH_GLOBAL_CONFIG" ]]; then
+        config_files+=("$GRALPH_GLOBAL_CONFIG")
     fi
 
     # 3. Project config (highest priority)
@@ -185,19 +185,19 @@ _legacy_env_override() {
 
     case "$key" in
         defaults.max_iterations)
-            legacy_env="RLOOP_MAX_ITERATIONS"
+            legacy_env="GRALPH_MAX_ITERATIONS"
             ;;
         defaults.task_file)
-            legacy_env="RLOOP_TASK_FILE"
+            legacy_env="GRALPH_TASK_FILE"
             ;;
         defaults.completion_marker)
-            legacy_env="RLOOP_COMPLETION_MARKER"
+            legacy_env="GRALPH_COMPLETION_MARKER"
             ;;
         defaults.backend)
-            legacy_env="RLOOP_BACKEND"
+            legacy_env="GRALPH_BACKEND"
             ;;
         defaults.model)
-            legacy_env="RLOOP_MODEL"
+            legacy_env="GRALPH_MODEL"
             ;;
     esac
 
@@ -232,16 +232,16 @@ get_config() {
     fi
 
     # Check environment variable override (full dotted key)
-    # Convert key to env var format: defaults.max_iterations -> RLOOP_DEFAULTS_MAX_ITERATIONS
-    local env_key="RLOOP_$(echo "$key" | tr '[:lower:].' '[:upper:]_')"
+    # Convert key to env var format: defaults.max_iterations -> GRALPH_DEFAULTS_MAX_ITERATIONS
+    local env_key="GRALPH_$(echo "$key" | tr '[:lower:].' '[:upper:]_')"
     if [[ -n "${!env_key:-}" ]]; then
         echo "${!env_key}"
         return 0
     fi
 
     # Check cache
-    if [[ -v "_RLOOP_CONFIG_CACHE[$key]" ]]; then
-        echo "${_RLOOP_CONFIG_CACHE[$key]}"
+    if [[ -v "_GRALPH_CONFIG_CACHE[$key]" ]]; then
+        echo "${_GRALPH_CONFIG_CACHE[$key]}"
         return 0
     fi
 
@@ -251,7 +251,7 @@ get_config() {
 }
 
 # set_config() - Set a global configuration value
-# Writes to the global config file (~/.config/rloop/config.yaml)
+# Writes to the global config file (~/.config/gralph/config.yaml)
 # Arguments:
 #   $1 - Configuration key (dot notation)
 #   $2 - Value to set
@@ -267,16 +267,16 @@ set_config() {
     fi
 
     # Ensure config directory exists
-    if [[ ! -d "$RLOOP_CONFIG_DIR" ]]; then
-        if ! mkdir -p "$RLOOP_CONFIG_DIR"; then
-            echo "Error: Failed to create config directory: $RLOOP_CONFIG_DIR" >&2
+    if [[ ! -d "$GRALPH_CONFIG_DIR" ]]; then
+        if ! mkdir -p "$GRALPH_CONFIG_DIR"; then
+            echo "Error: Failed to create config directory: $GRALPH_CONFIG_DIR" >&2
             return 1
         fi
     fi
 
     # Create config file if it doesn't exist
-    if [[ ! -f "$RLOOP_GLOBAL_CONFIG" ]]; then
-        touch "$RLOOP_GLOBAL_CONFIG"
+    if [[ ! -f "$GRALPH_GLOBAL_CONFIG" ]]; then
+        touch "$GRALPH_GLOBAL_CONFIG"
     fi
 
     # Parse the key into parts
@@ -292,12 +292,12 @@ set_config() {
     if [[ $num_parts -eq 1 ]]; then
         local simple_key="${key_parts[0]}"
         # Check if key exists and update, otherwise append
-        if grep -qE "^${simple_key}[[:space:]]*:" "$RLOOP_GLOBAL_CONFIG" 2>/dev/null; then
+        if grep -qE "^${simple_key}[[:space:]]*:" "$GRALPH_GLOBAL_CONFIG" 2>/dev/null; then
             # Update existing key
-            sed -i "s|^${simple_key}[[:space:]]*:.*|${simple_key}: ${value}|" "$RLOOP_GLOBAL_CONFIG"
+            sed -i "s|^${simple_key}[[:space:]]*:.*|${simple_key}: ${value}|" "$GRALPH_GLOBAL_CONFIG"
         else
             # Append new key
-            echo "${simple_key}: ${value}" >> "$RLOOP_GLOBAL_CONFIG"
+            echo "${simple_key}: ${value}" >> "$GRALPH_GLOBAL_CONFIG"
         fi
     else
         # For nested keys, we need more complex handling
@@ -306,26 +306,26 @@ set_config() {
         local child="${key_parts[1]}"
 
         # Check if parent section exists
-        if grep -qE "^${parent}[[:space:]]*:" "$RLOOP_GLOBAL_CONFIG" 2>/dev/null; then
+        if grep -qE "^${parent}[[:space:]]*:" "$GRALPH_GLOBAL_CONFIG" 2>/dev/null; then
             # Parent exists, check if child exists under it
             # This is simplified - for full YAML manipulation, consider using yq
-            if grep -qE "^[[:space:]]+${child}[[:space:]]*:" "$RLOOP_GLOBAL_CONFIG" 2>/dev/null; then
+            if grep -qE "^[[:space:]]+${child}[[:space:]]*:" "$GRALPH_GLOBAL_CONFIG" 2>/dev/null; then
                 # Update existing nested key (simplified approach)
-                sed -i "/^[[:space:]]*${child}[[:space:]]*:/s|:.*|: ${value}|" "$RLOOP_GLOBAL_CONFIG"
+                sed -i "/^[[:space:]]*${child}[[:space:]]*:/s|:.*|: ${value}|" "$GRALPH_GLOBAL_CONFIG"
             else
                 # Add child under parent (insert after parent line)
-                sed -i "/^${parent}[[:space:]]*:/a\\  ${child}: ${value}" "$RLOOP_GLOBAL_CONFIG"
+                sed -i "/^${parent}[[:space:]]*:/a\\  ${child}: ${value}" "$GRALPH_GLOBAL_CONFIG"
             fi
         else
             # Parent doesn't exist, add both
-            echo "" >> "$RLOOP_GLOBAL_CONFIG"
-            echo "${parent}:" >> "$RLOOP_GLOBAL_CONFIG"
-            echo "  ${child}: ${value}" >> "$RLOOP_GLOBAL_CONFIG"
+            echo "" >> "$GRALPH_GLOBAL_CONFIG"
+            echo "${parent}:" >> "$GRALPH_GLOBAL_CONFIG"
+            echo "  ${child}: ${value}" >> "$GRALPH_GLOBAL_CONFIG"
         fi
     fi
 
     # Update the cache
-    _RLOOP_CONFIG_CACHE["$key"]="$value"
+    _GRALPH_CONFIG_CACHE["$key"]="$value"
 
     return 0
 }
@@ -344,20 +344,20 @@ config_exists() {
     fi
 
     # Check environment variable override (full dotted key)
-    local env_key="RLOOP_$(echo "$key" | tr '[:lower:].' '[:upper:]_')"
+    local env_key="GRALPH_$(echo "$key" | tr '[:lower:].' '[:upper:]_')"
     if [[ -n "${!env_key:-}" ]]; then
         return 0
     fi
 
     # Check cache
-    [[ -v "_RLOOP_CONFIG_CACHE[$key]" ]]
+    [[ -v "_GRALPH_CONFIG_CACHE[$key]" ]]
 }
 
 # list_config() - List all configuration values
 # Outputs:
 #   All configuration key=value pairs, one per line
 list_config() {
-    for key in "${!_RLOOP_CONFIG_CACHE[@]}"; do
-        echo "$key=${_RLOOP_CONFIG_CACHE[$key]}"
+    for key in "${!_GRALPH_CONFIG_CACHE[@]}"; do
+        echo "$key=${_GRALPH_CONFIG_CACHE[$key]}"
     done | sort
 }

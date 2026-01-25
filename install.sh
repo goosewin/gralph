@@ -1,5 +1,5 @@
 #!/bin/bash
-# Installation script for rloop
+# Installation script for gralph
 # See PRD.md Unit 06 for full specification
 
 set -e
@@ -157,10 +157,10 @@ install_dependency() {
 
     # Verify installation succeeded
     if check_command "$dep"; then
-        echo_info "  ✓ $dep installed successfully"
+        echo_info "  $dep installed successfully"
         return 0
     else
-        echo_error "  ✗ Failed to install $dep"
+        echo_error "  Failed to install $dep"
         return 1
     fi
 }
@@ -229,9 +229,9 @@ check_dependencies() {
     # Check required dependencies
     for dep in "${REQUIRED_DEPS[@]}"; do
         if check_command "$dep"; then
-            echo_info "  ✓ $dep found"
+            echo_info "  $dep found"
         else
-            echo_error "  ✗ $dep not found"
+            echo_error "  $dep not found"
             missing_required+=("$dep")
         fi
     done
@@ -240,7 +240,7 @@ check_dependencies() {
     echo_info "Checking AI backend dependencies (at least one required)..."
     for dep in "${BACKEND_DEPS[@]}"; do
         if check_command "$dep"; then
-            echo_info "  ✓ $dep found"
+            echo_info "  $dep found"
             available_backends+=("$dep")
         else
             echo_warn "  - $dep not found"
@@ -252,7 +252,7 @@ check_dependencies() {
     echo_info "Checking optional dependencies..."
     for dep in "${OPTIONAL_DEPS[@]}"; do
         if check_command "$dep"; then
-            echo_info "  ✓ $dep found"
+            echo_info "  $dep found"
         else
             echo_warn "  - $dep not found (optional)"
             missing_optional+=("$dep")
@@ -368,7 +368,7 @@ determine_install_path() {
     # Option 1: ~/.local/bin already in PATH
     if is_in_path "$user_bin"; then
         if can_write_to "$user_bin"; then
-            echo_info "  ✓ $user_bin is in PATH and writable"
+            echo_info "  $user_bin is in PATH and writable"
             INSTALL_PATH="$user_bin"
             NEEDS_PATH_UPDATE=false
             return 0
@@ -377,7 +377,7 @@ determine_install_path() {
 
     # Option 2: /usr/local/bin is writable (running as root or has permissions)
     if can_write_to "$system_bin" && is_in_path "$system_bin"; then
-        echo_info "  ✓ $system_bin is writable"
+        echo_info "  $system_bin is writable"
         INSTALL_PATH="$system_bin"
         NEEDS_PATH_UPDATE=false
         return 0
@@ -481,7 +481,7 @@ INSTALL_PATH=""
 NEEDS_PATH_UPDATE=false
 USE_SUDO=false
 
-echo "rloop installer"
+echo "gralph installer"
 echo "==============="
 echo ""
 
@@ -508,12 +508,12 @@ if [ "$USE_SUDO" = true ]; then
 fi
 
 # =============================================================================
-# Copy rloop binary to install path
+# Copy gralph binary to install path
 # =============================================================================
 
-copy_rloop_binary() {
-    local source_bin="$SCRIPT_DIR/bin/rloop"
-    local dest_bin="$INSTALL_PATH/rloop"
+copy_gralph_binary() {
+    local source_bin="$SCRIPT_DIR/bin/gralph"
+    local dest_bin="$INSTALL_PATH/gralph"
 
     # Verify source exists
     if [ ! -f "$source_bin" ]; then
@@ -521,23 +521,23 @@ copy_rloop_binary() {
         return 1
     fi
 
-    echo_info "Installing rloop binary..."
+    echo_info "Installing gralph binary..."
 
     # Copy with or without sudo
     if [ "$USE_SUDO" = true ]; then
         if sudo cp "$source_bin" "$dest_bin"; then
             sudo chmod +x "$dest_bin"
-            echo_info "  ✓ Copied to $dest_bin (with sudo)"
+            echo_info "  Copied to $dest_bin (with sudo)"
         else
-            echo_error "  ✗ Failed to copy rloop binary"
+            echo_error "  Failed to copy gralph binary"
             return 1
         fi
     else
         if cp "$source_bin" "$dest_bin"; then
             chmod +x "$dest_bin"
-            echo_info "  ✓ Copied to $dest_bin"
+            echo_info "  Copied to $dest_bin"
         else
-            echo_error "  ✗ Failed to copy rloop binary"
+            echo_error "  Failed to copy gralph binary"
             return 1
         fi
     fi
@@ -546,16 +546,16 @@ copy_rloop_binary() {
 }
 
 echo ""
-if ! copy_rloop_binary; then
-    echo_error "Failed to install rloop binary."
+if ! copy_gralph_binary; then
+    echo_error "Failed to install gralph binary."
     exit 1
 fi
 
 # =============================================================================
-# Copy lib/ to ~/.config/rloop/lib/
+# Copy lib/ to ~/.config/gralph/lib/
 # =============================================================================
 
-CONFIG_DIR="$HOME/.config/rloop"
+CONFIG_DIR="$HOME/.config/gralph"
 LIB_DIR="$CONFIG_DIR/lib"
 
 copy_lib_files() {
@@ -571,10 +571,10 @@ copy_lib_files() {
 
     # Create config directory structure
     if ! mkdir -p "$LIB_DIR"; then
-        echo_error "  ✗ Failed to create $LIB_DIR"
+        echo_error "  Failed to create $LIB_DIR"
         return 1
     fi
-    echo_info "  ✓ Created $CONFIG_DIR"
+    echo_info "  Created $CONFIG_DIR"
 
     # Copy all .sh files from lib/
     local copied=0
@@ -584,10 +584,10 @@ copy_lib_files() {
             local filename=$(basename "$file")
             if cp "$file" "$LIB_DIR/$filename"; then
                 chmod +x "$LIB_DIR/$filename"
-                echo_info "  ✓ Copied $filename"
+                echo_info "  Copied $filename"
                 ((copied++))
             else
-                echo_error "  ✗ Failed to copy $filename"
+                echo_error "  Failed to copy $filename"
                 ((failed++))
             fi
         fi
@@ -597,7 +597,7 @@ copy_lib_files() {
     if [ -d "$source_lib/backends" ]; then
         local backends_dir="$LIB_DIR/backends"
         if ! mkdir -p "$backends_dir"; then
-            echo_error "  ✗ Failed to create $backends_dir"
+            echo_error "  Failed to create $backends_dir"
             return 1
         fi
 
@@ -606,10 +606,10 @@ copy_lib_files() {
                 local filename=$(basename "$file")
                 if cp "$file" "$backends_dir/$filename"; then
                     chmod +x "$backends_dir/$filename"
-                    echo_info "  ✓ Copied backends/$filename"
+                    echo_info "  Copied backends/$filename"
                     ((copied++))
                 else
-                    echo_error "  ✗ Failed to copy backends/$filename"
+                    echo_error "  Failed to copy backends/$filename"
                     ((failed++))
                 fi
             fi
@@ -621,7 +621,7 @@ copy_lib_files() {
         return 1
     fi
 
-    echo_info "  ✓ Installed $copied library files to $LIB_DIR"
+    echo_info "  Installed $copied library files to $LIB_DIR"
     return 0
 }
 
@@ -643,13 +643,13 @@ create_default_config() {
 
     # Ensure config directory exists (should already exist from lib copy)
     if ! mkdir -p "$CONFIG_DIR"; then
-        echo_error "  ✗ Failed to create $CONFIG_DIR"
+        echo_error "  Failed to create $CONFIG_DIR"
         return 1
     fi
 
     # Check if config already exists
     if [ -f "$dest_config" ]; then
-        echo_info "  ✓ Config already exists at $dest_config (keeping existing)"
+        echo_info "  Config already exists at $dest_config (keeping existing)"
         return 0
     fi
 
@@ -660,7 +660,7 @@ create_default_config() {
 
         # Create minimal default config inline
         cat > "$dest_config" << 'YAML_EOF'
-# rloop configuration
+# gralph configuration
 defaults:
   max_iterations: 30
   task_file: PRD.md
@@ -680,16 +680,16 @@ logging:
   level: info
   retain_days: 7
 YAML_EOF
-        echo_info "  ✓ Created default config at $dest_config"
+        echo_info "  Created default config at $dest_config"
         return 0
     fi
 
     # Copy default config
     if cp "$source_config" "$dest_config"; then
-        echo_info "  ✓ Created config at $dest_config"
+        echo_info "  Created config at $dest_config"
         return 0
     else
-        echo_error "  ✗ Failed to create config file"
+        echo_error "  Failed to create config file"
         return 1
     fi
 }
@@ -726,20 +726,20 @@ install_shell_completions() {
     fi
 
     # Copy bash completion
-    if [ -f "$source_completions/rloop.bash" ]; then
-        if cp "$source_completions/rloop.bash" "$COMPLETIONS_DIR/rloop.bash"; then
-            echo_info "  ✓ Copied bash completions"
+    if [ -f "$source_completions/gralph.bash" ]; then
+        if cp "$source_completions/gralph.bash" "$COMPLETIONS_DIR/gralph.bash"; then
+            echo_info "  Copied bash completions"
         else
-            echo_warn "  ✗ Failed to copy bash completions"
+            echo_warn "  Failed to copy bash completions"
         fi
     fi
 
     # Copy zsh completion
-    if [ -f "$source_completions/rloop.zsh" ]; then
-        if cp "$source_completions/rloop.zsh" "$COMPLETIONS_DIR/_rloop"; then
-            echo_info "  ✓ Copied zsh completions"
+    if [ -f "$source_completions/gralph.zsh" ]; then
+        if cp "$source_completions/gralph.zsh" "$COMPLETIONS_DIR/_gralph"; then
+            echo_info "  Copied zsh completions"
         else
-            echo_warn "  ✗ Failed to copy zsh completions"
+            echo_warn "  Failed to copy zsh completions"
         fi
     fi
 
@@ -751,52 +751,52 @@ install_shell_completions() {
     local zsh_installed=false
 
     # Bash: Try /etc/bash_completion.d or ~/.local/share/bash-completion/completions
-    if [ -f "$COMPLETIONS_DIR/rloop.bash" ]; then
+    if [ -f "$COMPLETIONS_DIR/gralph.bash" ]; then
         local bash_system_dir="/etc/bash_completion.d"
         local bash_user_dir="$HOME/.local/share/bash-completion/completions"
 
         if [ -d "$bash_system_dir" ] && [ -w "$bash_system_dir" ]; then
-            if cp "$COMPLETIONS_DIR/rloop.bash" "$bash_system_dir/rloop"; then
-                echo_info "  ✓ Installed bash completions to $bash_system_dir"
+            if cp "$COMPLETIONS_DIR/gralph.bash" "$bash_system_dir/gralph"; then
+                echo_info "  Installed bash completions to $bash_system_dir"
                 bash_installed=true
             fi
         elif [ "$USE_SUDO" = true ] && [ -d "$bash_system_dir" ]; then
-            if sudo cp "$COMPLETIONS_DIR/rloop.bash" "$bash_system_dir/rloop"; then
-                echo_info "  ✓ Installed bash completions to $bash_system_dir (with sudo)"
+            if sudo cp "$COMPLETIONS_DIR/gralph.bash" "$bash_system_dir/gralph"; then
+                echo_info "  Installed bash completions to $bash_system_dir (with sudo)"
                 bash_installed=true
             fi
         fi
 
         if [ "$bash_installed" = false ]; then
             mkdir -p "$bash_user_dir" 2>/dev/null
-            if [ -d "$bash_user_dir" ] && cp "$COMPLETIONS_DIR/rloop.bash" "$bash_user_dir/rloop" 2>/dev/null; then
-                echo_info "  ✓ Installed bash completions to $bash_user_dir"
+            if [ -d "$bash_user_dir" ] && cp "$COMPLETIONS_DIR/gralph.bash" "$bash_user_dir/gralph" 2>/dev/null; then
+                echo_info "  Installed bash completions to $bash_user_dir"
                 bash_installed=true
             fi
         fi
     fi
 
     # Zsh: Try /usr/local/share/zsh/site-functions or user fpath
-    if [ -f "$COMPLETIONS_DIR/_rloop" ]; then
+    if [ -f "$COMPLETIONS_DIR/_gralph" ]; then
         local zsh_system_dir="/usr/local/share/zsh/site-functions"
         local zsh_user_dir="$HOME/.zsh/completions"
 
         if [ -d "$zsh_system_dir" ] && [ -w "$zsh_system_dir" ]; then
-            if cp "$COMPLETIONS_DIR/_rloop" "$zsh_system_dir/_rloop"; then
-                echo_info "  ✓ Installed zsh completions to $zsh_system_dir"
+            if cp "$COMPLETIONS_DIR/_gralph" "$zsh_system_dir/_gralph"; then
+                echo_info "  Installed zsh completions to $zsh_system_dir"
                 zsh_installed=true
             fi
         elif [ "$USE_SUDO" = true ] && [ -d "$zsh_system_dir" ]; then
-            if sudo cp "$COMPLETIONS_DIR/_rloop" "$zsh_system_dir/_rloop"; then
-                echo_info "  ✓ Installed zsh completions to $zsh_system_dir (with sudo)"
+            if sudo cp "$COMPLETIONS_DIR/_gralph" "$zsh_system_dir/_gralph"; then
+                echo_info "  Installed zsh completions to $zsh_system_dir (with sudo)"
                 zsh_installed=true
             fi
         fi
 
         if [ "$zsh_installed" = false ]; then
             mkdir -p "$zsh_user_dir" 2>/dev/null
-            if [ -d "$zsh_user_dir" ] && cp "$COMPLETIONS_DIR/_rloop" "$zsh_user_dir/_rloop" 2>/dev/null; then
-                echo_info "  ✓ Installed zsh completions to $zsh_user_dir"
+            if [ -d "$zsh_user_dir" ] && cp "$COMPLETIONS_DIR/_gralph" "$zsh_user_dir/_gralph" 2>/dev/null; then
+                echo_info "  Installed zsh completions to $zsh_user_dir"
                 zsh_installed=true
             fi
         fi
@@ -826,7 +826,7 @@ print_completion_instructions() {
             if [ "$BASH_COMPLETION_INSTALLED" != true ]; then
                 echo ""
                 echo "    # Add to ~/.bashrc:"
-                echo "    source $COMPLETIONS_DIR/rloop.bash"
+                echo "    source $COMPLETIONS_DIR/gralph.bash"
             fi
             ;;
         zsh)
@@ -840,7 +840,7 @@ print_completion_instructions() {
         *)
             echo ""
             echo "    For bash, add to ~/.bashrc:"
-            echo "      source $COMPLETIONS_DIR/rloop.bash"
+            echo "      source $COMPLETIONS_DIR/gralph.bash"
             echo ""
             echo "    For zsh, add to ~/.zshrc (before compinit):"
             echo "      fpath=($COMPLETIONS_DIR \$fpath)"
@@ -869,11 +869,11 @@ print_completion_instructions
 print_success_message() {
     echo ""
     echo "============================================================"
-    echo -e "${GREEN}✓ rloop installed successfully!${NC}"
+    echo -e "${GREEN} gralph installed successfully!${NC}"
     echo "============================================================"
     echo ""
     echo "Installation summary:"
-    echo "  Binary:       $INSTALL_PATH/rloop"
+    echo "  Binary:       $INSTALL_PATH/gralph"
     echo "  Libraries:    $LIB_DIR/"
     echo "  Config:       $CONFIG_DIR/config.yaml"
     echo "  Completions:  $COMPLETIONS_DIR/"
@@ -881,26 +881,26 @@ print_success_message() {
     echo "Quick start:"
     echo ""
     echo "  # Start a loop in the current directory"
-    echo "  rloop start ."
+    echo "  gralph start ."
     echo ""
     echo "  # Start with custom options"
-    echo "  rloop start ~/my-project --name myapp --max-iterations 50"
+    echo "  gralph start ~/my-project --name myapp --max-iterations 50"
     echo ""
     echo "  # Check status of running loops"
-    echo "  rloop status"
+    echo "  gralph status"
     echo ""
     echo "  # View logs for a running loop"
-    echo "  rloop logs myapp --follow"
+    echo "  gralph logs myapp --follow"
     echo ""
     echo "  # Stop a running loop"
-    echo "  rloop stop myapp"
+    echo "  gralph stop myapp"
     echo ""
     echo "  # Resume loops after reboot/crash"
-    echo "  rloop resume"
+    echo "  gralph resume"
     echo ""
     echo "Documentation:"
-    echo "  rloop --help              Show all commands and options"
-    echo "  rloop <command> --help    Show help for a specific command"
+    echo "  gralph --help              Show all commands and options"
+    echo "  gralph <command> --help    Show help for a specific command"
     echo ""
 
     if [ "$NEEDS_PATH_UPDATE" = true ]; then
@@ -908,7 +908,7 @@ print_success_message() {
         echo ""
     fi
 
-    echo "Happy coding! 🚀"
+    echo "Happy coding!"
     echo ""
 }
 

@@ -1,10 +1,8 @@
-# Ralph Loop CLI - Product Requirements Document
+# Gralph CLI - Product Requirements Document
 
 ## Overview
 
-**Ralph Loop CLI** (`rloop`) is a standalone utility for running autonomous AI coding loops using Claude Code. It spawns fresh Claude Code sessions iteratively until all tasks in a PRD are complete, designed for remote/AFK execution on VPS or local machines.
-
-Named after the "Ralph Wiggum" technique - persistent iteration despite setbacks.
+**Gralph CLI** (`gralph`) is a standalone utility for running autonomous AI coding loops using Claude Code. It spawns fresh Claude Code sessions iteratively until all tasks in a PRD are complete, designed for remote/AFK execution on VPS or local machines.
 
 ## Problem Statement
 
@@ -31,10 +29,10 @@ A installable CLI tool with:
 
 ```bash
 # Basic usage
-rloop start ./my-project
+gralph start ./my-project
 
 # With options
-rloop start ./my-project \
+gralph start ./my-project \
   --max-iterations 50 \
   --task-file PRD.md \
   --completion-marker "ALL_DONE" \
@@ -78,33 +76,33 @@ echo "$result" | tail -c 500 | grep -qE "^<promise>$PROMISE</promise>\s*$"
 
 ```bash
 # From GitHub (private repo)
-curl -fsSL https://raw.githubusercontent.com/USER/ralph-cli/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/USER/gralph/main/install.sh | bash
 
 # Or clone and install
-git clone git@github.com:USER/ralph-cli.git
-cd ralph-cli
+git clone git@github.com:USER/gralph.git
+cd gralph
 ./install.sh
 
 # Or npm (if packaged)
-npm install -g @user/ralph-cli
+npm install -g @user/gralph
 ```
 
 **Install script responsibilities:**
 - Check dependencies (claude, jq, tmux)
-- Copy `rloop` to `/usr/local/bin/` or `~/.local/bin/`
-- Create config directory `~/.config/rloop/`
+- Copy `gralph` to `/usr/local/bin/` or `~/.local/bin/`
+- Create config directory `~/.config/gralph/`
 - Set up shell completions (optional)
 
 ### FR-4: Multi-Project Management
 
 ```bash
 # Start multiple projects
-rloop start ~/projects/app1 --name app1
-rloop start ~/projects/app2 --name app2
-rloop start ~/projects/app3 --name app3
+gralph start ~/projects/app1 --name app1
+gralph start ~/projects/app2 --name app2
+gralph start ~/projects/app3 --name app3
 
 # List all running
-rloop status
+gralph status
 
 # Output:
 # NAME          DIR                      ITERATION  STATUS     REMAINING
@@ -113,19 +111,19 @@ rloop status
 # app3          ~/projects/app3          15/30      complete   0 tasks
 
 # Stop one
-rloop stop app1
+gralph stop app1
 
 # Stop all
-rloop stop --all
+gralph stop --all
 
 # View logs
-rloop logs app1
-rloop logs app1 --follow
+gralph logs app1
+gralph logs app1 --follow
 ```
 
 ### FR-5: State Persistence
 
-State file: `~/.config/rloop/state.json`
+State file: `~/.config/gralph/state.json`
 
 ```json
 {
@@ -135,14 +133,14 @@ State file: `~/.config/rloop/state.json`
       "dir": "/root/projects/app1",
       "task_file": "PRD.md",
       "pid": 12345,
-      "tmux_session": "rloop-app1",
+      "tmux_session": "gralph-app1",
       "started_at": "2026-01-23T10:00:00Z",
       "iteration": 5,
       "max_iterations": 30,
       "status": "running",
       "last_task_count": 12,
       "completion_marker": "COMPLETE",
-      "log_file": "/root/projects/app1/.rloop/ralph.log"
+      "log_file": "/root/projects/app1/.gralph/ralph.log"
     }
   }
 }
@@ -152,17 +150,17 @@ State file: `~/.config/rloop/state.json`
 
 ```bash
 # On machine reboot, resume all previously running sessions
-rloop resume
+gralph resume
 
 # Resume specific
-rloop resume app1
+gralph resume app1
 ```
 
 Reads state file, restarts any sessions marked "running" that don't have active PIDs.
 
 ### FR-7: Configuration
 
-Global config: `~/.config/rloop/config.yaml`
+Global config: `~/.config/gralph/config.yaml`
 
 ```yaml
 defaults:
@@ -186,23 +184,23 @@ logging:
   retain_days: 7
 ```
 
-Project-level override: `.rloop.yaml` in project directory.
+Project-level override: `.gralph.yaml` in project directory.
 
 ### FR-8: Notifications
 
 ```bash
 # Discord/Slack webhook on completion
-rloop start ./project --webhook "https://discord.com/api/webhooks/..."
+gralph start ./project --webhook "https://discord.com/api/webhooks/..."
 
 # Or configure globally
-rloop config set notifications.webhook "https://..."
+gralph config set notifications.webhook "https://..."
 ```
 
 ### FR-9: Remote Status Server (Optional)
 
 ```bash
 # Start status API server
-rloop server --port 8080 --token SECRET
+gralph server --port 8080 --token SECRET
 
 # Query remotely
 curl -H "Authorization: Bearer SECRET" http://vps:8080/status
@@ -234,10 +232,10 @@ curl -H "Authorization: Bearer SECRET" http://vps:8080/status
 ## CLI Reference
 
 ```
-rloop - Autonomous AI coding loops
+gralph - Autonomous AI coding loops
 
 USAGE:
-  rloop <command> [options]
+  gralph <command> [options]
 
 COMMANDS:
   start <dir>         Start a new ralph loop
@@ -260,11 +258,11 @@ START OPTIONS:
   --no-tmux           Run in foreground (blocks)
 
 EXAMPLES:
-  rloop start .
-  rloop start ~/project --name myapp --max-iterations 50
-  rloop status
-  rloop logs myapp --follow
-  rloop stop myapp
+  gralph start .
+  gralph start ~/project --name myapp --max-iterations 50
+  gralph status
+  gralph logs myapp --follow
+  gralph stop myapp
 ```
 
 ---
@@ -272,11 +270,11 @@ EXAMPLES:
 ## File Structure
 
 ```
-ralph-cli/
+gralph/
 ├── install.sh              # Installation script
 ├── uninstall.sh            # Removal script
 ├── bin/
-│   └── rloop               # Main executable (bash)
+│   └── gralph               # Main executable (bash)
 ├── lib/
 │   ├── core.sh             # Core loop logic
 │   ├── state.sh            # State management
@@ -284,8 +282,8 @@ ralph-cli/
 │   ├── notify.sh           # Notifications
 │   └── utils.sh            # Helpers
 ├── completions/
-│   ├── rloop.bash          # Bash completions
-│   └── rloop.zsh           # Zsh completions
+│   ├── gralph.bash          # Bash completions
+│   └── gralph.zsh           # Zsh completions
 ├── config/
 │   └── default.yaml        # Default configuration
 ├── README.md
@@ -334,7 +332,7 @@ ralph-cli/
 - [x] Implement `cleanup_stale()` - remove sessions with dead PIDs
  - [x] Use file locking for concurrent access
 
-### Unit 04: CLI Commands (`bin/rloop`)
+### Unit 04: CLI Commands (`bin/gralph`)
 - [x] Implement argument parsing
  - [x] Implement `cmd_start()`
   - [x] Validate directory exists
@@ -363,14 +361,14 @@ ralph-cli/
  - [x] Implement `get_config()` - get specific key
  - [x] Implement `set_config()` - set global config value
 - [x] Create default.yaml with sensible defaults
-- [x] Support environment variable overrides (RLOOP_MAX_ITERATIONS, etc.)
+- [x] Support environment variable overrides (GRALPH_MAX_ITERATIONS, etc.)
 
 ### Unit 06: Installation Script (`install.sh`)
 - [x] Check for required dependencies (claude, jq, tmux)
  - [x] Prompt to install missing (apt/brew)
 - [x] Determine install path (~/.local/bin or /usr/local/bin)
-- [x] Copy bin/rloop to install path
- - [x] Copy lib/ to ~/.config/rloop/lib/
+- [x] Copy bin/gralph to install path
+ - [x] Copy lib/ to ~/.config/gralph/lib/
 - [x] Create default config
  - [x] Install shell completions
  - [x] Print success message with usage examples
@@ -405,7 +403,7 @@ ralph-cli/
 - [x] Create GitHub Actions workflow
  - [x] Auto-create release on version tag
  - [x] Attach install script to release
- - [x] Update version in rloop script
+ - [x] Update version in gralph script
 
 ---
 
@@ -446,7 +444,7 @@ Current iteration: {iteration}/{max_iterations}
 1. **Reliable completion**: Never terminates early due to LLM mentioning promise
 2. **Easy install**: Single curl command installs on fresh VPS
 3. **Multi-project**: Can run 5+ concurrent loops without issues
-4. **Crash recovery**: `rloop resume` restores all sessions after reboot
+4. **Crash recovery**: `gralph resume` restores all sessions after reboot
 5. **Observable**: Can check status of all loops from phone via webhook/API
 6. **Zero maintenance**: Runs AFK for hours without intervention
 
@@ -479,10 +477,10 @@ if [ -z "$PROJECT_DIR" ]; then
 fi
 
 cd "$PROJECT_DIR"
-mkdir -p .rloop
+mkdir -p .gralph
 
 TASK_FILE="PRD.md"
-LOG_FILE=".rloop/ralph.log"
+LOG_FILE=".gralph/ralph.log"
 
 stream_text='select(.type == "assistant").message.content[]? | select(.type == "text").text // empty | gsub("\n"; "\r\n") | . + "\r\n\n"'
 final_result='select(.type == "result").result // empty'

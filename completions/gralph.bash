@@ -1,11 +1,11 @@
-# Bash completions for rloop
+# Bash completions for gralph
 #
 # Installation:
-#   - Copy to /etc/bash_completion.d/rloop  (system-wide)
-#   - Or add to ~/.bashrc: source /path/to/rloop.bash
-#   - Or copy to ~/.local/share/bash-completion/completions/rloop
+#   - Copy to /etc/bash_completion.d/gralph  (system-wide)
+#   - Or add to ~/.bashrc: source /path/to/gralph.bash
+#   - Or copy to ~/.local/share/bash-completion/completions/gralph
 
-_rloop_completions() {
+_gralph_completions() {
     local cur prev words cword
     _init_completion 2>/dev/null || {
         COMPREPLY=()
@@ -30,7 +30,7 @@ _rloop_completions() {
     # Options for server command
     local server_opts="--port -p --token -t --help -h"
 
-    # Determine the command (first non-option argument after 'rloop')
+    # Determine the command (first non-option argument after 'gralph')
     local cmd=""
     local i
     for ((i=1; i < cword; i++)); do
@@ -110,8 +110,8 @@ _rloop_completions() {
                 stop)
                     # Complete with session names or --all
                     local sessions=""
-                    if command -v rloop &>/dev/null; then
-                        sessions=$(_rloop_get_sessions)
+                    if command -v gralph &>/dev/null; then
+                        sessions=$(_gralph_get_sessions)
                     fi
                     COMPREPLY=($(compgen -W "$sessions --all -a" -- "$cur"))
                     return 0
@@ -125,8 +125,8 @@ _rloop_completions() {
 
             # Complete with session names
             local sessions=""
-            if command -v rloop &>/dev/null; then
-                sessions=$(_rloop_get_sessions)
+            if command -v gralph &>/dev/null; then
+                sessions=$(_gralph_get_sessions)
             fi
             COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
             return 0
@@ -140,8 +140,8 @@ _rloop_completions() {
 
             # Complete with session names
             local sessions=""
-            if command -v rloop &>/dev/null; then
-                sessions=$(_rloop_get_sessions)
+            if command -v gralph &>/dev/null; then
+                sessions=$(_gralph_get_sessions)
             fi
             COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
             return 0
@@ -150,8 +150,8 @@ _rloop_completions() {
         resume)
             # Complete with session names
             local sessions=""
-            if command -v rloop &>/dev/null; then
-                sessions=$(_rloop_get_sessions)
+            if command -v gralph &>/dev/null; then
+                sessions=$(_gralph_get_sessions)
             fi
             COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
             return 0
@@ -193,12 +193,12 @@ _rloop_completions() {
 }
 
 # Helper function to get session names from state file
-_rloop_get_sessions() {
-    local state_file="${HOME}/.config/rloop/state.json"
+_gralph_get_sessions() {
+    local state_file="${HOME}/.config/gralph/state.json"
     if [[ -f "$state_file" ]] && command -v jq &>/dev/null; then
         jq -r '.sessions | keys[]' "$state_file" 2>/dev/null
     fi
 }
 
 # Register the completion function
-complete -F _rloop_completions rloop
+complete -F _gralph_completions gralph

@@ -6,7 +6,7 @@
 
 ## Summary
 
-The rloop CLI has been analyzed for macOS compatibility. Several potential issues were identified and documented below, along with their resolutions.
+The gralph CLI has been analyzed for macOS compatibility. Several potential issues were identified and documented below, along with their resolutions.
 
 ## Automation
 
@@ -66,7 +66,7 @@ Zsh is the default shell on modern macOS, and the installer correctly installs z
 
 **Current Code Analysis:**
 - `lib/core.sh:330` - Uses `date -Iseconds` for logging
-- `bin/rloop:385,459` - Uses `date -Iseconds` for session timestamps
+- `bin/gralph:385,459` - Uses `date -Iseconds` for session timestamps
 
 **Resolution:** The `-Iseconds` flag is supported on macOS 12+ (Monterey and later) as Apple has updated their date command. For older macOS versions, users can install GNU coreutils: `brew install coreutils` and use `gdate`.
 
@@ -74,7 +74,7 @@ Zsh is the default shell on modern macOS, and the installer correctly installs z
 
 All path handling uses POSIX-compliant methods:
 - `$HOME` for user directory
-- Standard config paths (`~/.config/rloop/`)
+- Standard config paths (`~/.config/gralph/`)
 - No hardcoded Linux-specific paths
 
 ### ✅ Passed: Install Paths
@@ -111,8 +111,8 @@ Homebrew installs to `/opt/homebrew/` on Apple Silicon Macs instead of `/usr/loc
 
 ### SIP (System Integrity Protection)
 
-No issues expected - rloop only modifies user-space directories:
-- `~/.config/rloop/`
+No issues expected - gralph only modifies user-space directories:
+- `~/.config/gralph/`
 - `~/.local/bin/`
 
 ### Gatekeeper
@@ -132,12 +132,12 @@ xattr -d com.apple.quarantine install.sh  # If downloaded from browser
 brew install bash jq tmux
 
 # Clone and install
-git clone git@github.com:USER/ralph-cli.git
-cd ralph-cli
+git clone git@github.com:goosewin/gralph.git
+cd gralph
 ./install.sh
 
 # Verify
-rloop version
+gralph version
 ```
 
 ### Scenario 2: Basic Loop Execution
@@ -148,23 +148,23 @@ mkdir ~/test-project && cd ~/test-project
 echo '- [ ] Test task 1' > PRD.md
 
 # Start loop (foreground for testing)
-rloop start . --no-tmux --max-iterations 1
+gralph start . --no-tmux --max-iterations 1
 ```
 
 ### Scenario 3: tmux Session Management
 
 ```bash
 # Start in background
-rloop start ~/test-project --name test
+gralph start ~/test-project --name test
 
 # Check status
-rloop status
+gralph status
 
 # View logs
-rloop logs test
+gralph logs test
 
 # Stop
-rloop stop test
+gralph stop test
 ```
 
 ## Recommendations
@@ -175,7 +175,7 @@ rloop stop test
 
 ## Conclusion
 
-The rloop CLI is compatible with macOS 12+ (Monterey and later) with standard Homebrew dependencies. No code changes are required for basic functionality. Users should ensure they have:
+The gralph CLI is compatible with macOS 12+ (Monterey and later) with standard Homebrew dependencies. No code changes are required for basic functionality. Users should ensure they have:
 
 1. Homebrew installed
 2. bash 4.0+ (via Homebrew)

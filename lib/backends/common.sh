@@ -5,7 +5,7 @@
 # and provides utilities for backend management.
 
 # Currently loaded backend
-RLOOP_CURRENT_BACKEND=""
+GRALPH_CURRENT_BACKEND=""
 
 # Backend interface functions that must be implemented:
 #
@@ -93,7 +93,7 @@ load_backend() {
     # shellcheck source=/dev/null
     source "$backend_file"
 
-    RLOOP_CURRENT_BACKEND="$backend_name"
+    GRALPH_CURRENT_BACKEND="$backend_name"
     return 0
 }
 
@@ -119,7 +119,7 @@ validate_backend() {
     done
 
     if [[ ${#missing[@]} -gt 0 ]]; then
-        echo "Error: Backend '$RLOOP_CURRENT_BACKEND' is missing required functions: ${missing[*]}" >&2
+        echo "Error: Backend '$GRALPH_CURRENT_BACKEND' is missing required functions: ${missing[*]}" >&2
         return 1
     fi
 

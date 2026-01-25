@@ -25,15 +25,15 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      - name: Verify version in rloop script matches tag
+      - name: Verify version in gralph script matches tag
         run: |
-          SCRIPT_VERSION=$(grep -E '^VERSION=' bin/rloop | cut -d'"' -f2)
+          SCRIPT_VERSION=$(grep -E '^VERSION=' bin/gralph | cut -d'"' -f2)
           TAG_VERSION=${{ steps.version.outputs.version }}
           if [ "$SCRIPT_VERSION" != "$TAG_VERSION" ]; then
             echo "Error: Version mismatch!"
             echo "  Script version: $SCRIPT_VERSION"
             echo "  Tag version: $TAG_VERSION"
-            echo "Please update VERSION in bin/rloop to match the tag."
+            echo "Please update VERSION in bin/gralph to match the tag."
             exit 1
           fi
           echo "Version verified: $SCRIPT_VERSION"
@@ -41,7 +41,7 @@ jobs:
       - name: Run shellcheck on scripts
         run: |
           sudo apt-get update && sudo apt-get install -y shellcheck
-          shellcheck bin/rloop || true
+          shellcheck bin/gralph || true
           shellcheck install.sh || true
           shellcheck uninstall.sh || true
           shellcheck lib/*.sh || true
@@ -50,8 +50,8 @@ jobs:
         run: |
           mkdir -p dist
           # Create tarball with all necessary files
-          tar -czvf dist/rloop-${{ steps.version.outputs.version }}.tar.gz \
-            --transform 's,^,rloop-${{ steps.version.outputs.version }}/,' \
+          tar -czvf dist/gralph-${{ steps.version.outputs.version }}.tar.gz \
+            --transform 's,^,gralph-${{ steps.version.outputs.version }}/,' \
             bin/ \
             lib/ \
             completions/ \
@@ -64,7 +64,7 @@ jobs:
       - name: Generate checksums
         run: |
           cd dist
-          sha256sum rloop-${{ steps.version.outputs.version }}.tar.gz > checksums.txt
+          sha256sum gralph-${{ steps.version.outputs.version }}.tar.gz > checksums.txt
           cat checksums.txt
 
       - name: Generate release notes
@@ -79,9 +79,9 @@ jobs:
           echo "curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash" >> release_notes.md
           echo "" >> release_notes.md
           echo "# Or download and install manually" >> release_notes.md
-          echo "wget https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/rloop-${{ steps.version.outputs.version }}.tar.gz" >> release_notes.md
-          echo "tar -xzf rloop-${{ steps.version.outputs.version }}.tar.gz" >> release_notes.md
-          echo "cd rloop-${{ steps.version.outputs.version }}" >> release_notes.md
+          echo "wget https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/gralph-${{ steps.version.outputs.version }}.tar.gz" >> release_notes.md
+          echo "tar -xzf gralph-${{ steps.version.outputs.version }}.tar.gz" >> release_notes.md
+          echo "cd gralph-${{ steps.version.outputs.version }}" >> release_notes.md
           echo "./install.sh" >> release_notes.md
           echo '```' >> release_notes.md
           echo "" >> release_notes.md
@@ -101,12 +101,12 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Ralph Loop CLI ${{ steps.version.outputs.tag }}
+          name: Gralph CLI ${{ steps.version.outputs.tag }}
           body_path: release_notes.md
           draft: false
           prerelease: ${{ contains(steps.version.outputs.tag, '-') }}
           files: |
-            dist/rloop-${{ steps.version.outputs.version }}.tar.gz
+            dist/gralph-${{ steps.version.outputs.version }}.tar.gz
             dist/checksums.txt
             install.sh
         env:
@@ -117,5 +117,5 @@ jobs:
           echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Version:** ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tarball:** rloop-${{ steps.version.outputs.version }}.tar.gz" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tarball:** gralph-${{ steps.version.outputs.version }}.tar.gz" >> $GITHUB_STEP_SUMMARY
           echo "- **Status:** Released successfully" >> $GITHUB_STEP_SUMMARY

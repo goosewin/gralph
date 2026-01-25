@@ -1,5 +1,5 @@
 #!/bin/bash
-# rloop - Autonomous AI coding loops
+# gralph - Autonomous AI coding loops
 # Version: 1.1.0
 
 set -e
@@ -11,8 +11,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="${SCRIPT_DIR}/../lib"
 
 # Alternative lib location when installed
-if [[ ! -d "$LIB_DIR" ]] && [[ -d "${HOME}/.config/rloop/lib" ]]; then
-    LIB_DIR="${HOME}/.config/rloop/lib"
+if [[ ! -d "$LIB_DIR" ]] && [[ -d "${HOME}/.config/gralph/lib" ]]; then
+    LIB_DIR="${HOME}/.config/gralph/lib"
 fi
 
 # Default configuration values
@@ -31,13 +31,13 @@ NC='\033[0m' # No Color
 # Print usage information
 usage() {
     cat << 'EOF'
-rloop - Autonomous AI coding loops
+gralph - Autonomous AI coding loops
 
 USAGE:
-  rloop <command> [options]
+  gralph <command> [options]
 
 COMMANDS:
-  start <dir>         Start a new ralph loop
+  start <dir>         Start a new gralph loop
   stop <name>         Stop a running loop
   stop --all          Stop all loops
   status              Show status of all loops
@@ -61,11 +61,11 @@ START OPTIONS:
   --no-tmux           Run in foreground (blocks)
 
 EXAMPLES:
-  rloop start .
-  rloop start ~/project --name myapp --max-iterations 50
-  rloop status
-  rloop logs myapp --follow
-  rloop stop myapp
+  gralph start .
+  gralph start ~/project --name myapp --max-iterations 50
+  gralph status
+  gralph logs myapp --follow
+  gralph stop myapp
 EOF
 }
 
@@ -366,14 +366,14 @@ source_libs() {
     fi
 }
 
-# cmd_start() - Start a new ralph loop
+# cmd_start() - Start a new gralph loop
 # Validates inputs, creates tmux session, and saves state
 cmd_start() {
     # Get directory from positional args
     local target_dir="${POSITIONAL_ARGS[0]}"
 
     if [[ -z "$target_dir" ]]; then
-        die "Directory is required. Usage: rloop start <directory>"
+        die "Directory is required. Usage: gralph start <directory>"
     fi
 
     # Validate directory exists
@@ -449,19 +449,19 @@ cmd_start() {
             local existing_pid
             existing_pid=$(get_session "$session_name" | jq -r '.pid // ""')
             if [[ -n "$existing_pid" ]] && kill -0 "$existing_pid" 2>/dev/null; then
-                die "Session '$session_name' is already running (PID: $existing_pid). Use 'rloop stop $session_name' first."
+                die "Session '$session_name' is already running (PID: $existing_pid). Use 'gralph stop $session_name' first."
             else
                 warn "Session '$session_name' exists but appears stale. Restarting..."
             fi
         fi
     fi
 
-    # Create .rloop directory in project
-    local rloop_dir="$target_dir/.rloop"
-    mkdir -p "$rloop_dir"
+    # Create .gralph directory in project
+    local gralph_dir="$target_dir/.gralph"
+    mkdir -p "$gralph_dir"
 
-    local log_file="$rloop_dir/ralph.log"
-    local tmux_session="rloop-$session_name"
+    local log_file="$gralph_dir/gralph.log"
+    local tmux_session="gralph-$session_name"
 
     # Handle prompt template file (optional)
     if [[ -n "$OPT_PROMPT_TEMPLATE_FILE" ]]; then
@@ -475,8 +475,8 @@ cmd_start() {
             die "Prompt template file does not exist: $prompt_template_file"
         fi
 
-        if ! cp "$prompt_template_file" "$rloop_dir/prompt-template.txt"; then
-            die "Failed to copy prompt template to $rloop_dir/prompt-template.txt"
+        if ! cp "$prompt_template_file" "$gralph_dir/prompt-template.txt"; then
+            die "Failed to copy prompt template to $gralph_dir/prompt-template.txt"
         fi
     fi
 
@@ -492,7 +492,7 @@ cmd_start() {
         die "Failed to initialize backend: $backend"
     fi
 
-    info "Starting ralph loop..."
+    info "Starting gralph loop..."
     info "  Directory: $target_dir"
     info "  Session: $session_name"
     info "  Task file: $OPT_TASK_FILE"
@@ -501,7 +501,7 @@ cmd_start() {
     info "  Backend: $backend"
     info "  Remaining tasks: $initial_count"
     if [[ -n "$OPT_PROMPT_TEMPLATE_FILE" ]]; then
-        info "  Prompt template: $rloop_dir/prompt-template.txt"
+        info "  Prompt template: $gralph_dir/prompt-template.txt"
     fi
     if [[ -n "$OPT_MODEL" ]]; then
         info "  Model: $OPT_MODEL"
@@ -528,14 +528,14 @@ cmd_start() {
             "model=$OPT_MODEL" \
             "webhook=$OPT_WEBHOOK"
 
-        RLOOP_STATE_CALLBACK="_update_session_state"
+        GRALPH_STATE_CALLBACK="_update_session_state"
         _update_session_state() {
             set_session "$1" iteration="$2" status="$3" last_task_count="$4"
         }
-        export RLOOP_STATE_CALLBACK
+        export GRALPH_STATE_CALLBACK
 
         # Set backend for the loop
-        export RLOOP_BACKEND="$backend"
+        export GRALPH_BACKEND="$backend"
 
         # Run the loop directly
         run_loop \
@@ -569,29 +569,29 @@ cmd_start() {
 
         # Build the command to run in tmux
         # We need to source the libs and call run_loop
-        local rloop_cmd="source '$LIB_DIR/state.sh' && source '$LIB_DIR/backends/common.sh' && source '$LIB_DIR/core.sh' && "
-        rloop_cmd+="export RLOOP_BACKEND='$backend' && "
-        rloop_cmd+="init_backend '$backend' && "
-        rloop_cmd+="RLOOP_STATE_CALLBACK=_update_session_state "
-        rloop_cmd+="_update_session_state() { "
-        rloop_cmd+="  set_session \"\$1\" iteration=\"\$2\" status=\"\$3\" last_task_count=\"\$4\"; "
-        rloop_cmd+="}; "
-        rloop_cmd+="run_loop "
-        rloop_cmd+="'$target_dir' "
-        rloop_cmd+="'$OPT_TASK_FILE' "
-        rloop_cmd+="'$OPT_MAX_ITERATIONS' "
-        rloop_cmd+="'$OPT_COMPLETION_MARKER' "
-        rloop_cmd+="'$OPT_MODEL' "
-        rloop_cmd+="'$session_name'; "
-        rloop_cmd+="exit_code=\$?; "
-        rloop_cmd+="if [ \$exit_code -eq 0 ]; then "
-        rloop_cmd+="  set_session '$session_name' status=complete; "
-        rloop_cmd+="else "
-        rloop_cmd+="  set_session '$session_name' status=failed; "
-        rloop_cmd+="fi"
+        local gralph_cmd="source '$LIB_DIR/state.sh' && source '$LIB_DIR/backends/common.sh' && source '$LIB_DIR/core.sh' && "
+        gralph_cmd+="export GRALPH_BACKEND='$backend' && "
+        gralph_cmd+="init_backend '$backend' && "
+        gralph_cmd+="GRALPH_STATE_CALLBACK=_update_session_state "
+        gralph_cmd+="_update_session_state() { "
+        gralph_cmd+="  set_session \"\$1\" iteration=\"\$2\" status=\"\$3\" last_task_count=\"\$4\"; "
+        gralph_cmd+="}; "
+        gralph_cmd+="run_loop "
+        gralph_cmd+="'$target_dir' "
+        gralph_cmd+="'$OPT_TASK_FILE' "
+        gralph_cmd+="'$OPT_MAX_ITERATIONS' "
+        gralph_cmd+="'$OPT_COMPLETION_MARKER' "
+        gralph_cmd+="'$OPT_MODEL' "
+        gralph_cmd+="'$session_name'; "
+        gralph_cmd+="exit_code=\$?; "
+        gralph_cmd+="if [ \$exit_code -eq 0 ]; then "
+        gralph_cmd+="  set_session '$session_name' status=complete; "
+        gralph_cmd+="else "
+        gralph_cmd+="  set_session '$session_name' status=failed; "
+        gralph_cmd+="fi"
 
         # Start tmux session
-        tmux new-session -d -s "$tmux_session" "bash -c '$rloop_cmd'"
+        tmux new-session -d -s "$tmux_session" "bash -c '$gralph_cmd'"
 
         # Get the PID of the tmux session's shell
         local tmux_pid
@@ -614,18 +614,18 @@ cmd_start() {
             "model=$OPT_MODEL" \
             "webhook=$OPT_WEBHOOK"
 
-        success "Ralph loop started in tmux session: $tmux_session"
+        success "Gralph loop started in tmux session: $tmux_session"
         echo ""
         echo "Useful commands:"
-        echo "  rloop status            - View all running loops"
-        echo "  rloop logs $session_name      - View logs"
-        echo "  rloop logs $session_name --follow - Follow logs"
-        echo "  rloop stop $session_name      - Stop this loop"
+        echo "  gralph status            - View all running loops"
+        echo "  gralph logs $session_name      - View logs"
+        echo "  gralph logs $session_name --follow - Follow logs"
+        echo "  gralph stop $session_name      - Stop this loop"
         echo "  tmux attach -t $tmux_session  - Attach to tmux session"
     fi
 }
 
-# cmd_stop() - Stop a running ralph loop
+# cmd_stop() - Stop a running gralph loop
 # Finds session by name, kills tmux session, updates state
 cmd_stop() {
     # Source library files
@@ -701,7 +701,7 @@ cmd_stop() {
     local session_name="${POSITIONAL_ARGS[0]}"
 
     if [[ -z "$session_name" ]]; then
-        die "Session name is required. Usage: rloop stop <name> or rloop stop --all"
+        die "Session name is required. Usage: gralph stop <name> or gralph stop --all"
     fi
 
     # Find session by name
@@ -746,7 +746,7 @@ cmd_stop() {
     success "Stopped session: $session_name"
 }
 
-# cmd_status() - Show status of all ralph loops
+# cmd_status() - Show status of all gralph loops
 # Lists all sessions in a formatted table with color coding
 cmd_status() {
     # Source library files
@@ -767,7 +767,7 @@ cmd_status() {
     if [[ -z "$sessions" ]] || [[ "$sessions" == "[]" ]]; then
         info "No sessions found"
         echo ""
-        echo "Start a new loop with: rloop start <directory>"
+        echo "Start a new loop with: gralph start <directory>"
         return 0
     fi
 
@@ -865,10 +865,10 @@ cmd_status() {
     done
 
     echo ""
-    echo "Commands: rloop logs <name>, rloop stop <name>, rloop resume"
+    echo "Commands: gralph logs <name>, gralph stop <name>, gralph resume"
 }
 
-# cmd_logs() - View logs for a ralph loop session
+# cmd_logs() - View logs for a gralph loop session
 # Tails the log file, supports --follow flag
 cmd_logs() {
     # Source library files
@@ -883,7 +883,7 @@ cmd_logs() {
     local session_name="${POSITIONAL_ARGS[0]}"
 
     if [[ -z "$session_name" ]]; then
-        die "Session name is required. Usage: rloop logs <name> [--follow]"
+        die "Session name is required. Usage: gralph logs <name> [--follow]"
     fi
 
     # Find session by name
@@ -901,7 +901,7 @@ cmd_logs() {
         local session_dir
         session_dir=$(echo "$session" | jq -r '.dir // empty')
         if [[ -n "$session_dir" ]]; then
-            log_file="$session_dir/.rloop/ralph.log"
+            log_file="$session_dir/.gralph/gralph.log"
         fi
     fi
 
@@ -1018,12 +1018,12 @@ cmd_resume() {
 
         info "Resuming session: $session_name (was at iteration $iteration)"
 
-        local tmux_session="rloop-$session_name"
-        local log_file="$dir/.rloop/ralph.log"
-        local rloop_dir="$dir/.rloop"
+        local tmux_session="gralph-$session_name"
+        local log_file="$dir/.gralph/gralph.log"
+        local gralph_dir="$dir/.gralph"
 
-        # Ensure .rloop directory exists
-        mkdir -p "$rloop_dir"
+        # Ensure .gralph directory exists
+        mkdir -p "$gralph_dir"
 
         # Get current task count
         local current_count
@@ -1033,29 +1033,29 @@ cmd_resume() {
         tmux kill-session -t "$tmux_session" 2>/dev/null || true
 
         # Build the command to run in tmux
-        local rloop_cmd="source '$LIB_DIR/state.sh' && source '$LIB_DIR/backends/common.sh' && source '$LIB_DIR/core.sh' && "
-        rloop_cmd+="export RLOOP_BACKEND='$backend' && "
-        rloop_cmd+="init_backend '$backend' && "
-        rloop_cmd+="RLOOP_STATE_CALLBACK=_update_session_state "
-        rloop_cmd+="_update_session_state() { "
-        rloop_cmd+="  set_session \"\$1\" iteration=\"\$2\" status=\"\$3\" last_task_count=\"\$4\"; "
-        rloop_cmd+="}; "
-        rloop_cmd+="run_loop "
-        rloop_cmd+="'$dir' "
-        rloop_cmd+="'$task_file' "
-        rloop_cmd+="'$max_iterations' "
-        rloop_cmd+="'$completion_marker' "
-        rloop_cmd+="'$model' "
-        rloop_cmd+="'$session_name'; "
-        rloop_cmd+="exit_code=\$?; "
-        rloop_cmd+="if [ \$exit_code -eq 0 ]; then "
-        rloop_cmd+="  set_session '$session_name' status=complete; "
-        rloop_cmd+="else "
-        rloop_cmd+="  set_session '$session_name' status=failed; "
-        rloop_cmd+="fi"
+        local gralph_cmd="source '$LIB_DIR/state.sh' && source '$LIB_DIR/backends/common.sh' && source '$LIB_DIR/core.sh' && "
+        gralph_cmd+="export GRALPH_BACKEND='$backend' && "
+        gralph_cmd+="init_backend '$backend' && "
+        gralph_cmd+="GRALPH_STATE_CALLBACK=_update_session_state "
+        gralph_cmd+="_update_session_state() { "
+        gralph_cmd+="  set_session \"\$1\" iteration=\"\$2\" status=\"\$3\" last_task_count=\"\$4\"; "
+        gralph_cmd+="}; "
+        gralph_cmd+="run_loop "
+        gralph_cmd+="'$dir' "
+        gralph_cmd+="'$task_file' "
+        gralph_cmd+="'$max_iterations' "
+        gralph_cmd+="'$completion_marker' "
+        gralph_cmd+="'$model' "
+        gralph_cmd+="'$session_name'; "
+        gralph_cmd+="exit_code=\$?; "
+        gralph_cmd+="if [ \$exit_code -eq 0 ]; then "
+        gralph_cmd+="  set_session '$session_name' status=complete; "
+        gralph_cmd+="else "
+        gralph_cmd+="  set_session '$session_name' status=failed; "
+        gralph_cmd+="fi"
 
         # Start tmux session
-        tmux new-session -d -s "$tmux_session" "bash -c '$rloop_cmd'"
+        tmux new-session -d -s "$tmux_session" "bash -c '$gralph_cmd'"
 
         # Get the PID of the tmux session's shell
         local tmux_pid
@@ -1078,7 +1078,7 @@ cmd_resume() {
         echo ""
         success "Resumed $resumed_count session(s)"
         echo ""
-        echo "Commands: rloop status, rloop logs <name>, rloop stop <name>"
+        echo "Commands: gralph status, gralph logs <name>, gralph stop <name>"
     fi
 }
 
@@ -1110,7 +1110,7 @@ cmd_backends() {
         echo ""
     done
 
-    echo "Usage: rloop start <dir> --backend <name>"
+    echo "Usage: gralph start <dir> --backend <name>"
 }
 
 cmd_config() {
@@ -1127,7 +1127,7 @@ cmd_config() {
         get)
             local key="${POSITIONAL_ARGS[1]}"
             if [[ -z "$key" ]]; then
-                die "Usage: rloop config get <key>"
+                die "Usage: gralph config get <key>"
             fi
 
             load_config "$(pwd)"
@@ -1141,7 +1141,7 @@ cmd_config() {
             local key="${POSITIONAL_ARGS[1]}"
             local value="${POSITIONAL_ARGS[2]}"
             if [[ -z "$key" || -z "$value" ]]; then
-                die "Usage: rloop config set <key> <value>"
+                die "Usage: gralph config set <key> <value>"
             fi
 
             if set_config "$key" "$value"; then
@@ -1155,7 +1155,7 @@ cmd_config() {
             list_config
             ;;
         *)
-            die "Unknown config command: $subcommand. Use 'rloop config get <key>' or 'rloop config set <key> <value>'"
+            die "Unknown config command: $subcommand. Use 'gralph config get <key>' or 'gralph config set <key> <value>'"
             ;;
     esac
 }
@@ -1178,7 +1178,7 @@ cmd_server() {
 }
 
 cmd_version() {
-    echo "rloop v$VERSION"
+    echo "gralph v$VERSION"
 }
 
 # Main entry point
@@ -1220,7 +1220,7 @@ main() {
             usage
             ;;
         *)
-            die "Unknown command: $COMMAND. Run 'rloop help' for usage."
+            die "Unknown command: $COMMAND. Run 'gralph help' for usage."
             ;;
     esac
 }

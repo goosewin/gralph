@@ -50,7 +50,7 @@ format_discord_complete() {
   cat <<EOF
 {
   "embeds": [{
-    "title": "✅ Ralph Loop Complete",
+    "title": "✅ Gralph Complete",
     "description": "Session **${escaped_name}** has finished all tasks successfully.",
     "color": 5763719,
     "fields": [
@@ -71,7 +71,7 @@ format_discord_complete() {
       }
     ],
     "footer": {
-      "text": "Ralph Loop CLI"
+      "text": "Gralph CLI"
     },
     "timestamp": "${timestamp}"
   }]
@@ -109,7 +109,7 @@ format_slack_complete() {
         "type": "header",
         "text": {
           "type": "plain_text",
-          "text": "✅ Ralph Loop Complete",
+          "text": "✅ Gralph Complete",
           "emoji": true
         }
       },
@@ -142,7 +142,7 @@ format_slack_complete() {
         "elements": [
           {
             "type": "mrkdwn",
-            "text": "Ralph Loop CLI • ${timestamp}"
+            "text": "Gralph CLI • ${timestamp}"
           }
         ]
       }
@@ -206,7 +206,7 @@ format_slack_failed() {
         "type": "header",
         "text": {
           "type": "plain_text",
-          "text": "❌ Ralph Loop Failed",
+          "text": "❌ Gralph Failed",
           "emoji": true
         }
       },
@@ -247,7 +247,7 @@ format_slack_failed() {
         "elements": [
           {
             "type": "mrkdwn",
-            "text": "Ralph Loop CLI • ${timestamp}"
+            "text": "Gralph CLI • ${timestamp}"
           }
         ]
       }
@@ -305,7 +305,7 @@ format_discord_failed() {
   cat <<EOF
 {
   "embeds": [{
-    "title": "❌ Ralph Loop Failed",
+    "title": "❌ Gralph Failed",
     "description": "${description}",
     "color": 15548997,
     "fields": [
@@ -336,7 +336,7 @@ format_discord_failed() {
       }
     ],
     "footer": {
-      "text": "Ralph Loop CLI"
+      "text": "Gralph CLI"
     },
     "timestamp": "${timestamp}"
   }]
@@ -473,7 +473,7 @@ notify_complete() {
   "iterations": "${iterations}",
   "duration": "${duration_str}",
   "timestamp": "${timestamp}",
-  "message": "Ralph loop '${escaped_name}' completed successfully after ${iterations} iterations (${duration_str})"
+  "message": "Gralph loop '${escaped_name}' completed successfully after ${iterations} iterations (${duration_str})"
 }
 EOF
 )
@@ -547,16 +547,16 @@ notify_failed() {
   local message
   case "$failure_reason" in
     max_iterations)
-      message="Ralph loop '${escaped_name}' failed: hit max iterations (${iterations}/${max_iterations}) with ${remaining_tasks} tasks remaining"
+      message="Gralph loop '${escaped_name}' failed: hit max iterations (${iterations}/${max_iterations}) with ${remaining_tasks} tasks remaining"
       ;;
     error)
-      message="Ralph loop '${escaped_name}' failed due to an error after ${iterations} iterations"
+      message="Gralph loop '${escaped_name}' failed due to an error after ${iterations} iterations"
       ;;
     manual_stop)
-      message="Ralph loop '${escaped_name}' was manually stopped after ${iterations} iterations with ${remaining_tasks} tasks remaining"
+      message="Gralph loop '${escaped_name}' was manually stopped after ${iterations} iterations with ${remaining_tasks} tasks remaining"
       ;;
     *)
-      message="Ralph loop '${escaped_name}' failed: ${escaped_reason} after ${iterations} iterations"
+      message="Gralph loop '${escaped_name}' failed: ${escaped_reason} after ${iterations} iterations"
       ;;
   esac
 

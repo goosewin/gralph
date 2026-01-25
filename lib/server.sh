@@ -1,11 +1,11 @@
 #!/bin/bash
-# server.sh - Simple HTTP status server for rloop
+# server.sh - Simple HTTP status server for gralph
 # Uses netcat (nc) or socat for a minimal HTTP server
 
 # Default server configuration
-RLOOP_SERVER_PORT="${RLOOP_SERVER_PORT:-8080}"
-RLOOP_SERVER_TOKEN="${RLOOP_SERVER_TOKEN:-}"
-RLOOP_SERVER_PID_FILE="${RLOOP_STATE_DIR:-$HOME/.config/rloop}/server.pid"
+GRALPH_SERVER_PORT="${GRALPH_SERVER_PORT:-8080}"
+GRALPH_SERVER_TOKEN="${GRALPH_SERVER_TOKEN:-}"
+GRALPH_SERVER_PID_FILE="${GRALPH_STATE_DIR:-$HOME/.config/gralph}/server.pid"
 
 # Source state.sh if not already sourced
 if ! declare -f list_sessions &>/dev/null; then
@@ -22,7 +22,7 @@ _check_auth() {
     local auth_header="$1"
 
     # If no token is configured, allow all requests
-    if [[ -z "$RLOOP_SERVER_TOKEN" ]]; then
+    if [[ -z "$GRALPH_SERVER_TOKEN" ]]; then
         return 0
     fi
 
@@ -35,7 +35,7 @@ _check_auth() {
     fi
 
     # Compare tokens (constant-time comparison would be better but this is acceptable)
-    if [[ "$provided_token" == "$RLOOP_SERVER_TOKEN" ]]; then
+    if [[ "$provided_token" == "$GRALPH_SERVER_TOKEN" ]]; then
         return 0
     fi
 
@@ -288,7 +288,7 @@ _handle_request() {
     # Route the request
     case "$method $path" in
         "GET /")
-            _send_json '{"status":"ok","service":"rloop-server"}'
+            _send_json '{"status":"ok","service":"gralph-server"}'
             ;;
         "GET /status")
             local json
@@ -328,12 +328,12 @@ _handle_request() {
 _run_server_nc() {
     local port="$1"
 
-    echo "Starting rloop status server on port $port using netcat..."
+    echo "Starting gralph status server on port $port using netcat..."
     echo "Endpoints:"
     echo "  GET  /status        - Get all sessions"
     echo "  GET  /status/:name  - Get specific session"
     echo "  POST /stop/:name    - Stop a session"
-    if [[ -n "$RLOOP_SERVER_TOKEN" ]]; then
+    if [[ -n "$GRALPH_SERVER_TOKEN" ]]; then
         echo "Authentication: Bearer token required"
     else
         echo "Authentication: None (use --token to enable)"
@@ -343,7 +343,7 @@ _run_server_nc() {
     echo ""
 
     # Create a named pipe for communication
-    local fifo="/tmp/rloop-server-$$"
+    local fifo="/tmp/gralph-server-$$"
     mkfifo "$fifo"
     trap "rm -f $fifo" EXIT
 
@@ -368,12 +368,12 @@ _run_server_nc() {
 _run_server_socat() {
     local port="$1"
 
-    echo "Starting rloop status server on port $port using socat..."
+    echo "Starting gralph status server on port $port using socat..."
     echo "Endpoints:"
     echo "  GET  /status        - Get all sessions"
     echo "  GET  /status/:name  - Get specific session"
     echo "  POST /stop/:name    - Stop a session"
-    if [[ -n "$RLOOP_SERVER_TOKEN" ]]; then
+    if [[ -n "$GRALPH_SERVER_TOKEN" ]]; then
         echo "Authentication: Bearer token required"
     else
         echo "Authentication: None (use --token to enable)"
@@ -387,9 +387,9 @@ _run_server_socat() {
     handler_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/server.sh"
 
     # Build environment variables to pass to handler
-    local env_vars="RLOOP_SERVER_TOKEN='$RLOOP_SERVER_TOKEN'"
-    if [[ -n "$RLOOP_STATE_DIR" ]]; then
-        env_vars="$env_vars RLOOP_STATE_DIR='$RLOOP_STATE_DIR'"
+    local env_vars="GRALPH_SERVER_TOKEN='$GRALPH_SERVER_TOKEN'"
+    if [[ -n "$GRALPH_STATE_DIR" ]]; then
+        env_vars="$env_vars GRALPH_STATE_DIR='$GRALPH_STATE_DIR'"
     fi
 
     # socat forks a new process for each connection
@@ -399,16 +399,16 @@ _run_server_socat() {
 
 # start_server() - Start the HTTP status server
 # Arguments:
-#   $1 - Port number (optional, defaults to RLOOP_SERVER_PORT)
-#   $2 - Authentication token (optional, defaults to RLOOP_SERVER_TOKEN)
+#   $1 - Port number (optional, defaults to GRALPH_SERVER_PORT)
+#   $2 - Authentication token (optional, defaults to GRALPH_SERVER_TOKEN)
 # Returns:
 #   0 on success (when server stops), 1 on error
 start_server() {
-    local port="${1:-$RLOOP_SERVER_PORT}"
-    local token="${2:-$RLOOP_SERVER_TOKEN}"
+    local port="${1:-$GRALPH_SERVER_PORT}"
+    local token="${2:-$GRALPH_SERVER_TOKEN}"
 
     # Update global token
-    RLOOP_SERVER_TOKEN="$token"
+    GRALPH_SERVER_TOKEN="$token"
 
     # Validate port
     if ! [[ "$port" =~ ^[0-9]+$ ]] || [[ "$port" -lt 1 ]] || [[ "$port" -gt 65535 ]]; then
@@ -428,8 +428,8 @@ start_server() {
     init_state || return 1
 
     # Store PID for tracking
-    echo $$ > "$RLOOP_SERVER_PID_FILE"
-    trap "rm -f '$RLOOP_SERVER_PID_FILE'" EXIT
+    echo $$ > "$GRALPH_SERVER_PID_FILE"
+    trap "rm -f '$GRALPH_SERVER_PID_FILE'" EXIT
 
     # Try socat first (better for concurrent connections), fall back to netcat
     if command -v socat &>/dev/null; then
@@ -449,22 +449,22 @@ start_server() {
 # Returns:
 #   0 on success, 1 if server not running
 stop_server() {
-    if [[ ! -f "$RLOOP_SERVER_PID_FILE" ]]; then
+    if [[ ! -f "$GRALPH_SERVER_PID_FILE" ]]; then
         echo "Server is not running (no PID file found)" >&2
         return 1
     fi
 
     local pid
-    pid=$(cat "$RLOOP_SERVER_PID_FILE")
+    pid=$(cat "$GRALPH_SERVER_PID_FILE")
 
     if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
         echo "Server is not running (stale PID file)" >&2
-        rm -f "$RLOOP_SERVER_PID_FILE"
+        rm -f "$GRALPH_SERVER_PID_FILE"
         return 1
     fi
 
     kill "$pid"
-    rm -f "$RLOOP_SERVER_PID_FILE"
+    rm -f "$GRALPH_SERVER_PID_FILE"
     echo "Server stopped (PID: $pid)"
     return 0
 }

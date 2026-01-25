@@ -1,7 +1,7 @@
 #!/bin/bash
-# Uninstall script for rloop
+# Uninstall script for gralph
 
 set -e
 
-echo "rloop uninstaller - Not yet implemented"
+echo "gralph uninstaller - Not yet implemented"
 echo "See PRD.md for planned functionality"

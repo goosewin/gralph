@@ -1,8 +1,8 @@
-# Ralph Loop CLI (`rloop`)
+# Gralph CLI (`gralph`)
 
 Autonomous AI coding loops using Claude Code or OpenCode. Spawns fresh AI coding sessions iteratively until all tasks in a PRD are complete.
 
-Named after the "Ralph Wiggum" technique - persistent iteration despite setbacks.
+Autonomous AI coding loops using Claude Code or OpenCode.
 
 ## Features
 
@@ -44,27 +44,27 @@ See `tests/macos-compatibility.md` for detailed platform notes.
 ### Quick Install (curl)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/USER/ralph-cli/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/goosewin/gralph/main/install.sh | bash
 ```
 
 ### From Source
 
 ```bash
-git clone git@github.com:USER/ralph-cli.git
-cd ralph-cli
+git clone git@github.com:goosewin/gralph.git
+cd gralph
 ./install.sh
 ```
 
 ### Manual Installation
 
 1. Clone this repository
-2. Copy `bin/rloop` to a directory in your PATH (e.g., `~/.local/bin/` or `/usr/local/bin/`)
-3. Copy `lib/` to `~/.config/rloop/lib/`
-4. Create config directory: `mkdir -p ~/.config/rloop`
+2. Copy `bin/gralph` to a directory in your PATH (e.g., `~/.local/bin/` or `/usr/local/bin/`)
+3. Copy `lib/` to `~/.config/gralph/lib/`
+4. Create config directory: `mkdir -p ~/.config/gralph`
 
 ## Backends
 
-rloop supports multiple AI coding assistants through a pluggable backend system.
+gralph supports multiple AI coding assistants through a pluggable backend system.
 
 ### Claude Code (Default)
 
@@ -75,10 +75,10 @@ rloop supports multiple AI coding assistants through a pluggable backend system.
 npm install -g @anthropic-ai/claude-code
 
 # Use Claude Code (default)
-rloop start .
+gralph start .
 
 # Or explicitly specify
-rloop start . --backend claude
+gralph start . --backend claude
 ```
 
 **Models:**
@@ -94,11 +94,11 @@ rloop start . --backend claude
 # Install OpenCode (see https://opencode.ai/docs/cli/)
 
 # Use OpenCode
-rloop start . --backend opencode
+gralph start . --backend opencode
 
 # OpenCode models use provider/model format
-rloop start . --backend opencode --model anthropic/claude-sonnet-4-20250514
-rloop start . --backend opencode --model openai/gpt-4o
+gralph start . --backend opencode --model anthropic/claude-sonnet-4-20250514
+gralph start . --backend opencode --model openai/gpt-4o
 ```
 
 **Models (format: provider/model):**
@@ -113,7 +113,7 @@ rloop start . --backend opencode --model openai/gpt-4o
 Set the default backend in your config file:
 
 ```yaml
-# ~/.config/rloop/config.yaml
+# ~/.config/gralph/config.yaml
 defaults:
   backend: opencode
   model: openai/gpt-4o
@@ -122,7 +122,7 @@ defaults:
 Or via environment variable:
 
 ```bash
-export RLOOP_DEFAULTS_BACKEND=opencode
+export GRALPH_DEFAULTS_BACKEND=opencode
 ```
 
 ## Usage
@@ -134,20 +134,20 @@ export RLOOP_DEFAULTS_BACKEND=opencode
 echo "- [ ] Build the CLI" > PRD.md
 
 # Start the loop in the current directory
-rloop start .
+gralph start .
 
 # Watch progress
-rloop status
+gralph status
 ```
 
 ### Start a Loop
 
 ```bash
 # Basic usage - start loop in current directory
-rloop start .
+gralph start .
 
 # Start with options
-rloop start ~/projects/myapp \
+gralph start ~/projects/myapp \
   --name myapp \
   --max-iterations 50 \
   --task-file PRD.md \
@@ -158,7 +158,7 @@ rloop start ~/projects/myapp \
 
 ```bash
 # List all running loops
-rloop status
+gralph status
 
 # Output:
 # NAME          DIR                      ITERATION  STATUS     REMAINING
@@ -171,37 +171,37 @@ rloop status
 
 ```bash
 # View logs for a specific loop
-rloop logs myapp
+gralph logs myapp
 
 # Follow logs in real-time
-rloop logs myapp --follow
+gralph logs myapp --follow
 ```
 
 ### Stop a Loop
 
 ```bash
 # Stop specific loop
-rloop stop myapp
+gralph stop myapp
 
 # Stop all loops
-rloop stop --all
+gralph stop --all
 ```
 
 ### Resume After Crash
 
 ```bash
 # Resume all previously running sessions
-rloop resume
+gralph resume
 
 # Resume specific session
-rloop resume myapp
+gralph resume myapp
 ```
 
 ## Configuration
 
 ### Global Configuration
 
-Location: `~/.config/rloop/config.yaml`
+Location: `~/.config/gralph/config.yaml`
 
 ```yaml
 defaults:
@@ -227,13 +227,13 @@ logging:
 
 ### Project Configuration
 
-Create `.rloop.yaml` in your project directory to override global settings.
+Create `.gralph.yaml` in your project directory to override global settings.
 
 ### Environment Variables
 
-- `RLOOP_MAX_ITERATIONS` - Override max iterations
-- `RLOOP_TASK_FILE` - Override task file path
-- `RLOOP_COMPLETION_MARKER` - Override completion marker
+- `GRALPH_MAX_ITERATIONS` - Override max iterations
+- `GRALPH_TASK_FILE` - Override task file path
+- `GRALPH_COMPLETION_MARKER` - Override completion marker
 
 ## Configuration Options Reference
 
@@ -323,7 +323,7 @@ Log file management settings.
 All configuration keys can be overridden using environment variables. The conversion rule is:
 
 1. Take the full dotted key (e.g., `defaults.max_iterations`)
-2. Prefix with `RLOOP_`
+2. Prefix with `GRALPH_`
 3. Convert to uppercase
 4. Replace dots with underscores
 
@@ -331,38 +331,38 @@ All configuration keys can be overridden using environment variables. The conver
 
 | Config Key | Environment Variable |
 |------------|---------------------|
-| `defaults.max_iterations` | `RLOOP_DEFAULTS_MAX_ITERATIONS` |
-| `defaults.task_file` | `RLOOP_DEFAULTS_TASK_FILE` |
-| `defaults.completion_marker` | `RLOOP_DEFAULTS_COMPLETION_MARKER` |
-| `defaults.backend` | `RLOOP_DEFAULTS_BACKEND` |
-| `notifications.webhook` | `RLOOP_NOTIFICATIONS_WEBHOOK` |
-| `logging.level` | `RLOOP_LOGGING_LEVEL` |
+| `defaults.max_iterations` | `GRALPH_DEFAULTS_MAX_ITERATIONS` |
+| `defaults.task_file` | `GRALPH_DEFAULTS_TASK_FILE` |
+| `defaults.completion_marker` | `GRALPH_DEFAULTS_COMPLETION_MARKER` |
+| `defaults.backend` | `GRALPH_DEFAULTS_BACKEND` |
+| `notifications.webhook` | `GRALPH_NOTIFICATIONS_WEBHOOK` |
+| `logging.level` | `GRALPH_LOGGING_LEVEL` |
 
 **Usage:**
 
 ```bash
 # Override max iterations for a single run
-RLOOP_DEFAULTS_MAX_ITERATIONS=100 rloop start .
+GRALPH_DEFAULTS_MAX_ITERATIONS=100 gralph start .
 
 # Export for all runs in this shell
-export RLOOP_NOTIFICATIONS_WEBHOOK="https://hooks.slack.com/services/xxx"
-rloop start .
+export GRALPH_NOTIFICATIONS_WEBHOOK="https://hooks.slack.com/services/xxx"
+gralph start .
 ```
 
 ### Configuration Precedence
 
 Configuration values are loaded in the following order (later sources override earlier):
 
-1. **Default config** (`~/.config/rloop/config/default.yaml` or bundled default)
-2. **Global config** (`~/.config/rloop/config.yaml`)
-3. **Project config** (`.rloop.yaml` in project directory)
-4. **Environment variables** (`RLOOP_*`)
+1. **Default config** (`~/.config/gralph/config/default.yaml` or bundled default)
+2. **Global config** (`~/.config/gralph/config.yaml`)
+3. **Project config** (`.gralph.yaml` in project directory)
+4. **Environment variables** (`GRALPH_*`)
 5. **CLI arguments** (e.g., `--max-iterations`)
 
 ### Complete Configuration Example
 
 ```yaml
-# ~/.config/rloop/config.yaml - Global configuration
+# ~/.config/gralph/config.yaml - Global configuration
 
 defaults:
   max_iterations: 50          # Allow more iterations
@@ -390,7 +390,7 @@ logging:
 ```
 
 ```yaml
-# ~/projects/myapp/.rloop.yaml - Project-specific overrides
+# ~/projects/myapp/.gralph.yaml - Project-specific overrides
 
 defaults:
   max_iterations: 100         # This project needs more iterations
@@ -405,13 +405,13 @@ notifications:
 ## CLI Reference
 
 ```
-rloop - Autonomous AI coding loops
+gralph - Autonomous AI coding loops
 
 USAGE:
-  rloop <command> [options]
+  gralph <command> [options]
 
 COMMANDS:
-  start <dir>         Start a new ralph loop
+  start <dir>         Start a new gralph loop
   stop <name>         Stop a running loop
   stop --all          Stop all loops
   status              Show status of all loops
@@ -425,10 +425,10 @@ COMMANDS:
 
 ### Command: `start`
 
-Start a new ralph loop in a specified directory.
+Start a new gralph loop in a specified directory.
 
 ```bash
-rloop start <directory> [options]
+gralph start <directory> [options]
 ```
 
 **Arguments:**
@@ -449,31 +449,31 @@ rloop start <directory> [options]
 **Examples:**
 ```bash
 # Start with defaults (uses Claude Code)
-rloop start .
+gralph start .
 
 # Start with custom name and iterations
-rloop start ~/projects/myapp --name myapp --max-iterations 50
+gralph start ~/projects/myapp --name myapp --max-iterations 50
 
 # Use different task file
-rloop start . --task-file TODO.md
+gralph start . --task-file TODO.md
 
 # Use OpenCode backend
-rloop start . --backend opencode
+gralph start . --backend opencode
 
 # Use OpenCode with specific model
-rloop start . --backend opencode --model openai/gpt-4o
+gralph start . --backend opencode --model openai/gpt-4o
 
 # Run in foreground (for debugging)
-rloop start . --no-tmux
+gralph start . --no-tmux
 ```
 
 ### Command: `stop`
 
-Stop a running ralph loop.
+Stop a running gralph loop.
 
 ```bash
-rloop stop <name>
-rloop stop --all
+gralph stop <name>
+gralph stop --all
 ```
 
 **Arguments:**
@@ -487,18 +487,18 @@ rloop stop --all
 **Examples:**
 ```bash
 # Stop specific session
-rloop stop myapp
+gralph stop myapp
 
 # Stop all sessions
-rloop stop --all
+gralph stop --all
 ```
 
 ### Command: `status`
 
-Show status of all ralph loop sessions.
+Show status of all gralph loop sessions.
 
 ```bash
-rloop status
+gralph status
 ```
 
 **Output columns:**
@@ -519,10 +519,10 @@ mobile-app    ~/projects/mobile        15/40      failed     5 tasks
 
 ### Command: `logs`
 
-View logs for a ralph loop session.
+View logs for a gralph loop session.
 
 ```bash
-rloop logs <name> [options]
+gralph logs <name> [options]
 ```
 
 **Arguments:**
@@ -536,10 +536,10 @@ rloop logs <name> [options]
 **Examples:**
 ```bash
 # View last 100 log lines
-rloop logs myapp
+gralph logs myapp
 
 # Follow logs in real-time
-rloop logs myapp --follow
+gralph logs myapp --follow
 ```
 
 ### Command: `resume`
@@ -547,7 +547,7 @@ rloop logs myapp --follow
 Resume crashed or stopped loops. Finds sessions that were marked as running but whose processes are no longer alive, and restarts them.
 
 ```bash
-rloop resume [name]
+gralph resume [name]
 ```
 
 **Arguments:**
@@ -561,10 +561,10 @@ rloop resume [name]
 **Examples:**
 ```bash
 # Resume all crashed sessions
-rloop resume
+gralph resume
 
 # Resume specific session
-rloop resume myapp
+gralph resume myapp
 ```
 
 ### Command: `server`
@@ -572,7 +572,7 @@ rloop resume myapp
 Start an HTTP status server for remote monitoring.
 
 ```bash
-rloop server [options]
+gralph server [options]
 ```
 
 **Options:**
@@ -591,10 +591,10 @@ rloop server [options]
 **Examples:**
 ```bash
 # Start server on default port
-rloop server
+gralph server
 
 # Start with authentication
-rloop server --port 8080 --token "my-secret-token"
+gralph server --port 8080 --token "my-secret-token"
 
 # Query from remote
 curl -H "Authorization: Bearer my-secret-token" http://server:8080/status
@@ -605,7 +605,7 @@ curl -H "Authorization: Bearer my-secret-token" http://server:8080/status
 List available AI backends and their installation status.
 
 ```bash
-rloop backends
+gralph backends
 ```
 
 **Output example:**
@@ -618,30 +618,30 @@ Available AI backends:
   opencode (not installed)
       Install: See https://opencode.ai/docs/cli/ for installation
 
-Usage: rloop start <dir> --backend <name>
+Usage: gralph start <dir> --backend <name>
 ```
 
 ### Command: `config`
 
-Manage rloop configuration values.
+Manage gralph configuration values.
 
 ```bash
-rloop config
-rloop config list
-rloop config get <key>
-rloop config set <key> <value>
+gralph config
+gralph config list
+gralph config get <key>
+gralph config set <key> <value>
 ```
 
 **Notes:**
-- `rloop config` and `rloop config list` print the merged configuration (default + global + project).
-- `rloop config set` writes to the global config file at `~/.config/rloop/config.yaml`.
+- `gralph config` and `gralph config list` print the merged configuration (default + global + project).
+- `gralph config set` writes to the global config file at `~/.config/gralph/config.yaml`.
 
 ### Command: `version`
 
-Show rloop version.
+Show gralph version.
 
 ```bash
-rloop version
+gralph version
 ```
 
 **Aliases:** `--version`, `-v`
@@ -651,7 +651,7 @@ rloop version
 Show help message with usage information.
 
 ```bash
-rloop help
+gralph help
 ```
 
 **Aliases:** `--help`, `-h`
@@ -684,13 +684,13 @@ Start a loop on a project with a PRD file:
 cd ~/projects/my-webapp
 
 # Start the loop (uses PRD.md by default)
-rloop start .
+gralph start .
 
 # Check progress
-rloop status
+gralph status
 
 # View live logs
-rloop logs my-webapp --follow
+gralph logs my-webapp --follow
 ```
 
 ### Example 2: Multiple Concurrent Projects
@@ -699,12 +699,12 @@ Run several projects simultaneously on a VPS:
 
 ```bash
 # Start multiple projects with custom names
-rloop start ~/projects/backend --name api-server --max-iterations 50
-rloop start ~/projects/frontend --name web-ui --max-iterations 30
-rloop start ~/projects/mobile --name mobile-app --max-iterations 40
+gralph start ~/projects/backend --name api-server --max-iterations 50
+gralph start ~/projects/frontend --name web-ui --max-iterations 30
+gralph start ~/projects/mobile --name mobile-app --max-iterations 40
 
 # Check all at once
-rloop status
+gralph status
 
 # Output:
 # NAME          DIR                      ITERATION  STATUS     REMAINING
@@ -719,13 +719,13 @@ Use a different task file or completion marker:
 
 ```bash
 # Use TODO.md instead of PRD.md
-rloop start . --task-file TODO.md
+gralph start . --task-file TODO.md
 
 # Use a custom completion marker
-rloop start . --completion-marker "ALL_DONE"
+gralph start . --completion-marker "ALL_DONE"
 
 # Combined
-rloop start ~/projects/app \
+gralph start ~/projects/app \
   --name myapp \
   --task-file TASKS.md \
   --completion-marker "FINISHED" \
@@ -738,11 +738,11 @@ Run loops on a VPS and monitor from anywhere:
 
 ```bash
 # On your VPS: start the status server
-rloop server --port 8080 --token "your-secret-token"
+gralph server --port 8080 --token "your-secret-token"
 
 # On your VPS: start your loops
-rloop start ~/projects/app1 --name app1
-rloop start ~/projects/app2 --name app2
+gralph start ~/projects/app1 --name app1
+gralph start ~/projects/app2 --name app2
 
 # From your laptop or phone: check status
 curl -H "Authorization: Bearer your-secret-token" \
@@ -759,13 +759,13 @@ Get notified when loops complete:
 
 ```bash
 # Discord webhook
-rloop start . --webhook "https://discord.com/api/webhooks/123/abc"
+gralph start . --webhook "https://discord.com/api/webhooks/123/abc"
 
 # Slack webhook
-rloop start . --webhook "https://hooks.slack.com/services/T00/B00/xxx"
+gralph start . --webhook "https://hooks.slack.com/services/T00/B00/xxx"
 
 # Or set globally
-rloop config set notifications.webhook "https://discord.com/api/webhooks/123/abc"
+gralph config set notifications.webhook "https://discord.com/api/webhooks/123/abc"
 ```
 
 ### Example 6: Recovery After Reboot
@@ -774,13 +774,13 @@ Resume loops after a server restart:
 
 ```bash
 # After reboot, check what was running
-rloop status
+gralph status
 
 # Resume all previously running sessions
-rloop resume
+gralph resume
 
 # Or resume specific session
-rloop resume myapp
+gralph resume myapp
 ```
 
 ### Example 7: Foreground Mode (No tmux)
@@ -789,7 +789,7 @@ Run in foreground for debugging or CI/CD:
 
 ```bash
 # Run without tmux (blocks until complete)
-rloop start . --no-tmux
+gralph start . --no-tmux
 
 # Useful for:
 # - Debugging loop behavior
@@ -803,10 +803,10 @@ Use a different Claude model:
 
 ```bash
 # Use Claude Opus for more complex tasks
-rloop start . --model claude-opus-4-20250514
+gralph start . --model claude-opus-4-20250514
 
 # Or set as default in config
-rloop config set defaults.model claude-opus-4-20250514
+gralph config set defaults.model claude-opus-4-20250514
 ```
 
 ### Example 9: Using OpenCode Backend
@@ -815,20 +815,20 @@ Use OpenCode instead of Claude Code:
 
 ```bash
 # Use OpenCode with default model
-rloop start . --backend opencode
+gralph start . --backend opencode
 
 # Use OpenCode with GPT-4o
-rloop start . --backend opencode --model openai/gpt-4o
+gralph start . --backend opencode --model openai/gpt-4o
 
 # Use OpenCode with Gemini
-rloop start . --backend opencode --model google/gemini-2.0-flash
+gralph start . --backend opencode --model google/gemini-2.0-flash
 
 # Use OpenCode with DeepSeek
-rloop start . --backend opencode --model deepseek/deepseek-chat
+gralph start . --backend opencode --model deepseek/deepseek-chat
 
 # Set OpenCode as default in config
-rloop config set defaults.backend opencode
-rloop config set defaults.model openai/gpt-4o
+gralph config set defaults.backend opencode
+gralph config set defaults.model openai/gpt-4o
 ```
 
 ## Troubleshooting
@@ -847,7 +847,7 @@ rloop config set defaults.model openai/gpt-4o
    ls -la PRD.md
 
    # Or specify correct path
-   rloop start . --task-file TASKS.md
+   gralph start . --task-file TASKS.md
    ```
 
 2. **No unchecked tasks in file**
@@ -876,7 +876,7 @@ rloop config set defaults.model openai/gpt-4o
 3. **Missing dependencies** - Ensure required files/packages exist
 4. **Check logs for errors:**
    ```bash
-   rloop logs <session-name>
+   gralph logs <session-name>
    ```
 
 #### "Session already exists" error
@@ -886,10 +886,10 @@ rloop config set defaults.model openai/gpt-4o
 **Solution:**
 ```bash
 # Stop the existing session first
-rloop stop myapp
+gralph stop myapp
 
 # Or use a different name
-rloop start . --name myapp-v2
+gralph start . --name myapp-v2
 ```
 
 #### tmux session not found
@@ -907,7 +907,7 @@ rloop start . --name myapp-v2
 
 2. **Session crashed** - Use resume to restart:
    ```bash
-   rloop resume myapp
+   gralph resume myapp
    ```
 
 #### Failed to acquire state lock
@@ -916,14 +916,14 @@ rloop start . --name myapp-v2
 
 **Causes and solutions:**
 
-1. **Another rloop process is still running**
+1. **Another gralph process is still running**
    ```bash
-   rloop status
+   gralph status
    ```
 
 2. **Stale lock file after a crash**
    ```bash
-   rm ~/.config/rloop/state.lock
+   rm ~/.config/gralph/state.lock
    ```
 
 3. **Missing flock on macOS**
@@ -939,7 +939,7 @@ rloop start . --name myapp-v2
 
 1. **Check if server is running:**
    ```bash
-   ps aux | grep "rloop server"
+   ps aux | grep "gralph server"
    ```
 
 2. **Check port availability:**
@@ -948,7 +948,7 @@ rloop start . --name myapp-v2
    lsof -i :8080
 
    # Try different port
-   rloop server --port 9090
+   gralph server --port 9090
    ```
 
 3. **Firewall blocking connections:**
@@ -984,14 +984,14 @@ rloop start . --name myapp-v2
 
 **Solutions:**
 
-1. **Check rloop is executable:**
+1. **Check gralph is executable:**
    ```bash
-   chmod +x ~/.local/bin/rloop
+   chmod +x ~/.local/bin/gralph
    ```
 
 2. **Check lib files are readable:**
    ```bash
-   chmod -R 755 ~/.config/rloop/lib/
+   chmod -R 755 ~/.config/gralph/lib/
    ```
 
 3. **Check project directory is writable:**
@@ -1021,7 +1021,7 @@ rloop start . --name myapp-v2
 
 1. **Increase max iterations:**
    ```bash
-   rloop start . --max-iterations 100
+   gralph start . --max-iterations 100
    ```
 
 2. **Check remaining task complexity:**
@@ -1031,7 +1031,7 @@ rloop start . --name myapp-v2
 
 3. **Review logs for repeated errors:**
    ```bash
-   rloop logs myapp | grep -i error
+   gralph logs myapp | grep -i error
    ```
 
 ### Debugging Tips
@@ -1040,7 +1040,7 @@ rloop start . --name myapp-v2
 
 ```bash
 # Set debug log level in config
-RLOOP_LOGGING_LEVEL=debug rloop start .
+GRALPH_LOGGING_LEVEL=debug gralph start .
 ```
 
 #### Run in foreground mode
@@ -1048,27 +1048,27 @@ RLOOP_LOGGING_LEVEL=debug rloop start .
 For easier debugging, run without tmux:
 
 ```bash
-rloop start . --no-tmux
+gralph start . --no-tmux
 ```
 
 #### Inspect state file
 
 ```bash
 # View current state
-cat ~/.config/rloop/state.json | jq .
+cat ~/.config/gralph/state.json | jq .
 
 # Find specific session
-jq '.sessions.myapp' ~/.config/rloop/state.json
+jq '.sessions.myapp' ~/.config/gralph/state.json
 ```
 
 #### Check tmux session directly
 
 ```bash
-# List rloop tmux sessions
-tmux list-sessions | grep rloop
+# List gralph tmux sessions
+tmux list-sessions | grep gralph
 
 # Attach to session
-tmux attach -t rloop-myapp
+tmux attach -t gralph-myapp
 ```
 
 #### Clean up stale state
@@ -1077,22 +1077,22 @@ If state file becomes corrupted or out of sync:
 
 ```bash
 # Backup current state
-cp ~/.config/rloop/state.json ~/.config/rloop/state.json.bak
+cp ~/.config/gralph/state.json ~/.config/gralph/state.json.bak
 
 # Remove specific session from state
-jq 'del(.sessions.myapp)' ~/.config/rloop/state.json > tmp.json && \
-  mv tmp.json ~/.config/rloop/state.json
+jq 'del(.sessions.myapp)' ~/.config/gralph/state.json > tmp.json && \
+  mv tmp.json ~/.config/gralph/state.json
 
 # Or reset entirely (stops all sessions first)
-rloop stop --all
-rm ~/.config/rloop/state.json
+gralph stop --all
+rm ~/.config/gralph/state.json
 ```
 
 ### Getting Help
 
 If you continue to experience issues:
 
-1. **Check the logs** - Most issues are visible in `rloop logs <name>`
+1. **Check the logs** - Most issues are visible in `gralph logs <name>`
 2. **Verify dependencies** - Run `./install.sh` to check all requirements
 3. **Open an issue** - Include logs and system info (OS, bash version, etc.)
 
