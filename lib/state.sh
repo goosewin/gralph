@@ -237,7 +237,7 @@ list_sessions() {
 
     # Extract all sessions as a JSON array
     local sessions
-    sessions=$(jq -r '[.sessions | to_entries[] | .value]' "$RLOOP_STATE_FILE" 2>/dev/null)
+    sessions=$(jq -r '[.sessions | to_entries[] | (.value + {name: .key})]' "$RLOOP_STATE_FILE" 2>/dev/null)
     local exit_code=$?
 
     if [[ $exit_code -ne 0 ]]; then

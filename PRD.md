@@ -330,7 +330,7 @@ ralph-cli/
 - [ ] Implement `get_session()` - read session by name
 - [ ] Implement `set_session()` - upsert session
 - [ ] Implement `delete_session()` - remove session
-- [ ] Implement `list_sessions()` - get all sessions
+- [x] Implement `list_sessions()` - get all sessions
 - [ ] Implement `cleanup_stale()` - remove sessions with dead PIDs
  - [x] Use file locking for concurrent access
 
