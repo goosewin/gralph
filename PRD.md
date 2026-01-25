@@ -329,7 +329,7 @@ ralph-cli/
 - [x] Implement `init_state()` - create state file if missing
 - [x] Implement `get_session()` - read session by name
  - [x] Implement `set_session()` - upsert session
-- [ ] Implement `delete_session()` - remove session
+- [x] Implement `delete_session()` - remove session
 - [x] Implement `list_sessions()` - get all sessions
 - [x] Implement `cleanup_stale()` - remove sessions with dead PIDs
  - [x] Use file locking for concurrent access
