@@ -43,7 +43,7 @@ rloop start ./my-project \
 
 **Loop logic:**
 1. Read task file (PRD.md by default)
-2. Count unchecked tasks (`- [ ]`)
+2. Count unchecked tasks (`- \[ \]`)
 3. If count > 0, spawn Claude Code with task prompt
 4. Wait for Claude to exit
 5. Re-count unchecked tasks
@@ -59,7 +59,7 @@ rloop start ./my-project \
 ```
 
 **Fix**: Only detect completion when:
-1. Zero `- [ ]` patterns remain in task file, AND
+1. Zero `- \[ \]` patterns remain in task file, AND
 2. Promise appears as final statement (last 200 chars of output), OR
 3. Promise appears on its own line with no negating context
 
@@ -72,7 +72,7 @@ rloop start ./my-project \
 echo "$result" | tail -c 500 | grep -qE "^<promise>$PROMISE</promise>\s*$"
 ```
 
-**Additional safeguard**: Always verify task file has zero `- [ ]` before accepting completion.
+**Additional safeguard**: Always verify task file has zero `- \[ \]` before accepting completion.
 
 ### FR-3: Installation
 
@@ -313,7 +313,7 @@ ralph-cli/
   - [x] Stream output to log and stdout
   - [x] Extract result from JSON stream
 - [x] Implement `check_completion()` function
-  - [x] Count `- [ ]` in task file
+  - [x] Count `- \[ \]` in task file
   - [x] Verify promise appears at END of output (not mentioned)
   - [x] Return true only if both conditions met
  - [x] Implement `run_loop()` function
@@ -395,8 +395,9 @@ ralph-cli/
  - [x] Write usage examples in README
 - [x] Document all CLI commands
 - [x] Document configuration options
-- [x] Add troubleshooting section
-- [x] Create example PRD.md template
+  - [x] Add troubleshooting section
+  - [x] Create example PRD.md template
+  - [x] Escape inline task markers to avoid false grep matches
 - [x] Test on fresh Ubuntu 24.04
 - [x] Test on macOS
 
@@ -419,20 +420,20 @@ TASK FILE: {task_file}
 
 INSTRUCTIONS:
 1. Read the task file carefully
-2. Find any task marked with '- [ ]' (unchecked checkbox)
+2. Find any task marked with '- \\[ \\]' (unchecked checkbox)
 3. If you find unchecked tasks:
    - Pick ONE task to complete
    - Implement it fully with tests if applicable
    - Mark it '- [x]' in the task file
    - Commit changes with descriptive message
    - Exit normally (do NOT output the completion promise)
-4. If ALL tasks are marked '- [ ]' (zero unchecked remain):
-   - Verify by searching for '- [ ]' pattern
+4. If ALL tasks are marked '- \\[ \\]' (zero unchecked remain):
+   - Verify by searching for '- \\[ \\]' pattern
    - If truly zero remain, output ONLY: <promise>{completion_marker}</promise>
 
 CRITICAL: 
 - Do NOT mention <promise>{completion_marker}</promise> unless outputting it as completion signal
-- Do NOT output the promise if ANY '- [ ]' remain
+- Do NOT output the promise if ANY '- \\[ \\]' remain
 - Complete ONE task per session, then exit
 
 Current iteration: {iteration}/{max_iterations}
@@ -534,7 +535,7 @@ for ((i=1; i<=$MAX_ITERATIONS; i++)); do
     --verbose \
     --print \
     --output-format stream-json \
-    -p "Read $TASK_FILE carefully. Find any task marked '- [ ]' (unchecked).
+  -p "Read $TASK_FILE carefully. Find any task marked '- \\[ \\]' (unchecked).
 
 If unchecked tasks exist:
 - Complete ONE task fully
@@ -542,7 +543,7 @@ If unchecked tasks exist:
 - Commit changes
 - Exit normally (do NOT output completion promise)
 
-If ZERO '- [ ]' remain (all complete):
+If ZERO '- \\[ \\]' remain (all complete):
 - Verify by searching the file
 - Output ONLY: <promise>$COMPLETION_PROMISE</promise>
 
