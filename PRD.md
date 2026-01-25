@@ -316,7 +316,7 @@ ralph-cli/
   - [x] Count `- [ ]` in task file
   - [x] Verify promise appears at END of output (not mentioned)
   - [x] Return true only if both conditions met
-- [ ] Implement `run_loop()` function
+ - [x] Implement `run_loop()` function
   - [x] Initialize iteration counter
   - [x] Call run_iteration in loop
   - [x] Check completion after each
