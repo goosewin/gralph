@@ -394,7 +394,7 @@ ralph-cli/
 ### Unit 09: Testing & Documentation
 - [ ] Write usage examples in README
 - [x] Document all CLI commands
-- [ ] Document configuration options
+- [x] Document configuration options
 - [ ] Add troubleshooting section
 - [x] Create example PRD.md template
 - [x] Test on fresh Ubuntu 24.04
