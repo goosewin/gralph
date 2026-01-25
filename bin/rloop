@@ -108,6 +108,16 @@ parse_args() {
     OPT_WEBHOOK=""
     OPT_NO_TMUX=false
 
+    OPT_NAME_SET=false
+    OPT_MAX_ITERATIONS_SET=false
+    OPT_TASK_FILE_SET=false
+    OPT_COMPLETION_MARKER_SET=false
+    OPT_BACKEND_SET=false
+    OPT_MODEL_SET=false
+    OPT_PROMPT_TEMPLATE_FILE_SET=false
+    OPT_WEBHOOK_SET=false
+    OPT_NO_TMUX_SET=false
+
     # Stop command options
     OPT_ALL=false
 
@@ -143,10 +153,12 @@ parse_args() {
                     die "Option --name requires a value"
                 fi
                 OPT_NAME="$2"
+                OPT_NAME_SET=true
                 shift 2
                 ;;
             --name=*)
                 OPT_NAME="${1#*=}"
+                OPT_NAME_SET=true
                 shift
                 ;;
 
@@ -159,6 +171,7 @@ parse_args() {
                     die "Option --max-iterations must be a positive integer"
                 fi
                 OPT_MAX_ITERATIONS="$2"
+                OPT_MAX_ITERATIONS_SET=true
                 shift 2
                 ;;
             --max-iterations=*)
@@ -167,6 +180,7 @@ parse_args() {
                     die "Option --max-iterations must be a positive integer"
                 fi
                 OPT_MAX_ITERATIONS="$val"
+                OPT_MAX_ITERATIONS_SET=true
                 shift
                 ;;
 
@@ -176,10 +190,12 @@ parse_args() {
                     die "Option --task-file requires a value"
                 fi
                 OPT_TASK_FILE="$2"
+                OPT_TASK_FILE_SET=true
                 shift 2
                 ;;
             --task-file=*)
                 OPT_TASK_FILE="${1#*=}"
+                OPT_TASK_FILE_SET=true
                 shift
                 ;;
 
@@ -189,10 +205,12 @@ parse_args() {
                     die "Option --completion-marker requires a value"
                 fi
                 OPT_COMPLETION_MARKER="$2"
+                OPT_COMPLETION_MARKER_SET=true
                 shift 2
                 ;;
             --completion-marker=*)
                 OPT_COMPLETION_MARKER="${1#*=}"
+                OPT_COMPLETION_MARKER_SET=true
                 shift
                 ;;
 
@@ -205,6 +223,7 @@ parse_args() {
                     die "Option --backend must be 'claude' or 'opencode'"
                 fi
                 OPT_BACKEND="$2"
+                OPT_BACKEND_SET=true
                 shift 2
                 ;;
             --backend=*)
@@ -213,6 +232,7 @@ parse_args() {
                     die "Option --backend must be 'claude' or 'opencode'"
                 fi
                 OPT_BACKEND="$val"
+                OPT_BACKEND_SET=true
                 shift
                 ;;
 
@@ -222,10 +242,12 @@ parse_args() {
                     die "Option --model requires a value"
                 fi
                 OPT_MODEL="$2"
+                OPT_MODEL_SET=true
                 shift 2
                 ;;
             --model=*)
                 OPT_MODEL="${1#*=}"
+                OPT_MODEL_SET=true
                 shift
                 ;;
 
@@ -235,10 +257,12 @@ parse_args() {
                     die "Option --prompt-template requires a file path"
                 fi
                 OPT_PROMPT_TEMPLATE_FILE="$2"
+                OPT_PROMPT_TEMPLATE_FILE_SET=true
                 shift 2
                 ;;
             --prompt-template=*)
                 OPT_PROMPT_TEMPLATE_FILE="${1#*=}"
+                OPT_PROMPT_TEMPLATE_FILE_SET=true
                 shift
                 ;;
 
@@ -248,16 +272,19 @@ parse_args() {
                     die "Option --webhook requires a value"
                 fi
                 OPT_WEBHOOK="$2"
+                OPT_WEBHOOK_SET=true
                 shift 2
                 ;;
             --webhook=*)
                 OPT_WEBHOOK="${1#*=}"
+                OPT_WEBHOOK_SET=true
                 shift
                 ;;
 
             # No tmux flag (start command)
             --no-tmux)
                 OPT_NO_TMUX=true
+                OPT_NO_TMUX_SET=true
                 shift
                 ;;
 
@@ -356,6 +383,42 @@ cmd_start() {
 
     # Resolve to absolute path
     target_dir=$(cd "$target_dir" && pwd)
+
+    # Load configuration defaults (if available) for this project
+    if [[ -f "$LIB_DIR/config.sh" ]]; then
+        source "$LIB_DIR/config.sh"
+        load_config "$target_dir"
+
+        if [[ "$OPT_MAX_ITERATIONS_SET" != "true" ]]; then
+            OPT_MAX_ITERATIONS=$(get_config "defaults.max_iterations" "$OPT_MAX_ITERATIONS")
+        fi
+        if [[ "$OPT_TASK_FILE_SET" != "true" ]]; then
+            OPT_TASK_FILE=$(get_config "defaults.task_file" "$OPT_TASK_FILE")
+        fi
+        if [[ "$OPT_COMPLETION_MARKER_SET" != "true" ]]; then
+            OPT_COMPLETION_MARKER=$(get_config "defaults.completion_marker" "$OPT_COMPLETION_MARKER")
+        fi
+        if [[ "$OPT_BACKEND_SET" != "true" ]]; then
+            OPT_BACKEND=$(get_config "defaults.backend" "$OPT_BACKEND")
+        fi
+        if [[ "$OPT_MODEL_SET" != "true" ]]; then
+            OPT_MODEL=$(get_config "defaults.model" "$OPT_MODEL")
+        fi
+        if [[ -z "$OPT_MODEL" ]] && [[ "${OPT_BACKEND:-claude}" == "opencode" ]]; then
+            OPT_MODEL=$(get_config "opencode.default_model" "$OPT_MODEL")
+        fi
+    fi
+
+    # Validate configured values
+    if ! [[ "$OPT_MAX_ITERATIONS" =~ ^[0-9]+$ ]]; then
+        die "Configured max_iterations must be a positive integer"
+    fi
+    if [[ -n "$OPT_BACKEND" ]] && [[ "$OPT_BACKEND" != "claude" ]] && [[ "$OPT_BACKEND" != "opencode" ]]; then
+        die "Configured backend must be 'claude' or 'opencode'"
+    fi
+    if [[ -z "$OPT_COMPLETION_MARKER" ]]; then
+        die "Configured completion marker cannot be empty"
+    fi
 
     # Validate task file exists
     local task_file_path="$target_dir/$OPT_TASK_FILE"
