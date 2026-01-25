@@ -350,7 +350,7 @@ ralph-cli/
   - [ ] List all sessions
   - [ ] Show table with iteration/status/remaining
   - [ ] Color coding (green=complete, yellow=running, red=failed)
-- [ ] Implement `cmd_logs()`
+- [x] Implement `cmd_logs()`
   - [ ] Tail log file
   - [ ] Support --follow flag
 - [ ] Implement `cmd_resume()`
