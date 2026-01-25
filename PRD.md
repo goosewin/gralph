@@ -338,7 +338,7 @@ ralph-cli/
 - [x] Implement argument parsing
 - [ ] Implement `cmd_start()`
   - [ ] Validate directory exists
-  - [ ] Validate task file exists
+  - [x] Validate task file exists
   - [ ] Check for existing session with same name
   - [ ] Start tmux session with loop
   - [ ] Save state
