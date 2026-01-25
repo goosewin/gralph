@@ -318,7 +318,7 @@ ralph-cli/
   - [x] Return true only if both conditions met
 - [ ] Implement `run_loop()` function
   - [x] Initialize iteration counter
-  - [ ] Call run_iteration in loop
+  - [x] Call run_iteration in loop
   - [ ] Check completion after each
   - [ ] Handle max iterations
   - [x] Update state after each iteration
