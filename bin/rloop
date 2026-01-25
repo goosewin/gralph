@@ -688,7 +688,7 @@ cmd_status() {
         die "Failed to initialize state"
     fi
 
-    # Clean up stale sessions first (mark them, don't remove)
+    # Clean up stale sessions first (remove dead sessions)
     cleanup_stale >/dev/null 2>&1
 
     # Get all sessions

@@ -307,7 +307,7 @@ delete_session() {
 # _cleanup_stale_unlocked() - Internal: Cleanup stale sessions without locking
 # Called by cleanup_stale() which handles locking
 _cleanup_stale_unlocked() {
-    local mode="${1:-mark}"  # "remove" or "mark"
+    local mode="${1:-remove}"  # "remove" or "mark"
 
     # Ensure state is initialized
     if ! init_state; then
