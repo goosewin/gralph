@@ -404,7 +404,7 @@ ralph-cli/
 - [ ] Create GitHub Actions workflow
 - [ ] Auto-create release on version tag
 - [ ] Attach install script to release
-- [ ] Update version in rloop script
+ - [x] Update version in rloop script
 
 ---
 
