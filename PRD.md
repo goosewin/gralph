@@ -326,7 +326,7 @@ ralph-cli/
 - [ ] Add model override support
 
 ### Unit 03: State Management (`lib/state.sh`)
-- [ ] Implement `init_state()` - create state file if missing
+- [x] Implement `init_state()` - create state file if missing
 - [x] Implement `get_session()` - read session by name
 - [ ] Implement `set_session()` - upsert session
 - [ ] Implement `delete_session()` - remove session
