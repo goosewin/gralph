@@ -396,7 +396,7 @@ ralph-cli/
 - [ ] Document all CLI commands
 - [ ] Document configuration options
 - [ ] Add troubleshooting section
-- [ ] Create example PRD.md template
+- [x] Create example PRD.md template
 - [ ] Test on fresh Ubuntu 24.04
 - [ ] Test on macOS
 
