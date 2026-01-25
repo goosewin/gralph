@@ -303,7 +303,7 @@ ralph-cli/
 - [ ] Initialize git repository
 - [ ] Create directory structure per File Structure section
 - [ ] Create README.md with installation instructions
-- [ ] Create LICENSE (MIT)
+- [x] Create LICENSE (MIT)
 - [x] Create .gitignore
 
 ### Unit 02: Core Loop Engine (`lib/core.sh`)
