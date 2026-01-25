@@ -402,7 +402,7 @@ ralph-cli/
 
 ### Unit 10: Release Automation
 - [x] Create GitHub Actions workflow
-- [ ] Auto-create release on version tag
+ - [x] Auto-create release on version tag
 - [ ] Attach install script to release
  - [x] Update version in rloop script
 
