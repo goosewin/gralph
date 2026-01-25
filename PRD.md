@@ -341,7 +341,7 @@ ralph-cli/
   - [x] Validate task file exists
   - [x] Check for existing session with same name
   - [x] Start tmux session with loop
-  - [ ] Save state
+  - [x] Save state
  - [x] Implement `cmd_stop()`
   - [ ] Find session by name
   - [ ] Kill tmux session
