@@ -314,7 +314,7 @@ ralph-cli/
   - [ ] Extract result from JSON stream
 - [x] Implement `check_completion()` function
   - [ ] Count `- [ ]` in task file
-  - [ ] Verify promise appears at END of output (not mentioned)
+  - [x] Verify promise appears at END of output (not mentioned)
   - [ ] Return true only if both conditions met
 - [ ] Implement `run_loop()` function
   - [ ] Initialize iteration counter
