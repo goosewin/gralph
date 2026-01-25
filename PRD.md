@@ -335,7 +335,7 @@ ralph-cli/
  - [x] Use file locking for concurrent access
 
 ### Unit 04: CLI Commands (`bin/rloop`)
-- [ ] Implement argument parsing
+- [x] Implement argument parsing
 - [ ] Implement `cmd_start()`
   - [ ] Validate directory exists
   - [ ] Validate task file exists
