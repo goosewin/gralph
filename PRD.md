@@ -372,7 +372,7 @@ ralph-cli/
 - [x] Copy bin/rloop to install path
  - [x] Copy lib/ to ~/.config/rloop/lib/
 - [x] Create default config
-- [ ] Install shell completions
+ - [x] Install shell completions
 - [ ] Print success message with usage examples
 
 ### Unit 07: Notifications (`lib/notify.sh`)
