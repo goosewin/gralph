@@ -337,7 +337,7 @@ ralph-cli/
 ### Unit 04: CLI Commands (`bin/rloop`)
 - [x] Implement argument parsing
 - [ ] Implement `cmd_start()`
-  - [ ] Validate directory exists
+  - [x] Validate directory exists
   - [x] Validate task file exists
   - [ ] Check for existing session with same name
   - [ ] Start tmux session with loop
