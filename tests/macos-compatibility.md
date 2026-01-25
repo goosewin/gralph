@@ -8,6 +8,10 @@
 
 The rloop CLI has been analyzed for macOS compatibility. Several potential issues were identified and documented below, along with their resolutions.
 
+## Automation
+
+macOS smoke tests run in GitHub Actions on `macos-14` using `tests/macos-smoke.sh`.
+
 ## Compatibility Checklist
 
 ### ✅ Passed: Core Dependencies
