@@ -1045,7 +1045,50 @@ cmd_backends() {
 }
 
 cmd_config() {
-    die "cmd_config not yet implemented"
+    # Source configuration library
+    if [[ -f "$LIB_DIR/config.sh" ]]; then
+        source "$LIB_DIR/config.sh"
+    else
+        die "Library not found: $LIB_DIR/config.sh"
+    fi
+
+    local subcommand="${POSITIONAL_ARGS[0]}"
+
+    case "$subcommand" in
+        get)
+            local key="${POSITIONAL_ARGS[1]}"
+            if [[ -z "$key" ]]; then
+                die "Usage: rloop config get <key>"
+            fi
+
+            load_config "$(pwd)"
+            if config_exists "$key"; then
+                get_config "$key"
+            else
+                die "Config key not found: $key"
+            fi
+            ;;
+        set)
+            local key="${POSITIONAL_ARGS[1]}"
+            local value="${POSITIONAL_ARGS[2]}"
+            if [[ -z "$key" || -z "$value" ]]; then
+                die "Usage: rloop config set <key> <value>"
+            fi
+
+            if set_config "$key" "$value"; then
+                success "Updated config: $key"
+            else
+                die "Failed to set config: $key"
+            fi
+            ;;
+        list|"" )
+            load_config "$(pwd)"
+            list_config
+            ;;
+        *)
+            die "Unknown config command: $subcommand. Use 'rloop config get <key>' or 'rloop config set <key> <value>'"
+            ;;
+    esac
 }
 
 cmd_server() {
