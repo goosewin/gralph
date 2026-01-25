@@ -354,7 +354,7 @@ ralph-cli/
   - [x] Tail log file
 - [x] Support --follow flag
 - [ ] Implement `cmd_resume()`
-  - [ ] Find sessions marked running with dead PIDs
+  - [x] Find sessions marked running with dead PIDs
   - [ ] Restart their tmux sessions
 - [x] Implement `cmd_version()`
 
