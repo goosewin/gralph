@@ -302,7 +302,7 @@ ralph-cli/
 ### Unit 01: Project Scaffolding
 - [ ] Initialize git repository
 - [ ] Create directory structure per File Structure section
-- [ ] Create README.md with installation instructions
+ - [x] Create README.md with installation instructions
 - [x] Create LICENSE (MIT)
 - [x] Create .gitignore
 
