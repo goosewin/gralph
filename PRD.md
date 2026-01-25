@@ -392,7 +392,7 @@ ralph-cli/
  - [x] CORS headers for browser access
 
 ### Unit 09: Testing & Documentation
-- [ ] Write usage examples in README
+ - [x] Write usage examples in README
 - [x] Document all CLI commands
 - [x] Document configuration options
 - [x] Add troubleshooting section

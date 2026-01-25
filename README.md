@@ -127,6 +127,19 @@ export RLOOP_DEFAULTS_BACKEND=opencode
 
 ## Usage
 
+### Quickstart
+
+```bash
+# Create a PRD with one task
+echo "- [ ] Build the CLI" > PRD.md
+
+# Start the loop in the current directory
+rloop start .
+
+# Watch progress
+rloop status
+```
+
 ### Start a Loop
 
 ```bash
