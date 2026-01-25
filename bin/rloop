@@ -528,6 +528,12 @@ cmd_start() {
             "model=$OPT_MODEL" \
             "webhook=$OPT_WEBHOOK"
 
+        RLOOP_STATE_CALLBACK="_update_session_state"
+        _update_session_state() {
+            set_session "$1" iteration="$2" status="$3" last_task_count="$4"
+        }
+        export RLOOP_STATE_CALLBACK
+
         # Set backend for the loop
         export RLOOP_BACKEND="$backend"
 

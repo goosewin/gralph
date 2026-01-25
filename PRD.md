@@ -321,7 +321,7 @@ ralph-cli/
   - [ ] Call run_iteration in loop
   - [ ] Check completion after each
   - [ ] Handle max iterations
-  - [ ] Update state after each iteration
+  - [x] Update state after each iteration
 - [x] Add configurable prompt template
 - [x] Add model override support
 
