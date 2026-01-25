@@ -262,18 +262,26 @@ check_completion() {
         return 1
     fi
 
-    # Promise must appear at the end (last 500 chars), not just mentioned
+    # Promise must appear as a standalone line OR as the final statement
     local tail_result
+    local tail_end
+    local promise_line
+
     tail_result=$(echo "$result" | tail -c 500)
 
-    # Check if promise pattern exists in tail
-    if ! echo "$tail_result" | grep -qE "<promise>$completion_marker</promise>"; then
-        return 1
+    if echo "$tail_result" | grep -qE "^[[:space:]]*<promise>$completion_marker</promise>[[:space:]]*$"; then
+        promise_line=$(echo "$tail_result" | grep -E "^[[:space:]]*<promise>$completion_marker</promise>[[:space:]]*$" | tail -n 1)
+    else
+        tail_end=$(echo "$result" | tail -c 200)
+        if echo "$tail_end" | grep -qE "<promise>$completion_marker</promise>[[:space:]]*$"; then
+            promise_line="$tail_end"
+        else
+            return 1
+        fi
     fi
 
     # Verify it's not negated (common patterns like "cannot", "won't", etc.)
-    # Check if negation words appear before the promise in the tail
-    if echo "$tail_result" | grep -qiE "(cannot|can't|won't|will not|do not|don't|should not|shouldn't|must not|mustn't)[^<]*<promise>"; then
+    if echo "$promise_line" | grep -qiE "(cannot|can't|won't|will not|do not|don't|should not|shouldn't|must not|mustn't)[^<]*<promise>"; then
         return 1
     fi
 

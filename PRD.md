@@ -300,111 +300,111 @@ ralph-cli/
 ## Implementation Tasks
 
 ### Unit 01: Project Scaffolding
-- [x] Initialize git repository
-- [x] Create directory structure per File Structure section
-- [x] Create README.md with installation instructions
-- [x] Create LICENSE (MIT)
-- [x] Create .gitignore
+- [ ] Initialize git repository
+- [ ] Create directory structure per File Structure section
+- [ ] Create README.md with installation instructions
+- [ ] Create LICENSE (MIT)
+- [ ] Create .gitignore
 
 ### Unit 02: Core Loop Engine (`lib/core.sh`)
-- [x] Implement `run_iteration()` function
-  - [x] Spawn Claude Code with proper flags
-  - [x] Capture output to temp file
-  - [x] Stream output to log and stdout
-  - [x] Extract result from JSON stream
+- [ ] Implement `run_iteration()` function
+  - [ ] Spawn Claude Code with proper flags
+  - [ ] Capture output to temp file
+  - [ ] Stream output to log and stdout
+  - [ ] Extract result from JSON stream
 - [x] Implement `check_completion()` function
-  - [x] Count `- [ ]` in task file
-  - [x] Verify promise appears at END of output (not mentioned)
-  - [x] Return true only if both conditions met
-- [x] Implement `run_loop()` function
-  - [x] Initialize iteration counter
-  - [x] Call run_iteration in loop
-  - [x] Check completion after each
-  - [x] Handle max iterations
-  - [x] Update state after each iteration
-- [x] Add configurable prompt template
-- [x] Add model override support
+  - [ ] Count `- [ ]` in task file
+  - [ ] Verify promise appears at END of output (not mentioned)
+  - [ ] Return true only if both conditions met
+- [ ] Implement `run_loop()` function
+  - [ ] Initialize iteration counter
+  - [ ] Call run_iteration in loop
+  - [ ] Check completion after each
+  - [ ] Handle max iterations
+  - [ ] Update state after each iteration
+- [ ] Add configurable prompt template
+- [ ] Add model override support
 
 ### Unit 03: State Management (`lib/state.sh`)
-- [x] Implement `init_state()` - create state file if missing
-- [x] Implement `get_session()` - read session by name
-- [x] Implement `set_session()` - upsert session
-- [x] Implement `delete_session()` - remove session
-- [x] Implement `list_sessions()` - get all sessions
-- [x] Implement `cleanup_stale()` - remove sessions with dead PIDs
-- [x] Use file locking for concurrent access
+- [ ] Implement `init_state()` - create state file if missing
+- [ ] Implement `get_session()` - read session by name
+- [ ] Implement `set_session()` - upsert session
+- [ ] Implement `delete_session()` - remove session
+- [ ] Implement `list_sessions()` - get all sessions
+- [ ] Implement `cleanup_stale()` - remove sessions with dead PIDs
+- [ ] Use file locking for concurrent access
 
 ### Unit 04: CLI Commands (`bin/rloop`)
-- [x] Implement argument parsing
-- [x] Implement `cmd_start()`
-  - [x] Validate directory exists
-  - [x] Validate task file exists
-  - [x] Check for existing session with same name
-  - [x] Start tmux session with loop
-  - [x] Save state
-- [x] Implement `cmd_stop()`
-  - [x] Find session by name
-  - [x] Kill tmux session
-  - [x] Update state
-- [x] Implement `cmd_status()`
-  - [x] List all sessions
-  - [x] Show table with iteration/status/remaining
-  - [x] Color coding (green=complete, yellow=running, red=failed)
-- [x] Implement `cmd_logs()`
-  - [x] Tail log file
-  - [x] Support --follow flag
-- [x] Implement `cmd_resume()`
-  - [x] Find sessions marked running with dead PIDs
-  - [x] Restart their tmux sessions
-- [x] Implement `cmd_version()`
+- [ ] Implement argument parsing
+- [ ] Implement `cmd_start()`
+  - [ ] Validate directory exists
+  - [ ] Validate task file exists
+  - [ ] Check for existing session with same name
+  - [ ] Start tmux session with loop
+  - [ ] Save state
+- [ ] Implement `cmd_stop()`
+  - [ ] Find session by name
+  - [ ] Kill tmux session
+  - [ ] Update state
+- [ ] Implement `cmd_status()`
+  - [ ] List all sessions
+  - [ ] Show table with iteration/status/remaining
+  - [ ] Color coding (green=complete, yellow=running, red=failed)
+- [ ] Implement `cmd_logs()`
+  - [ ] Tail log file
+  - [ ] Support --follow flag
+- [ ] Implement `cmd_resume()`
+  - [ ] Find sessions marked running with dead PIDs
+  - [ ] Restart their tmux sessions
+- [ ] Implement `cmd_version()`
 
 ### Unit 05: Configuration (`lib/config.sh`)
-- [x] Implement `load_config()` - merge default + global + project configs
-- [x] Implement `get_config()` - get specific key
-- [x] Implement `set_config()` - set global config value
-- [x] Create default.yaml with sensible defaults
-- [x] Support environment variable overrides (RLOOP_MAX_ITERATIONS, etc.)
+- [ ] Implement `load_config()` - merge default + global + project configs
+- [ ] Implement `get_config()` - get specific key
+- [ ] Implement `set_config()` - set global config value
+- [ ] Create default.yaml with sensible defaults
+- [ ] Support environment variable overrides (RLOOP_MAX_ITERATIONS, etc.)
 
 ### Unit 06: Installation Script (`install.sh`)
-- [x] Check for required dependencies (claude, jq, tmux)
-- [x] Prompt to install missing (apt/brew)
-- [x] Determine install path (~/.local/bin or /usr/local/bin)
-- [x] Copy bin/rloop to install path
-- [x] Copy lib/ to ~/.config/rloop/lib/
-- [x] Create default config
-- [x] Install shell completions
-- [x] Print success message with usage examples
+- [ ] Check for required dependencies (claude, jq, tmux)
+- [ ] Prompt to install missing (apt/brew)
+- [ ] Determine install path (~/.local/bin or /usr/local/bin)
+- [ ] Copy bin/rloop to install path
+- [ ] Copy lib/ to ~/.config/rloop/lib/
+- [ ] Create default config
+- [ ] Install shell completions
+- [ ] Print success message with usage examples
 
 ### Unit 07: Notifications (`lib/notify.sh`)
-- [x] Implement `send_webhook()` - POST to webhook URL
-- [x] Implement `notify_complete()` - format completion message
-- [x] Implement `notify_failed()` - format failure message
-- [x] Support Discord webhook format
-- [x] Support Slack webhook format
-- [x] Support generic JSON POST
+- [ ] Implement `send_webhook()` - POST to webhook URL
+- [ ] Implement `notify_complete()` - format completion message
+- [ ] Implement `notify_failed()` - format failure message
+- [ ] Support Discord webhook format
+- [ ] Support Slack webhook format
+- [ ] Support generic JSON POST
 
 ### Unit 08: Status Server (Optional, `lib/server.sh`)
-- [x] Implement simple HTTP server using netcat/socat
-- [x] GET /status - return JSON of all sessions
-- [x] GET /status/:name - return specific session
-- [x] POST /stop/:name - stop a session
-- [x] Bearer token authentication
-- [x] CORS headers for browser access
+- [ ] Implement simple HTTP server using netcat/socat
+- [ ] GET /status - return JSON of all sessions
+- [ ] GET /status/:name - return specific session
+- [ ] POST /stop/:name - stop a session
+- [ ] Bearer token authentication
+- [ ] CORS headers for browser access
 
 ### Unit 09: Testing & Documentation
-- [x] Write usage examples in README
-- [x] Document all CLI commands
-- [x] Document configuration options
-- [x] Add troubleshooting section
-- [x] Create example PRD.md template
-- [x] Test on fresh Ubuntu 24.04
-- [x] Test on macOS
+- [ ] Write usage examples in README
+- [ ] Document all CLI commands
+- [ ] Document configuration options
+- [ ] Add troubleshooting section
+- [ ] Create example PRD.md template
+- [ ] Test on fresh Ubuntu 24.04
+- [ ] Test on macOS
 
 ### Unit 10: Release Automation
-- [x] Create GitHub Actions workflow
-- [x] Auto-create release on version tag
-- [x] Attach install script to release
-- [x] Update version in rloop script
+- [ ] Create GitHub Actions workflow
+- [ ] Auto-create release on version tag
+- [ ] Attach install script to release
+- [ ] Update version in rloop script
 
 ---
 
@@ -423,10 +423,10 @@ INSTRUCTIONS:
 3. If you find unchecked tasks:
    - Pick ONE task to complete
    - Implement it fully with tests if applicable
-   - Mark it '- [x]' in the task file
+   - Mark it '- [ ]' in the task file
    - Commit changes with descriptive message
    - Exit normally (do NOT output the completion promise)
-4. If ALL tasks are marked '- [x]' (zero unchecked remain):
+4. If ALL tasks are marked '- [ ]' (zero unchecked remain):
    - Verify by searching for '- [ ]' pattern
    - If truly zero remain, output ONLY: <promise>{completion_marker}</promise>
 
@@ -538,7 +538,7 @@ for ((i=1; i<=$MAX_ITERATIONS; i++)); do
 
 If unchecked tasks exist:
 - Complete ONE task fully
-- Mark it '- [x]' in $TASK_FILE  
+- Mark it '- [ ]' in $TASK_FILE  
 - Commit changes
 - Exit normally (do NOT output completion promise)
 
