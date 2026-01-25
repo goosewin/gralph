@@ -381,7 +381,7 @@ ralph-cli/
 - [ ] Implement `notify_failed()` - format failure message
 - [x] Support Discord webhook format
 - [x] Support Slack webhook format
-- [ ] Support generic JSON POST
+- [x] Support generic JSON POST
 
 ### Unit 08: Status Server (Optional, `lib/server.sh`)
 - [ ] Implement simple HTTP server using netcat/socat
