@@ -123,7 +123,7 @@ run_iteration() {
     local completion_marker="${5:-COMPLETE}"
     local model="$6"
     local log_file="$7"
-    local prompt_template="${8:-$DEFAULT_PROMPT_TEMPLATE}"
+    local prompt_template="$8"
 
     # Validate required arguments
     if [[ -z "$project_dir" ]]; then
@@ -163,6 +163,22 @@ run_iteration() {
     local tmpfile
     tmpfile=$(mktemp)
     trap "rm -f '$tmpfile'" RETURN
+
+    # Resolve prompt template (argument > file override > default)
+    if [[ -z "$prompt_template" ]]; then
+        local template_path=""
+        if [[ -n "$RLOOP_PROMPT_TEMPLATE_FILE" ]] && [[ -f "$RLOOP_PROMPT_TEMPLATE_FILE" ]]; then
+            template_path="$RLOOP_PROMPT_TEMPLATE_FILE"
+        else
+            template_path="$project_dir/.rloop/prompt-template.txt"
+        fi
+
+        if [[ -n "$template_path" ]] && [[ -f "$template_path" ]]; then
+            prompt_template=$(cat "$template_path")
+        else
+            prompt_template="$DEFAULT_PROMPT_TEMPLATE"
+        fi
+    fi
 
     # Build the prompt using template
     local prompt

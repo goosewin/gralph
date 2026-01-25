@@ -56,6 +56,7 @@ START OPTIONS:
   --completion-marker Completion promise text (default: COMPLETE)
   --backend, -b       AI backend: claude or opencode (default: claude)
   --model, -m         Model override (format depends on backend)
+  --prompt-template   Path to custom prompt template file
   --webhook           Notification webhook URL
   --no-tmux           Run in foreground (blocks)
 
@@ -103,6 +104,7 @@ parse_args() {
     OPT_COMPLETION_MARKER="$DEFAULT_COMPLETION_MARKER"
     OPT_BACKEND=""
     OPT_MODEL="$DEFAULT_MODEL"
+    OPT_PROMPT_TEMPLATE_FILE=""
     OPT_WEBHOOK=""
     OPT_NO_TMUX=false
 
@@ -224,6 +226,19 @@ parse_args() {
                 ;;
             --model=*)
                 OPT_MODEL="${1#*=}"
+                shift
+                ;;
+
+            # Prompt template option (start command)
+            --prompt-template)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --prompt-template requires a file path"
+                fi
+                OPT_PROMPT_TEMPLATE_FILE="$2"
+                shift 2
+                ;;
+            --prompt-template=*)
+                OPT_PROMPT_TEMPLATE_FILE="${1#*=}"
                 shift
                 ;;
 
@@ -385,6 +400,23 @@ cmd_start() {
     local log_file="$rloop_dir/ralph.log"
     local tmux_session="rloop-$session_name"
 
+    # Handle prompt template file (optional)
+    if [[ -n "$OPT_PROMPT_TEMPLATE_FILE" ]]; then
+        local prompt_template_file="$OPT_PROMPT_TEMPLATE_FILE"
+
+        if [[ "$prompt_template_file" != /* ]]; then
+            prompt_template_file="$(pwd)/$prompt_template_file"
+        fi
+
+        if [[ ! -f "$prompt_template_file" ]]; then
+            die "Prompt template file does not exist: $prompt_template_file"
+        fi
+
+        if ! cp "$prompt_template_file" "$rloop_dir/prompt-template.txt"; then
+            die "Failed to copy prompt template to $rloop_dir/prompt-template.txt"
+        fi
+    fi
+
     # Get initial task count
     local initial_count
     initial_count=$(grep -cE '^\s*- \[ \]' "$task_file_path" 2>/dev/null || echo "0")
@@ -405,6 +437,9 @@ cmd_start() {
     info "  Completion marker: $OPT_COMPLETION_MARKER"
     info "  Backend: $backend"
     info "  Remaining tasks: $initial_count"
+    if [[ -n "$OPT_PROMPT_TEMPLATE_FILE" ]]; then
+        info "  Prompt template: $rloop_dir/prompt-template.txt"
+    fi
     if [[ -n "$OPT_MODEL" ]]; then
         info "  Model: $OPT_MODEL"
     fi
