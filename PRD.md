@@ -351,7 +351,7 @@ ralph-cli/
   - [ ] Show table with iteration/status/remaining
   - [ ] Color coding (green=complete, yellow=running, red=failed)
 - [x] Implement `cmd_logs()`
-  - [ ] Tail log file
+  - [x] Tail log file
   - [ ] Support --follow flag
 - [ ] Implement `cmd_resume()`
   - [ ] Find sessions marked running with dead PIDs
