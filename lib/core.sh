@@ -338,6 +338,10 @@ run_loop() {
         echo "Error: project_dir is required" >&2
         return 1
     fi
+    if ! [[ "$max_iterations" =~ ^[0-9]+$ ]] || [[ "$max_iterations" -le 0 ]]; then
+        echo "Error: max_iterations must be a positive integer" >&2
+        return 1
+    fi
 
     # Resolve to absolute path
     project_dir=$(cd "$project_dir" && pwd)
@@ -439,7 +443,9 @@ run_loop() {
         ((iteration++))
 
         # Small delay between iterations to avoid hammering the API
-        sleep 2
+        if [[ $iteration -le $max_iterations ]]; then
+            sleep 2
+        fi
     done
 
     # Max iterations reached

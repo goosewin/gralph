@@ -320,7 +320,7 @@ ralph-cli/
   - [x] Initialize iteration counter
   - [x] Call run_iteration in loop
   - [x] Check completion after each
-  - [ ] Handle max iterations
+  - [x] Handle max iterations
   - [x] Update state after each iteration
 - [x] Add configurable prompt template
 - [x] Add model override support
