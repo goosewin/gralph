@@ -319,7 +319,7 @@ ralph-cli/
 - [ ] Implement `run_loop()` function
   - [x] Initialize iteration counter
   - [x] Call run_iteration in loop
-  - [ ] Check completion after each
+  - [x] Check completion after each
   - [ ] Handle max iterations
   - [x] Update state after each iteration
 - [x] Add configurable prompt template
