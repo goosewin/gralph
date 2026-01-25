@@ -340,7 +340,7 @@ ralph-cli/
   - [x] Validate directory exists
   - [x] Validate task file exists
   - [x] Check for existing session with same name
-  - [ ] Start tmux session with loop
+  - [x] Start tmux session with loop
   - [ ] Save state
  - [x] Implement `cmd_stop()`
   - [ ] Find session by name
