@@ -684,7 +684,7 @@ cmd_stop() {
             fi
 
             # Update state to stopped
-            set_session "$session_name" status="stopped"
+            set_session "$session_name" status="stopped" pid="" tmux_session=""
             stopped_count=$((stopped_count + 1))
             info "Stopped session: $session_name"
         done
@@ -741,7 +741,7 @@ cmd_stop() {
     fi
 
     # Update state to stopped
-    set_session "$session_name" status="stopped"
+    set_session "$session_name" status="stopped" pid="" tmux_session=""
 
     success "Stopped session: $session_name"
 }
