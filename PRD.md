@@ -355,7 +355,7 @@ ralph-cli/
 - [x] Support --follow flag
 - [ ] Implement `cmd_resume()`
   - [x] Find sessions marked running with dead PIDs
-  - [ ] Restart their tmux sessions
+  - [x] Restart their tmux sessions
 - [x] Implement `cmd_version()`
 
 ### Unit 05: Configuration (`lib/config.sh`)
