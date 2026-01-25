@@ -172,6 +172,43 @@ load_config() {
     return 0
 }
 
+# _legacy_env_override() - Check for legacy environment variable overrides
+# Arguments:
+#   $1 - Configuration key
+# Outputs:
+#   Prints the legacy environment variable value if set
+# Returns:
+#   0 if legacy override found, 1 otherwise
+_legacy_env_override() {
+    local key="$1"
+    local legacy_env=""
+
+    case "$key" in
+        defaults.max_iterations)
+            legacy_env="RLOOP_MAX_ITERATIONS"
+            ;;
+        defaults.task_file)
+            legacy_env="RLOOP_TASK_FILE"
+            ;;
+        defaults.completion_marker)
+            legacy_env="RLOOP_COMPLETION_MARKER"
+            ;;
+        defaults.backend)
+            legacy_env="RLOOP_BACKEND"
+            ;;
+        defaults.model)
+            legacy_env="RLOOP_MODEL"
+            ;;
+    esac
+
+    if [[ -n "$legacy_env" && -n "${!legacy_env:-}" ]]; then
+        echo "${!legacy_env}"
+        return 0
+    fi
+
+    return 1
+}
+
 # get_config() - Get a specific configuration value
 # Arguments:
 #   $1 - Configuration key (dot notation, e.g., "defaults.max_iterations")
@@ -189,7 +226,12 @@ get_config() {
         return 1
     fi
 
-    # Check environment variable override first
+    # Check legacy environment variable override first
+    if _legacy_env_override "$key"; then
+        return 0
+    fi
+
+    # Check environment variable override (full dotted key)
     # Convert key to env var format: defaults.max_iterations -> RLOOP_DEFAULTS_MAX_ITERATIONS
     local env_key="RLOOP_$(echo "$key" | tr '[:lower:].' '[:upper:]_')"
     if [[ -n "${!env_key:-}" ]]; then
@@ -296,7 +338,12 @@ set_config() {
 config_exists() {
     local key="$1"
 
-    # Check environment variable override first
+    # Check legacy environment variable override first
+    if _legacy_env_override "$key" > /dev/null; then
+        return 0
+    fi
+
+    # Check environment variable override (full dotted key)
     local env_key="RLOOP_$(echo "$key" | tr '[:lower:].' '[:upper:]_')"
     if [[ -n "${!env_key:-}" ]]; then
         return 0
