@@ -344,7 +344,7 @@ ralph-cli/
   - [x] Save state
  - [x] Implement `cmd_stop()`
   - [x] Find session by name
-  - [ ] Kill tmux session
+  - [x] Kill tmux session
   - [ ] Update state
 - [x] Implement `cmd_status()`
   - [x] List all sessions
