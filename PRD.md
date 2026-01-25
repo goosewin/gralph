@@ -346,7 +346,7 @@ ralph-cli/
   - [ ] Find session by name
   - [ ] Kill tmux session
   - [ ] Update state
-- [ ] Implement `cmd_status()`
+- [x] Implement `cmd_status()`
   - [ ] List all sessions
   - [ ] Show table with iteration/status/remaining
   - [ ] Color coding (green=complete, yellow=running, red=failed)
