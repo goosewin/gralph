@@ -423,7 +423,7 @@ INSTRUCTIONS:
 3. If you find unchecked tasks:
    - Pick ONE task to complete
    - Implement it fully with tests if applicable
-   - Mark it '- [ ]' in the task file
+   - Mark it '- [x]' in the task file
    - Commit changes with descriptive message
    - Exit normally (do NOT output the completion promise)
 4. If ALL tasks are marked '- [ ]' (zero unchecked remain):
@@ -538,7 +538,7 @@ for ((i=1; i<=$MAX_ITERATIONS; i++)); do
 
 If unchecked tasks exist:
 - Complete ONE task fully
-- Mark it '- [ ]' in $TASK_FILE  
+- Mark it '- [x]' in $TASK_FILE  
 - Commit changes
 - Exit normally (do NOT output completion promise)
 
