@@ -348,7 +348,7 @@ ralph-cli/
   - [ ] Update state
 - [x] Implement `cmd_status()`
   - [x] List all sessions
-  - [ ] Show table with iteration/status/remaining
+  - [x] Show table with iteration/status/remaining
   - [ ] Color coding (green=complete, yellow=running, red=failed)
 - [x] Implement `cmd_logs()`
   - [x] Tail log file
