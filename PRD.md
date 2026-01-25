@@ -384,7 +384,7 @@ ralph-cli/
 - [x] Support generic JSON POST
 
 ### Unit 08: Status Server (Optional, `lib/server.sh`)
-- [ ] Implement simple HTTP server using netcat/socat
+- [x] Implement simple HTTP server using netcat/socat
  - [x] GET /status - return JSON of all sessions
  - [x] GET /status/:name - return specific session
 - [ ] POST /stop/:name - stop a session
