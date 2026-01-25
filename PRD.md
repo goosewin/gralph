@@ -339,7 +339,7 @@ ralph-cli/
 - [ ] Implement `cmd_start()`
   - [x] Validate directory exists
   - [x] Validate task file exists
-  - [ ] Check for existing session with same name
+  - [x] Check for existing session with same name
   - [ ] Start tmux session with loop
   - [ ] Save state
 - [ ] Implement `cmd_stop()`
