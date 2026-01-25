@@ -393,7 +393,7 @@ ralph-cli/
 
 ### Unit 09: Testing & Documentation
 - [ ] Write usage examples in README
-- [ ] Document all CLI commands
+- [x] Document all CLI commands
 - [ ] Document configuration options
 - [ ] Add troubleshooting section
 - [x] Create example PRD.md template

@@ -610,12 +610,18 @@ Usage: rloop start <dir> --backend <name>
 
 ### Command: `config`
 
-Manage rloop configuration (planned feature).
+Manage rloop configuration values.
 
 ```bash
+rloop config
+rloop config list
 rloop config get <key>
 rloop config set <key> <value>
 ```
+
+**Notes:**
+- `rloop config` and `rloop config list` print the merged configuration (default + global + project).
+- `rloop config set` writes to the global config file at `~/.config/rloop/config.yaml`.
 
 ### Command: `version`
 
