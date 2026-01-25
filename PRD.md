@@ -373,7 +373,7 @@ ralph-cli/
  - [x] Copy lib/ to ~/.config/rloop/lib/
 - [x] Create default config
  - [x] Install shell completions
-- [ ] Print success message with usage examples
+ - [x] Print success message with usage examples
 
 ### Unit 07: Notifications (`lib/notify.sh`)
 - [x] Implement `send_webhook()` - POST to webhook URL
