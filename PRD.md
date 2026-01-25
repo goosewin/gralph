@@ -336,7 +336,7 @@ ralph-cli/
 
 ### Unit 04: CLI Commands (`bin/rloop`)
 - [x] Implement argument parsing
-- [ ] Implement `cmd_start()`
+ - [x] Implement `cmd_start()`
   - [x] Validate directory exists
   - [x] Validate task file exists
   - [x] Check for existing session with same name
