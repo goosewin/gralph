@@ -379,7 +379,7 @@ ralph-cli/
 - [x] Implement `send_webhook()` - POST to webhook URL
 - [x] Implement `notify_complete()` - format completion message
 - [ ] Implement `notify_failed()` - format failure message
-- [ ] Support Discord webhook format
+- [x] Support Discord webhook format
 - [x] Support Slack webhook format
 - [ ] Support generic JSON POST
 
