@@ -307,7 +307,7 @@ ralph-cli/
 - [x] Create .gitignore
 
 ### Unit 02: Core Loop Engine (`lib/core.sh`)
-- [ ] Implement `run_iteration()` function
+- [x] Implement `run_iteration()` function
   - [ ] Spawn Claude Code with proper flags
   - [ ] Capture output to temp file
   - [ ] Stream output to log and stdout
