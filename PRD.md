@@ -313,7 +313,7 @@ ralph-cli/
   - [ ] Stream output to log and stdout
   - [x] Extract result from JSON stream
 - [x] Implement `check_completion()` function
-  - [ ] Count `- [ ]` in task file
+  - [x] Count `- [ ]` in task file
   - [x] Verify promise appears at END of output (not mentioned)
   - [ ] Return true only if both conditions met
 - [ ] Implement `run_loop()` function
