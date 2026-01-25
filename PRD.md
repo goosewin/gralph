@@ -311,7 +311,7 @@ ralph-cli/
   - [ ] Spawn Claude Code with proper flags
   - [ ] Capture output to temp file
   - [ ] Stream output to log and stdout
-  - [ ] Extract result from JSON stream
+  - [x] Extract result from JSON stream
 - [x] Implement `check_completion()` function
   - [ ] Count `- [ ]` in task file
   - [x] Verify promise appears at END of output (not mentioned)
