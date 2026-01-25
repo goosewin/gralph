@@ -359,7 +359,7 @@ ralph-cli/
 - [x] Implement `cmd_version()`
 
 ### Unit 05: Configuration (`lib/config.sh`)
-- [ ] Implement `load_config()` - merge default + global + project configs
+ - [x] Implement `load_config()` - merge default + global + project configs
 - [ ] Implement `get_config()` - get specific key
 - [ ] Implement `set_config()` - set global config value
 - [ ] Create default.yaml with sensible defaults
