@@ -361,7 +361,7 @@ ralph-cli/
 ### Unit 05: Configuration (`lib/config.sh`)
  - [x] Implement `load_config()` - merge default + global + project configs
  - [x] Implement `get_config()` - get specific key
-- [ ] Implement `set_config()` - set global config value
+ - [x] Implement `set_config()` - set global config value
 - [x] Create default.yaml with sensible defaults
 - [x] Support environment variable overrides (RLOOP_MAX_ITERATIONS, etc.)
 
