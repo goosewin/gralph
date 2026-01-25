@@ -897,6 +897,27 @@ rloop start . --name myapp-v2
    rloop resume myapp
    ```
 
+#### Failed to acquire state lock
+
+**Symptom:** `Error: Failed to acquire state lock within 10s`
+
+**Causes and solutions:**
+
+1. **Another rloop process is still running**
+   ```bash
+   rloop status
+   ```
+
+2. **Stale lock file after a crash**
+   ```bash
+   rm ~/.config/rloop/state.lock
+   ```
+
+3. **Missing flock on macOS**
+   ```bash
+   brew install flock
+   ```
+
 #### Status server not responding
 
 **Symptom:** `curl: (7) Failed to connect` when querying status server
