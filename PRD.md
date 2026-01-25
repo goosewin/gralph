@@ -317,7 +317,7 @@ ralph-cli/
   - [x] Verify promise appears at END of output (not mentioned)
   - [x] Return true only if both conditions met
 - [ ] Implement `run_loop()` function
-  - [ ] Initialize iteration counter
+  - [x] Initialize iteration counter
   - [ ] Call run_iteration in loop
   - [ ] Check completion after each
   - [ ] Handle max iterations
