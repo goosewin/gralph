@@ -310,7 +310,7 @@ ralph-cli/
 - [x] Implement `run_iteration()` function
   - [x] Spawn Claude Code with proper flags
   - [x] Capture output to temp file
-  - [ ] Stream output to log and stdout
+  - [x] Stream output to log and stdout
   - [x] Extract result from JSON stream
 - [x] Implement `check_completion()` function
   - [x] Count `- [ ]` in task file
