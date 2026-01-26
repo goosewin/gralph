@@ -1,0 +1,25 @@
+tests/backend-integration-test.sh
+  155b5c0332ccdcc5 1-203
+PRD.generated.md
+  155b5c0332ccdcc5 177
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "941f95aaaf0252656422ceccc5e9d9374798d7e4",
+  "prompts": {
+    "155b5c0332ccdcc5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "47aa6e7b-7691-4496-837f-264f102d0ea6",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 204,
+      "total_deletions": 1,
+      "accepted_lines": 204,
+      "overriden_lines": 0
+    }
+  }
+}
