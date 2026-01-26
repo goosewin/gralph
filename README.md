@@ -125,6 +125,8 @@ export GRALPH_DEFAULTS_BACKEND=opencode
 
 ### Quickstart
 
+Use `PRD.template.md` as a starting point for your task file.
+
 ```bash
 # Create a PRD with one task
 echo "- [ ] Build the CLI" > PRD.md
