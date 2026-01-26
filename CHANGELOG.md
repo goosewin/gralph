@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - DOTNET-13 Implemented OpenCode, Gemini, and Codex backend adapters with backend listing.
 - DOTNET-14 Implemented config command with list/get/set support and global config updates.
 - DOTNET-15 Added xUnit test project with state, config, and PRD validation tests.
+- DOTNET-16 Added cross-platform publish profiles for self-contained builds.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.
 - C-2 Added worktree command routing and validation.

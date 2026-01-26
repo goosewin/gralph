@@ -275,7 +275,7 @@ The codebase must be structured for unit testing with dependency injection and i
   * macOS x64 and arm64 executables build successfully.
   * Linux x64 executable builds successfully.
 - **Dependencies** DOTNET-7
-- [ ] DOTNET-16 Configure cross-platform publish profiles
+- [x] DOTNET-16 Configure cross-platform publish profiles
 
 ---
 

@@ -109,6 +109,26 @@ If you prefer not to use the installer:
 4. Copy `config/default.yaml` to `~/.config/gralph/config.yaml`
 5. (Optional) Copy `completions/` to `~/.config/gralph/completions/`
 
+### Build (.NET)
+
+To produce self-contained, single-file executables, use the publish profiles:
+
+```bash
+# Windows x64
+dotnet publish src/Gralph/Gralph.csproj -c Release -p:PublishProfile=PublishWinX64
+
+# macOS x64
+dotnet publish src/Gralph/Gralph.csproj -c Release -p:PublishProfile=PublishOsxX64
+
+# macOS arm64
+dotnet publish src/Gralph/Gralph.csproj -c Release -p:PublishProfile=PublishOsxArm64
+
+# Linux x64
+dotnet publish src/Gralph/Gralph.csproj -c Release -p:PublishProfile=PublishLinuxX64
+```
+
+Outputs land under `src/Gralph/bin/Release/net10.0/<RID>/publish/`.
+
 ### Uninstalling
 
 To remove gralph from your system, use the provided uninstaller:
