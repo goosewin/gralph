@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - GO-8 Added stop, status, logs, and resume commands.
 - GO-9 Added notification package for webhook payloads and delivery.
 - GO-10 Added HTTP status server with bearer auth and CORS.
+- GO-11 Added PRD utilities package for stack detection, validation, and sanitization.
 - Initial public release notes for the gralph CLI.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.

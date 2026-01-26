@@ -223,7 +223,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * Context Bundle path validation.
   * Unit tests cover validation rules.
 - **Dependencies** GO-1
-- [ ] GO-11 Implement PRD utilities package
+- [x] GO-11 Implement PRD utilities package
 
 ### Task GO-12
 

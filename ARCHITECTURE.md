@@ -9,6 +9,9 @@ This document captures the high-level structure of gralph. It is a living summar
 `lib/core.sh` owns the execution loop. It loads backend adapters, renders prompt templates, runs iterations, counts remaining tasks, checks completion conditions, and handles loop lifecycle including logs, duration, and notifications.
 `internal/core` ports the execution loop to Go, including prompt rendering, task selection, completion checks, and integration tests.
 
+`lib/prd.sh` provides PRD utilities for task block parsing, validation, sanitization, and stack detection.
+`internal/prd` ports PRD utilities to Go, covering stack detection, validation, and sanitization helpers.
+
 `internal/backend` defines the Go backend interface and registry. Implementations such as `internal/backend/claude`, `internal/backend/opencode`, `internal/backend/gemini`, and `internal/backend/codex` wrap AI CLI backends for iteration runs and response parsing.
 
 `lib/state.sh` provides persistent session state. It manages the state file, locking, and CRUD operations for sessions plus stale session cleanup so concurrent loops remain consistent.
