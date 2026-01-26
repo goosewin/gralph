@@ -52,6 +52,29 @@ curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.s
 
 This downloads and runs the installer from the latest tagged release, ensuring you get a stable, tested version.
 
+#### Bootstrap Environment Overrides
+
+When installing via `curl|bash`, you can customize the download source using environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GRALPH_REPO` | GitHub repository slug | `goosewin/gralph` |
+| `GRALPH_REF` | Git ref (tag or branch) to download | Latest release |
+| `GRALPH_ASSET_URL` | Direct URL to tarball (overrides repo/ref) | (none) |
+
+**Examples:**
+
+```bash
+# Install from a fork
+GRALPH_REPO=myuser/gralph-fork curl -fsSL ... | bash
+
+# Install a specific version
+GRALPH_REF=v1.2.0 curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
+
+# Install from a custom URL
+GRALPH_ASSET_URL=https://example.com/gralph.tar.gz curl -fsSL ... | bash
+```
+
 ### From Source
 
 ```bash
