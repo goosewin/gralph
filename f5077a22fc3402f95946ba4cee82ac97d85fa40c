@@ -1,0 +1,25 @@
+lib/backends/codex.sh
+  a496d4bdd96ac57f 1-117
+PRD.generated.md
+  a496d4bdd96ac57f 83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "f5077a22fc3402f95946ba4cee82ac97d85fa40c",
+  "prompts": {
+    "a496d4bdd96ac57f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e4a4e19e-1864-414d-9583-e8295cac9271",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 118,
+      "total_deletions": 1,
+      "accepted_lines": 118,
+      "overriden_lines": 0
+    }
+  }
+}
