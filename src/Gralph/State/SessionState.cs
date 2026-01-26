@@ -39,4 +39,16 @@ public sealed class SessionState
 
     [JsonPropertyName("log_file")]
     public string? LogFile { get; set; }
+
+    [JsonPropertyName("backend")]
+    public string? Backend { get; set; }
+
+    [JsonPropertyName("model")]
+    public string? Model { get; set; }
+
+    [JsonPropertyName("variant")]
+    public string? Variant { get; set; }
+
+    [JsonPropertyName("webhook")]
+    public string? Webhook { get; set; }
 }

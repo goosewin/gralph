@@ -1,4 +1,7 @@
 using System.CommandLine;
+using Gralph.Backends;
+using Gralph.Commands;
+using Gralph.State;
 
 const string Version = "1.1.0";
 
@@ -94,8 +97,64 @@ root.Add(helpOption);
 root.SetAction(_ => Console.WriteLine(helpText));
 
 var start = new Command("start", "Start a new gralph loop");
-start.Add(new Argument<string>("dir") { Arity = ArgumentArity.ExactlyOne });
-start.SetAction(_ => Console.WriteLine("start is not implemented yet."));
+var startDirArgument = new Argument<string>("dir") { Arity = ArgumentArity.ExactlyOne };
+var startNameOption = new Option<string?>("--name", "Session name (default: directory name)");
+var startNameShortOption = new Option<string?>("-n", "Session name (default: directory name)");
+var startMaxIterationsOption = new Option<int?>("--max-iterations", "Max iterations before giving up");
+var startTaskFileOption = new Option<string?>("--task-file", "Task file path");
+var startTaskFileShortOption = new Option<string?>("-f", "Task file path");
+var startCompletionMarkerOption = new Option<string?>("--completion-marker", "Completion promise text");
+var startBackendOption = new Option<string?>("--backend", "AI backend");
+var startBackendShortOption = new Option<string?>("-b", "AI backend");
+var startModelOption = new Option<string?>("--model", "Model override");
+var startModelShortOption = new Option<string?>("-m", "Model override");
+var startVariantOption = new Option<string?>("--variant", "Model variant override");
+var startPromptTemplateOption = new Option<string?>("--prompt-template", "Path to custom prompt template file");
+var startWebhookOption = new Option<string?>("--webhook", "Notification webhook URL");
+var startNoTmuxOption = new Option<bool>("--no-tmux", "Run in foreground (blocks)");
+var startStrictPrdOption = new Option<bool>("--strict-prd", "Validate PRD before starting the loop");
+var startBackgroundChildOption = new Option<bool>("--background-child");
+
+start.Add(startDirArgument);
+start.Add(startNameOption);
+start.Add(startNameShortOption);
+start.Add(startMaxIterationsOption);
+start.Add(startTaskFileOption);
+start.Add(startTaskFileShortOption);
+start.Add(startCompletionMarkerOption);
+start.Add(startBackendOption);
+start.Add(startBackendShortOption);
+start.Add(startModelOption);
+start.Add(startModelShortOption);
+start.Add(startVariantOption);
+start.Add(startPromptTemplateOption);
+start.Add(startWebhookOption);
+start.Add(startNoTmuxOption);
+start.Add(startStrictPrdOption);
+start.Add(startBackgroundChildOption);
+
+start.SetAction(parseResult =>
+{
+    var handler = new StartCommandHandler(BackendRegistry.CreateDefault(), new StateStore());
+    var exitCode = handler.ExecuteAsync(new StartCommandSettings
+    {
+        Directory = parseResult.GetValue(startDirArgument),
+        Name = parseResult.GetValue(startNameOption) ?? parseResult.GetValue(startNameShortOption),
+        MaxIterations = parseResult.GetValue(startMaxIterationsOption),
+        TaskFile = parseResult.GetValue(startTaskFileOption) ?? parseResult.GetValue(startTaskFileShortOption),
+        CompletionMarker = parseResult.GetValue(startCompletionMarkerOption),
+        Backend = parseResult.GetValue(startBackendOption) ?? parseResult.GetValue(startBackendShortOption),
+        Model = parseResult.GetValue(startModelOption) ?? parseResult.GetValue(startModelShortOption),
+        Variant = parseResult.GetValue(startVariantOption),
+        PromptTemplatePath = parseResult.GetValue(startPromptTemplateOption),
+        Webhook = parseResult.GetValue(startWebhookOption),
+        NoTmux = parseResult.GetValue(startNoTmuxOption),
+        StrictPrd = parseResult.GetValue(startStrictPrdOption),
+        BackgroundChild = parseResult.GetValue(startBackgroundChildOption)
+    }, CancellationToken.None).GetAwaiter().GetResult();
+
+    Environment.ExitCode = exitCode;
+});
 
 var stop = new Command("stop", "Stop a running loop");
 stop.Add(new Argument<string>("name") { Arity = ArgumentArity.ZeroOrOne });

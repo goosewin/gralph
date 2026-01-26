@@ -159,7 +159,7 @@ The codebase must be structured for unit testing with dependency injection and i
   * Background execution mode implemented (replacement for tmux).
   * Foreground mode (no-tmux equivalent) working.
 - **Dependencies** DOTNET-2, DOTNET-6
-- [ ] DOTNET-7 Implement start command with session management
+- [x] DOTNET-7 Implement start command with session management
 
 ### Task DOTNET-8
 

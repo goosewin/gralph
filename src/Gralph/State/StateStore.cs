@@ -116,6 +116,10 @@ public sealed class StateStore
             existing.LastTaskCount = session.LastTaskCount;
             existing.CompletionMarker = session.CompletionMarker;
             existing.LogFile = session.LogFile;
+            existing.Backend = session.Backend;
+            existing.Model = session.Model;
+            existing.Variant = session.Variant;
+            existing.Webhook = session.Webhook;
         });
     }
 
