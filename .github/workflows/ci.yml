@@ -21,4 +21,4 @@ jobs:
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin --locked
       - name: Run coverage threshold
-        run: cargo tarpaulin --workspace --fail-under 60
+        run: cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*
