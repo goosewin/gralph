@@ -110,10 +110,47 @@ EOF
 }
 
 # -----------------------------------------------------------------------------
+# Test: task blocks stop at --- or ##
+# -----------------------------------------------------------------------------
+test_task_block_boundaries() {
+    local test_file="$TEST_TMP_DIR/task-block-boundaries.md"
+    cat > "$test_file" << 'EOF'
+# PRD
+
+### Task B-1
+- [ ] First task
+- Details for B-1
+---
+
+## Notes
+This should not be part of any task block.
+
+### Task B-2
+- [ ] Second task
+- Details for B-2
+## Next Section
+More notes
+EOF
+
+    local blocks=()
+    local block
+    while IFS= read -r -d '' block; do
+        blocks+=("$block")
+    done < <(get_task_blocks "$test_file")
+
+    if [[ ${#blocks[@]} -eq 2 ]] && [[ "${blocks[0]}" == *"### Task B-1"* ]] && [[ "${blocks[0]}" != *"## Notes"* ]] && [[ "${blocks[1]}" == *"### Task B-2"* ]] && [[ "${blocks[1]}" != *"## Next Section"* ]]; then
+        pass "task blocks stop at --- or ##"
+    else
+        fail "task block boundary detection failed"
+    fi
+}
+
+# -----------------------------------------------------------------------------
 # Run all tests
 # -----------------------------------------------------------------------------
 test_task_block_selection
 test_task_block_fallback_no_headers
+test_task_block_boundaries
 
 # -----------------------------------------------------------------------------
 # Summary

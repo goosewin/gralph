@@ -63,6 +63,13 @@ Each task block must contain exactly one unchecked task line.
 
 ---
 
-## Open Questions
+## Sources
 
-- [ ] Any unresolved product or technical questions
+- List authoritative URLs used as source of truth.
+
+---
+
+## Warnings
+
+- Only include this section if no reliable sources were found.
+- State what is missing and what must be verified.

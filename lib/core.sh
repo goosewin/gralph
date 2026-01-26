@@ -148,10 +148,18 @@ get_task_blocks() {
             fi
             in_block=1
             block="$line"
-        else
-            if [[ $in_block -eq 1 ]]; then
-                block+=$'\n'"$line"
-            fi
+            continue
+        fi
+
+        if [[ $in_block -eq 1 ]] && [[ "$line" =~ ^[[:space:]]*---[[:space:]]*$ || "$line" =~ ^[[:space:]]*##[[:space:]]+ ]]; then
+            printf '%s\0' "$block"
+            in_block=0
+            block=""
+            continue
+        fi
+
+        if [[ $in_block -eq 1 ]]; then
+            block+=$'\n'"$line"
         fi
     done < "$task_file"
 
@@ -458,10 +466,21 @@ count_remaining_tasks() {
         return
     fi
 
-    # Count lines matching '- [ ]' pattern (unchecked checkbox)
-    # Ensure a single numeric output even when grep returns non-zero
-    local count
-    count=$(grep -cE '^\s*- \[ \]' "$task_file" 2>/dev/null || true)
+    local count=0
+
+    if grep -qE '^[[:space:]]*###\ Task[[:space:]]+' "$task_file" 2>/dev/null; then
+        local block
+        while IFS= read -r -d '' block; do
+            local block_count
+            block_count=$(echo "$block" | grep -cE '^\s*- \[ \]' || true)
+            count=$((count + block_count))
+        done < <(get_task_blocks "$task_file")
+    else
+        # Count lines matching '- [ ]' pattern (unchecked checkbox)
+        # Ensure a single numeric output even when grep returns non-zero
+        count=$(grep -cE '^\s*- \[ \]' "$task_file" 2>/dev/null || true)
+    fi
+
     echo "$count"
 }
 
