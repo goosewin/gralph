@@ -357,7 +357,7 @@ Support webhook notifications:
   * PRD validation logic tested.
   * Minimum 80% coverage on core modules.
 - **Dependencies** AOT-2, AOT-3, AOT-6
-- [ ] AOT-17 Write unit tests for core modules
+- [x] AOT-17 Write unit tests for core modules
 
 ### Task AOT-18
 
