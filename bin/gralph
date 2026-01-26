@@ -550,7 +550,7 @@ cmd_start() {
 
     # Get initial task count
     local initial_count
-    initial_count=$(grep -cE '^\s*- \[ \]' "$task_file_path" 2>/dev/null || echo "0")
+    initial_count=$(grep -cE '^\s*- \[ \]' "$task_file_path" 2>/dev/null || true)
 
     # Determine backend (CLI option > config > default)
     local backend="${OPT_BACKEND:-claude}"
@@ -647,6 +647,7 @@ cmd_start() {
         # Escape all user-provided values to handle special characters safely
         local esc_lib_dir esc_backend esc_variant esc_target_dir esc_task_file
         local esc_max_iterations esc_completion_marker esc_model esc_session_name
+        local esc_path esc_opencode_config
         esc_lib_dir=$(escape_single_quote "$LIB_DIR")
         esc_backend=$(escape_single_quote "$backend")
         esc_variant=$(escape_single_quote "$OPT_VARIANT")
@@ -656,8 +657,13 @@ cmd_start() {
         esc_completion_marker=$(escape_single_quote "$OPT_COMPLETION_MARKER")
         esc_model=$(escape_single_quote "$OPT_MODEL")
         esc_session_name=$(escape_single_quote "$session_name")
+        esc_path=$(escape_single_quote "$PATH")
+        esc_opencode_config=$(escape_single_quote "$target_dir/opencode.json")
 
-        local gralph_cmd="source '${esc_lib_dir}/state.sh' && source '${esc_lib_dir}/backends/common.sh' && source '${esc_lib_dir}/core.sh' && "
+        local gralph_cmd="export PATH='${esc_path}' && "
+        gralph_cmd+="export OPENCODE_CONFIG='${esc_opencode_config}' && "
+        gralph_cmd+="cd '${esc_target_dir}' && "
+        gralph_cmd+="source '${esc_lib_dir}/state.sh' && source '${esc_lib_dir}/backends/common.sh' && source '${esc_lib_dir}/core.sh' && "
         gralph_cmd+="export GRALPH_BACKEND='${esc_backend}' && "
         if [[ -n "$OPT_VARIANT" ]]; then
             gralph_cmd+="export GRALPH_VARIANT='${esc_variant}' && "
@@ -682,7 +688,9 @@ cmd_start() {
         gralph_cmd+="fi"
 
         # Start tmux session
-        tmux new-session -d -s "$tmux_session" bash -lc "$gralph_cmd"
+        local bash_bin
+        bash_bin="$(command -v bash || echo "bash")"
+        tmux new-session -d -s "$tmux_session" "$bash_bin" -lc "$gralph_cmd"
 
         # Get the PID of the tmux session's shell
         local tmux_pid
@@ -935,7 +943,10 @@ cmd_status() {
         # Try to get current remaining count if directory exists
         local current_remaining="$last_task_count"
         if [[ -d "$dir" ]] && [[ -f "$dir/$task_file" ]]; then
-            current_remaining=$(grep -cE '^\s*- \[ \]' "$dir/$task_file" 2>/dev/null || echo "$last_task_count")
+            current_remaining=$(grep -cE '^\s*- \[ \]' "$dir/$task_file" 2>/dev/null || true)
+            if [[ -z "$current_remaining" ]]; then
+                current_remaining="$last_task_count"
+            fi
         fi
 
         # Truncate long dirs for display
@@ -1143,7 +1154,7 @@ cmd_resume() {
 
         # Get current task count
         local current_count
-        current_count=$(grep -cE '^\s*- \[ \]' "$dir/$task_file" 2>/dev/null || echo "0")
+        current_count=$(grep -cE '^\s*- \[ \]' "$dir/$task_file" 2>/dev/null || true)
 
         # Kill any existing tmux session with the same name
         tmux kill-session -t "$tmux_session" 2>/dev/null || true
@@ -1152,6 +1163,7 @@ cmd_resume() {
         # Escape all user-provided values to handle special characters safely
         local esc_lib_dir esc_backend esc_variant esc_dir esc_task_file
         local esc_max_iterations esc_completion_marker esc_model esc_session_name
+        local esc_path esc_opencode_config
         esc_lib_dir=$(escape_single_quote "$LIB_DIR")
         esc_backend=$(escape_single_quote "$backend")
         esc_variant=$(escape_single_quote "$variant")
@@ -1161,8 +1173,13 @@ cmd_resume() {
         esc_completion_marker=$(escape_single_quote "$completion_marker")
         esc_model=$(escape_single_quote "$model")
         esc_session_name=$(escape_single_quote "$session_name")
+        esc_path=$(escape_single_quote "$PATH")
+        esc_opencode_config=$(escape_single_quote "$dir/opencode.json")
 
-        local gralph_cmd="source '${esc_lib_dir}/state.sh' && source '${esc_lib_dir}/backends/common.sh' && source '${esc_lib_dir}/core.sh' && "
+        local gralph_cmd="export PATH='${esc_path}' && "
+        gralph_cmd+="export OPENCODE_CONFIG='${esc_opencode_config}' && "
+        gralph_cmd+="cd '${esc_dir}' && "
+        gralph_cmd+="source '${esc_lib_dir}/state.sh' && source '${esc_lib_dir}/backends/common.sh' && source '${esc_lib_dir}/core.sh' && "
         gralph_cmd+="export GRALPH_BACKEND='${esc_backend}' && "
         if [[ -n "$variant" ]]; then
             gralph_cmd+="export GRALPH_VARIANT='${esc_variant}' && "
@@ -1187,7 +1204,9 @@ cmd_resume() {
         gralph_cmd+="fi"
 
         # Start tmux session
-        tmux new-session -d -s "$tmux_session" bash -lc "$gralph_cmd"
+        local bash_bin
+        bash_bin="$(command -v bash || echo "bash")"
+        tmux new-session -d -s "$tmux_session" "$bash_bin" -lc "$gralph_cmd"
 
         # Get the PID of the tmux session's shell
         local tmux_pid
@@ -1299,7 +1318,34 @@ cmd_worktree_create() {
         die "Usage: gralph worktree create <ID>"
     fi
 
-    die "Worktree create is not implemented yet"
+    if ! [[ "$task_id" =~ ^[A-Za-z]+-[0-9]+$ ]]; then
+        die "Invalid task ID format: $task_id (expected like A-1)"
+    fi
+
+    local repo_root
+    if ! repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+        die "Not a git repository (or any of the parent directories)"
+    fi
+
+    local worktrees_dir="$repo_root/.worktrees"
+    mkdir -p "$worktrees_dir"
+
+    local branch_name="task-$task_id"
+    local worktree_path="$worktrees_dir/$branch_name"
+
+    if git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch_name"; then
+        die "Branch already exists: $branch_name"
+    fi
+
+    if [[ -e "$worktree_path" ]]; then
+        die "Worktree path already exists: $worktree_path"
+    fi
+
+    if ! git -C "$repo_root" worktree add -b "$branch_name" "$worktree_path"; then
+        die "Failed to create worktree at $worktree_path"
+    fi
+
+    success "Created worktree $worktree_path on branch $branch_name"
 }
 
 cmd_worktree_finish() {
