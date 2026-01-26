@@ -1,0 +1,25 @@
+lib/backends/gemini.sh
+  b269cf1e43a23d4b 1-115
+PRD.generated.md
+  b269cf1e43a23d4b 68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "287fdc0d137a24fee1f9589a6bdae32ea505e8dc",
+  "prompts": {
+    "b269cf1e43a23d4b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb4933f2-1697-4559-8483-9875ecac1bb8",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 116,
+      "total_deletions": 1,
+      "accepted_lines": 116,
+      "overriden_lines": 0
+    }
+  }
+}
