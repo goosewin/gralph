@@ -224,7 +224,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * Help text is accurate and complete.
   * Error messages are clear.
 - **Dependencies** None
-- [ ] OSS-13 Audit main CLI entry point
+- [x] OSS-13 Audit main CLI entry point
 
 ---
 
