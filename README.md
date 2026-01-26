@@ -1101,6 +1101,10 @@ If you continue to experience issues:
 Please report vulnerabilities via the private advisory workflow in
 [SECURITY.md](SECURITY.md).
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and PR guidelines.
+
 ## License
 
 MIT
