@@ -4,6 +4,7 @@
 
 # Default server configuration
 GRALPH_SERVER_PORT="${GRALPH_SERVER_PORT:-8080}"
+GRALPH_SERVER_HOST="${GRALPH_SERVER_HOST:-127.0.0.1}"
 GRALPH_SERVER_TOKEN="${GRALPH_SERVER_TOKEN:-}"
 GRALPH_SERVER_PID_FILE="${GRALPH_STATE_DIR:-$HOME/.config/gralph}/server.pid"
 
@@ -325,10 +326,12 @@ _handle_request() {
 # _run_server_nc() - Run HTTP server using netcat
 # Arguments:
 #   $1 - Port number
+#   $2 - Host/IP to bind to
 _run_server_nc() {
     local port="$1"
+    local host="$2"
 
-    echo "Starting gralph status server on port $port using netcat..."
+    echo "Starting gralph status server on $host:$port using netcat..."
     echo "Endpoints:"
     echo "  GET  /status        - Get all sessions"
     echo "  GET  /status/:name  - Get specific session"
@@ -354,10 +357,10 @@ _run_server_nc() {
         # Different versions of nc have different syntax, try both
         if nc -h 2>&1 | grep -q "GNU"; then
             # GNU netcat
-            cat "$fifo" | nc -l -p "$port" | _handle_request > "$fifo"
+            cat "$fifo" | nc -l -s "$host" -p "$port" | _handle_request > "$fifo"
         else
             # BSD/OpenBSD netcat (macOS)
-            cat "$fifo" | nc -l "$port" | _handle_request > "$fifo"
+            cat "$fifo" | nc -l "$host" "$port" | _handle_request > "$fifo"
         fi
     done
 }
@@ -365,10 +368,12 @@ _run_server_nc() {
 # _run_server_socat() - Run HTTP server using socat
 # Arguments:
 #   $1 - Port number
+#   $2 - Host/IP to bind to
 _run_server_socat() {
     local port="$1"
+    local host="$2"
 
-    echo "Starting gralph status server on port $port using socat..."
+    echo "Starting gralph status server on $host:$port using socat..."
     echo "Endpoints:"
     echo "  GET  /status        - Get all sessions"
     echo "  GET  /status/:name  - Get specific session"
@@ -394,20 +399,23 @@ _run_server_socat() {
 
     # socat forks a new process for each connection
     # We use EXEC to run a bash command that sources this file and handles the request
-    socat TCP-LISTEN:"$port",reuseaddr,fork EXEC:"bash -c '$env_vars source $handler_script && _handle_request'"
+    socat TCP-LISTEN:"$port",bind="$host",reuseaddr,fork EXEC:"bash -c '$env_vars source $handler_script && _handle_request'"
 }
 
 # start_server() - Start the HTTP status server
 # Arguments:
 #   $1 - Port number (optional, defaults to GRALPH_SERVER_PORT)
-#   $2 - Authentication token (optional, defaults to GRALPH_SERVER_TOKEN)
+#   $2 - Host/IP to bind to (optional, defaults to GRALPH_SERVER_HOST)
+#   $3 - Authentication token (optional, defaults to GRALPH_SERVER_TOKEN)
 # Returns:
 #   0 on success (when server stops), 1 on error
 start_server() {
     local port="${1:-$GRALPH_SERVER_PORT}"
-    local token="${2:-$GRALPH_SERVER_TOKEN}"
+    local host="${2:-$GRALPH_SERVER_HOST}"
+    local token="${3:-$GRALPH_SERVER_TOKEN}"
 
-    # Update global token
+    # Update globals
+    GRALPH_SERVER_HOST="$host"
     GRALPH_SERVER_TOKEN="$token"
 
     # Validate port
@@ -433,9 +441,9 @@ start_server() {
 
     # Try socat first (better for concurrent connections), fall back to netcat
     if command -v socat &>/dev/null; then
-        _run_server_socat "$port"
+        _run_server_socat "$port" "$host"
     elif command -v nc &>/dev/null; then
-        _run_server_nc "$port"
+        _run_server_nc "$port" "$host"
     else
         echo "Error: Neither socat nor netcat (nc) is available" >&2
         echo "Install one of them:" >&2

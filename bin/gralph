@@ -72,12 +72,18 @@ START OPTIONS:
   --webhook           Notification webhook URL
   --no-tmux           Run in foreground (blocks)
 
+SERVER OPTIONS:
+  --host, -H            Host/IP to bind to (default: 127.0.0.1)
+  --port, -p            Port number (default: 8080)
+  --token, -t           Authentication token (optional)
+
 EXAMPLES:
   gralph start .
   gralph start ~/project --name myapp --max-iterations 50
   gralph status
   gralph logs myapp --follow
   gralph stop myapp
+  gralph server --host 0.0.0.0 --port 8080
 EOF
 }
 
@@ -147,6 +153,7 @@ parse_args() {
 
     # Server command options
     OPT_PORT=""
+    OPT_HOST=""
     OPT_TOKEN=""
 
     # No arguments provided
@@ -353,6 +360,19 @@ parse_args() {
                     die "Option --port must be a positive integer"
                 fi
                 OPT_PORT="$val"
+                shift
+                ;;
+
+            # Host option (server command)
+            --host|-H)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --host requires a value"
+                fi
+                OPT_HOST="$2"
+                shift 2
+                ;;
+            --host=*)
+                OPT_HOST="${1#*=}"
                 shift
                 ;;
 
@@ -1269,12 +1289,13 @@ cmd_server() {
         die "Library not found: $LIB_DIR/server.sh"
     fi
 
-    # Get port and token from parsed options
+    # Get port, host, and token from parsed options
     local port="${OPT_PORT:-8080}"
+    local host="${OPT_HOST:-127.0.0.1}"
     local token="${OPT_TOKEN:-}"
 
     # Start the server
-    start_server "$port" "$token"
+    start_server "$port" "$host" "$token"
 }
 
 cmd_version() {

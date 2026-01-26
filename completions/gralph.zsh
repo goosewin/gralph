@@ -30,7 +30,8 @@ _gralph() {
         '(-f --task-file)'{-f,--task-file}'[Task file path]:file:_files -g "*.md"'
         '--completion-marker[Completion promise text]:marker:(COMPLETE DONE FINISHED ALL_DONE)'
         '(-b --backend)'{-b,--backend}'[AI backend to use]:backend:(claude opencode)'
-        '(-m --model)'{-m,--model}'[Model override]:model:(claude-sonnet-4-20250514 claude-opus-4-20250514 claude-haiku-3-5-20241022 anthropic/claude-sonnet-4-20250514 anthropic/claude-opus-4-20250514 openai/gpt-4o google/gemini-2.0-flash deepseek/deepseek-chat)'
+        '(-m --model)'{-m,--model}'[Model override]:model:(opencode/gpt-5.2-codex claude-opus-4.5 anthropic/claude-opus-4.5 google/gemini-3-pro)'
+        '--variant[Model variant override]:variant:(xhigh high medium low)'
         '--webhook[Notification webhook URL]:url:'
         '--no-tmux[Run in foreground (blocks)]'
         '(-h --help)'{-h,--help}'[Show help]'
@@ -47,6 +48,7 @@ _gralph() {
     )
 
     server_opts=(
+        '(-H --host)'{-H,--host}'[Host/IP to bind to]:host:(127.0.0.1 0.0.0.0 localhost)'
         '(-p --port)'{-p,--port}'[Port number]:port:(8080 3000 8000 9000)'
         '(-t --token)'{-t,--token}'[Authentication token]:token:'
         '(-h --help)'{-h,--help}'[Show help]'

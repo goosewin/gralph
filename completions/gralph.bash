@@ -19,7 +19,7 @@ _gralph_completions() {
     local commands="start stop status logs resume backends config server version help"
 
     # Options for start command
-    local start_opts="--name -n --max-iterations --task-file -f --completion-marker --backend -b --model -m --webhook --no-tmux --help -h"
+    local start_opts="--name -n --max-iterations --task-file -f --completion-marker --backend -b --model -m --variant --webhook --no-tmux --help -h"
 
     # Options for stop command
     local stop_opts="--all -a --help -h"
@@ -28,7 +28,7 @@ _gralph_completions() {
     local logs_opts="--follow --help -h"
 
     # Options for server command
-    local server_opts="--port -p --token -t --help -h"
+    local server_opts="--host -H --port -p --token -t --help -h"
 
     # Determine the command (first non-option argument after 'gralph')
     local cmd=""
@@ -82,10 +82,15 @@ _gralph_completions() {
                 -m|--model)
                     # Suggest models for both backends
                     # Claude models
-                    local claude_models="claude-sonnet-4-20250514 claude-opus-4-20250514 claude-haiku-3-5-20241022"
+                    local claude_models="claude-opus-4.5"
                     # OpenCode models (provider/model format)
-                    local opencode_models="anthropic/claude-sonnet-4-20250514 anthropic/claude-opus-4-20250514 openai/gpt-4o google/gemini-2.0-flash deepseek/deepseek-chat"
+                    local opencode_models="opencode/gpt-5.2-codex anthropic/claude-opus-4.5 google/gemini-3-pro"
                     COMPREPLY=($(compgen -W "$claude_models $opencode_models" -- "$cur"))
+                    return 0
+                    ;;
+                --variant)
+                    # Suggest common variants
+                    COMPREPLY=($(compgen -W "xhigh high medium low" -- "$cur"))
                     return 0
                     ;;
                 --webhook)
@@ -159,6 +164,11 @@ _gralph_completions() {
 
         server)
             case "$prev" in
+                -H|--host)
+                    # Suggest common host bindings
+                    COMPREPLY=($(compgen -W "127.0.0.1 0.0.0.0 localhost" -- "$cur"))
+                    return 0
+                    ;;
                 -p|--port)
                     # Suggest common ports
                     COMPREPLY=($(compgen -W "8080 3000 8000 9000" -- "$cur"))
