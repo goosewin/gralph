@@ -7,6 +7,7 @@ This document captures the high-level structure of gralph. It is a living summar
 `bin/gralph` is the CLI entrypoint. It parses commands, loads configuration defaults, wires in the shared libraries, and dispatches to subcommands like start/stop/status/server while managing session setup and logging paths.
 
 `lib/core.sh` owns the execution loop. It loads backend adapters, renders prompt templates, runs iterations, counts remaining tasks, checks completion conditions, and handles loop lifecycle including logs, duration, and notifications.
+`internal/core` ports the execution loop to Go, including prompt rendering, task selection, completion checks, and integration tests.
 
 `internal/backend` defines the Go backend interface and registry. Implementations such as `internal/backend/claude`, `internal/backend/opencode`, `internal/backend/gemini`, and `internal/backend/codex` wrap AI CLI backends for iteration runs and response parsing.
 

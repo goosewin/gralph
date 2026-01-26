@@ -158,7 +158,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * Task block extraction and selection.
   * Integration tests verify loop behavior.
 - **Dependencies** GO-2, GO-3, GO-4
-- [ ] GO-6 Implement core loop engine
+- [x] GO-6 Implement core loop engine
 
 ### Task GO-7
 

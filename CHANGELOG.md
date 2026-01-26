@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - GO-3 Added Go state management package with locking, atomic writes, and tests.
 - GO-4 Added backend interface, Claude implementation, and registry.
 - GO-5 Added OpenCode, Gemini, and Codex backend implementations.
+- GO-6 Added Go core loop engine with prompt rendering and tests.
 - Initial public release notes for the gralph CLI.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.
