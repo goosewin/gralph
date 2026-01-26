@@ -638,6 +638,12 @@ bootstrap_download() {
         return 1
     fi
 
+    # Verify completions directory exists (warn but don't fail - INS-5)
+    if [ ! -d "$extracted_root/completions" ]; then
+        echo_warn "Completions directory not found in archive."
+        echo_warn "Shell completions will not be installed."
+    fi
+
     # Set SCRIPT_DIR to extracted location
     SCRIPT_DIR="$extracted_root"
     echo_info "  Extracted to: $SCRIPT_DIR"
