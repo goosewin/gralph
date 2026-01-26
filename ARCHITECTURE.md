@@ -13,6 +13,7 @@ This document captures the high-level structure of gralph. It is a living summar
 `gralph-rs/src/state.rs` mirrors state management in Rust with file locking and atomic writes.
 
 `lib/server.sh` implements the lightweight status API. It exposes endpoints for session status and stop commands, handles auth, and supports running via netcat or socat.
+`gralph-rs/src/server.rs` mirrors the HTTP status server, CORS handling, and bearer auth in Rust.
 
 `lib/config.sh` handles configuration loading and overrides. It merges default, global, and project YAML into a cache and exposes getters and setters used by the CLI and core loop.
 `gralph-rs/src/config.rs` mirrors configuration loading in Rust using serde_yaml for the ported CLI.

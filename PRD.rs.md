@@ -193,7 +193,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
   * CORS headers match Bash version.
   * Integration test for auth.
 - **Dependencies** RS-3
-- [ ] RS-9 Implement HTTP status server with hyper/axum
+- [x] RS-9 Implement HTTP status server with hyper/axum
 
 ---
 
