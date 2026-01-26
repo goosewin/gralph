@@ -74,10 +74,17 @@ _yaml_to_flat() {
             next
         }
 
-        # Parse key: value
-        if (match($0, /^([a-zA-Z_][a-zA-Z0-9_]*)[[:space:]]*:[[:space:]]*(.*)$/, arr)) {
-            key = arr[1]
-            value = arr[2]
+        # Parse key: value (portable awk, no capture arrays)
+        if ($0 ~ /^[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*:/) {
+            line = $0
+            pos = index(line, ":")
+            if (pos == 0) next
+
+            key = substr(line, 1, pos - 1)
+            gsub(/[[:space:]]+$/, "", key)
+
+            value = substr(line, pos + 1)
+            gsub(/^[[:space:]]+/, "", value)
 
             # Determine the current level based on indentation
             while (level > 0 && indent <= indent_level[level]) {
@@ -293,8 +300,8 @@ set_config() {
         local simple_key="${key_parts[0]}"
         # Check if key exists and update, otherwise append
         if grep -qE "^${simple_key}[[:space:]]*:" "$GRALPH_GLOBAL_CONFIG" 2>/dev/null; then
-            # Update existing key
-            sed -i "s|^${simple_key}[[:space:]]*:.*|${simple_key}: ${value}|" "$GRALPH_GLOBAL_CONFIG"
+            # Update existing key using portable helper
+            _portable_sed_inplace "s|^${simple_key}[[:space:]]*:.*|${simple_key}: ${value}|" "$GRALPH_GLOBAL_CONFIG"
         else
             # Append new key
             echo "${simple_key}: ${value}" >> "$GRALPH_GLOBAL_CONFIG"
@@ -310,11 +317,11 @@ set_config() {
             # Parent exists, check if child exists under it
             # This is simplified - for full YAML manipulation, consider using yq
             if grep -qE "^[[:space:]]+${child}[[:space:]]*:" "$GRALPH_GLOBAL_CONFIG" 2>/dev/null; then
-                # Update existing nested key (simplified approach)
-                sed -i "/^[[:space:]]*${child}[[:space:]]*:/s|:.*|: ${value}|" "$GRALPH_GLOBAL_CONFIG"
+                # Update existing nested key using portable helper
+                _portable_sed_inplace "/^[[:space:]]*${child}[[:space:]]*:/s|:.*|: ${value}|" "$GRALPH_GLOBAL_CONFIG"
             else
-                # Add child under parent (insert after parent line)
-                sed -i "/^${parent}[[:space:]]*:/a\\  ${child}: ${value}" "$GRALPH_GLOBAL_CONFIG"
+                # Add child under parent using portable helper
+                _portable_insert_after "^${parent}[[:space:]]*:" "  ${child}: ${value}" "$GRALPH_GLOBAL_CONFIG"
             fi
         else
             # Parent doesn't exist, add both
@@ -328,6 +335,92 @@ set_config() {
     _GRALPH_CONFIG_CACHE["$key"]="$value"
 
     return 0
+}
+
+# _portable_sed_inplace() - Portable in-place file modification
+# Avoids `sed -i` which behaves differently on macOS vs Linux.
+# Uses a temporary file approach that works on both platforms.
+# Arguments:
+#   $1 - sed expression to apply
+#   $2 - target file path
+# Returns:
+#   0 on success, 1 on failure
+_portable_sed_inplace() {
+    local sed_expr="$1"
+    local target_file="$2"
+    local tmp_file
+
+    if [[ ! -f "$target_file" ]]; then
+        echo "Error: File not found: $target_file" >&2
+        return 1
+    fi
+
+    # Create temp file in same directory to preserve permissions and allow atomic move
+    tmp_file="${target_file}.tmp.$$"
+
+    if sed "$sed_expr" "$target_file" > "$tmp_file"; then
+        # Preserve original file permissions
+        if command -v chmod >/dev/null 2>&1 && command -v stat >/dev/null 2>&1; then
+            # Try to preserve permissions (works on both macOS and Linux)
+            if [[ "$(uname)" == "Darwin" ]]; then
+                chmod "$(stat -f '%p' "$target_file" | tail -c 4)" "$tmp_file" 2>/dev/null || true
+            else
+                chmod --reference="$target_file" "$tmp_file" 2>/dev/null || true
+            fi
+        fi
+        mv "$tmp_file" "$target_file"
+        return 0
+    else
+        rm -f "$tmp_file"
+        echo "Error: sed operation failed" >&2
+        return 1
+    fi
+}
+
+# _portable_insert_after() - Insert a line after a matching pattern
+# Portable alternative to `sed -i '/pattern/a\text'` which differs on macOS/Linux.
+# Arguments:
+#   $1 - grep pattern to match
+#   $2 - line to insert after match
+#   $3 - target file path
+# Returns:
+#   0 on success, 1 on failure
+_portable_insert_after() {
+    local pattern="$1"
+    local insert_line="$2"
+    local target_file="$3"
+    local tmp_file
+    local found=0
+
+    if [[ ! -f "$target_file" ]]; then
+        echo "Error: File not found: $target_file" >&2
+        return 1
+    fi
+
+    tmp_file="${target_file}.tmp.$$"
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        printf '%s\n' "$line"
+        if [[ $found -eq 0 ]] && echo "$line" | grep -qE "$pattern"; then
+            printf '%s\n' "$insert_line"
+            found=1
+        fi
+    done < "$target_file" > "$tmp_file"
+
+    if [[ -s "$tmp_file" ]]; then
+        # Preserve original file permissions
+        if [[ "$(uname)" == "Darwin" ]]; then
+            chmod "$(stat -f '%p' "$target_file" | tail -c 4)" "$tmp_file" 2>/dev/null || true
+        else
+            chmod --reference="$target_file" "$tmp_file" 2>/dev/null || true
+        fi
+        mv "$tmp_file" "$target_file"
+        return 0
+    else
+        rm -f "$tmp_file"
+        echo "Error: Failed to process file" >&2
+        return 1
+    fi
 }
 
 # config_exists() - Check if a configuration key exists
