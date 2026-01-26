@@ -286,7 +286,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * Version injected via ldflags.
   * CI workflow runs tests and builds.
 - **Dependencies** GO-15
-- [ ] GO-16 Set up build system and CI
+- [x] GO-16 Set up build system and CI
 
 ### Task GO-17
 

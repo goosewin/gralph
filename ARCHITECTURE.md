@@ -41,3 +41,10 @@ notifications.
 Session state is stored in `~/.config/gralph/state.json` with a lock file
 at `~/.config/gralph/state.lock` (or a lock dir fallback). Loop logs are
 written to `.gralph/<session>.log` inside the target project directory.
+
+## Build System
+
+Go releases are defined in `.goreleaser.yaml`, producing linux/darwin binaries
+for amd64 and arm64. Version metadata is injected via ldflags into
+`github.com/goosewin/gralph/cmd.Version`. CI runs `go test` and a Goreleaser
+snapshot build to ensure cross-platform artifacts are generated.

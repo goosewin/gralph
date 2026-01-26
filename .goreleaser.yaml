@@ -1,0 +1,34 @@
+version: 2
+
+project_name: gralph
+
+builds:
+  - id: gralph
+    main: .
+    binary: gralph
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/goosewin/gralph/cmd.Version={{.Version}}
+
+archives:
+  - id: gralph
+    builds:
+      - gralph
+    format: tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  name_template: "{{ .Version }}-snapshot"
+
+release:
+  disable: true
