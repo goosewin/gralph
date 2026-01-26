@@ -10,6 +10,7 @@ using System.Threading;
 using Gralph.Backends;
 using Gralph.Config;
 using Gralph.Core;
+using Gralph.Notify;
 using Gralph.Prd;
 using Gralph.Server;
 using Gralph.State;
@@ -460,6 +461,26 @@ public static class Program
             Console.Error.WriteLine($"Error: {result.ErrorMessage}");
         }
 
+        if (result.Status == CoreLoopStatus.Complete)
+        {
+            TryNotifyCompletion(config, options.Webhook, sessionName, targetDir, result);
+        }
+        else
+        {
+            var reason = result.Status == CoreLoopStatus.MaxIterations ? "max_iterations" : "error";
+            TryNotifyFailure(
+                config,
+                options.Webhook,
+                sessionWebhook: null,
+                sessionName,
+                targetDir,
+                reason,
+                result.Iterations,
+                options.MaxIterations,
+                result.RemainingTasks,
+                result.Duration);
+        }
+
         return result.Status == CoreLoopStatus.Complete ? 0 : 1;
     }
 
@@ -527,6 +548,7 @@ public static class Program
                 }
 
                 StopSession(session, name, inspector, state, quietWarnings: true);
+                TryNotifyManualStop(session, name);
                 stoppedCount++;
             }
 
@@ -556,6 +578,7 @@ public static class Program
         }
 
         StopSession(existing, sessionName, inspector, state, quietWarnings: false);
+        TryNotifyManualStop(existing, sessionName);
         Console.WriteLine($"Stopped session: {sessionName}");
         return 0;
     }
@@ -1950,6 +1973,166 @@ public static class Program
         }
 
         return -1;
+    }
+
+    private static void TryNotifyCompletion(
+        ConfigService config,
+        string? optionWebhook,
+        string sessionName,
+        string projectDir,
+        CoreLoopResult result)
+    {
+        if (!IsConfigEnabled(config, "notifications.on_complete", defaultValue: false))
+        {
+            return;
+        }
+
+        var webhookUrl = ResolveWebhookUrl(config, optionWebhook, sessionWebhook: null);
+        if (string.IsNullOrWhiteSpace(webhookUrl))
+        {
+            return;
+        }
+
+        try
+        {
+            var notification = new CompletionNotification(sessionName, projectDir, result.Iterations, result.Duration);
+            var success = WebhookNotifier.NotifyCompleteAsync(notification, webhookUrl).GetAwaiter().GetResult();
+            if (!success)
+            {
+                Console.Error.WriteLine("Warning: Failed to send completion notification");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Warning: Failed to send completion notification: {ex.Message}");
+        }
+    }
+
+    private static void TryNotifyFailure(
+        ConfigService config,
+        string? optionWebhook,
+        string? sessionWebhook,
+        string sessionName,
+        string projectDir,
+        string reason,
+        int iterations,
+        int maxIterations,
+        int remainingTasks,
+        TimeSpan? duration)
+    {
+        if (!IsConfigEnabled(config, "notifications.on_fail", defaultValue: false))
+        {
+            return;
+        }
+
+        var webhookUrl = ResolveWebhookUrl(config, optionWebhook, sessionWebhook);
+        if (string.IsNullOrWhiteSpace(webhookUrl))
+        {
+            return;
+        }
+
+        try
+        {
+            var notification = new FailureNotification(sessionName, projectDir, reason, iterations, maxIterations, remainingTasks, duration);
+            var success = WebhookNotifier.NotifyFailedAsync(notification, webhookUrl).GetAwaiter().GetResult();
+            if (!success)
+            {
+                Console.Error.WriteLine("Warning: Failed to send failure notification");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Warning: Failed to send failure notification: {ex.Message}");
+        }
+    }
+
+    private static void TryNotifyManualStop(JsonObject session, string sessionName)
+    {
+        var projectDir = GetSessionString(session, "dir") ?? string.Empty;
+        var config = new ConfigService(ConfigPaths.FromEnvironment());
+        config.Load(string.IsNullOrWhiteSpace(projectDir) ? null : projectDir);
+
+        if (!IsConfigEnabled(config, "notifications.on_fail", defaultValue: false))
+        {
+            return;
+        }
+
+        var sessionWebhook = GetSessionString(session, "webhook");
+        var webhookUrl = ResolveWebhookUrl(config, optionWebhook: null, sessionWebhook);
+        if (string.IsNullOrWhiteSpace(webhookUrl))
+        {
+            return;
+        }
+
+        var iterations = TryGetSessionInt(session, "iteration", out var iter) ? iter : -1;
+        var maxIterations = TryGetSessionInt(session, "max_iterations", out var maxIter) ? maxIter : -1;
+        var remainingTasks = TryGetSessionInt(session, "last_task_count", out var remaining) ? remaining : -1;
+        var duration = ResolveSessionDuration(session);
+
+        try
+        {
+            var notification = new FailureNotification(
+                sessionName,
+                projectDir,
+                "manual_stop",
+                iterations,
+                maxIterations,
+                remainingTasks,
+                duration);
+
+            var success = WebhookNotifier.NotifyFailedAsync(notification, webhookUrl).GetAwaiter().GetResult();
+            if (!success)
+            {
+                Console.Error.WriteLine("Warning: Failed to send stop notification");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Warning: Failed to send stop notification: {ex.Message}");
+        }
+    }
+
+    private static string ResolveWebhookUrl(ConfigService config, string? optionWebhook, string? sessionWebhook)
+    {
+        if (!string.IsNullOrWhiteSpace(optionWebhook))
+        {
+            return optionWebhook.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(sessionWebhook))
+        {
+            return sessionWebhook.Trim();
+        }
+
+        return config.Get("notifications.webhook", string.Empty).Trim();
+    }
+
+    private static bool IsConfigEnabled(ConfigService config, string key, bool defaultValue)
+    {
+        var rawValue = config.Get(key, defaultValue ? "true" : "false");
+        return string.Equals(rawValue, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static TimeSpan? ResolveSessionDuration(JsonObject session)
+    {
+        var startedAt = GetSessionString(session, "started_at");
+        if (string.IsNullOrWhiteSpace(startedAt))
+        {
+            return null;
+        }
+
+        if (!DateTimeOffset.TryParse(startedAt, out var startTime))
+        {
+            return null;
+        }
+
+        var duration = DateTimeOffset.Now - startTime;
+        if (duration < TimeSpan.Zero)
+        {
+            return TimeSpan.Zero;
+        }
+
+        return duration;
     }
 
     private static string FormatRemaining(int remaining)

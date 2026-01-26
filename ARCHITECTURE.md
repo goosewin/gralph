@@ -28,6 +28,7 @@ This document captures the high-level structure of gralph. It is a living summar
 `src/Gralph/Backends` defines the backend abstraction layer and implementations for invoking model CLIs. It includes backend discovery, model metadata, and JSON stream parsing utilities.
 
 `lib/notify.sh` formats and sends webhook notifications. It detects webhook targets, builds payloads for Slack/Discord/generic endpoints, and posts completion or failure events.
+`src/Gralph/Notify` mirrors webhook notification handling in .NET, generating Slack/Discord/generic payloads and sending completion or failure events.
 
 ## Runtime Flow
 
