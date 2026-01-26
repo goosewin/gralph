@@ -69,3 +69,26 @@ behavior remains when unset.
 - Rely on the agent to discover shared docs without explicit instructions.
 - Hardcode a fixed list of context files in the prompt.
 - Inject the entire repository contents into the prompt.
+
+## D-004 Worktree Command Design
+- Date: 2026-01-25
+- Status: Accepted
+
+### Context
+Worktree automation needs a small, predictable interface that enforces naming
+conventions and keeps operations safe on dirty repos.
+
+### Decision
+Use `gralph worktree create <ID>` and `gralph worktree finish <ID>` commands
+that create `task-<ID>` branches with `.worktrees/task-<ID>` paths and refuse to
+run when `git status` is dirty.
+
+### Rationale
+- Keeps a minimal two-command surface aligned with the protocol steps.
+- Encodes task ID naming and worktree location to reduce manual mistakes.
+- Fails fast on dirty state to prevent partial merges or orphaned worktrees.
+
+### Alternatives
+- Expose low-level `add`/`remove` wrappers without task ID conventions.
+- Allow custom worktree paths and branch names per invocation.
+- Attempt auto-stash or auto-clean instead of refusing dirty state.
