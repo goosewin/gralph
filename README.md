@@ -295,6 +295,12 @@ gralph resume myapp
 ### Worktree Workflow
 
 Use worktrees to isolate task branches under `.worktrees/task-<ID>`.
+Task IDs use the `LETTER-NUMBER` format (for example, `C-6`).
+
+Steps:
+1. Create the worktree for the task.
+2. Work inside `.worktrees/task-<ID>`.
+3. Finish the task to merge and remove the worktree.
 
 ```bash
 # Create a task worktree (IDs look like C-6)
