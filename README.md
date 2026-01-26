@@ -723,8 +723,10 @@ gralph server [options]
 **Options:**
 | Option | Short | Description | Default |
 |--------|-------|-------------|---------|
+| `--host` | `-H` | Host/IP to bind to | 127.0.0.1 |
 | `--port` | `-p` | Port number to listen on | 8080 |
-| `--token` | `-t` | Bearer token for authentication | (none, open access) |
+| `--token` | `-t` | Bearer token for authentication | (required for non-localhost) |
+| `--open` | | Disable token requirement (not recommended) | false |
 
 **API Endpoints:**
 | Method | Endpoint | Description |
@@ -735,15 +737,15 @@ gralph server [options]
 
 **Dependencies:** `socat` is preferred; `nc` (netcat) is used as a fallback.
 
-**Security note:** The server listens on all interfaces by default. Use `--token` and restrict network access (firewall/VPN) when exposing it.
+**Security note:** The server defaults to localhost-only binding. When binding to non-localhost addresses (e.g., `0.0.0.0`), a `--token` is required for security. Use `--open` to explicitly disable this requirement (not recommended). Always restrict network access via firewall/VPN when exposing the server.
 
 **Examples:**
 ```bash
-# Start server on default port
+# Start server on localhost (no token required)
 gralph server
 
-# Start with authentication
-gralph server --port 8080 --token "my-secret-token"
+# Expose to network (token required)
+gralph server --host 0.0.0.0 --port 8080 --token "my-secret-token"
 
 # Query from remote
 curl -H "Authorization: Bearer my-secret-token" http://server:8080/status

@@ -402,17 +402,55 @@ _run_server_socat() {
     socat TCP-LISTEN:"$port",bind="$host",reuseaddr,fork EXEC:"bash -c '$env_vars source $handler_script && _handle_request'"
 }
 
+# _is_localhost() - Check if a host is localhost
+# Arguments:
+#   $1 - Host/IP to check
+# Returns:
+#   0 if localhost, 1 otherwise
+_is_localhost() {
+    local host="$1"
+    case "$host" in
+        127.0.0.1|localhost|::1)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 # start_server() - Start the HTTP status server
 # Arguments:
 #   $1 - Port number (optional, defaults to GRALPH_SERVER_PORT)
 #   $2 - Host/IP to bind to (optional, defaults to GRALPH_SERVER_HOST)
 #   $3 - Authentication token (optional, defaults to GRALPH_SERVER_TOKEN)
+#   $4 - Open mode flag (optional, disables token requirement for non-localhost)
 # Returns:
 #   0 on success (when server stops), 1 on error
 start_server() {
     local port="${1:-$GRALPH_SERVER_PORT}"
     local host="${2:-$GRALPH_SERVER_HOST}"
     local token="${3:-$GRALPH_SERVER_TOKEN}"
+    local open="${4:-false}"
+
+    # Security check: require token for non-localhost unless --open is specified
+    if ! _is_localhost "$host" && [[ -z "$token" ]] && [[ "$open" != "true" ]]; then
+        echo "Error: Token required when binding to non-localhost address ($host)" >&2
+        echo "" >&2
+        echo "For security, a token is required when exposing the server to the network." >&2
+        echo "Either:" >&2
+        echo "  1. Provide a token: --token <your-secret-token>" >&2
+        echo "  2. Explicitly disable security: --open (not recommended)" >&2
+        echo "  3. Bind to localhost only: --host 127.0.0.1" >&2
+        return 1
+    fi
+
+    # Warn when using --open on non-localhost
+    if ! _is_localhost "$host" && [[ "$open" == "true" ]] && [[ -z "$token" ]]; then
+        echo "Warning: Server exposed without authentication (--open flag used)" >&2
+        echo "Anyone with network access can view and control your sessions!" >&2
+        echo "" >&2
+    fi
 
     # Update globals
     GRALPH_SERVER_HOST="$host"

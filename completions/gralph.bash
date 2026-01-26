@@ -28,7 +28,7 @@ _gralph_completions() {
     local logs_opts="--follow --help -h"
 
     # Options for server command
-    local server_opts="--host -H --port -p --token -t --help -h"
+    local server_opts="--host -H --port -p --token -t --open --help -h"
 
     # Determine the command (first non-option argument after 'gralph')
     local cmd=""

@@ -75,7 +75,8 @@ START OPTIONS:
 SERVER OPTIONS:
   --host, -H            Host/IP to bind to (default: 127.0.0.1)
   --port, -p            Port number (default: 8080)
-  --token, -t           Authentication token (optional)
+  --token, -t           Authentication token (required for non-localhost)
+  --open                Disable token requirement (use with caution)
 
 EXAMPLES:
   gralph start .
@@ -155,6 +156,7 @@ parse_args() {
     OPT_PORT=""
     OPT_HOST=""
     OPT_TOKEN=""
+    OPT_OPEN=false
 
     # No arguments provided
     if [[ $# -eq 0 ]]; then
@@ -386,6 +388,12 @@ parse_args() {
                 ;;
             --token=*)
                 OPT_TOKEN="${1#*=}"
+                shift
+                ;;
+
+            # Open flag (server command) - disable security requirement
+            --open)
+                OPT_OPEN=true
                 shift
                 ;;
 
@@ -1293,9 +1301,10 @@ cmd_server() {
     local port="${OPT_PORT:-8080}"
     local host="${OPT_HOST:-127.0.0.1}"
     local token="${OPT_TOKEN:-}"
+    local open="${OPT_OPEN:-false}"
 
     # Start the server
-    start_server "$port" "$host" "$token"
+    start_server "$port" "$host" "$token" "$open"
 }
 
 cmd_version() {

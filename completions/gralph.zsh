@@ -51,6 +51,7 @@ _gralph() {
         '(-H --host)'{-H,--host}'[Host/IP to bind to]:host:(127.0.0.1 0.0.0.0 localhost)'
         '(-p --port)'{-p,--port}'[Port number]:port:(8080 3000 8000 9000)'
         '(-t --token)'{-t,--token}'[Authentication token]:token:'
+        '--open[Disable token requirement (not recommended)]'
         '(-h --help)'{-h,--help}'[Show help]'
     )
 
