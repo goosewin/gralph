@@ -76,15 +76,15 @@ echo "$result" | tail -c 500 | grep -qE "^<promise>$PROMISE</promise>\s*$"
 
 ```bash
 # From GitHub (private repo)
-curl -fsSL https://raw.githubusercontent.com/USER/gralph/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/goosewin/gralph/main/install.sh | bash
 
 # Or clone and install
-git clone git@github.com:USER/gralph.git
+git clone git@github.com:goosewin/gralph.git
 cd gralph
 ./install.sh
 
 # Or npm (if packaged)
-npm install -g @user/gralph
+npm install -g @goosewin/gralph
 ```
 
 **Install script responsibilities:**
