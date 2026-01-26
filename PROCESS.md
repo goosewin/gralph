@@ -9,7 +9,7 @@
    - DECISIONS.md (if decision made)
    - RISK_REGISTER.md (if new risk found)
    - ARCHITECTURE.md (delta update)
-5) Run checklist + verification.
+5) Run checklist + verification (go test ./..., gofmt if Go files touched).
 6) Merge worktree back and remove it.
 
 ## Guardrails

@@ -19,6 +19,7 @@ Autonomous AI coding loops using Claude Code or OpenCode. Spawns fresh AI coding
   - `gemini` (Gemini CLI) - `npm install -g @google/gemini-cli` (optional)
   - `codex` (Codex CLI) - `npm install -g @openai/codex` (optional)
 - `tmux` (optional) for background sessions; use `--no-tmux` to run in foreground
+- Go 1.24+ (only if building from source)
 
 ### Platform Support
 
@@ -67,6 +68,9 @@ On Linux, replace the checksum command with:
 sha256sum -c checksums.txt --ignore-missing
 ```
 
+Release archives also include `config/default.yaml` and pre-generated shell
+completions under `completions/`.
+
 ### Install with Go (From Source)
 
 ```bash
@@ -106,7 +110,7 @@ Project logs live under each project's `.gralph/` directory and are not removed 
 
 ### Migration from the Bash Version
 
-- The Go binary replaces the old `install.sh` and `uninstall.sh` scripts.
+- The Go binary replaces the legacy bash implementation; installer scripts are removed.
 - `bash`, `jq`, `curl`, `socat`, and `nc` are no longer required for normal operation.
 - `tmux` is still required only for background sessions; use `--no-tmux` to run in foreground.
 - Configuration and state paths remain under `~/.config/gralph/`, and project logs still live in `.gralph/`.
@@ -494,53 +498,22 @@ gralph start .
 
 Configuration values are loaded in the following order (later sources override earlier):
 
-1. **Default config** (`~/.config/gralph/config/default.yaml` or bundled default)
+1. **Default config** (`config/default.yaml` bundled with the release or `~/.config/gralph/config/default.yaml`)
 2. **Global config** (`~/.config/gralph/config.yaml`)
 3. **Project config** (`.gralph.yaml` in project directory)
 4. **Environment variables** (`GRALPH_*`)
 5. **CLI arguments** (e.g., `--max-iterations`)
 
-### Supported YAML Features
+### YAML Support
 
-Gralph uses a lightweight built-in YAML parser (no external dependencies). The following YAML features are supported:
-
-**Supported:**
-- Simple key-value pairs: `key: value`
-- Nested objects (up to 2 levels): `parent:\n  child: value`
-- String values (with or without quotes): `name: "quoted"` or `name: unquoted`
-- Numbers and booleans: `max: 30`, `enabled: true`
-- Comments: `# this is a comment`
-- Inline comments: `key: value  # comment`
-- Simple arrays of scalars (flattened to comma-separated values):
-  `flags:\n  - --headless\n  - --verbose`
-
-**Not Supported:**
-- Multi-line strings (block scalars): `description: |`
-- Anchors and aliases: `&anchor`, `*alias`
-- Complex nested structures (3+ levels deep)
-- Arrays of objects or nested arrays
-- Flow style: `{key: value}` or `[item1, item2]`
-
-**Example of supported config:**
-```yaml
-# Global settings
-defaults:
-  max_iterations: 50
-  task_file: PRD.md
-  backend: claude
-
-notifications:
-  webhook: https://hooks.example.com/notify
-
-logging:
-  level: info
-```
-
-For complex configuration needs (arrays, deep nesting), use environment variable overrides or CLI arguments instead.
+Gralph uses Viper (YAML v3) to parse configuration files. Standard YAML is
+supported; keep configs simple for portability across environments.
 
 ## Notifications
 
-Gralph can send webhook notifications when loops complete or fail. This is useful for monitoring long-running loops on remote servers.
+Gralph accepts webhook configuration and includes a Go notifier package for
+Discord, Slack, and generic JSON payloads. Delivery hooks are wired where the
+loop runner enables notifications, so treat webhooks as opt-in runtime behavior.
 
 ### Enabling Notifications
 
@@ -559,7 +532,7 @@ export GRALPH_NOTIFICATIONS_WEBHOOK="https://example.com/webhook"
 
 ### Notification Events
 
-Gralph sends notifications for two types of events:
+When enabled, gralph sends notifications for two types of events:
 
 | Event | Trigger | Information Included |
 |-------|---------|---------------------|
@@ -1041,7 +1014,7 @@ unchecked `- [ ]` line.
 ### Task P-1
 
 - **ID** P-1
-- **Context Bundle** `lib/core.sh`
+- **Context Bundle** `internal/core/taskblock.go`
 - **DoD** Add task block parsing
 - **Checklist**
   * Parser extracts task blocks from PRD.
@@ -1110,16 +1083,12 @@ Gralph runs stateless iterations, so shared documents provide durable context be
 
 ## Using gralph to build gralph
 
-The repo includes a minimal self-hosting example set plus a runner script that
-executes the example stages in order.
-
-- Example PRDs: `examples/README.md` (see `examples/PRD-Stage-P-Example.md` and `examples/PRD-Stage-A-Example.md`).
-- Runner script: `scripts/run-release.sh`.
-
-Run the example release flow from the repo root:
+The repo includes a minimal self-hosting example set. See `examples/README.md`
+for the PRDs and run the stages manually from the repo root:
 
 ```bash
-./scripts/run-release.sh
+gralph start . --task-file examples/PRD-Stage-P-Example.md --no-tmux --backend claude --model claude-opus-4-5
+gralph start . --task-file examples/PRD-Stage-A-Example.md --no-tmux --backend claude --model claude-opus-4-5
 ```
 
 ## Usage Examples
@@ -1482,29 +1451,10 @@ gralph start . --name myapp-v2
    chmod +x ~/.local/bin/gralph
    ```
 
-2. **Check lib files are readable:**
-   ```bash
-   chmod -R 755 ~/.config/gralph/lib/
-   ```
-
-3. **Check project directory is writable:**
+2. **Check project directory is writable:**
    ```bash
    ls -la ~/projects/myapp/
    ```
-
-#### JSON parse errors in logs
-
-**Symptom:** `jq: parse error` messages in output
-
-**Causes:**
-
-1. **jq not installed:**
-   ```bash
-   sudo apt install jq  # Ubuntu/Debian
-   brew install jq      # macOS
-   ```
-
-2. **Claude output contains invalid JSON** - Usually transient, loop will retry
 
 #### Loop stuck at max iterations
 
@@ -1547,7 +1497,7 @@ gralph start . --no-tmux
 #### Inspect state file
 
 ```bash
-# View current state
+# View current state (jq optional)
 cat ~/.config/gralph/state.json | jq .
 
 # Find specific session
@@ -1586,8 +1536,8 @@ rm ~/.config/gralph/state.json
 If you continue to experience issues:
 
 1. **Check the logs** - Most issues are visible in `gralph logs <name>`
-2. **Verify dependencies** - Run `./install.sh` to check all requirements
-3. **Open an issue** - Include logs and system info (OS, bash version, etc.)
+2. **Verify dependencies** - Run `gralph backends` and confirm backend CLIs
+3. **Open an issue** - Include logs and system info (OS, gralph version, backend versions)
 
 ## Security
 

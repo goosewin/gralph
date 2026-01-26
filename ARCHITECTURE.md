@@ -4,27 +4,23 @@ This document captures the high-level structure of gralph. It is a living summar
 
 ## Modules
 
-`bin/gralph` is the CLI entrypoint. It parses commands, loads configuration defaults, wires in the shared libraries, and dispatches to subcommands like start/stop/status/server while managing session setup and logging paths.
+`main.go` initializes the CLI and wires the Cobra command tree in `cmd`.
 
-`lib/core.sh` owns the execution loop. It loads backend adapters, renders prompt templates, runs iterations, counts remaining tasks, checks completion conditions, and handles loop lifecycle including logs, duration, and notifications.
-`internal/core` ports the execution loop to Go, including prompt rendering, task selection, completion checks, and integration tests.
+`cmd` owns the CLI surface, parses flags, and dispatches subcommands like start/stop/status/logs/resume/prd/worktree/config/server/backends.
 
-`lib/prd.sh` provides PRD utilities for task block parsing, validation, sanitization, and stack detection.
-`internal/prd` ports PRD utilities to Go, covering stack detection, validation, and sanitization helpers.
+`internal/core` owns the execution loop, prompt rendering, task selection, completion checks, log handling, and iteration pacing.
 
-`internal/backend` defines the Go backend interface and registry. Implementations such as `internal/backend/claude`, `internal/backend/opencode`, `internal/backend/gemini`, and `internal/backend/codex` wrap AI CLI backends for iteration runs and response parsing.
+`internal/prd` provides PRD parsing, validation, sanitization, and stack detection utilities.
 
-`lib/state.sh` provides persistent session state. It manages the state file, locking, and CRUD operations for sessions plus stale session cleanup so concurrent loops remain consistent.
-`internal/state` ports the session state store to Go with locking, atomic writes, and CRUD helpers.
+`internal/backend` defines the backend interface and registry. Implementations under `internal/backend/<name>` wrap AI CLI backends for iteration runs and response parsing.
 
-`lib/server.sh` implements the lightweight status API. It exposes endpoints for session status and stop commands, handles auth, and supports running via netcat or socat.
-`internal/server` ports the status API to Go with REST endpoints, bearer auth, and CORS.
+`internal/state` persists session state with locking, atomic writes, and stale-session cleanup so concurrent loops remain consistent.
 
-`lib/config.sh` handles configuration loading and overrides. It merges default, global, and project YAML into a cache and exposes getters and setters used by the CLI and core loop.
+`internal/server` exposes the status API with REST endpoints, bearer auth, and CORS handling.
 
-`internal/config` provides the Go configuration package. It loads and merges default, global, and project YAML files using Viper with GRALPH_ environment overrides.
+`internal/config` loads and merges default, global, and project YAML config using Viper with GRALPH_ environment overrides.
 
-`lib/notify.sh` formats and sends webhook notifications. It detects webhook targets, builds payloads for Slack/Discord/generic endpoints, and posts completion or failure events.
+`internal/notify` formats and sends webhook notifications to Discord, Slack, or generic JSON endpoints.
 
 ## Go Package Structure
 
@@ -72,11 +68,13 @@ notifications.
 
 Session state is stored in `~/.config/gralph/state.json` with a lock file
 at `~/.config/gralph/state.lock` (or a lock dir fallback). Loop logs are
-written to `.gralph/<session>.log` inside the target project directory.
+written to `.gralph/<session>.log` and `.gralph/<session>.raw.log` inside the
+target project directory.
 
 ## Build System
 
 Go releases are defined in `.goreleaser.yaml`, producing linux/darwin binaries
 for amd64 and arm64. Version metadata is injected via ldflags into
 `github.com/goosewin/gralph/cmd.Version`. CI runs `go test` and a Goreleaser
-snapshot build to ensure cross-platform artifacts are generated.
+snapshot build to ensure cross-platform artifacts are generated. Tagged
+releases use the Goreleaser GitHub Action.

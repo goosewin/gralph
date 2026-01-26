@@ -85,3 +85,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - OSS-16 Hardened core loop completion detection and parse error handling.
 - OSS-17 Documented PRD validation rules, sanitization behavior, and stack detection heuristics.
 - OSS-18 Reviewed README for CLI reference, model names, and doc accuracy.
+
+### Changed
+- Updated macOS CI to run Go tests on macOS.
+- Switched tagged releases to Goreleaser and bundled config/completions in archives.
+- Refreshed core docs for the Go implementation.
+
+### Removed
+- Removed legacy shell implementation, installer scripts, and shell test harnesses.
+- Removed committed .gralph loop logs from the repository.
