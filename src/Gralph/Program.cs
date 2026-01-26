@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -870,8 +871,24 @@ public static class Program
             return Fail("PRD file path is required. Usage: gralph prd check <file>");
         }
 
-        _ = allowMissingContext;
-        Console.WriteLine("prd check command is registered but not implemented in this build.");
+        if (positional.Count > 1)
+        {
+            return Fail("prd check accepts a single file path.");
+        }
+
+        var taskFile = positional[0];
+        var validation = PrdValidator.ValidateFile(taskFile, allowMissingContext);
+        if (!validation.IsValid)
+        {
+            foreach (var error in validation.Errors)
+            {
+                Console.Error.WriteLine(error.Format());
+            }
+
+            return Fail($"PRD validation failed: {taskFile}");
+        }
+
+        Console.WriteLine($"PRD validation passed: {taskFile}");
         return 0;
     }
 
@@ -961,7 +978,203 @@ public static class Program
             }
         }
 
-        Console.WriteLine("prd create command is registered but not implemented in this build.");
+        var targetDir = string.IsNullOrWhiteSpace(options.Directory)
+            ? Directory.GetCurrentDirectory()
+            : options.Directory;
+
+        if (!Directory.Exists(targetDir))
+        {
+            return Fail($"Directory does not exist: {targetDir}");
+        }
+
+        targetDir = Path.GetFullPath(targetDir);
+
+        var outputPath = string.IsNullOrWhiteSpace(options.Output)
+            ? "PRD.generated.md"
+            : options.Output;
+
+        if (!Path.IsPathRooted(outputPath))
+        {
+            outputPath = Path.Combine(targetDir, outputPath);
+        }
+
+        if (File.Exists(outputPath) && !options.Force)
+        {
+            return Fail($"Output file already exists: {outputPath}. Use --force to overwrite.");
+        }
+
+        var config = new ConfigService(ConfigPaths.FromEnvironment());
+        config.Load(targetDir);
+
+        var backendName = string.IsNullOrWhiteSpace(options.Backend)
+            ? config.Get("defaults.backend", "claude")
+            : options.Backend;
+        var model = string.IsNullOrWhiteSpace(options.Model)
+            ? config.Get("defaults.model", string.Empty)
+            : options.Model;
+
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            model = config.Get($"{backendName}.default_model", string.Empty);
+        }
+
+        var interactive = options.Interactive ?? !Console.IsInputRedirected;
+
+        if (interactive)
+        {
+            options.Goal = PromptRequired("Goal", options.Goal, options.Multiline);
+            options.Constraints = PromptOptional("Constraints", options.Constraints, options.Multiline);
+            options.Sources = PromptOptional("Sources (comma-separated URLs)", options.Sources, options.Multiline);
+        }
+
+        if (string.IsNullOrWhiteSpace(options.Goal))
+        {
+            return Fail("PRD goal is required. Provide --goal or run interactively.");
+        }
+
+        var contextFiles = BuildContextFileList(targetDir, options.Context, config.Get("defaults.context_files", string.Empty));
+        var sourcesList = NormalizeCsvList(options.Sources);
+        var constraintsText = string.IsNullOrWhiteSpace(options.Constraints) ? "None." : options.Constraints.Trim();
+        var sourcesSection = sourcesList.Count > 0 ? string.Join("\n", sourcesList) : "None.";
+        var warningsSection = sourcesList.Count == 0
+            ? "No reliable external sources were provided. Verify requirements and stack assumptions before implementation."
+            : string.Empty;
+        var contextSection = contextFiles.Count > 0 ? string.Join("\n", contextFiles) : "None.";
+
+        var stackSummary = PrdStackDetector.Detect(targetDir);
+        var stackSummaryPrompt = stackSummary.FormatSummary(2);
+
+        var templateText = PrdTemplate.GetTemplateText(targetDir);
+
+        var promptBuilder = new StringBuilder();
+        promptBuilder.AppendLine("You are generating a gralph PRD in markdown. The output must be spec-compliant and grounded in the repository.");
+        promptBuilder.AppendLine();
+        promptBuilder.AppendLine($"Project directory: {targetDir}");
+        promptBuilder.AppendLine();
+        promptBuilder.AppendLine("Goal:");
+        promptBuilder.AppendLine(options.Goal.Trim());
+        promptBuilder.AppendLine();
+        promptBuilder.AppendLine("Constraints:");
+        promptBuilder.AppendLine(constraintsText);
+        promptBuilder.AppendLine();
+        promptBuilder.AppendLine("Detected stack summary (from repository files):");
+        promptBuilder.AppendLine(stackSummaryPrompt);
+        promptBuilder.AppendLine();
+        promptBuilder.AppendLine("Sources (authoritative URLs or references):");
+        promptBuilder.AppendLine(sourcesSection);
+        promptBuilder.AppendLine();
+        promptBuilder.AppendLine("Warnings (only include in the PRD if Sources is empty):");
+        promptBuilder.AppendLine(string.IsNullOrWhiteSpace(warningsSection) ? "None." : warningsSection);
+        promptBuilder.AppendLine();
+        promptBuilder.AppendLine("Context files (read these first if present):");
+        promptBuilder.AppendLine(contextSection);
+        promptBuilder.AppendLine();
+        promptBuilder.AppendLine("Requirements:");
+        promptBuilder.AppendLine("- Output only the PRD markdown with no commentary or code fences.");
+        promptBuilder.AppendLine("- Use ASCII only.");
+        promptBuilder.AppendLine("- Do not include an \"Open Questions\" section.");
+        promptBuilder.AppendLine("- Do not use any checkboxes outside task blocks.");
+        promptBuilder.AppendLine("- Context Bundle entries must be real files in the repo and must be selected from the Context files list above.");
+        promptBuilder.AppendLine("- If a task creates new files, do not list the new files in Context Bundle; cite the closest existing files instead.");
+        promptBuilder.AppendLine("- Use atomic, granular tasks grounded in the repo and context files.");
+        promptBuilder.AppendLine("- Each task block must use a '### Task <ID>' header and include **ID**, **Context Bundle**, **DoD**, **Checklist**, **Dependencies**.");
+        promptBuilder.AppendLine("- Each task block must contain exactly one unchecked task line like '- [ ] <ID> <summary>'.");
+        promptBuilder.AppendLine("- If Sources is empty, include a 'Warnings' section with the warning text above and no checkboxes.");
+        promptBuilder.AppendLine("- Do not invent stack, frameworks, or files not supported by the context files and stack summary.");
+        promptBuilder.AppendLine();
+        promptBuilder.AppendLine("Template:");
+        promptBuilder.AppendLine(templateText);
+
+        var prompt = promptBuilder.ToString();
+
+        IBackend backend;
+        try
+        {
+            backend = BackendLoader.Load(backendName);
+        }
+        catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException)
+        {
+            return Fail(ex.Message);
+        }
+
+        if (!backend.IsInstalled())
+        {
+            return Fail($"Backend '{backend.Name}' is not installed. {backend.GetInstallHint()}");
+        }
+
+        var tmpOutput = Path.GetTempFileName();
+        var tmpPrd = Path.GetTempFileName();
+        var rawOutput = Path.GetTempFileName();
+
+        BackendRunResult runResult;
+        try
+        {
+            runResult = backend.RunIterationAsync(new BackendRunRequest(prompt, model, tmpOutput, rawOutput), CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (Exception ex)
+        {
+            return Fail($"PRD generation failed: {ex.Message}");
+        }
+
+        if (runResult.ExitCode != 0)
+        {
+            Console.Error.WriteLine($"Warning: PRD generation failed (backend exit code {runResult.ExitCode}).");
+            Console.Error.WriteLine($"Raw backend output saved to: {rawOutput}");
+            return 1;
+        }
+
+        if (string.IsNullOrWhiteSpace(runResult.ParsedText))
+        {
+            Console.Error.WriteLine("Warning: PRD generation returned empty output.");
+            Console.Error.WriteLine($"Raw backend output saved to: {rawOutput}");
+            return 1;
+        }
+
+        File.WriteAllText(tmpPrd, runResult.ParsedText.TrimEnd() + "\n");
+
+        PrdSanitizer.SanitizeFile(tmpPrd, targetDir, contextFiles);
+
+        var validation = PrdValidator.ValidateFile(tmpPrd, options.AllowMissingContext, targetDir);
+        if (!validation.IsValid)
+        {
+            Console.Error.WriteLine("Warning: Generated PRD failed validation.");
+            foreach (var error in validation.Errors)
+            {
+                Console.Error.WriteLine(error.Format());
+            }
+
+            var invalidPath = outputPath;
+            if (!options.Force)
+            {
+                invalidPath = outputPath.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
+                    ? outputPath[..^3] + ".invalid.md"
+                    : outputPath + ".invalid";
+            }
+
+            File.Move(tmpPrd, invalidPath, true);
+            Console.Error.WriteLine($"Saved invalid PRD to: {invalidPath}");
+            return 1;
+        }
+
+        File.Move(tmpPrd, outputPath, true);
+        TryDeleteFile(tmpOutput);
+        TryDeleteFile(rawOutput);
+
+        Console.WriteLine($"PRD created: {outputPath}");
+        var relativeOutput = outputPath.StartsWith(targetDir, StringComparison.Ordinal)
+            ? Path.GetRelativePath(targetDir, outputPath)
+            : outputPath;
+        Console.WriteLine("Next step:");
+        var startCommand = new StringBuilder($"gralph start {targetDir} --task-file {relativeOutput} --no-tmux --backend {backendName}");
+        if (!string.IsNullOrWhiteSpace(model))
+        {
+            startCommand.Append($" --model {model}");
+        }
+        startCommand.Append(" --strict-prd");
+        Console.WriteLine($"  {startCommand}");
+
         return 0;
     }
 
@@ -1217,6 +1430,190 @@ public static class Program
         }
 
         return result;
+    }
+
+    private static string PromptRequired(string label, string currentValue, bool multiline)
+    {
+        if (!string.IsNullOrWhiteSpace(currentValue))
+        {
+            return currentValue.Trim();
+        }
+
+        var value = PromptInput(label, string.Empty, multiline);
+        while (string.IsNullOrWhiteSpace(value))
+        {
+            Console.WriteLine($"{label} is required.");
+            value = PromptInput(label, string.Empty, multiline);
+        }
+
+        return value;
+    }
+
+    private static string PromptOptional(string label, string currentValue, bool multiline)
+    {
+        if (!string.IsNullOrWhiteSpace(currentValue))
+        {
+            return currentValue.Trim();
+        }
+
+        return PromptInput(label, string.Empty, multiline);
+    }
+
+    private static string PromptInput(string label, string defaultValue, bool multiline)
+    {
+        if (multiline)
+        {
+            Console.WriteLine($"{label} (finish with empty line):");
+            var lines = new List<string>();
+            while (true)
+            {
+                var line = Console.ReadLine();
+                if (line is null)
+                {
+                    break;
+                }
+                if (string.IsNullOrEmpty(line))
+                {
+                    break;
+                }
+                lines.Add(line);
+            }
+
+            if (lines.Count == 0)
+            {
+                return defaultValue;
+            }
+
+            return string.Join("\n", lines).Trim();
+        }
+
+        Console.Write($"{label}: ");
+        var input = Console.ReadLine();
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return defaultValue;
+        }
+
+        return input.Trim();
+    }
+
+    private static List<string> NormalizeCsvList(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return new List<string>();
+        }
+
+        var items = value
+            .Split(new[] { ',', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(item => item.Trim())
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        return items;
+    }
+
+    private static List<string> BuildContextFileList(string targetDir, string? userContext, string configContext)
+    {
+        var combined = new List<string>();
+        combined.AddRange(NormalizeCsvList(configContext));
+        combined.AddRange(NormalizeCsvList(userContext));
+
+        var results = new List<string>();
+        foreach (var entry in combined)
+        {
+            if (!TryResolveContextEntry(entry, targetDir, out var displayPath, out var fullPath))
+            {
+                continue;
+            }
+
+            if (!File.Exists(fullPath) && !Directory.Exists(fullPath))
+            {
+                continue;
+            }
+
+            if (!results.Contains(displayPath, StringComparer.Ordinal))
+            {
+                results.Add(displayPath);
+            }
+        }
+
+        return results;
+    }
+
+    private static bool TryResolveContextEntry(string entry, string baseDir, out string displayPath, out string fullPath)
+    {
+        displayPath = string.Empty;
+        fullPath = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(entry))
+        {
+            return false;
+        }
+
+        if (Path.IsPathRooted(entry))
+        {
+            fullPath = Path.GetFullPath(entry);
+            if (!IsSubPath(baseDir, fullPath))
+            {
+                return false;
+            }
+            displayPath = Path.GetRelativePath(baseDir, fullPath);
+            return true;
+        }
+
+        fullPath = Path.GetFullPath(Path.Combine(baseDir, entry));
+        if (!IsSubPath(baseDir, fullPath))
+        {
+            return false;
+        }
+
+        displayPath = entry.Replace('\u005c', '/');
+        return true;
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private static bool IsSubPath(string baseDir, string path)
+    {
+        if (string.IsNullOrWhiteSpace(baseDir))
+        {
+            return true;
+        }
+
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        var normalizedBase = baseDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (!path.StartsWith(normalizedBase, comparison))
+        {
+            return false;
+        }
+
+        if (path.Length == normalizedBase.Length)
+        {
+            return true;
+        }
+
+        var next = path[normalizedBase.Length];
+        return next == Path.DirectorySeparatorChar || next == Path.AltDirectorySeparatorChar;
     }
 
     private static int Fail(string message)

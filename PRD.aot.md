@@ -279,7 +279,7 @@ Support webhook notifications:
   * Stack detection infers project technologies.
   * Generated PRD sanitized before writing.
 - **Dependencies** AOT-6, AOT-8
-- [ ] AOT-11 Implement prd check and prd create commands
+- [x] AOT-11 Implement prd check and prd create commands
 
 ### Task AOT-12
 
