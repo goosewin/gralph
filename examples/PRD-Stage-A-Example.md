@@ -96,7 +96,3 @@ Provide the baseline shared documents with minimal structure and content.
 - The baseline supports tracking process, architecture, decisions, risks, and changes.
 
 ---
-
-## Open Questions
-
-- [ ] None.

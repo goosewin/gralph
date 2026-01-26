@@ -1,5 +1,4 @@
-# GitHub Actions workflow for auto-release
-# Triggers on version tags (v*) and creates a GitHub release with assets
+# GitHub Actions workflow for Native AOT release assets
 
 name: Release
 
@@ -12,110 +11,98 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  build:
+    name: Build ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+            archive: tar.gz
+          - os: macos-14
+            rid: osx-arm64
+            archive: tar.gz
+          - os: windows-latest
+            rid: win-x64
+            archive: zip
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Extract version from tag
-        id: version
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
 
-      - name: Verify version in gralph script matches tag
-        run: |
-          SCRIPT_VERSION=$(grep -E '^VERSION=' bin/gralph | cut -d'"' -f2)
-          TAG_VERSION=${{ steps.version.outputs.version }}
-          if [ "$SCRIPT_VERSION" != "$TAG_VERSION" ]; then
-            echo "Error: Version mismatch!"
-            echo "  Script version: $SCRIPT_VERSION"
-            echo "  Tag version: $TAG_VERSION"
-            echo "Please update VERSION in bin/gralph to match the tag."
-            exit 1
-          fi
-          echo "Version verified: $SCRIPT_VERSION"
+      - name: Set version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
-      - name: Run shellcheck on scripts
+      - name: Publish AOT binary
+        shell: bash
         run: |
-          sudo apt-get update && sudo apt-get install -y shellcheck
-          shellcheck bin/gralph
-          shellcheck install.sh
-          shellcheck uninstall.sh
-          shellcheck lib/*.sh
+          dotnet publish src/Gralph/Gralph.csproj \
+            -c Release \
+            -r "${{ matrix.rid }}" \
+            -o "dist/aot/${{ matrix.rid }}" \
+            -p:PublishAot=true \
+            -p:SelfContained=true \
+            -p:PublishSingleFile=true \
+            -p:StripSymbols=true \
+            -p:InvariantGlobalization=true \
+            -p:AssemblyName=gralph
 
-      - name: Create release tarball
+      - name: Package (macOS/Linux)
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
-          mkdir -p dist
-          # Create tarball with all necessary files
-          tar -czvf dist/gralph-${{ steps.version.outputs.version }}.tar.gz \
-            --transform 's,^,gralph-${{ steps.version.outputs.version }}/,' \
-            bin/ \
-            lib/ \
-            completions/ \
-            config/ \
-            install.sh \
-            uninstall.sh \
-            README.md \
-            LICENSE
+          pkg_dir="dist/package/gralph-${VERSION}-${{ matrix.rid }}"
+          mkdir -p "$pkg_dir"
+          chmod +x "dist/aot/${{ matrix.rid }}/gralph" || true
+          cp "dist/aot/${{ matrix.rid }}/gralph" "$pkg_dir/"
+          cp -R config completions README.md LICENSE "$pkg_dir/"
+          tar -czf "dist/gralph-${VERSION}-${{ matrix.rid }}.tar.gz" -C dist/package "gralph-${VERSION}-${{ matrix.rid }}"
+          shasum -a 256 "dist/gralph-${VERSION}-${{ matrix.rid }}.tar.gz" > "dist/gralph-${VERSION}-${{ matrix.rid }}.sha256"
 
-      - name: Generate checksums
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          cd dist
-          sha256sum gralph-${{ steps.version.outputs.version }}.tar.gz > checksums.txt
-          cat checksums.txt
+          $version = $env:VERSION
+          $rid = "${{ matrix.rid }}"
+          $pkgDir = "dist/package/gralph-$version-$rid"
+          New-Item -ItemType Directory -Force -Path $pkgDir | Out-Null
+          Copy-Item "dist/aot/$rid/gralph.exe" "$pkgDir/"
+          Copy-Item "config" "$pkgDir/config" -Recurse
+          Copy-Item "completions" "$pkgDir/completions" -Recurse
+          Copy-Item "README.md" "$pkgDir/"
+          Copy-Item "LICENSE" "$pkgDir/"
+          Compress-Archive -Path $pkgDir -DestinationPath "dist/gralph-$version-$rid.zip"
+          $hash = (Get-FileHash -Algorithm SHA256 "dist/gralph-$version-$rid.zip").Hash
+          "$hash  gralph-$version-$rid.zip" | Out-File "dist/gralph-$version-$rid.sha256" -Encoding ascii
 
-      - name: Generate release notes
-        id: release_notes
-        run: |
-          echo "## What's New in ${{ steps.version.outputs.tag }}" > release_notes.md
-          echo "" >> release_notes.md
-          echo "### Installation" >> release_notes.md
-          echo "" >> release_notes.md
-          echo '```bash' >> release_notes.md
-          echo "# Quick install (recommended)" >> release_notes.md
-          echo "curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "# Or download and install manually" >> release_notes.md
-          echo "wget https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/gralph-${{ steps.version.outputs.version }}.tar.gz" >> release_notes.md
-          echo "tar -xzf gralph-${{ steps.version.outputs.version }}.tar.gz" >> release_notes.md
-          echo "cd gralph-${{ steps.version.outputs.version }}" >> release_notes.md
-          echo "./install.sh" >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### Checksums" >> release_notes.md
-          echo "" >> release_notes.md
-          echo '```' >> release_notes.md
-          cat dist/checksums.txt >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### Requirements" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "- \`claude\` CLI (Claude Code)" >> release_notes.md
-          echo "- \`jq\` for JSON parsing" >> release_notes.md
-          echo "- \`tmux\` for session management" >> release_notes.md
-          echo "- \`bash\` 4.0+" >> release_notes.md
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gralph-${{ matrix.rid }}-assets
+          path: dist/gralph-${{ env.VERSION }}-${{ matrix.rid }}.*
 
-      - name: Create GitHub Release
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          name: Gralph CLI ${{ steps.version.outputs.tag }}
-          body_path: release_notes.md
-          draft: false
-          prerelease: ${{ contains(steps.version.outputs.tag, '-') }}
+          generate_release_notes: true
           files: |
-            dist/gralph-${{ steps.version.outputs.version }}.tar.gz
-            dist/checksums.txt
-            install.sh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Summary
-        run: |
-          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version:** ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tarball:** gralph-${{ steps.version.outputs.version }}.tar.gz" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status:** Released successfully" >> $GITHUB_STEP_SUMMARY
+            dist/*

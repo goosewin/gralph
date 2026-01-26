@@ -5,37 +5,42 @@ Environment: Ubuntu 24.04.3 LTS
 
 ## Checks
 
-- Dependencies present: `jq`, `tmux`, `bash`
-- `./bin/gralph version` returns current version
-- `./bin/gralph help` prints CLI usage
-- `./bin/gralph status` runs with empty state
-- `./bin/gralph backends` lists available backends
-- `./bin/gralph config list` shows configuration
+- .NET 10 SDK available (`dotnet --version`)
+- Native AOT build succeeds (`scripts/publish-aot.sh --rid linux-x64`)
+- `./dist/aot/linux-x64/gralph version` returns current version
+- `./dist/aot/linux-x64/gralph help` prints CLI usage
+- `./dist/aot/linux-x64/gralph status` runs with empty state
+- `./dist/aot/linux-x64/gralph backends` lists available backends
+- `./dist/aot/linux-x64/gralph config list` shows configuration
 - Help output includes new flags: `--no-tmux`, `--backend`, `--webhook`, `--variant`, `--prompt-template`
 - Server command available in help
 
 ## Command Output
 
 ```bash
-# Verify dependencies
-command -v jq && command -v tmux && command -v bash
+# Verify toolchain
+dotnet --version
+
+# Build AOT binary
+scripts/publish-aot.sh --rid linux-x64
 
 # Basic commands
-./bin/gralph version
-./bin/gralph help
-./bin/gralph status
+./dist/aot/linux-x64/gralph version
+./dist/aot/linux-x64/gralph help
+./dist/aot/linux-x64/gralph status
 
 # New commands
-./bin/gralph backends
-./bin/gralph config list
+./dist/aot/linux-x64/gralph backends
+./dist/aot/linux-x64/gralph config list
 
 # Verify new flags in help
-./bin/gralph help | grep -E '\-\-(no-tmux|backend|webhook|variant|prompt-template)'
-./bin/gralph help | grep 'server'
+./dist/aot/linux-x64/gralph help | grep -E '\-\-(no-tmux|backend|webhook|variant|prompt-template)'
+./dist/aot/linux-x64/gralph help | grep 'server'
 ```
 
 Expected results:
-- All dependency commands resolve in PATH
+- `dotnet --version` prints a 10.x SDK
+- AOT build emits `dist/aot/linux-x64/gralph`
 - Version prints `gralph v1.1.0`
 - Help output lists commands and options including new flags
 - Status reports no sessions found

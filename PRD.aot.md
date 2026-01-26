@@ -1,5 +1,8 @@
 # Project Requirements Document
 
+> Note: This PRD captures the legacy bash-to-.NET migration and references shell
+> files that have since been removed. It is preserved for historical context.
+
 ## Overview
 
 Port gralph, an autonomous AI coding loop CLI, from bash to .NET 10 with AOT (Ahead-of-Time) compilation. The new implementation will be a cross-platform, single-file native executable that maintains full feature parity with the existing bash implementation while gaining improved startup time, type safety, and maintainability.

@@ -9,8 +9,8 @@ Thanks for taking the time to contribute to gralph.
 
 ## Development setup
 
-- Install dependencies: `bash` 4+, `jq`, and `tmux`.
-- From a local clone, you can run `./install.sh` to install the CLI.
+- Install dependencies: .NET 10 SDK and at least one backend CLI (claude/opencode/gemini/codex).
+- Build or run locally with `dotnet run --project src/Gralph -- --help`.
 
 ## Running tests
 
@@ -18,17 +18,14 @@ Run the test suite locally before submitting a PR:
 
 ```bash
 # Run all tests
-./tests/config-test.sh
-./tests/state-test.sh
-./tests/loop-test.sh
-./tests/macos-smoke.sh
+dotnet test tests/Gralph.Tests/Gralph.Tests.csproj
 ```
 
 Test files:
-- `tests/config-test.sh` - Tests for config get/set functionality
-- `tests/state-test.sh` - Tests for state management (sessions)
-- `tests/loop-test.sh` - Tests for core loop functions (prompt rendering, task counting, completion detection)
-- `tests/macos-smoke.sh` - Basic smoke tests for CLI commands
+- `tests/Gralph.Tests/ConfigServiceTests.cs` - Tests for config merging and overrides
+- `tests/Gralph.Tests/StateStoreTests.cs` - Tests for state persistence
+- `tests/Gralph.Tests/CoreLoopIntegrationTests.cs` - Loop integration checks
+- `tests/Gralph.Tests/CliArgumentParsingTests.cs` - CLI option parsing coverage
 
 ## Workflow
 
@@ -44,5 +41,5 @@ Test files:
 
 ## Style
 
-- Prefer clear, defensive Bash with explicit error handling.
-- Keep scripts portable across macOS and Linux.
+- Follow .NET conventions and keep code formatted.
+- Prefer small, testable classes with clear error messages.
