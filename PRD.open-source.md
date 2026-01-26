@@ -141,7 +141,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * Confirm model name matches Anthropic Claude Code CLI expectations.
   * Update if model name format is incorrect.
 - **Dependencies** None
-- [ ] OSS-7 Verify Claude Code model name accuracy
+- [x] OSS-7 Verify Claude Code model name accuracy
 
 ---
 

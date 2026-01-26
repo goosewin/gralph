@@ -55,3 +55,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - OSS-4 Updated shell completions to match backend model names.
 - OSS-5 Verified Codex CLI docs URL and install reference.
 - OSS-6 Verified OpenCode CLI docs URL and install reference.
+- OSS-7 Verified Claude Code model alias claude-opus-4-5.
