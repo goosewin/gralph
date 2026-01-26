@@ -47,7 +47,7 @@ jobs:
         run: |
           mkdir -p dist
           mkdir -p dist/gralph-${{ steps.version.outputs.version }}
-          cp gralph-rs/target/release/gralph-rs dist/gralph-${{ steps.version.outputs.version }}/gralph
+          cp gralph-rs/target/release/gralph dist/gralph-${{ steps.version.outputs.version }}/gralph
           cp -R completions dist/gralph-${{ steps.version.outputs.version }}/
           cp -R config dist/gralph-${{ steps.version.outputs.version }}/
           cp README.md LICENSE dist/gralph-${{ steps.version.outputs.version }}/

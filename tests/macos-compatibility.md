@@ -51,7 +51,7 @@ The binary can be placed in either:
 brew install tmux
 curl https://sh.rustup.rs -sSf | sh
 cargo build --release --manifest-path gralph-rs/Cargo.toml
-./gralph-rs/target/release/gralph-rs version
+./gralph-rs/target/release/gralph version
 ```
 
 ### Scenario 2: Basic Loop Execution

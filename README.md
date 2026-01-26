@@ -60,7 +60,7 @@ Release assets currently target Linux x86_64. For macOS or other platforms, buil
 git clone git@github.com:goosewin/gralph.git
 cd gralph
 cargo build --release --manifest-path gralph-rs/Cargo.toml
-./gralph-rs/target/release/gralph-rs --version
+./gralph-rs/target/release/gralph --version
 ```
 
 ### Rust Build and Install (cargo)
@@ -69,11 +69,7 @@ cargo build --release --manifest-path gralph-rs/Cargo.toml
 cargo install --path gralph-rs --locked
 ```
 
-The installed binary name is `gralph-rs`. If you want the `gralph` command name, add a symlink:
-
-```bash
-ln -s ~/.cargo/bin/gralph-rs ~/.local/bin/gralph
-```
+The installed binary name is `gralph`.
 
 ### Manual Installation
 
@@ -88,7 +84,7 @@ If you prefer not to use Cargo:
 Remove the binary and config manually:
 
 ```bash
-rm -f ~/.local/bin/gralph ~/.cargo/bin/gralph-rs
+rm -f ~/.local/bin/gralph ~/.cargo/bin/gralph
 rm -f ~/.config/gralph/config.yaml
 ```
 
@@ -285,7 +281,7 @@ gralph worktree finish C-6
 
 The legacy Bash implementation has been removed; the Rust CLI keeps the same commands, flags, PRD format, and file locations. The main differences:
 
-- Release tarballs ship a `gralph` binary; Cargo installs `gralph-rs` (symlink if desired).
+- Release tarballs ship a `gralph` binary; Cargo installs `gralph`.
 - Rust removes the `jq`, `socat/nc`, and `flock` dependencies; `tmux` is still used for background sessions.
 - Configuration and state stay in `~/.config/gralph/`, and logs remain under `.gralph/` in each project.
 - Shell completions are generated during the Rust build.

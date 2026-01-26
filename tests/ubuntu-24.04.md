@@ -7,11 +7,11 @@ Environment: Ubuntu 24.04.3 LTS
 
 - Rust toolchain installed: `cargo --version`
 - Build succeeds: `cargo build --release --manifest-path gralph-rs/Cargo.toml`
-- `./gralph-rs/target/release/gralph-rs version` returns current version
-- `./gralph-rs/target/release/gralph-rs help` prints CLI usage
-- `./gralph-rs/target/release/gralph-rs status` runs with empty state
-- `./gralph-rs/target/release/gralph-rs backends` lists available backends
-- `./gralph-rs/target/release/gralph-rs config list` shows configuration
+- `./gralph-rs/target/release/gralph version` returns current version
+- `./gralph-rs/target/release/gralph help` prints CLI usage
+- `./gralph-rs/target/release/gralph status` runs with empty state
+- `./gralph-rs/target/release/gralph backends` lists available backends
+- `./gralph-rs/target/release/gralph config list` shows configuration
 - Help output includes flags: `--no-tmux`, `--backend`, `--webhook`, `--variant`, `--prompt-template`
 - Server command available in help
 
@@ -21,15 +21,15 @@ Environment: Ubuntu 24.04.3 LTS
 cargo --version
 cargo build --release --manifest-path gralph-rs/Cargo.toml
 
-./gralph-rs/target/release/gralph-rs version
-./gralph-rs/target/release/gralph-rs help
-./gralph-rs/target/release/gralph-rs status
+./gralph-rs/target/release/gralph version
+./gralph-rs/target/release/gralph help
+./gralph-rs/target/release/gralph status
 
-./gralph-rs/target/release/gralph-rs backends
-./gralph-rs/target/release/gralph-rs config list
+./gralph-rs/target/release/gralph backends
+./gralph-rs/target/release/gralph config list
 
-./gralph-rs/target/release/gralph-rs help | grep -E '\-\-(no-tmux|backend|webhook|variant|prompt-template)'
-./gralph-rs/target/release/gralph-rs help | grep 'server'
+./gralph-rs/target/release/gralph help | grep -E '\-\-(no-tmux|backend|webhook|variant|prompt-template)'
+./gralph-rs/target/release/gralph help | grep 'server'
 ```
 
 Expected results:

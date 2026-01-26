@@ -63,6 +63,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - DOC-1 Refreshed shared docs for the Rust-only codebase.
 
 ### Fixed
+- Aligned the Cargo-installed binary name with release assets (`gralph`).
 - OSS-1 Removed duplicate introductory text from README.
 - OSS-2 Corrected Gemini CLI install hints and README instructions.
 - OSS-3 Updated backend model names to real or placeholder values.
