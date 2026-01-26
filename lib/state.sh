@@ -5,6 +5,10 @@
 GRALPH_STATE_DIR="${GRALPH_STATE_DIR:-$HOME/.config/gralph}"
 GRALPH_STATE_FILE="${GRALPH_STATE_FILE:-$GRALPH_STATE_DIR/state.json}"
 GRALPH_LOCK_FILE="${GRALPH_LOCK_FILE:-$GRALPH_STATE_DIR/state.lock}"
+GRALPH_LOCK_DIR="${GRALPH_LOCK_DIR:-${GRALPH_LOCK_FILE}.dir}"
+
+# Track which lock method is in use (flock or mkdir)
+GRALPH_LOCK_METHOD=""
 
 # Lock timeout in seconds (default 10 seconds)
 GRALPH_LOCK_TIMEOUT="${GRALPH_LOCK_TIMEOUT:-10}"
@@ -26,24 +30,51 @@ _acquire_lock() {
         mkdir -p "$GRALPH_STATE_DIR" 2>/dev/null || return 1
     fi
 
-    # Open lock file on designated FD
-    eval "exec $GRALPH_LOCK_FD>\"$GRALPH_LOCK_FILE\""
+    if command -v flock >/dev/null 2>&1; then
+        GRALPH_LOCK_METHOD="flock"
 
-    # Try to acquire exclusive lock with timeout
-    if ! flock -x -w "$timeout" "$GRALPH_LOCK_FD" 2>/dev/null; then
-        echo "Error: Failed to acquire state lock within ${timeout}s" >&2
-        return 1
+        # Open lock file on designated FD
+        eval "exec $GRALPH_LOCK_FD>\"$GRALPH_LOCK_FILE\""
+
+        # Try to acquire exclusive lock with timeout
+        if ! flock -x -w "$timeout" "$GRALPH_LOCK_FD" 2>/dev/null; then
+            echo "Error: Failed to acquire state lock within ${timeout}s" >&2
+            return 1
+        fi
+
+        return 0
     fi
 
-    return 0
+    # Fallback for systems without flock: use mkdir lock directory
+    GRALPH_LOCK_METHOD="mkdir"
+    local deadline=$((SECONDS + timeout))
+    while true; do
+        if mkdir "$GRALPH_LOCK_DIR" 2>/dev/null; then
+            echo "$$" > "$GRALPH_LOCK_DIR/pid" 2>/dev/null || true
+            return 0
+        fi
+
+        if (( SECONDS >= deadline )); then
+            echo "Error: Failed to acquire state lock within ${timeout}s" >&2
+            return 1
+        fi
+
+        sleep 0.1
+    done
 }
 
 # _release_lock() - Release exclusive lock on state file
 # Returns:
 #   0 on success
 _release_lock() {
-    # Release the lock by closing the file descriptor
-    eval "exec $GRALPH_LOCK_FD>&-" 2>/dev/null
+    if [[ "$GRALPH_LOCK_METHOD" == "flock" ]]; then
+        # Release the lock by closing the file descriptor
+        eval "exec $GRALPH_LOCK_FD>&-" 2>/dev/null
+    elif [[ "$GRALPH_LOCK_METHOD" == "mkdir" ]]; then
+        rm -rf "$GRALPH_LOCK_DIR" 2>/dev/null || true
+    fi
+
+    GRALPH_LOCK_METHOD=""
     return 0
 }
 
@@ -307,7 +338,7 @@ delete_session() {
 # _cleanup_stale_unlocked() - Internal: Cleanup stale sessions without locking
 # Called by cleanup_stale() which handles locking
 _cleanup_stale_unlocked() {
-    local mode="${1:-remove}"  # "remove" or "mark"
+    local mode="${1:-mark}"  # "mark" (default) or "remove"
 
     # Ensure state is initialized
     if ! init_state; then
@@ -378,12 +409,12 @@ _cleanup_stale_unlocked() {
     return 0
 }
 
-# cleanup_stale() - Remove sessions with dead PIDs
+# cleanup_stale() - Mark or remove sessions with dead PIDs
 # Uses file locking to ensure concurrent access safety
 # Finds sessions marked as "running" whose PIDs no longer exist
-# and either removes them or marks them as "stale"
+# and either marks them as "stale" (default) or removes them
 # Arguments:
-#   $1 - (optional) "remove" to delete stale sessions, otherwise marks as "stale"
+#   $1 - (optional) "mark" (default) to mark sessions as stale, or "remove" to delete them
 # Outputs:
 #   Prints names of cleaned up sessions to stdout (one per line)
 # Returns:
