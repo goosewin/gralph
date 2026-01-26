@@ -42,7 +42,7 @@ Expose the task block format in documentation to reduce confusion.
   * Selector returns the first unchecked task block.
   * Legacy single-line task parsing still works.
 - **Dependencies** None
-- [ ] P-EX-1 Select next task block
+- [x] P-EX-1 Select next task block
 
 ### Task P-EX-2
 
