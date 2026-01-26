@@ -184,7 +184,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * cmd/logs.go displays session logs with follow mode.
   * cmd/resume.go restarts stale sessions.
 - **Dependencies** GO-3, GO-7
-- [ ] GO-8 Implement stop, status, logs, and resume commands
+- [x] GO-8 Implement stop, status, logs, and resume commands
 
 ### Task GO-9
 
