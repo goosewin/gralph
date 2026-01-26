@@ -188,7 +188,7 @@ Support webhook notifications:
   * Backend loader selects correct implementation.
   * Model override support works.
 - **Dependencies** AOT-1
-- [ ] AOT-4 Create backend abstraction layer and Claude backend
+- [x] AOT-4 Create backend abstraction layer and Claude backend
 
 ### Task AOT-5
 
