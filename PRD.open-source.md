@@ -102,7 +102,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * Model suggestions in completions match backend implementations.
   * Remove fictional model names from completion options.
 - **Dependencies** OSS-3
-- [ ] OSS-4 Update shell completions with corrected model names
+- [x] OSS-4 Update shell completions with corrected model names
 
 ---
 

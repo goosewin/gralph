@@ -76,16 +76,20 @@ _gralph_completions() {
                     ;;
                 -b|--backend)
                     # Suggest available backends
-                    COMPREPLY=($(compgen -W "claude opencode" -- "$cur"))
+                    COMPREPLY=($(compgen -W "claude opencode gemini codex" -- "$cur"))
                     return 0
                     ;;
                 -m|--model)
-                    # Suggest models for both backends
+                    # Suggest models for all backends
                     # Claude models
                     local claude_models="claude-opus-4-5"
                     # OpenCode models (provider/model format)
-                    local opencode_models="opencode/gpt-5.2-codex anthropic/claude-opus-4-5 google/gemini-3-pro"
-                    COMPREPLY=($(compgen -W "$claude_models $opencode_models" -- "$cur"))
+                    local opencode_models="opencode/example-code-model anthropic/claude-opus-4-5 google/gemini-1.5-pro"
+                    # Gemini models (native backend)
+                    local gemini_models="gemini-1.5-pro"
+                    # Codex models (native backend)
+                    local codex_models="example-codex-model"
+                    COMPREPLY=($(compgen -W "$claude_models $opencode_models $gemini_models $codex_models" -- "$cur"))
                     return 0
                     ;;
                 --variant)
@@ -165,7 +169,7 @@ _gralph_completions() {
             esac
 
             if [[ "$cur" == -* ]]; then
-                COMPREPLY=($(compgen -W "--dir --output -o --goal --constraints --context --no-interactive --force" -- "$cur"))
+                COMPREPLY=($(compgen -W "--dir --output -o --goal --constraints --context --sources --allow-missing-context --multiline --no-interactive --interactive --force" -- "$cur"))
                 return 0
             fi
 

@@ -9,7 +9,7 @@
 
 _gralph() {
     local -a commands
-    local -a start_opts stop_opts logs_opts server_opts
+    local -a start_opts stop_opts logs_opts server_opts prd_create_opts prd_check_opts
 
     commands=(
         'start:Start a new gralph loop'
@@ -30,11 +30,13 @@ _gralph() {
         '--max-iterations[Max iterations before giving up]:iterations:(10 20 30 50 100)'
         '(-f --task-file)'{-f,--task-file}'[Task file path]:file:_files -g "*.md"'
         '--completion-marker[Completion promise text]:marker:(COMPLETE DONE FINISHED ALL_DONE)'
-        '(-b --backend)'{-b,--backend}'[AI backend to use]:backend:(claude opencode)'
-        '(-m --model)'{-m,--model}'[Model override]:model:(opencode/gpt-5.2-codex claude-opus-4-5 anthropic/claude-opus-4-5 google/gemini-3-pro)'
+        '(-b --backend)'{-b,--backend}'[AI backend to use]:backend:(claude opencode gemini codex)'
+        '(-m --model)'{-m,--model}'[Model override]:model:(claude-opus-4-5 opencode/example-code-model anthropic/claude-opus-4-5 google/gemini-1.5-pro gemini-1.5-pro example-codex-model)'
         '--variant[Model variant override]:variant:(xhigh high medium low)'
         '--webhook[Notification webhook URL]:url:'
         '--no-tmux[Run in foreground (blocks)]'
+        '--interactive[Force interactive prompts]'
+        '--no-interactive[Disable interactive prompts]'
         '(-h --help)'{-h,--help}'[Show help]'
     )
 
@@ -53,6 +55,26 @@ _gralph() {
         '(-p --port)'{-p,--port}'[Port number]:port:(8080 3000 8000 9000)'
         '(-t --token)'{-t,--token}'[Authentication token]:token:'
         '--open[Disable token requirement (not recommended)]'
+        '(-h --help)'{-h,--help}'[Show help]'
+    )
+
+    prd_create_opts=(
+        '--dir[Project directory]:directory:_directories'
+        '(-o --output)'{-o,--output}'[Output PRD file path]:file:_files -g "*.md"'
+        '--goal[Short description of what to build]:goal:'
+        '--constraints[Constraints or requirements]:constraints:'
+        '--context[Extra context files (comma-separated)]:context:'
+        '--sources[External URLs or references (comma-separated)]:sources:'
+        '--allow-missing-context[Allow missing Context Bundle paths]'
+        '--multiline[Enable multiline prompts]'
+        '--interactive[Force interactive prompts]'
+        '--no-interactive[Disable interactive prompts]'
+        '--force[Overwrite existing output file]'
+        '(-h --help)'{-h,--help}'[Show help]'
+    )
+
+    prd_check_opts=(
+        '--allow-missing-context[Allow missing Context Bundle paths]'
         '(-h --help)'{-h,--help}'[Show help]'
     )
 
@@ -100,7 +122,22 @@ _gralph() {
                         'check:Validate a PRD file'
                         'create:Generate a spec-compliant PRD'
                     )
-                    _describe -t prd_cmds 'prd subcommands' prd_cmds
+                    if (( CURRENT == 2 )); then
+                        _describe -t prd_cmds 'prd subcommands' prd_cmds
+                        return
+                    fi
+                    case $words[2] in
+                        create|init|new)
+                            _arguments $prd_create_opts
+                            ;;
+                        check)
+                            _arguments $prd_check_opts \
+                                '1:PRD file:_files -g "*.md"'
+                            ;;
+                        *)
+                            _describe -t prd_cmds 'prd subcommands' prd_cmds
+                            ;;
+                    esac
                     ;;
                 backends|status|version|help)
                     # No further arguments
