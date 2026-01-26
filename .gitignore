@@ -46,3 +46,6 @@ build/
 .env
 .env.local
 .env.*.local
+
+# OpenCode config (local)
+opencode.json
