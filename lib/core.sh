@@ -96,6 +96,7 @@ init_backend() {
 #   {completion_marker}  - The completion promise marker (e.g., COMPLETE)
 #   {iteration}          - Current iteration number
 #   {max_iterations}     - Maximum iterations allowed
+#   {task_block}         - Selected task block or placeholder string
 DEFAULT_PROMPT_TEMPLATE='Read {task_file} carefully. Find any task marked '\''- [ ]'\'' (unchecked).
 
 If unchecked tasks exist:
@@ -109,6 +110,9 @@ If ZERO '\''- [ ]'\'' remain (all complete):
 - Output ONLY: <promise>{completion_marker}</promise>
 
 CRITICAL: Never mention the promise unless outputting it as the completion signal.
+
+Task Block:
+{task_block}
 
 Iteration: {iteration}/{max_iterations}'
 
@@ -194,6 +198,7 @@ get_next_unchecked_task_block() {
 #   $3 - Completion marker (required)
 #   $4 - Current iteration (required)
 #   $5 - Max iterations (required)
+#   $6 - Task block text (optional)
 #
 # Returns:
 #   Prints the rendered prompt to stdout
@@ -204,6 +209,11 @@ render_prompt_template() {
     local completion_marker="$3"
     local iteration="$4"
     local max_iterations="$5"
+    local task_block="${6:-}"
+
+    if [[ -z "$task_block" ]]; then
+        task_block="No task block available."
+    fi
 
     # Substitute all template variables
     local rendered="$template"
@@ -211,6 +221,7 @@ render_prompt_template() {
     rendered="${rendered//\{completion_marker\}/$completion_marker}"
     rendered="${rendered//\{iteration\}/$iteration}"
     rendered="${rendered//\{max_iterations\}/$max_iterations}"
+    rendered="${rendered//\{task_block\}/$task_block}"
 
     echo "$rendered"
 }
@@ -303,9 +314,20 @@ run_iteration() {
         fi
     fi
 
+    # Build task block for prompt injection
+    local task_block
+    task_block=$(get_next_unchecked_task_block "$full_task_path")
+    if [[ -z "$task_block" ]]; then
+        local remaining_tasks
+        remaining_tasks=$(count_remaining_tasks "$full_task_path")
+        if [[ "$remaining_tasks" -gt 0 ]]; then
+            task_block=$(grep -m 1 -E '^\s*- \[ \]' "$full_task_path" 2>/dev/null || true)
+        fi
+    fi
+
     # Build the prompt using template
     local prompt
-    prompt=$(render_prompt_template "$prompt_template" "$task_file" "$completion_marker" "$iteration" "$max_iterations")
+    prompt=$(render_prompt_template "$prompt_template" "$task_file" "$completion_marker" "$iteration" "$max_iterations" "$task_block")
 
     # Change to project directory and run backend
     pushd "$project_dir" > /dev/null || return 1
