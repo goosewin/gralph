@@ -44,9 +44,13 @@ See `tests/macos-compatibility.md` for detailed platform notes.
 
 ### Quick Install (curl)
 
+The recommended installation method uses the latest GitHub release tarball:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/goosewin/gralph/main/install.sh | bash
+curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
 ```
+
+This downloads and runs the installer from the latest tagged release, ensuring you get a stable, tested version.
 
 ### From Source
 
