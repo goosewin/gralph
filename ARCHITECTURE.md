@@ -16,6 +16,9 @@ This document captures the high-level structure of gralph. It is a living summar
 `lib/config.sh` handles configuration loading and overrides. It merges default, global, and project YAML into a cache and exposes getters and setters used by the CLI and core loop.
 `gralph-rs/src/config.rs` mirrors configuration loading in Rust using serde_yaml for the ported CLI.
 
+`lib/backends/*.sh` provides backend adapters that invoke external CLIs.
+`gralph-rs/src/backend` defines the backend trait and CLI-backed implementations for the Rust port.
+
 `lib/notify.sh` formats and sends webhook notifications. It detects webhook targets, builds payloads for Slack/Discord/generic endpoints, and posts completion or failure events.
 
 ## Runtime Flow

@@ -123,7 +123,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
   * Claude backend spawns claude CLI and streams output.
   * Unit tests mock backend execution.
 - **Dependencies** RS-2
-- [ ] RS-4 Define backend trait and implement Claude backend
+- [x] RS-4 Define backend trait and implement Claude backend
 
 ---
 
