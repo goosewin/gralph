@@ -111,6 +111,54 @@ If you prefer not to use the installer:
 4. Copy `config/default.yaml` to `~/.config/gralph/config.yaml`
 5. (Optional) Copy `completions/` to `~/.config/gralph/completions/`
 
+### Uninstalling
+
+To remove gralph from your system, use the provided uninstaller:
+
+```bash
+# Interactive uninstall (prompts for confirmation)
+./uninstall.sh
+
+# Or download and run directly
+curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/uninstall.sh | bash
+```
+
+**Options:**
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--all` | `-a` | Remove everything including logs and state data |
+| `--force` | `-f` | Skip confirmation prompts |
+| `--help` | `-h` | Show help message |
+
+**What gets removed by default:**
+- gralph binary (from `~/.local/bin` or `/usr/local/bin`)
+- Library files (`~/.config/gralph/lib/`)
+- Shell completions (`~/.config/gralph/completions/` and system locations)
+- Configuration file (`~/.config/gralph/config.yaml`)
+
+**What gets removed with `--all`:**
+- All of the above
+- Session logs (`~/.gralph/*.log`)
+- State files (`~/.gralph/sessions.json`)
+- The entire `~/.gralph` directory
+
+**Examples:**
+
+```bash
+# Uninstall but keep logs and session data
+./uninstall.sh
+
+# Uninstall everything including user data
+./uninstall.sh --all
+
+# Uninstall without prompts (for scripts)
+./uninstall.sh --force
+
+# Complete removal without prompts
+./uninstall.sh --all --force
+```
+
 ## Backends
 
 gralph supports multiple AI coding assistants through a pluggable backend system.
