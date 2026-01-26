@@ -9,6 +9,7 @@ This document captures the high-level structure of gralph. It is a living summar
 `lib/core.sh` owns the execution loop. It loads backend adapters, renders prompt templates, runs iterations, counts remaining tasks, checks completion conditions, and handles loop lifecycle including logs, duration, and notifications.
 
 `lib/state.sh` provides persistent session state. It manages the state file, locking, and CRUD operations for sessions plus stale session cleanup so concurrent loops remain consistent.
+`internal/state` ports the session state store to Go with locking, atomic writes, and CRUD helpers.
 
 `lib/server.sh` implements the lightweight status API. It exposes endpoints for session status and stop commands, handles auth, and supports running via netcat or socat.
 
