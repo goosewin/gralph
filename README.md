@@ -137,9 +137,11 @@ curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/uninstall
 
 **What gets removed with `--all`:**
 - All of the above
-- Session logs (`~/.gralph/*.log`)
-- State files (`~/.gralph/sessions.json`)
-- The entire `~/.gralph` directory
+- State files (`~/.config/gralph/state.json` and `~/.config/gralph/state.lock`)
+- Default config template (`~/.config/gralph/config/default.yaml`) if present
+- Any remaining `~/.config/gralph/` data
+
+Project logs live under each project's `.gralph/` directory and are not removed automatically.
 
 **Examples:**
 
@@ -190,14 +192,14 @@ gralph start . --backend claude
 gralph start . --backend opencode
 
 # OpenCode models use provider/model format
-gralph start . --backend opencode --model opencode/gpt-5.2-codex
-gralph start . --backend opencode --model google/gemini-3-pro
+gralph start . --backend opencode --model opencode/example-code-model
+gralph start . --backend opencode --model google/gemini-1.5-pro
 ```
 
 **Models (format: provider/model):**
-- `opencode/gpt-5.2-codex` (default for opencode)
+- `opencode/example-code-model` (default for opencode)
 - `anthropic/claude-opus-4-5`
-- `google/gemini-3-pro`
+- `google/gemini-1.5-pro`
 
 ### Gemini CLI
 
@@ -212,7 +214,7 @@ gralph start . --backend gemini
 ```
 
 **Models:**
-- `gemini-3-pro` (default)
+- `gemini-1.5-pro` (default)
 
 ### Codex CLI
 
@@ -227,7 +229,7 @@ gralph start . --backend codex
 ```
 
 **Models:**
-- `gpt-5.2-codex` (default)
+- `example-codex-model` (default)
 
 ### Setting Default Backend
 
@@ -237,7 +239,7 @@ Set the default backend in your config file:
 # ~/.config/gralph/config.yaml
 defaults:
   backend: opencode
-  model: opencode/gpt-5.2-codex
+  model: opencode/example-code-model
 ```
 
 Or via environment variable:
@@ -376,9 +378,12 @@ Create `.gralph.yaml` in your project directory to override global settings.
 
 ### Environment Variables
 
+Legacy overrides (still supported):
 - `GRALPH_MAX_ITERATIONS` - Override max iterations
 - `GRALPH_TASK_FILE` - Override task file path
 - `GRALPH_COMPLETION_MARKER` - Override completion marker
+- `GRALPH_BACKEND` - Override default backend
+- `GRALPH_MODEL` - Override default model
 
 ## Configuration Options Reference
 
@@ -424,13 +429,13 @@ Settings for the OpenCode backend.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `opencode.default_model` | string | `opencode/gpt-5.2-codex` | Default model in provider/model format. |
+| `opencode.default_model` | string | `opencode/example-code-model` | Default model in provider/model format. |
 
 **Example:**
 
 ```yaml
 opencode:
-  default_model: opencode/gpt-5.2-codex
+  default_model: opencode/example-code-model
 ```
 
 ### Section: `gemini`
@@ -439,14 +444,14 @@ Settings for the Gemini CLI backend.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `gemini.default_model` | string | `gemini-3-pro` | Default model (gemini-3-pro). |
+| `gemini.default_model` | string | `gemini-1.5-pro` | Default model (gemini-1.5-pro). |
 | `gemini.flags` | array | `["--headless"]` | CLI flags passed to `gemini` command. |
 
 **Example:**
 
 ```yaml
 gemini:
-  default_model: gemini-3-pro
+  default_model: gemini-1.5-pro
   flags:
     - --headless
 ```
@@ -457,14 +462,14 @@ Settings for the Codex CLI backend.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `codex.default_model` | string | `gpt-5.2-codex` | Default model (gpt-5.2-codex). |
+| `codex.default_model` | string | `example-codex-model` | Default model (example-codex-model). |
 | `codex.flags` | array | `["--quiet", "--auto-approve"]` | CLI flags passed to `codex` command. |
 
 **Example:**
 
 ```yaml
 codex:
-  default_model: gpt-5.2-codex
+  default_model: example-codex-model
   flags:
     - --quiet
     - --auto-approve
@@ -710,15 +715,15 @@ claude:
     IS_SANDBOX: "1"
 
 opencode:
-  default_model: opencode/gpt-5.2-codex
+  default_model: opencode/example-code-model
 
 gemini:
-  default_model: gemini-3-pro
+  default_model: gemini-1.5-pro
   flags:
     - --headless
 
 codex:
-  default_model: gpt-5.2-codex
+  default_model: example-codex-model
   flags:
     - --quiet
     - --auto-approve
@@ -739,7 +744,7 @@ defaults:
   max_iterations: 100         # This project needs more iterations
   task_file: TASKS.md         # Use different task file
   backend: opencode           # Use OpenCode for this project
-  model: google/gemini-3-pro  # Use Gemini 3 Pro via OpenCode
+  model: google/gemini-1.5-pro  # Use Gemini 1.5 Pro via OpenCode
 
 notifications:
   webhook: https://hooks.slack.com/services/T00/B00/xxx  # Different webhook
@@ -762,11 +767,13 @@ COMMANDS:
   resume [name]       Resume crashed/stopped loops
   prd check <file>    Validate PRD task blocks
   prd create          Generate a spec-compliant PRD
+  worktree create <ID> Create task worktree
+  worktree finish <ID> Finish task worktree
   backends            List available AI backends
   config              Manage configuration
   server              Start status API server
   version             Show version
-  help                Show help message
+  help                Show this help message
 ```
 
 ### Command: `start`
@@ -789,8 +796,11 @@ gralph start <directory> [options]
 | `--completion-marker` | | Completion promise text | COMPLETE |
 | `--backend` | `-b` | AI backend to use (claude, opencode, gemini, codex) | claude |
 | `--model` | `-m` | Model to use (format depends on backend) | (from config) |
+| `--variant` | | Model variant override (backend-specific) | (none) |
+| `--prompt-template` | | Path to custom prompt template file | (none) |
 | `--webhook` | | Notification webhook URL | (none) |
 | `--no-tmux` | | Run in foreground (blocking) | false |
+| `--strict-prd` | | Validate PRD before starting the loop | false |
 
 **Examples:**
 ```bash
@@ -807,7 +817,7 @@ gralph start . --task-file TODO.md
 gralph start . --backend opencode
 
 # Use OpenCode with specific model
-gralph start . --backend opencode --model opencode/gpt-5.2-codex
+gralph start . --backend opencode --model opencode/example-code-model
 
 # Run in foreground (for debugging)
 gralph start . --no-tmux
@@ -931,6 +941,8 @@ gralph prd check <file> [options]
 | `--constraints` | | Constraints or non-functional requirements | (optional) |
 | `--context` | | Extra context files (comma-separated) | (none) |
 | `--sources` | | External URLs or references (comma-separated) | (none) |
+| `--backend` | `-b` | Backend for PRD generation | (from config) |
+| `--model` | `-m` | Model override for PRD generation | (from config) |
 | `--allow-missing-context` | | Allow missing Context Bundle paths | false |
 | `--multiline` | | Enable multiline prompts (interactive) | false |
 | `--interactive` | | Force interactive prompts | auto |
@@ -1077,7 +1089,7 @@ unchecked `- [ ]` line.
 ### Task P-1
 
 - **ID** P-1
-- **Context Bundle** `gralph/lib/core.sh`
+- **Context Bundle** `lib/core.sh`
 - **DoD** Add task block parsing
 - **Checklist**
   * Parser extracts task blocks from PRD.
@@ -1149,13 +1161,13 @@ Gralph runs stateless iterations, so shared documents provide durable context be
 The repo includes a minimal self-hosting example set plus a runner script that
 executes the example stages in order.
 
-- Example PRDs: `gralph/examples/README.md` (see `gralph/examples/PRD-Stage-P-Example.md` and `gralph/examples/PRD-Stage-A-Example.md`).
-- Runner script: `gralph/scripts/run-release.sh`.
+- Example PRDs: `examples/README.md` (see `examples/PRD-Stage-P-Example.md` and `examples/PRD-Stage-A-Example.md`).
+- Runner script: `scripts/run-release.sh`.
 
 Run the example release flow from the repo root:
 
 ```bash
-./gralph/scripts/run-release.sh
+./scripts/run-release.sh
 ```
 
 ## Usage Examples
@@ -1323,15 +1335,15 @@ Use OpenCode instead of Claude Code:
 # Use OpenCode with default model
 gralph start . --backend opencode
 
-# Use OpenCode with GPT-5.2 Codex
-gralph start . --backend opencode --model opencode/gpt-5.2-codex
+# Use OpenCode with example model
+gralph start . --backend opencode --model opencode/example-code-model
 
-# Use OpenCode with Gemini 3 Pro
-gralph start . --backend opencode --model google/gemini-3-pro
+# Use OpenCode with Gemini 1.5 Pro
+gralph start . --backend opencode --model google/gemini-1.5-pro
 
 # Set OpenCode as default in config
 gralph config set defaults.backend opencode
-gralph config set defaults.model opencode/gpt-5.2-codex
+gralph config set defaults.model opencode/example-code-model
 ```
 
 ### Example 10: Using Gemini CLI Backend
@@ -1339,12 +1351,12 @@ gralph config set defaults.model opencode/gpt-5.2-codex
 Use Gemini CLI for Google's AI models:
 
 ```bash
-# Use Gemini CLI with default model (gemini-3-pro)
+# Use Gemini CLI with default model (gemini-1.5-pro)
 gralph start . --backend gemini
 
 # Set Gemini as default in config
 gralph config set defaults.backend gemini
-gralph config set defaults.model gemini-3-pro
+gralph config set defaults.model gemini-1.5-pro
 ```
 
 ### Example 11: Using Codex CLI Backend
@@ -1352,12 +1364,12 @@ gralph config set defaults.model gemini-3-pro
 Use Codex CLI for OpenAI's coding models:
 
 ```bash
-# Use Codex CLI with default model (gpt-5.2-codex)
+# Use Codex CLI with default model (example-codex-model)
 gralph start . --backend codex
 
 # Set Codex as default in config
 gralph config set defaults.backend codex
-gralph config set defaults.model gpt-5.2-codex
+gralph config set defaults.model example-codex-model
 ```
 
 ## Troubleshooting

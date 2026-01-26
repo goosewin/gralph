@@ -37,7 +37,9 @@ echo_error() {
 CONFIG_DIR="$HOME/.config/gralph"
 LIB_DIR="$CONFIG_DIR/lib"
 COMPLETIONS_DIR="$CONFIG_DIR/completions"
-GRALPH_STATE_DIR="$HOME/.gralph"
+STATE_FILE="$CONFIG_DIR/state.json"
+LOCK_FILE="$CONFIG_DIR/state.lock"
+DEFAULT_CONFIG_DIR="$CONFIG_DIR/config"
 
 # Possible binary locations
 BINARY_LOCATIONS=(
@@ -107,12 +109,12 @@ What gets removed by default:
 
 What gets removed with --all:
     - All of the above
-    - Session logs (~/.gralph/*.log)
-    - State files (~/.gralph/sessions.json)
-    - The entire ~/.gralph directory
+    - State files (~/.config/gralph/state.json, ~/.config/gralph/state.lock)
+    - Default config template (~/.config/gralph/config/default.yaml)
+    - Any remaining ~/.config/gralph data
 
-Note: User data (logs, state) is NOT removed by default.
-      Use --all to include user data removal.
+Note: Project logs live under each project's .gralph/ directory and are not removed automatically.
+      State data is NOT removed by default; use --all to include state removal.
 
 EOF
     exit 0
@@ -337,24 +339,35 @@ uninstall_config() {
 
 # Remove logs and state (only with --all)
 uninstall_user_data() {
-    echo_info "Removing user data (logs and state)..."
+    echo_info "Removing state data..."
 
-    if [ -d "$GRALPH_STATE_DIR" ]; then
-        # Count files for user feedback
-        local log_count
-        log_count=$(find "$GRALPH_STATE_DIR" -name "*.log" 2>/dev/null | wc -l | tr -d ' ')
+    local removed_any=false
 
-        if [ "$log_count" -gt 0 ]; then
-            echo_warn "  Found $log_count log file(s)"
-        fi
+    if [ -f "$STATE_FILE" ]; then
+        echo_warn "  Found state file"
+        remove_file "$STATE_FILE"
+        removed_any=true
+    fi
 
-        if [ -f "$GRALPH_STATE_DIR/sessions.json" ]; then
-            echo_warn "  Found session state file"
-        fi
+    if [ -f "$LOCK_FILE" ]; then
+        echo_warn "  Found state lock"
+        remove_file "$LOCK_FILE"
+        removed_any=true
+    fi
 
-        remove_dir "$GRALPH_STATE_DIR"
-    else
-        echo_info "  No user data directory found"
+    if [ -d "$DEFAULT_CONFIG_DIR" ]; then
+        echo_warn "  Found default config template"
+        remove_dir "$DEFAULT_CONFIG_DIR"
+        removed_any=true
+    fi
+
+    # Remove config dir if now empty
+    if [ -d "$CONFIG_DIR" ] && [ -z "$(ls -A "$CONFIG_DIR" 2>/dev/null)" ]; then
+        remove_dir "$CONFIG_DIR"
+    fi
+
+    if [ "$removed_any" = false ]; then
+        echo_info "  No state data found"
     fi
 }
 
@@ -403,10 +416,19 @@ if [ -d "$COMPLETIONS_DIR" ]; then
     installed_components+=("Completions: $COMPLETIONS_DIR")
 fi
 
-# Check user data
-if [ -d "$GRALPH_STATE_DIR" ]; then
-    log_count=$(find "$GRALPH_STATE_DIR" -name "*.log" 2>/dev/null | wc -l | tr -d ' ')
-    installed_components+=("User data: $GRALPH_STATE_DIR ($log_count logs)")
+# Check state data
+state_items=()
+if [ -f "$STATE_FILE" ]; then
+    state_items+=("state.json")
+fi
+if [ -f "$LOCK_FILE" ]; then
+    state_items+=("state.lock")
+fi
+if [ -f "$DEFAULT_CONFIG_DIR/default.yaml" ]; then
+    state_items+=("config/default.yaml")
+fi
+if [ ${#state_items[@]} -gt 0 ]; then
+    installed_components+=("State data: ${state_items[*]} in $CONFIG_DIR")
 fi
 
 echo ""
@@ -468,10 +490,10 @@ if [ "$REMOVE_ALL" = true ]; then
     echo "All gralph components and data have been removed."
 else
     echo "gralph has been removed."
-    if [ -d "$GRALPH_STATE_DIR" ]; then
+    if [ -f "$STATE_FILE" ] || [ -f "$LOCK_FILE" ] || [ -f "$DEFAULT_CONFIG_DIR/default.yaml" ]; then
         echo ""
-        echo "Note: User data was preserved in $GRALPH_STATE_DIR"
-        echo "      To remove it, run: rm -rf $GRALPH_STATE_DIR"
+        echo "Note: State data was preserved in $CONFIG_DIR"
+        echo "      To remove it, run: rm -f $STATE_FILE $LOCK_FILE"
         echo "      Or use: ./uninstall.sh --all"
     fi
 fi

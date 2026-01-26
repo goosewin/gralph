@@ -66,3 +66,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - OSS-15 Added simple YAML array parsing and documented supported config lists.
 - OSS-16 Hardened core loop completion detection and parse error handling.
 - OSS-17 Documented PRD validation rules, sanitization behavior, and stack detection heuristics.
+- OSS-18 Reviewed README for CLI reference, model names, and doc accuracy.

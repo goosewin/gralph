@@ -295,7 +295,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * No broken links.
   * Troubleshooting section is complete.
 - **Dependencies** OSS-1, OSS-2, OSS-3, OSS-5, OSS-6, OSS-7, OSS-8
-- [ ] OSS-18 Final documentation review
+- [x] OSS-18 Final documentation review
 
 ---
 
