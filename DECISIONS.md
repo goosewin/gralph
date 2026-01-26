@@ -21,3 +21,27 @@ RISK_REGISTER, and CHANGELOG) and keep them in ASCII.
 - Store documents externally (wiki or drive) with a link in the repo.
 - Encode context in code comments only.
 - Use a single monolithic context file instead of separate documents.
+
+## D-002 Inject Task Blocks into Prompts
+- Date: 2026-01-25
+- Status: Accepted
+
+### Context
+Task execution needs more than a single checkbox line. Without surrounding
+context, iterations can miss scope, assumptions, and dependencies captured in
+the task block.
+
+### Decision
+Inject the full task block into the iteration prompt when available. When task
+blocks are absent, fall back to the single unchecked line to keep legacy PRDs
+working.
+
+### Rationale
+- Ensures the agent sees full task intent and constraints.
+- Preserves compatibility with existing single-line task formats.
+- Reduces mis-scoped work caused by missing local context.
+
+### Alternatives
+- Only include the unchecked line and rely on the agent to look up context.
+- Require task blocks and break legacy PRDs.
+- Attach the entire PRD instead of a scoped task block.
