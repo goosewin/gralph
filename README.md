@@ -159,6 +159,35 @@ Project logs live under each project's `.gralph/` directory and are not removed 
 ./uninstall.sh --all --force
 ```
 
+## Native AOT Builds (.NET 10)
+
+The .NET implementation ships as single-file, self-contained Native AOT
+executables for each platform. Use the build scripts to publish binaries
+into `dist/aot/<rid>`.
+
+```bash
+# Build for the current host RID
+scripts/publish-aot.sh
+
+# Build a specific RID
+scripts/publish-aot.sh --rid osx-arm64
+
+# Build the full matrix (run on matching OS/toolchains)
+scripts/publish-aot.sh --all
+```
+
+Artifacts land at `dist/aot/<rid>/gralph` (or `gralph.exe` on Windows).
+
+### Startup Time + Binary Size
+
+Measure startup time and binary size for a target RID:
+
+```bash
+scripts/verify-aot.sh --runs 15
+```
+
+Recorded metrics live in `docs/AOT-METRICS.md`.
+
 ## Backends
 
 gralph supports multiple AI coding assistants through a pluggable backend system.

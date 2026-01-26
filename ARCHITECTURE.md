@@ -45,3 +45,12 @@ notifications.
 Session state is stored in `~/.config/gralph/state.json` with a lock file
 at `~/.config/gralph/state.lock` (or a lock dir fallback). Loop logs are
 written to `.gralph/<session>.log` inside the target project directory.
+
+## Build and Release
+
+Native AOT builds are published with the scripts in `scripts/`:
+
+- `scripts/publish-aot.sh` builds single-file, self-contained executables into
+  `dist/aot/<rid>` for macOS, Linux, and Windows RIDs.
+- `scripts/verify-aot.sh` builds a target RID and prints startup timing and
+  binary size metrics for documentation.

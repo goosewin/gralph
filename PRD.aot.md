@@ -344,7 +344,7 @@ Support webhook notifications:
   * Startup time under 100ms verified.
   * Binary sizes documented.
 - **Dependencies** AOT-8, AOT-9, AOT-10, AOT-11, AOT-12, AOT-13, AOT-14, AOT-15
-- [ ] AOT-16 Configure cross-platform AOT builds and verify binaries
+- [x] AOT-16 Configure cross-platform AOT builds and verify binaries
 
 ### Task AOT-17
 
