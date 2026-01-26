@@ -359,6 +359,42 @@ Configuration values are loaded in the following order (later sources override e
 4. **Environment variables** (`GRALPH_*`)
 5. **CLI arguments** (e.g., `--max-iterations`)
 
+### Supported YAML Features
+
+Gralph uses a lightweight built-in YAML parser (no external dependencies). The following YAML features are supported:
+
+**Supported:**
+- Simple key-value pairs: `key: value`
+- Nested objects (up to 2 levels): `parent:\n  child: value`
+- String values (with or without quotes): `name: "quoted"` or `name: unquoted`
+- Numbers and booleans: `max: 30`, `enabled: true`
+- Comments: `# this is a comment`
+- Inline comments: `key: value  # comment`
+
+**Not Supported:**
+- Arrays/lists: `items:\n  - item1\n  - item2`
+- Multi-line strings (block scalars): `description: |`
+- Anchors and aliases: `&anchor`, `*alias`
+- Complex nested structures (3+ levels deep)
+- Flow style: `{key: value}` or `[item1, item2]`
+
+**Example of supported config:**
+```yaml
+# Global settings
+defaults:
+  max_iterations: 50
+  task_file: PRD.md
+  backend: claude
+
+notifications:
+  webhook: https://hooks.example.com/notify
+
+logging:
+  level: info
+```
+
+For complex configuration needs (arrays, deep nesting), use environment variable overrides or CLI arguments instead.
+
 ### Complete Configuration Example
 
 ```yaml
