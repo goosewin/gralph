@@ -41,6 +41,7 @@ backend_run_iteration() {
     local prompt="$1"
     local model="$2"
     local output_file="$3"
+    local raw_output_file="${GRALPH_RAW_OUTPUT_FILE:-}"
 
     if [[ -z "$prompt" ]]; then
         echo "Error: prompt is required" >&2
@@ -65,8 +66,15 @@ backend_run_iteration() {
 
     # Execute OpenCode and capture/stream output
     # OpenCode 'run' command outputs text directly, not JSON
-    opencode run "${opencode_args[@]}" "$prompt" 2>&1 \
-        | tee "$output_file"
+    if [[ -n "$raw_output_file" ]]; then
+        : > "$raw_output_file"
+        opencode run "${opencode_args[@]}" "$prompt" 2>&1 \
+            | tee "$raw_output_file" \
+            | tee "$output_file"
+    else
+        opencode run "${opencode_args[@]}" "$prompt" 2>&1 \
+            | tee "$output_file"
+    fi
 
     return "${PIPESTATUS[0]}"
 }

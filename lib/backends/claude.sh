@@ -43,6 +43,7 @@ backend_run_iteration() {
     local prompt="$1"
     local model="$2"
     local output_file="$3"
+    local raw_output_file="${GRALPH_RAW_OUTPUT_FILE:-}"
 
     if [[ -z "$prompt" ]]; then
         echo "Error: prompt is required" >&2
@@ -71,12 +72,22 @@ backend_run_iteration() {
     claude_args+=(-p "$prompt")
 
     # Execute Claude and capture/stream output
+    # - Capture raw output for debugging (optional)
     # - Capture full JSON to output file
     # - Stream human-readable text to stdout
-    IS_SANDBOX=1 claude "${claude_args[@]}" 2>&1 \
-        | grep --line-buffered '^{' \
-        | tee "$output_file" \
-        | jq --unbuffered -rj "$_CLAUDE_JQ_STREAM_TEXT"
+    if [[ -n "$raw_output_file" ]]; then
+        : > "$raw_output_file"
+        IS_SANDBOX=1 claude "${claude_args[@]}" 2>&1 \
+            | tee "$raw_output_file" \
+            | grep --line-buffered '^{' \
+            | tee "$output_file" \
+            | jq --unbuffered -rj "$_CLAUDE_JQ_STREAM_TEXT"
+    else
+        IS_SANDBOX=1 claude "${claude_args[@]}" 2>&1 \
+            | grep --line-buffered '^{' \
+            | tee "$output_file" \
+            | jq --unbuffered -rj "$_CLAUDE_JQ_STREAM_TEXT"
+    fi
 
     return "${PIPESTATUS[0]}"
 }

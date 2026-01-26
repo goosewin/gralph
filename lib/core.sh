@@ -301,6 +301,7 @@ run_iteration() {
     local model="$6"
     local log_file="$7"
     local prompt_template="$8"
+    local raw_output_file=""
 
     # Validate required arguments
     if [[ -z "$project_dir" ]]; then
@@ -340,6 +341,14 @@ run_iteration() {
     local tmpfile
     tmpfile=$(mktemp)
     trap "rm -f '$tmpfile'" RETURN
+
+    if [[ -n "$log_file" ]]; then
+        if [[ "$log_file" == *.log ]]; then
+            raw_output_file="${log_file%.log}.raw.log"
+        else
+            raw_output_file="${log_file}.raw.log"
+        fi
+    fi
 
     # Resolve prompt template (argument > file override > default)
     if [[ -z "$prompt_template" ]]; then
@@ -385,14 +394,25 @@ run_iteration() {
     # Execute backend and capture/stream output
     local backend_exit_code
     if [[ -n "$log_file" ]]; then
-        backend_run_iteration "$prompt" "$model" "$tmpfile" | tee -a "$log_file"
+        GRALPH_RAW_OUTPUT_FILE="$raw_output_file" backend_run_iteration "$prompt" "$model" "$tmpfile" | tee -a "$log_file"
         backend_exit_code=${PIPESTATUS[0]}
     else
-        backend_run_iteration "$prompt" "$model" "$tmpfile"
+        GRALPH_RAW_OUTPUT_FILE="$raw_output_file" backend_run_iteration "$prompt" "$model" "$tmpfile"
         backend_exit_code=$?
     fi
 
     popd > /dev/null || return 1
+
+    # If no output was produced, treat as failure and surface raw output path
+    if [[ ! -s "$tmpfile" ]]; then
+        if [[ -n "$log_file" ]]; then
+            echo "Error: backend '$GRALPH_BACKEND' produced no JSON output." | tee -a "$log_file"
+            if [[ -n "$raw_output_file" ]] && [[ -s "$raw_output_file" ]]; then
+                echo "Raw output saved to: $raw_output_file" | tee -a "$log_file"
+            fi
+        fi
+        backend_exit_code=1
+    fi
 
     # Extract the final result using backend's parser
     local result
@@ -606,8 +626,9 @@ run_loop() {
             echo "Zero tasks remaining before iteration, verifying completion..." | tee -a "$log_file"
         fi
 
-        # Run single iteration
-        run_iteration \
+        # Run single iteration (capture failures without exiting due to set -e)
+        local iteration_exit_code=0
+        if run_iteration \
             "$project_dir" \
             "$task_file" \
             "$iteration" \
@@ -615,9 +636,31 @@ run_loop() {
             "$completion_marker" \
             "$model" \
             "$log_file" \
-            "$prompt_template"
+            "$prompt_template"; then
+            iteration_exit_code=0
+        else
+            iteration_exit_code=$?
+        fi
 
-        local iteration_exit_code=$?
+        if [[ $iteration_exit_code -ne 0 ]]; then
+            local raw_log
+            if [[ "$log_file" == *.log ]]; then
+                raw_log="${log_file%.log}.raw.log"
+            else
+                raw_log="${log_file}.raw.log"
+            fi
+
+            echo "Iteration failed with exit code $iteration_exit_code." | tee -a "$log_file"
+            if [[ -s "$raw_log" ]]; then
+                echo "Raw backend output: $raw_log" | tee -a "$log_file"
+            fi
+
+            if [[ -n "$GRALPH_STATE_CALLBACK" ]] && declare -f "$GRALPH_STATE_CALLBACK" > /dev/null; then
+                "$GRALPH_STATE_CALLBACK" "$session_name" "$iteration" "failed" "$remaining_before"
+            fi
+
+            return 1
+        fi
 
         # Get the result from the iteration
         local result="$GRALPH_ITERATION_RESULT"
