@@ -1,0 +1,23 @@
+examples/PRD-Stage-P-Example.md
+  29528314e78f4d81 45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "8fdda3b90e6df0b5a2ac6b46399fdc5b985afd6a",
+  "prompts": {
+    "29528314e78f4d81": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cbe32d9a-a3e6-4103-af45-d54a884bcd29",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
