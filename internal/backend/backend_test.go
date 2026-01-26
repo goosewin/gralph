@@ -5,17 +5,23 @@ import (
 
 	"github.com/goosewin/gralph/internal/backend"
 	_ "github.com/goosewin/gralph/internal/backend/claude"
+	_ "github.com/goosewin/gralph/internal/backend/codex"
+	_ "github.com/goosewin/gralph/internal/backend/gemini"
+	_ "github.com/goosewin/gralph/internal/backend/opencode"
 )
 
-func TestRegistryLoadsClaude(t *testing.T) {
-	registered, ok := backend.Get("claude")
-	if !ok {
-		t.Fatalf("expected claude backend to be registered")
-	}
-	if registered == nil {
-		t.Fatalf("expected backend instance")
-	}
-	if len(registered.GetModels()) == 0 {
-		t.Fatalf("expected claude models")
+func TestRegistryLoadsBackends(t *testing.T) {
+	backends := []string{"claude", "opencode", "gemini", "codex"}
+	for _, name := range backends {
+		registered, ok := backend.Get(name)
+		if !ok {
+			t.Fatalf("expected %s backend to be registered", name)
+		}
+		if registered == nil {
+			t.Fatalf("expected backend instance for %s", name)
+		}
+		if len(registered.GetModels()) == 0 {
+			t.Fatalf("expected %s models", name)
+		}
 	}
 }

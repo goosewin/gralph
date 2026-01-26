@@ -145,7 +145,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * internal/backend/codex implements Codex CLI backend.
   * All backends pass interface validation.
 - **Dependencies** GO-4
-- [ ] GO-5 Implement OpenCode, Gemini, and Codex backends
+- [x] GO-5 Implement OpenCode, Gemini, and Codex backends
 
 ### Task GO-6
 
