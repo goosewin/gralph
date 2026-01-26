@@ -325,7 +325,33 @@ var config = new Command("config", "Manage configuration");
 config.SetAction(_ => Console.WriteLine("config is not implemented yet."));
 
 var server = new Command("server", "Start status API server");
-server.SetAction(_ => Console.WriteLine("server is not implemented yet."));
+var serverHostOption = new Option<string?>("--host", "Host/IP to bind to");
+var serverHostShortOption = new Option<string?>("-H", "Host/IP to bind to");
+var serverPortOption = new Option<int?>("--port", "Port number");
+var serverPortShortOption = new Option<int?>("-p", "Port number");
+var serverTokenOption = new Option<string?>("--token", "Authentication token");
+var serverTokenShortOption = new Option<string?>("-t", "Authentication token");
+var serverOpenOption = new Option<bool>("--open", "Disable token requirement (use with caution)");
+server.Add(serverHostOption);
+server.Add(serverHostShortOption);
+server.Add(serverPortOption);
+server.Add(serverPortShortOption);
+server.Add(serverTokenOption);
+server.Add(serverTokenShortOption);
+server.Add(serverOpenOption);
+server.SetAction(parseResult =>
+{
+    var handler = new ServerCommandHandler(new StateStore());
+    var exitCode = handler.ExecuteAsync(new ServerCommandSettings
+    {
+        Host = parseResult.GetValue(serverHostOption) ?? parseResult.GetValue(serverHostShortOption),
+        Port = parseResult.GetValue(serverPortOption) ?? parseResult.GetValue(serverPortShortOption),
+        Token = parseResult.GetValue(serverTokenOption) ?? parseResult.GetValue(serverTokenShortOption),
+        Open = parseResult.GetValue(serverOpenOption)
+    }, CancellationToken.None).GetAwaiter().GetResult();
+
+    Environment.ExitCode = exitCode;
+});
 
 var version = new Command("version", "Show version");
 version.SetAction(_ => Console.WriteLine(Version));

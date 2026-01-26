@@ -16,6 +16,8 @@ This document captures the high-level structure of gralph. It is a living summar
 
 `src/Gralph/Prd` handles PRD task validation, generation prompts, stack detection, and sanitization of generated PRDs.
 
+`src/Gralph/Commands/ServerCommandHandler.cs` hosts the HTTP status server using minimal APIs with auth, CORS, and session status/stop endpoints.
+
 `bin/gralph` is the CLI entrypoint. It parses commands, loads configuration defaults, wires in the shared libraries, and dispatches to subcommands like start/stop/status/server while managing session setup and logging paths.
 
 `lib/core.sh` owns the execution loop. It loads backend adapters, renders prompt templates, runs iterations, counts remaining tasks, checks completion conditions, and handles loop lifecycle including logs, duration, and notifications.

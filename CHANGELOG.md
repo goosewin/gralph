@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - DOTNET-7 Implemented start command with session state and background execution.
 - DOTNET-8 Implemented status, stop, logs, and resume commands.
 - DOTNET-9 Implemented PRD validation and generation commands with sanitization.
+- DOTNET-10 Implemented HTTP status server with minimal APIs, auth, and CORS.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.
 - C-2 Added worktree command routing and validation.

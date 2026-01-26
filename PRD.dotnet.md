@@ -198,7 +198,7 @@ The codebase must be structured for unit testing with dependency injection and i
   * CORS headers for browser access configured.
   * Server binds to configurable host and port.
 - **Dependencies** DOTNET-2, DOTNET-4
-- [ ] DOTNET-10 Implement HTTP status server
+- [x] DOTNET-10 Implement HTTP status server
 
 ### Task DOTNET-11
 
