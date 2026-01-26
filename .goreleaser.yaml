@@ -23,12 +23,16 @@ archives:
       - gralph
     format: tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+      - config/default.yaml
+      - completions/gralph.bash
+      - completions/gralph.zsh
+      - completions/gralph.fish
 
 checksum:
   name_template: "checksums.txt"
 
 snapshot:
   name_template: "{{ .Version }}-snapshot"
-
-release:
-  disable: true
