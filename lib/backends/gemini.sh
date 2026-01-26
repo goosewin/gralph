@@ -102,12 +102,12 @@ backend_parse_text() {
 # backend_get_models() - Get list of supported models
 #
 # Gemini CLI supports Gemini models:
-# - gemini-3-pro
+# - gemini-1.5-pro
 backend_get_models() {
-    echo "gemini-3-pro"
+    echo "gemini-1.5-pro"
 }
 
 # backend_get_default_model() - Get the default model for this backend
 backend_get_default_model() {
-    echo "gemini-3-pro"
+    echo "gemini-1.5-pro"
 }

@@ -89,7 +89,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * Replace with actual model names or clearly marked placeholders.
   * Update config/default.yaml comments accordingly.
 - **Dependencies** None
-- [ ] OSS-3 Update model names to real or clearly placeholder values
+- [x] OSS-3 Update model names to real or clearly placeholder values
 
 ---
 

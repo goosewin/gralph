@@ -103,15 +103,13 @@ backend_parse_text() {
 
 # backend_get_models() - Get list of supported models
 #
-# Codex CLI supports various OpenAI models:
-# - o3
-# - o4-mini
-# - gpt-4.1
+# Codex CLI supports OpenAI models (placeholder shown):
+# - example-codex-model
 backend_get_models() {
-    echo "o3 o4-mini gpt-4.1"
+    echo "example-codex-model"
 }
 
 # backend_get_default_model() - Get the default model for this backend
 backend_get_default_model() {
-    echo "o3"
+    echo "example-codex-model"
 }

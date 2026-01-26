@@ -100,14 +100,14 @@ backend_parse_text() {
 # backend_get_models() - Get list of supported models
 #
 # OpenCode supports multiple providers. Supported models include:
-# - opencode/gpt-5.2-codex
+# - opencode/example-code-model
 # - anthropic/claude-opus-4-5
-# - google/gemini-3-pro
+# - google/gemini-1.5-pro
 backend_get_models() {
-    echo "opencode/gpt-5.2-codex anthropic/claude-opus-4-5 google/gemini-3-pro"
+    echo "opencode/example-code-model anthropic/claude-opus-4-5 google/gemini-1.5-pro"
 }
 
 # backend_get_default_model() - Get the default model for this backend
 backend_get_default_model() {
-    echo "opencode/gpt-5.2-codex"
+    echo "opencode/example-code-model"
 }

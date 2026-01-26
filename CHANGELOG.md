@@ -51,3 +51,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - OSS-1 Removed duplicate introductory text from README.
 - OSS-2 Corrected Gemini CLI install hints and README instructions.
+- OSS-3 Updated backend model names to real or placeholder values.
