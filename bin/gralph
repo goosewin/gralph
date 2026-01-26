@@ -113,6 +113,14 @@ success() {
     echo -e "${GREEN}Success:${NC} $1"
 }
 
+# Ensure git working tree is clean
+ensure_git_clean() {
+    local repo_root="$1"
+    if [[ -n "$(git -C "$repo_root" status --porcelain 2>/dev/null)" ]]; then
+        die "Git working tree is dirty. Commit or stash changes before running worktree commands."
+    fi
+}
+
 # Escape a string for safe inclusion in single-quoted shell arguments
 # This replaces ' with '\'' (end quote, escaped quote, start quote)
 escape_single_quote() {
@@ -1327,6 +1335,8 @@ cmd_worktree_create() {
         die "Not a git repository (or any of the parent directories)"
     fi
 
+    ensure_git_clean "$repo_root"
+
     local worktrees_dir="$repo_root/.worktrees"
     mkdir -p "$worktrees_dir"
 
@@ -1364,12 +1374,18 @@ cmd_worktree_finish() {
         die "Not a git repository (or any of the parent directories)"
     fi
 
+    ensure_git_clean "$repo_root"
+
     local branch_name="task-$task_id"
     local worktrees_dir="$repo_root/.worktrees"
     local worktree_path="$worktrees_dir/$branch_name"
 
     if ! git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch_name"; then
         die "Branch does not exist: $branch_name"
+    fi
+
+    if [[ ! -d "$worktree_path" ]]; then
+        die "Worktree path is missing: $worktree_path"
     fi
 
     local current_branch
