@@ -221,7 +221,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
   * GitHub Actions workflow runs tests on push.
   * Code coverage threshold set.
 - **Dependencies** RS-10
-- [ ] RS-11 Add unit and integration tests with CI workflow
+- [x] RS-11 Add unit and integration tests with CI workflow
 
 ---
 

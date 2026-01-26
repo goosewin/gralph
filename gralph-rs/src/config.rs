@@ -352,4 +352,66 @@ mod tests {
         env::remove_var("GRALPH_MAX_ITERATIONS");
         env::remove_var("GRALPH_DEFAULT_CONFIG");
     }
+
+    #[test]
+    fn list_includes_nested_entries() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(
+            &default_path,
+            "defaults:\n  max_iterations: 5\nlogging:\n  level: info\n",
+        );
+        env::set_var("GRALPH_DEFAULT_CONFIG", &default_path);
+
+        let config = Config::load(None).unwrap();
+        let list = config.list();
+        assert!(list
+            .iter()
+            .any(|(key, value)| key == "defaults.max_iterations" && value == "5"));
+        assert!(list
+            .iter()
+            .any(|(key, value)| key == "logging.level" && value == "info"));
+
+        env::remove_var("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn arrays_flatten_to_csv() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(
+            &default_path,
+            "test:\n  flags:\n    - --headless\n    - --verbose\n",
+        );
+        env::set_var("GRALPH_DEFAULT_CONFIG", &default_path);
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(
+            config.get("test.flags").as_deref(),
+            Some("--headless,--verbose")
+        );
+
+        env::remove_var("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn exists_returns_true_for_env_override() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 1\n");
+        env::set_var("GRALPH_DEFAULT_CONFIG", &default_path);
+        env::set_var("GRALPH_TEST_FLAGS", "1");
+
+        let config = Config::load(None).unwrap();
+        assert!(config.exists("test.flags"));
+
+        env::remove_var("GRALPH_TEST_FLAGS");
+        env::remove_var("GRALPH_DEFAULT_CONFIG");
+    }
 }

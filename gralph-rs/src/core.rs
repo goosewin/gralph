@@ -873,4 +873,11 @@ mod tests {
         assert!(blocks[0].contains("RS-1"));
         assert!(blocks[1].contains("RS-2"));
     }
+
+    #[test]
+    fn normalize_context_files_trims_and_splits() {
+        let raw = "README.md,  ARCHITECTURE.md ,";
+        let normalized = normalize_context_files(raw);
+        assert_eq!(normalized, "README.md\nARCHITECTURE.md");
+    }
 }

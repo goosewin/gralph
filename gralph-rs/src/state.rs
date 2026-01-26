@@ -443,4 +443,47 @@ mod tests {
         );
         assert_eq!(session.get("pid").and_then(|v| v.as_i64()), Some(123));
     }
+
+    #[test]
+    fn set_get_list_and_delete_session_flow() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        store.init_state().unwrap();
+
+        store
+            .set_session("alpha", &[("status", "running"), ("pid", "123")])
+            .unwrap();
+        let session = store.get_session("alpha").unwrap().unwrap();
+        assert_eq!(
+            session.get("status").and_then(|v| v.as_str()),
+            Some("running")
+        );
+        assert_eq!(session.get("pid").and_then(|v| v.as_i64()), Some(123));
+
+        let sessions = store.list_sessions().unwrap();
+        assert_eq!(sessions.len(), 1);
+
+        store.delete_session("alpha").unwrap();
+        assert!(store.get_session("alpha").unwrap().is_none());
+    }
+
+    #[test]
+    fn cleanup_stale_marks_dead_sessions() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        store.init_state().unwrap();
+
+        store
+            .set_session("stale-session", &[("status", "running"), ("pid", "999999")])
+            .unwrap();
+
+        let cleaned = store.cleanup_stale(CleanupMode::Mark).unwrap();
+        assert_eq!(cleaned, vec!["stale-session".to_string()]);
+
+        let session = store.get_session("stale-session").unwrap().unwrap();
+        assert_eq!(
+            session.get("status").and_then(|v| v.as_str()),
+            Some("stale")
+        );
+    }
 }
