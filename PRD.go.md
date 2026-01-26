@@ -312,6 +312,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * Module diagram shows package dependencies.
 - **Dependencies** GO-17
 - [ ] GO-18 Update architecture documentation
+- [x] GO-18 Update architecture documentation
 
 ---
 

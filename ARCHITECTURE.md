@@ -26,6 +26,38 @@ This document captures the high-level structure of gralph. It is a living summar
 
 `lib/notify.sh` formats and sends webhook notifications. It detects webhook targets, builds payloads for Slack/Discord/generic endpoints, and posts completion or failure events.
 
+## Go Package Structure
+
+The Go port organizes functionality into internal packages that mirror the bash
+modules. The command surface lives in `cmd` and binds flags to the core
+packages listed below.
+
+- `cmd` Cobra command tree and CLI wiring.
+- `internal/core` loop engine, prompt rendering, task selection.
+- `internal/prd` PRD parsing, validation, sanitization helpers.
+- `internal/backend` backend interfaces and CLI adapters.
+- `internal/state` session state storage and locking.
+- `internal/config` configuration loading and overrides.
+- `internal/server` HTTP status API.
+- `internal/notify` webhook notifications.
+
+## Module Diagram
+
+Package dependencies flow from `cmd` into service packages, with the core loop
+depending on config, state, PRD helpers, and backends.
+
+```
+cmd
+ |-- internal/core
+ |     |-- internal/config
+ |     |-- internal/state
+ |     |-- internal/prd
+ |     `-- internal/backend
+ |-- internal/server
+ |     `-- internal/state
+ `-- internal/notify
+```
+
 ## Runtime Flow
 
 The CLI initializes configuration and starts the core loop. The loop

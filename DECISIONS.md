@@ -161,3 +161,25 @@ the result, and prints the exact loop command to run next.
 - Maintain only a static PRD template and manual editing.
 - Build an external generator script outside the CLI.
 - Skip validation and rely on runtime failures.
+
+## D-008 Go Port Architecture Alignment
+- Date: 2026-01-26
+- Status: Accepted
+
+### Context
+The Go implementation needs a clear mapping from bash modules to Go packages so
+contributors can navigate the codebase and reason about dependencies.
+
+### Decision
+Align Go package structure with existing module boundaries and document the
+package dependency flow in ARCHITECTURE.
+
+### Rationale
+- Preserves functional parity by mirroring known module responsibilities.
+- Keeps dependency direction explicit for the core loop and CLI commands.
+- Reduces onboarding time when moving between bash and Go implementations.
+
+### Alternatives
+- Reorganize packages by technical layer (handlers/services) without mapping to
+  bash modules.
+- Defer documentation and let structure emerge organically.

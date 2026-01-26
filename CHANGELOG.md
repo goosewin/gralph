@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - GO-15 Added Cobra completion command and generated bash, zsh, and fish scripts.
 - GO-16 Added Go build configuration with Goreleaser and CI builds.
 - GO-17 Updated README installation docs for Go binary releases.
+- GO-18 Updated architecture and decisions docs for Go package structure.
 - Initial public release notes for the gralph CLI.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.
