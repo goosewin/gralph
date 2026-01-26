@@ -346,6 +346,11 @@ public sealed class StateStore
             stateLock = null;
             Directory.CreateDirectory(stateDir);
 
+            if (OperatingSystem.IsMacOS())
+            {
+                return TryAcquireDirectoryLock(lockDir, timeout, out stateLock);
+            }
+
             var stopwatch = Stopwatch.StartNew();
             var lockUnavailable = false;
 
@@ -478,7 +483,10 @@ public sealed class StateStore
             {
                 try
                 {
-                    _lockStream.Unlock(0, 0);
+                    if (!OperatingSystem.IsMacOS())
+                    {
+                        _lockStream.Unlock(0, 0);
+                    }
                 }
                 catch (IOException)
                 {
