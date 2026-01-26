@@ -428,7 +428,11 @@ determine_install_path() {
                 return 1
             }
             INSTALL_PATH="$custom_path"
-            NEEDS_PATH_UPDATE=! is_in_path "$custom_path"
+            if is_in_path "$custom_path"; then
+                NEEDS_PATH_UPDATE=false
+            else
+                NEEDS_PATH_UPDATE=true
+            fi
             ;;
         *)
             echo_error "Invalid choice."
