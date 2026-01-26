@@ -3,6 +3,7 @@
 ## Supported Versions
 
 We support security fixes for the latest release on the main branch.
+Prebuilt release assets are published with checksums; verify downloads before running.
 
 ## Reporting a Vulnerability
 

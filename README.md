@@ -13,151 +13,77 @@ Autonomous AI coding loops using Claude Code or OpenCode. Spawns fresh AI coding
 
 ## Requirements
 
-- At least one AI backend:
+- At least one AI backend CLI:
   - `claude` CLI (Claude Code) - `npm install -g @anthropic-ai/claude-code`
   - `opencode` CLI (OpenCode) - See https://opencode.ai/docs/cli/
   - `gemini` CLI (Gemini CLI) - `npm install -g @google/gemini-cli` (optional)
   - `codex` CLI (Codex CLI) - `npm install -g @openai/codex` (optional)
-- `jq` for JSON parsing
-- `tmux` for session management
-- `bash` 4.0+
-- `curl` (optional, for notifications)
-- `socat` or `nc` (optional, required for `gralph server`)
-- `flock` (optional, for safer concurrent state access - built-in on Linux, available via Homebrew on macOS)
+- `git` (required for worktree commands)
+- .NET 10 SDK (only for building from source or running tests)
 
 ### Platform Support
 
 | Platform | Status | Notes |
 |----------|--------|-------|
-| Linux | ✅ Fully supported | Primary development platform |
-| macOS 12+ | ✅ Supported | Requires Homebrew dependencies |
-| WSL2 | ⚠️ Best effort | Should work like Linux |
-
-**macOS Users:** Install dependencies via Homebrew:
-```bash
-brew install bash jq tmux
-```
+| Linux | ✅ Supported | Primary development platform |
+| macOS 12+ | ✅ Supported | Native AOT binaries |
+| Windows 10/11 | ✅ Supported | win-x64 AOT binaries |
+| WSL2 | ⚠️ Best effort | Should behave like Linux |
 
 ## Installation
 
-Gralph uses a dual-mode installer that automatically detects whether it's being piped from curl or run from a local clone. Both methods use the same `install.sh` script.
+Gralph ships as a self-contained .NET Native AOT binary. Download the release asset for your platform or build from source.
 
-### Quick Install (curl)
+### Quick Install (Release Asset)
 
-The recommended installation method uses the latest GitHub release tarball:
+1. Download the archive for your RID from GitHub Releases.
+2. Extract it and move `gralph` (or `gralph.exe`) into your PATH.
+3. Keep the `config/` directory next to the binary, or set `GRALPH_DEFAULT_CONFIG` to its path.
 
-```bash
-curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
-```
-
-This downloads the installer and runs it in **bootstrap mode**, which:
-1. Fetches the latest release tarball from GitHub
-2. Extracts it to a temporary directory
-3. Installs the binary, libraries, and completions
-4. Cleans up the temporary files
-
-#### Bootstrap Environment Overrides
-
-When installing via `curl|bash`, you can customize the download source using environment variables:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GRALPH_REPO` | GitHub repository slug | `goosewin/gralph` |
-| `GRALPH_REF` | Git ref (tag or branch) to download | Latest release |
-| `GRALPH_ASSET_URL` | Direct URL to tarball (overrides repo/ref) | (none) |
-
-**Examples:**
+Example (macOS / Linux):
 
 ```bash
-# Install from a fork
-GRALPH_REPO=myuser/gralph-fork curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
-
-# Install a specific version
-GRALPH_REF=v1.2.0 curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
-
-# Install from a custom URL
-GRALPH_ASSET_URL=https://example.com/gralph.tar.gz curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
+curl -L -o gralph.tar.gz https://github.com/goosewin/gralph/releases/download/vX.Y.Z/gralph-X.Y.Z-osx-arm64.tar.gz
+tar -xzf gralph.tar.gz
+cd gralph-X.Y.Z-osx-arm64
+chmod +x gralph
+./gralph --help
 ```
 
-### From Source (git clone)
+### From Source (dotnet publish)
 
 ```bash
-git clone git@github.com:goosewin/gralph.git
-cd gralph
-./install.sh
+dotnet publish src/Gralph/Gralph.csproj \
+  -c Release \
+  -r osx-arm64 \
+  -o dist/aot/osx-arm64 \
+  -p:PublishAot=true \
+  -p:SelfContained=true \
+  -p:PublishSingleFile=true
 ```
 
-When run from a cloned repository, the installer operates in **local mode**, which:
-1. Detects `bin/gralph` in the current directory
-2. Installs directly from the local files (no download)
-3. Copies binary, libraries, config, and completions to their destinations
+Or use the helper script:
 
-Both modes perform the same installation steps:
-- Check and optionally install dependencies (`jq`, `tmux`, backend CLI)
-- Copy `gralph` binary to `~/.local/bin` (or `/usr/local/bin`)
-- Copy library files to `~/.config/gralph/lib/`
-- Create default config at `~/.config/gralph/config.yaml`
-- Install shell completions for bash/zsh
+```bash
+scripts/publish-aot.sh --rid osx-arm64
+```
 
 ### Manual Installation
 
-If you prefer not to use the installer:
+If you prefer to wire paths yourself:
 
-1. Clone this repository
-2. Copy `bin/gralph` to a directory in your PATH (e.g., `~/.local/bin/` or `/usr/local/bin/`)
-3. Copy `lib/` to `~/.config/gralph/lib/`
-4. Copy `config/default.yaml` to `~/.config/gralph/config.yaml`
-5. (Optional) Copy `completions/` to `~/.config/gralph/completions/`
+1. Copy the `gralph` binary to a directory in your PATH (e.g., `~/.local/bin/` or `/usr/local/bin/`).
+2. Copy `config/default.yaml` to `~/.config/gralph/config/default.yaml` (or set `GRALPH_DEFAULT_CONFIG`).
+3. (Optional) Copy `completions/` to your shell completion directory.
 
 ### Uninstalling
 
-To remove gralph from your system, use the provided uninstaller:
+To remove gralph from your system:
 
-```bash
-# Interactive uninstall (prompts for confirmation)
-./uninstall.sh
-
-# Or download and run directly
-curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/uninstall.sh | bash
-```
-
-**Options:**
-
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--all` | `-a` | Remove everything including logs and state data |
-| `--force` | `-f` | Skip confirmation prompts |
-| `--help` | `-h` | Show help message |
-
-**What gets removed by default:**
-- gralph binary (from `~/.local/bin` or `/usr/local/bin`)
-- Library files (`~/.config/gralph/lib/`)
-- Shell completions (`~/.config/gralph/completions/` and system locations)
-- Configuration file (`~/.config/gralph/config.yaml`)
-
-**What gets removed with `--all`:**
-- All of the above
-- State files (`~/.config/gralph/state.json` and `~/.config/gralph/state.lock`)
-- Default config template (`~/.config/gralph/config/default.yaml`) if present
-- Any remaining `~/.config/gralph/` data
+1. Delete the `gralph` binary from your PATH.
+2. Remove `~/.config/gralph/` to clear config and state (optional).
 
 Project logs live under each project's `.gralph/` directory and are not removed automatically.
-
-**Examples:**
-
-```bash
-# Uninstall but keep logs and session data
-./uninstall.sh
-
-# Uninstall everything including user data
-./uninstall.sh --all
-
-# Uninstall without prompts (for scripts)
-./uninstall.sh --force
-
-# Complete removal without prompts
-./uninstall.sh --all --force
-```
 
 ## Native AOT Builds (.NET 10)
 
@@ -378,6 +304,11 @@ gralph worktree finish C-6
 
 Location: `~/.config/gralph/config.yaml`
 
+The default config is loaded from `config/default.yaml` next to the binary. Override paths with:
+- `GRALPH_CONFIG_DIR` (base directory for config/state)
+- `GRALPH_DEFAULT_CONFIG` (path to default.yaml)
+- `GRALPH_GLOBAL_CONFIG` (path to global config)
+
 ```yaml
 defaults:
   max_iterations: 30
@@ -385,12 +316,6 @@ defaults:
   completion_marker: COMPLETE
   backend: claude
   model: claude-opus-4-5
-
-claude:
-  flags:
-    - --dangerously-skip-permissions
-  env:
-    IS_SANDBOX: "1"
 
 notifications:
   on_complete: true
@@ -404,6 +329,7 @@ logging:
 ### Project Configuration
 
 Create `.gralph.yaml` in your project directory to override global settings.
+Override the filename with `GRALPH_PROJECT_CONFIG_NAME`.
 
 ### Environment Variables
 
@@ -435,22 +361,7 @@ Default values for loop behavior.
 
 Settings for the Claude Code backend.
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `claude.flags` | array | `["--dangerously-skip-permissions"]` | CLI flags passed to `claude` command. |
-| `claude.env` | object | `{ IS_SANDBOX: "1" }` | Environment variables set when running Claude. |
-
-**Example:**
-
-```yaml
-claude:
-  flags:
-    - --dangerously-skip-permissions
-    - --verbose
-  env:
-    IS_SANDBOX: "1"
-    CUSTOM_VAR: "value"
-```
+The .NET CLI currently uses fixed Claude flags (`--dangerously-skip-permissions`, `--verbose`) and sets `IS_SANDBOX=1`. There are no configurable `claude.*` keys yet.
 
 ### Section: `opencode`
 
@@ -474,15 +385,12 @@ Settings for the Gemini CLI backend.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `gemini.default_model` | string | `gemini-1.5-pro` | Default model (gemini-1.5-pro). |
-| `gemini.flags` | array | `["--headless"]` | CLI flags passed to `gemini` command. |
 
 **Example:**
 
 ```yaml
 gemini:
   default_model: gemini-1.5-pro
-  flags:
-    - --headless
 ```
 
 ### Section: `codex`
@@ -492,16 +400,12 @@ Settings for the Codex CLI backend.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `codex.default_model` | string | `example-codex-model` | Default model (example-codex-model). |
-| `codex.flags` | array | `["--quiet", "--auto-approve"]` | CLI flags passed to `codex` command. |
 
 **Example:**
 
 ```yaml
 codex:
   default_model: example-codex-model
-  flags:
-    - --quiet
-    - --auto-approve
 ```
 
 ### Section: `notifications`
@@ -734,28 +638,17 @@ defaults:
   task_file: PRD.md           # Default task file
   completion_marker: COMPLETE # Completion signal
   context_files: ARCHITECTURE.md,DECISIONS.md,CHANGELOG.md,RISK_REGISTER.md,PROCESS.md
-  backend: claude             # AI backend (claude or opencode)
+  backend: claude             # AI backend (claude, opencode, gemini, codex)
   model: claude-opus-4-5      # Model override (optional)
-
-claude:
-  flags:
-    - --dangerously-skip-permissions
-  env:
-    IS_SANDBOX: "1"
 
 opencode:
   default_model: opencode/example-code-model
 
 gemini:
   default_model: gemini-1.5-pro
-  flags:
-    - --headless
 
 codex:
   default_model: example-codex-model
-  flags:
-    - --quiet
-    - --auto-approve
 
 notifications:
   on_complete: true
@@ -1010,8 +903,6 @@ gralph server [options]
 | GET | `/status/:name` | Get specific session |
 | POST | `/stop/:name` | Stop a session |
 
-**Dependencies:** `socat` is preferred; `nc` (netcat) is used as a fallback.
-
 **Security note:** The server defaults to localhost-only binding. When binding to non-localhost addresses (e.g., `0.0.0.0`), a `--token` is required for security. Use `--open` to explicitly disable this requirement (not recommended). Always restrict network access via firewall/VPN when exposing the server.
 
 **Examples:**
@@ -1118,7 +1009,7 @@ unchecked `- [ ]` line.
 ### Task P-1
 
 - **ID** P-1
-- **Context Bundle** `lib/core.sh`
+- **Context Bundle** `src/Gralph/Prd/PrdParser.cs`, `src/Gralph/Prd/PrdValidator.cs`
 - **DoD** Add task block parsing
 - **Checklist**
   * Parser extracts task blocks from PRD.
@@ -1187,16 +1078,15 @@ Gralph runs stateless iterations, so shared documents provide durable context be
 
 ## Using gralph to build gralph
 
-The repo includes a minimal self-hosting example set plus a runner script that
-executes the example stages in order.
+The repo includes a minimal self-hosting example set that exercises PRD parsing and shared docs.
 
 - Example PRDs: `examples/README.md` (see `examples/PRD-Stage-P-Example.md` and `examples/PRD-Stage-A-Example.md`).
-- Runner script: `scripts/run-release.sh`.
 
-Run the example release flow from the repo root:
+Run the example flow from the repo root (using the CLI built from source):
 
 ```bash
-./scripts/run-release.sh
+dotnet run --project src/Gralph -- start . --task-file examples/PRD-Stage-P-Example.md --no-tmux --backend claude --model claude-opus-4-5
+dotnet run --project src/Gralph -- start . --task-file examples/PRD-Stage-A-Example.md --no-tmux --backend claude --model claude-opus-4-5
 ```
 
 ## Usage Examples
@@ -1330,12 +1220,12 @@ gralph resume
 gralph resume myapp
 ```
 
-### Example 7: Foreground Mode (No tmux)
+### Example 7: Foreground Mode (--no-tmux)
 
-Run in foreground for debugging or CI/CD:
+Run in foreground for debugging or CI/CD (legacy flag name):
 
 ```bash
-# Run without tmux (blocks until complete)
+# Run in foreground (blocks until complete)
 gralph start . --no-tmux
 
 # Useful for:
@@ -1462,22 +1352,25 @@ gralph stop myapp
 gralph start . --name myapp-v2
 ```
 
-#### tmux session not found
+#### Background worker not running
 
-**Symptom:** `Error: tmux session not found` when checking status
+**Symptom:** Session shows as running but logs stop updating or no progress is made.
 
-**Causes:**
+**Causes and solutions:**
 
-1. **tmux not installed:**
+1. **Backend CLI exited early** - Verify the backend is installed and working:
    ```bash
-   # Install tmux
-   sudo apt install tmux  # Ubuntu/Debian
-   brew install tmux      # macOS
+   gralph backends
    ```
 
-2. **Session crashed** - Use resume to restart:
+2. **Worker crashed** - Resume the session:
    ```bash
    gralph resume myapp
+   ```
+
+3. **Debug in foreground** - Run with `--no-tmux` to see live output:
+   ```bash
+   gralph start . --no-tmux
    ```
 
 #### Failed to acquire state lock
@@ -1559,29 +1452,15 @@ gralph start . --name myapp-v2
    chmod +x ~/.local/bin/gralph
    ```
 
-2. **Check lib files are readable:**
+2. **Check config/state directory permissions:**
    ```bash
-   chmod -R 755 ~/.config/gralph/lib/
+   chmod -R 755 ~/.config/gralph
    ```
 
 3. **Check project directory is writable:**
    ```bash
    ls -la ~/projects/myapp/
    ```
-
-#### JSON parse errors in logs
-
-**Symptom:** `jq: parse error` messages in output
-
-**Causes:**
-
-1. **jq not installed:**
-   ```bash
-   sudo apt install jq  # Ubuntu/Debian
-   brew install jq      # macOS
-   ```
-
-2. **Claude output contains invalid JSON** - Usually transient, loop will retry
 
 #### Loop stuck at max iterations
 
@@ -1615,7 +1494,7 @@ GRALPH_LOGGING_LEVEL=debug gralph start .
 
 #### Run in foreground mode
 
-For easier debugging, run without tmux:
+For easier debugging, run in the foreground:
 
 ```bash
 gralph start . --no-tmux
@@ -1625,20 +1504,7 @@ gralph start . --no-tmux
 
 ```bash
 # View current state
-cat ~/.config/gralph/state.json | jq .
-
-# Find specific session
-jq '.sessions.myapp' ~/.config/gralph/state.json
-```
-
-#### Check tmux session directly
-
-```bash
-# List gralph tmux sessions
-tmux list-sessions | grep gralph
-
-# Attach to session
-tmux attach -t gralph-myapp
+cat ~/.config/gralph/state.json
 ```
 
 #### Clean up stale state
@@ -1649,11 +1515,7 @@ If state file becomes corrupted or out of sync:
 # Backup current state
 cp ~/.config/gralph/state.json ~/.config/gralph/state.json.bak
 
-# Remove specific session from state
-jq 'del(.sessions.myapp)' ~/.config/gralph/state.json > tmp.json && \
-  mv tmp.json ~/.config/gralph/state.json
-
-# Or reset entirely (stops all sessions first)
+# Reset entirely (stops all sessions first)
 gralph stop --all
 rm ~/.config/gralph/state.json
 ```
@@ -1663,8 +1525,8 @@ rm ~/.config/gralph/state.json
 If you continue to experience issues:
 
 1. **Check the logs** - Most issues are visible in `gralph logs <name>`
-2. **Verify dependencies** - Run `./install.sh` to check all requirements
-3. **Open an issue** - Include logs and system info (OS, bash version, etc.)
+2. **Verify backend CLIs** - Run `gralph backends` to confirm installs
+3. **Open an issue** - Include logs and system info (OS, CLI version, backend)
 
 ## Security
 

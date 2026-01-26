@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Updated documentation and workflows to reflect the .NET 10 CLI and AOT distribution model.
+
+### Removed
+- Removed the legacy bash CLI implementation, installers, and shell-based tests.
+
 ### Added
 - AOT-1 Added .NET 10 solution and bootstrap console app with Native AOT publish profile.
 - AOT-2 Added .NET configuration loader with YAML parsing, merging, and env overrides.

@@ -9,10 +9,11 @@
    - DECISIONS.md (if decision made)
    - RISK_REGISTER.md (if new risk found)
    - ARCHITECTURE.md (delta update)
-5) Run checklist + verification.
+5) Run checklist + verification (use `dotnet test tests/Gralph.Tests/Gralph.Tests.csproj` when applicable).
 6) Merge worktree back and remove it.
 
 ## Guardrails
 - Any task lacking Context Bundle or DoD is invalid.
 - If conflicts occur, record in CHANGELOG.
 - New risks must be added to RISK_REGISTER.md with mitigation.
+- Keep docs and workflows aligned with the .NET CLI implementation.
