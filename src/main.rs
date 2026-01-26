@@ -1410,4 +1410,62 @@ fn is_process_alive(pid: i64) -> bool {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+    use std::fs;
+
+    #[test]
+    fn resolve_prd_output_handles_relative_and_absolute_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path();
+
+        let relative = resolve_prd_output(base, Some(PathBuf::from("PRD.out.md")), false).unwrap();
+        assert_eq!(relative, base.join("PRD.out.md"));
+
+        let absolute = base.join("PRD.abs.md");
+        let resolved = resolve_prd_output(base, Some(absolute.clone()), false).unwrap();
+        assert_eq!(resolved, absolute);
+    }
+
+    #[test]
+    fn resolve_prd_output_respects_force_for_existing_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path();
+        let output = base.join("PRD.generated.md");
+        fs::write(&output, "existing").unwrap();
+
+        let err = resolve_prd_output(base, Some(output.clone()), false).unwrap_err();
+        match err {
+            CliError::Message(message) => assert!(message.contains("Output file exists")),
+            _ => panic!("unexpected error type"),
+        }
+
+        let resolved = resolve_prd_output(base, Some(output.clone()), true).unwrap();
+        assert_eq!(resolved, output);
+    }
+
+    #[test]
+    fn invalid_prd_path_handles_extensions_and_force() {
+        let output_md = PathBuf::from("PRD.generated.md");
+        let invalid_md = invalid_prd_path(&output_md, false);
+        assert_eq!(invalid_md, PathBuf::from("PRD.generated.invalid.md"));
+
+        let output_txt = PathBuf::from("PRD.generated.txt");
+        let invalid_txt = invalid_prd_path(&output_txt, false);
+        assert_eq!(invalid_txt, PathBuf::from("PRD.generated.invalid"));
+
+        let forced = invalid_prd_path(&output_txt, true);
+        assert_eq!(forced, output_txt);
+    }
+
+    #[test]
+    fn cli_parse_reports_missing_required_args() {
+        assert!(Cli::try_parse_from(["gralph", "logs"]).is_err());
+        assert!(Cli::try_parse_from(["gralph", "worktree", "create"]).is_err());
+        assert!(Cli::try_parse_from(["gralph", "prd", "check"]).is_err());
+    }
+}
+
 const DEFAULT_PRD_TEMPLATE: &str = "## Overview\n\nBriefly describe the project, goals, and intended users.\n\n## Problem Statement\n\n- What problem does this solve?\n- What pain points exist today?\n\n## Solution\n\nHigh-level solution summary.\n\n---\n\n## Functional Requirements\n\n### FR-1: Core Feature\n\nDescribe the primary user-facing behavior.\n\n### FR-2: Secondary Feature\n\nDescribe supporting behavior.\n\n---\n\n## Non-Functional Requirements\n\n### NFR-1: Performance\n\n- Example: Response times under 200ms for key operations.\n\n### NFR-2: Reliability\n\n- Example: Crash recovery or retries where appropriate.\n\n---\n\n## Implementation Tasks\n\nEach task must use a `### Task <ID>` block header and include the required fields.\nEach task block must contain exactly one unchecked task line.\n\n### Task EX-1\n\n- **ID** EX-1\n- **Context Bundle** `path/to/file`, `path/to/other`\n- **DoD** Define the done criteria for this task.\n- **Checklist**\n  * First verification item.\n  * Second verification item.\n- **Dependencies** None\n- [ ] EX-1 Short task summary\n\n---\n\n## Success Criteria\n\n- Define measurable outcomes that indicate completion.\n\n---\n\n## Sources\n\n- List authoritative URLs used as source of truth.\n\n---\n\n## Warnings\n\n- Only include this section if no reliable sources were found.\n- State what is missing and what must be verified.\n";

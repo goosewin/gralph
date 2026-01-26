@@ -62,6 +62,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - RS-12 Documented Rust build/install steps and migration notes.
 - RS-13 Updated release workflow to package Rust binaries and completions.
 - DOC-1 Refreshed shared docs for the Rust-only codebase.
+- T-CLI-1 Added CLI unit tests for PRD output resolution and parse validation.
 
 ### Fixed
 - Aligned the Cargo-installed binary name with release assets (`gralph`).
