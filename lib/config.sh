@@ -68,11 +68,36 @@ _yaml_to_flat() {
         # Skip if line is empty after trimming
         if (length($0) == 0) next
 
-        # Handle array items (- item)
-        if (/^- /) {
-            # Array item - skip for now (we handle arrays differently)
-            next
+    # Handle array items (- item)
+    if ($0 ~ /^- /) {
+        item = substr($0, 3)
+        gsub(/^[[:space:]]+/, "", item)
+        gsub(/[[:space:]]+#.*$/, "", item)
+        gsub(/^["'"'"']|["'"'"']$/, "", item)
+        if (length(item) == 0) next
+
+        # Determine the current level based on indentation
+        while (level > 0 && indent <= indent_level[level]) {
+            level--
         }
+
+        # Build full key path from current parents
+        full_key = ""
+        for (i = 0; i <= level; i++) {
+            if (parent_key[i] != "") {
+                if (full_key != "") full_key = full_key "."
+                full_key = full_key parent_key[i]
+            }
+        }
+        if (full_key == "") next
+
+        if (array_values[full_key] != "") {
+            array_values[full_key] = array_values[full_key] "," item
+        } else {
+            array_values[full_key] = item
+        }
+        next
+    }
 
         # Parse key: value (portable awk, no capture arrays)
         if ($0 ~ /^[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*:/) {
@@ -114,6 +139,11 @@ _yaml_to_flat() {
                 gsub(/[[:space:]]+#.*$/, "", value)
                 print full_key "=" value
             }
+        }
+    }
+    END {
+        for (key in array_values) {
+            print key "=" array_values[key]
         }
     }
     ' "$yaml_file"
@@ -230,7 +260,7 @@ get_config() {
 
     if [[ -z "$key" ]]; then
         echo "$default_value"
-        return 1
+        return 0
     fi
 
     # Check legacy environment variable override first
@@ -254,7 +284,7 @@ get_config() {
 
     # Return default
     echo "$default_value"
-    return 1
+    return 0
 }
 
 # set_config() - Set a global configuration value

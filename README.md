@@ -554,12 +554,14 @@ Gralph uses a lightweight built-in YAML parser (no external dependencies). The f
 - Numbers and booleans: `max: 30`, `enabled: true`
 - Comments: `# this is a comment`
 - Inline comments: `key: value  # comment`
+- Simple arrays of scalars (flattened to comma-separated values):
+  `flags:\n  - --headless\n  - --verbose`
 
 **Not Supported:**
-- Arrays/lists: `items:\n  - item1\n  - item2`
 - Multi-line strings (block scalars): `description: |`
 - Anchors and aliases: `&anchor`, `*alias`
 - Complex nested structures (3+ levels deep)
+- Arrays of objects or nested arrays
 - Flow style: `{key: value}` or `[item1, item2]`
 
 **Example of supported config:**

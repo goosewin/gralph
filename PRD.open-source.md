@@ -252,7 +252,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * Environment variable overrides work correctly.
   * Configuration precedence is documented and implemented.
 - **Dependencies** None
-- [ ] OSS-15 Audit configuration module
+- [x] OSS-15 Audit configuration module
 
 ---
 

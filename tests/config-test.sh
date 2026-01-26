@@ -85,10 +85,10 @@ test_get_config_missing_no_default() {
     local exit_code=0
     result=$(get_config "nonexistent.key" "") || exit_code=$?
 
-    if [[ $exit_code -eq 1 && -z "$result" ]]; then
-        pass "get_config returns exit 1 for missing key with no default"
+    if [[ $exit_code -eq 0 && -z "$result" ]]; then
+        pass "get_config returns empty for missing key with no default"
     else
-        fail "get_config should return exit 1 and empty, got exit=$exit_code result='$result'"
+        fail "get_config should return exit 0 and empty, got exit=$exit_code result='$result'"
     fi
 }
 
@@ -267,6 +267,29 @@ EOF
 }
 
 # -----------------------------------------------------------------------------
+# Test: YAML parsing handles simple arrays
+# -----------------------------------------------------------------------------
+test_yaml_parses_arrays() {
+    mkdir -p "$GRALPH_CONFIG_DIR"
+    cat > "$GRALPH_GLOBAL_CONFIG" << 'EOF'
+test:
+  flags:
+    - --headless
+    - "--verbose"  # inline comment
+EOF
+
+    load_config
+    local result
+    result=$(get_config "test.flags" "") || true
+
+    if [[ "$result" == "--headless,--verbose" ]]; then
+        pass "YAML parser flattens simple arrays"
+    else
+        fail "YAML parser array handling: expected '--headless,--verbose', got '$result'"
+    fi
+}
+
+# -----------------------------------------------------------------------------
 # Run all tests
 # -----------------------------------------------------------------------------
 test_load_default_config
@@ -282,6 +305,7 @@ test_env_override
 test_legacy_env_override
 test_list_config
 test_yaml_ignores_comments
+test_yaml_parses_arrays
 
 # -----------------------------------------------------------------------------
 # Summary
