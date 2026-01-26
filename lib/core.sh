@@ -502,5 +502,18 @@ run_loop() {
         "$GRALPH_STATE_CALLBACK" "$session_name" "$max_iterations" "max_iterations" "$final_remaining"
     fi
 
+    # Send failure notification if configured
+    local notify_on_fail webhook_url
+    notify_on_fail=$(get_config "notifications.on_fail" "false")
+    webhook_url=$(get_config "notifications.webhook" "")
+
+    if [[ "$notify_on_fail" == "true" && -n "$webhook_url" ]]; then
+        if declare -f notify_failed > /dev/null; then
+            notify_failed "$session_name" "$webhook_url" "max_iterations" "$project_dir" \
+                "$max_iterations" "$max_iterations" "$final_remaining" "$loop_duration_secs" || \
+                echo "Warning: Failed to send failure notification" >&2
+        fi
+    fi
+
     return 1
 }
