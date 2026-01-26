@@ -45,3 +45,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - E-4 Added release runner script for example stages.
 - E-5 Documented self-hosting workflow in README.
 - E-6 Recorded Stage E example and runner rationale in DECISIONS.
+- P-EX-2 Updated README task block example to include all required fields.

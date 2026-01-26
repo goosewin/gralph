@@ -959,9 +959,14 @@ prompt. If no task blocks are present, gralph falls back to the first unchecked 
 **Example:**
 ```markdown
 ### Task P-1
+
 - **ID** P-1
 - **Context Bundle** `gralph/lib/core.sh`
 - **DoD** Add task block parsing
+- **Checklist**
+  * Parser extracts task blocks from PRD.
+  * Fallback to single-line tasks when no blocks exist.
+- **Dependencies** None
 - [ ] P-1 Implement parser
 ```
 

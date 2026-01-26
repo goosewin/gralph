@@ -53,7 +53,7 @@ Expose the task block format in documentation to reduce confusion.
   * README includes a task block example.
   * Template reflects the documented format.
 - **Dependencies** P-EX-1
-- [ ] P-EX-2 Document task block format
+- [x] P-EX-2 Document task block format
 
 ---
 
