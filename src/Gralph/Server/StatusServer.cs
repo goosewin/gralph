@@ -4,6 +4,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
 using Gralph.Prd;
@@ -13,6 +14,12 @@ namespace Gralph.Server;
 
 public sealed class StatusServer
 {
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = false,
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver()
+    };
+
     private readonly StatusServerOptions _options;
     private readonly StateStore _state;
     private readonly IProcessInspector _processInspector;
@@ -393,7 +400,7 @@ public sealed class StatusServer
 
     private static async Task WriteJsonAsync(HttpListenerResponse response, int statusCode, JsonNode payload)
     {
-        var json = payload.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
+        var json = payload.ToJsonString(JsonOptions);
         var buffer = Encoding.UTF8.GetBytes(json);
         response.StatusCode = statusCode;
         response.ContentType = "application/json";

@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -23,7 +24,8 @@ public static class WebhookNotifier
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNamingPolicy = null
+        PropertyNamingPolicy = null,
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver()
     };
 
     public static Task<bool> NotifyCompleteAsync(

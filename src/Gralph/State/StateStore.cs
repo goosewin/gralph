@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 
 namespace Gralph.State;
@@ -17,7 +18,8 @@ public sealed class StateStore
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        WriteIndented = false
+        WriteIndented = false,
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver()
     };
 
     private readonly StatePaths _paths;
