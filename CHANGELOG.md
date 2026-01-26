@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - GO-4 Added backend interface, Claude implementation, and registry.
 - GO-5 Added OpenCode, Gemini, and Codex backend implementations.
 - GO-6 Added Go core loop engine with prompt rendering and tests.
+- GO-7 Added start command with tmux or foreground loop execution.
 - Initial public release notes for the gralph CLI.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.

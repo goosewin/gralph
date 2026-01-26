@@ -171,7 +171,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * Background mode spawns tmux session.
   * State saved on start.
 - **Dependencies** GO-6
-- [ ] GO-7 Implement start command
+- [x] GO-7 Implement start command
 
 ### Task GO-8
 
