@@ -1207,11 +1207,106 @@ public static class Program
                     return Fail($"Unknown option: {subArgs[0]}");
                 }
 
-                Console.WriteLine($"worktree {subcommand} command is registered but not implemented in this build.");
-                return 0;
+                var taskId = subArgs[0];
+                if (!IsValidTaskId(taskId))
+                {
+                    return Fail($"Invalid task ID format: {taskId} (expected like A-1)");
+                }
+
+                var repoRoot = GetGitRoot();
+                if (string.IsNullOrWhiteSpace(repoRoot))
+                {
+                    return Fail("Not a git repository (or any of the parent directories)");
+                }
+
+                var statusResult = RunProcess("git", ["-C", repoRoot, "status", "--porcelain"], repoRoot);
+                if (statusResult.ExitCode != 0)
+                {
+                    return Fail($"Unable to check git status in {repoRoot}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(statusResult.StdOut))
+                {
+                    return Fail("Git working tree is dirty. Commit or stash changes before running worktree commands.");
+                }
+
+                return subcommand.Equals("create", StringComparison.OrdinalIgnoreCase)
+                    ? HandleWorktreeCreate(repoRoot, taskId)
+                    : HandleWorktreeFinish(repoRoot, taskId);
             default:
                 return Fail($"Unknown worktree subcommand: {subcommand}");
         }
+    }
+
+    private static int HandleWorktreeCreate(string repoRoot, string taskId)
+    {
+        var branchName = $"task-{taskId}";
+        var worktreesDir = Path.Combine(repoRoot, ".worktrees");
+        Directory.CreateDirectory(worktreesDir);
+        var worktreePath = Path.Combine(worktreesDir, branchName);
+
+        var branchResult = RunProcess("git", ["-C", repoRoot, "show-ref", "--verify", "--quiet", $"refs/heads/{branchName}"], repoRoot);
+        if (branchResult.ExitCode == 0)
+        {
+            return Fail($"Branch already exists: {branchName}");
+        }
+
+        if (Directory.Exists(worktreePath) || File.Exists(worktreePath))
+        {
+            return Fail($"Worktree path already exists: {worktreePath}");
+        }
+
+        var addResult = RunProcess("git", ["-C", repoRoot, "worktree", "add", "-b", branchName, worktreePath], repoRoot);
+        if (addResult.ExitCode != 0)
+        {
+            return Fail($"Failed to create worktree at {worktreePath}");
+        }
+
+        Console.WriteLine($"Created worktree {worktreePath} on branch {branchName}");
+        return 0;
+    }
+
+    private static int HandleWorktreeFinish(string repoRoot, string taskId)
+    {
+        var branchName = $"task-{taskId}";
+        var worktreesDir = Path.Combine(repoRoot, ".worktrees");
+        var worktreePath = Path.Combine(worktreesDir, branchName);
+
+        var branchResult = RunProcess("git", ["-C", repoRoot, "show-ref", "--verify", "--quiet", $"refs/heads/{branchName}"], repoRoot);
+        if (branchResult.ExitCode != 0)
+        {
+            return Fail($"Branch does not exist: {branchName}");
+        }
+
+        if (!Directory.Exists(worktreePath))
+        {
+            return Fail($"Worktree path is missing: {worktreePath} (run 'gralph worktree create {taskId}' first)");
+        }
+
+        var currentBranchResult = RunProcess("git", ["-C", repoRoot, "rev-parse", "--abbrev-ref", "HEAD"], repoRoot);
+        if (currentBranchResult.ExitCode == 0)
+        {
+            var currentBranch = currentBranchResult.StdOut.Trim();
+            if (string.Equals(currentBranch, branchName, StringComparison.Ordinal))
+            {
+                return Fail($"Cannot finish while on branch {branchName}");
+            }
+        }
+
+        var mergeResult = RunProcess("git", ["-C", repoRoot, "merge", "--no-ff", branchName], repoRoot);
+        if (mergeResult.ExitCode != 0)
+        {
+            return Fail($"Failed to merge branch: {branchName}");
+        }
+
+        var removeResult = RunProcess("git", ["-C", repoRoot, "worktree", "remove", worktreePath], repoRoot);
+        if (removeResult.ExitCode != 0)
+        {
+            return Fail($"Failed to remove worktree at {worktreePath}");
+        }
+
+        Console.WriteLine($"Finished worktree {worktreePath} and merged {branchName}");
+        return 0;
     }
 
     private static int HandleBackends(string[] args)
@@ -2002,6 +2097,63 @@ public static class Program
         }
 
         return false;
+    }
+
+    private static bool IsValidTaskId(string taskId)
+    {
+        if (string.IsNullOrWhiteSpace(taskId))
+        {
+            return false;
+        }
+
+        return Regex.IsMatch(taskId, "^[A-Za-z]+-[0-9]+$");
+    }
+
+    private static string? GetGitRoot()
+    {
+        var result = RunProcess("git", ["rev-parse", "--show-toplevel"], Environment.CurrentDirectory);
+        if (result.ExitCode != 0)
+        {
+            return null;
+        }
+
+        var path = result.StdOut.Trim();
+        return string.IsNullOrWhiteSpace(path) ? null : path;
+    }
+
+    private static (int ExitCode, string StdOut, string StdErr) RunProcess(string fileName, IReadOnlyCollection<string> args, string? workingDirectory)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            WorkingDirectory = string.IsNullOrWhiteSpace(workingDirectory) ? Environment.CurrentDirectory : workingDirectory
+        };
+
+        foreach (var arg in args)
+        {
+            startInfo.ArgumentList.Add(arg);
+        }
+
+        using var process = new Process { StartInfo = startInfo };
+        try
+        {
+            if (!process.Start())
+            {
+                return (-1, string.Empty, "Failed to start process.");
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return (-1, string.Empty, ex.Message);
+        }
+
+        var stdOut = process.StandardOutput.ReadToEnd();
+        var stdErr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        return (process.ExitCode, stdOut.TrimEnd(), stdErr.TrimEnd());
     }
 
     private static void PrintUsage()

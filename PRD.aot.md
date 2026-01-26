@@ -292,7 +292,7 @@ Support webhook notifications:
   * Dirty git state rejected.
   * Task ID format validated.
 - **Dependencies** AOT-8
-- [ ] AOT-12 Implement worktree create and finish commands
+- [x] AOT-12 Implement worktree create and finish commands
 
 ### Task AOT-13
 
