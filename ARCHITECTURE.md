@@ -21,6 +21,7 @@ This document captures the high-level structure of gralph. It is a living summar
 `gralph-rs/src/backend` defines the backend trait and CLI-backed implementations for the Rust port.
 
 `lib/notify.sh` formats and sends webhook notifications. It detects webhook targets, builds payloads for Slack/Discord/generic endpoints, and posts completion or failure events.
+`gralph-rs/src/notify.rs` mirrors webhook detection, payload formatting, and delivery in Rust via reqwest.
 
 ## Runtime Flow
 

@@ -165,7 +165,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
   * JSON payloads match Bash output.
   * Timeouts and error handling present.
 - **Dependencies** RS-1
-- [ ] RS-7 Implement webhook notifications with reqwest
+- [x] RS-7 Implement webhook notifications with reqwest
 
 ---
 
