@@ -100,7 +100,7 @@ public sealed class CodexBackend : IBackend
 
     private static async Task ReadStreamAsync(StreamReader reader, StreamWriter outputWriter, object writeLock, CancellationToken cancellationToken)
     {
-        while (!reader.EndOfStream)
+        while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
