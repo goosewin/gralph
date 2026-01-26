@@ -260,7 +260,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * cmd/backends.go lists available backends with install status.
   * cmd/config.go implements config get, set, and list subcommands.
 - **Dependencies** GO-2, GO-4
-- [ ] GO-14 Implement backends and config commands
+- [x] GO-14 Implement backends and config commands
 
 ### Task GO-15
 

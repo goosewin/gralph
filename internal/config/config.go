@@ -112,6 +112,18 @@ func SetConfig(key, value string) error {
 	return nil
 }
 
+// ListConfig returns a flattened view of the current configuration.
+func ListConfig() (map[string]string, error) {
+	if currentConfig == nil {
+		return nil, errors.New("config not loaded")
+	}
+
+	settings := currentConfig.AllSettings()
+	flattened := map[string]string{}
+	flattenSettings("", settings, flattened)
+	return flattened, nil
+}
+
 func defaultConfigPath() string {
 	if path, ok := os.LookupEnv("GRALPH_DEFAULT_CONFIG"); ok && path != "" {
 		return path
@@ -244,5 +256,36 @@ func valueToString(value interface{}) string {
 		return strings.Join(parts, ",")
 	default:
 		return fmt.Sprint(value)
+	}
+}
+
+func flattenSettings(prefix string, value interface{}, out map[string]string) {
+	if value == nil {
+		return
+	}
+
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		for key, item := range typed {
+			nextKey := key
+			if prefix != "" {
+				nextKey = prefix + "." + key
+			}
+			flattenSettings(nextKey, item, out)
+		}
+	case map[interface{}]interface{}:
+		for key, item := range typed {
+			keyText := fmt.Sprint(key)
+			nextKey := keyText
+			if prefix != "" {
+				nextKey = prefix + "." + keyText
+			}
+			flattenSettings(nextKey, item, out)
+		}
+	default:
+		if prefix == "" {
+			return
+		}
+		out[prefix] = valueToString(value)
 	}
 }
