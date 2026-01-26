@@ -59,6 +59,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - RS-10 Wired Rust CLI subcommands with build-time shell completions.
 - RS-11 Added Rust tests coverage and CI workflow with coverage threshold.
 - RS-12 Documented Rust build/install steps and migration notes.
+- RS-13 Updated release workflow to package Rust binaries and completions.
+- DOC-1 Refreshed shared docs for the Rust-only codebase.
 
 ### Fixed
 - OSS-1 Removed duplicate introductory text from README.
@@ -79,3 +81,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - OSS-16 Hardened core loop completion detection and parse error handling.
 - OSS-17 Documented PRD validation rules, sanitization behavior, and stack detection heuristics.
 - OSS-18 Reviewed README for CLI reference, model names, and doc accuracy.
+- OSS-19 Removed legacy shell artifacts and aligned context defaults with Rust sources.

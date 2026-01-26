@@ -5,40 +5,39 @@ Environment: Ubuntu 24.04.3 LTS
 
 ## Checks
 
-- Dependencies present: `jq`, `tmux`, `bash`
-- `./bin/gralph version` returns current version
-- `./bin/gralph help` prints CLI usage
-- `./bin/gralph status` runs with empty state
-- `./bin/gralph backends` lists available backends
-- `./bin/gralph config list` shows configuration
-- Help output includes new flags: `--no-tmux`, `--backend`, `--webhook`, `--variant`, `--prompt-template`
+- Rust toolchain installed: `cargo --version`
+- Build succeeds: `cargo build --release --manifest-path gralph-rs/Cargo.toml`
+- `./gralph-rs/target/release/gralph-rs version` returns current version
+- `./gralph-rs/target/release/gralph-rs help` prints CLI usage
+- `./gralph-rs/target/release/gralph-rs status` runs with empty state
+- `./gralph-rs/target/release/gralph-rs backends` lists available backends
+- `./gralph-rs/target/release/gralph-rs config list` shows configuration
+- Help output includes flags: `--no-tmux`, `--backend`, `--webhook`, `--variant`, `--prompt-template`
 - Server command available in help
 
 ## Command Output
 
 ```bash
-# Verify dependencies
-command -v jq && command -v tmux && command -v bash
+cargo --version
+cargo build --release --manifest-path gralph-rs/Cargo.toml
 
-# Basic commands
-./bin/gralph version
-./bin/gralph help
-./bin/gralph status
+./gralph-rs/target/release/gralph-rs version
+./gralph-rs/target/release/gralph-rs help
+./gralph-rs/target/release/gralph-rs status
 
-# New commands
-./bin/gralph backends
-./bin/gralph config list
+./gralph-rs/target/release/gralph-rs backends
+./gralph-rs/target/release/gralph-rs config list
 
-# Verify new flags in help
-./bin/gralph help | grep -E '\-\-(no-tmux|backend|webhook|variant|prompt-template)'
-./bin/gralph help | grep 'server'
+./gralph-rs/target/release/gralph-rs help | grep -E '\-\-(no-tmux|backend|webhook|variant|prompt-template)'
+./gralph-rs/target/release/gralph-rs help | grep 'server'
 ```
 
 Expected results:
-- All dependency commands resolve in PATH
-- Version prints `gralph v1.1.0`
+- Cargo is available in PATH
+- Build completes successfully
+- Version prints the current gralph release
 - Help output lists commands and options including new flags
 - Status reports no sessions found
-- Backends lists `claude` as available
+- Backends lists available backends
 - Config list shows default configuration values
 - New flags appear in help text

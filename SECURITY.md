@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-We support security fixes for the latest release on the main branch.
+We support security fixes for the latest Rust CLI release on the main branch.
 
 ## Reporting a Vulnerability
 
