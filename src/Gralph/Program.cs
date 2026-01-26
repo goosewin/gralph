@@ -1368,9 +1368,12 @@ public static class Program
 
     private static int HandleConfig(string[] args)
     {
+        var config = new ConfigService(ConfigPaths.FromEnvironment());
+        config.Load(Directory.GetCurrentDirectory());
+
         if (args.Length == 0)
         {
-            Console.WriteLine("config command is registered but not implemented in this build.");
+            PrintConfigList(config);
             return 0;
         }
 
@@ -1384,7 +1387,7 @@ public static class Program
                 {
                     return Fail("config list does not take additional arguments.");
                 }
-                Console.WriteLine("config list command is registered but not implemented in this build.");
+                PrintConfigList(config);
                 return 0;
             case "get":
                 if (subArgs.Length == 0)
@@ -1395,17 +1398,41 @@ public static class Program
                 {
                     return Fail("config get accepts a single key.");
                 }
-                Console.WriteLine("config get command is registered but not implemented in this build.");
+
+                var key = subArgs[0];
+                if (!config.Exists(key))
+                {
+                    return Fail($"Config key not found: {key}");
+                }
+
+                Console.WriteLine(config.Get(key));
                 return 0;
             case "set":
                 if (subArgs.Length < 2)
                 {
                     return Fail("config set requires a key and value.");
                 }
-                Console.WriteLine("config set command is registered but not implemented in this build.");
+                if (subArgs.Length > 2)
+                {
+                    return Fail("config set accepts a single key and value.");
+                }
+
+                var setKey = subArgs[0];
+                var setValue = subArgs[1];
+                config.Set(setKey, setValue);
+                Console.WriteLine($"Updated config: {setKey}");
                 return 0;
             default:
                 return Fail($"Unknown config subcommand: {subcommand}");
+        }
+    }
+
+    private static void PrintConfigList(ConfigService config)
+    {
+        var entries = config.ListMerged();
+        foreach (var entry in entries)
+        {
+            Console.WriteLine($"{entry.Key}={entry.Value}");
         }
     }
 

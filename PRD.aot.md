@@ -331,7 +331,7 @@ Support webhook notifications:
   * Config get retrieves specific key.
   * Config set updates global config file.
 - **Dependencies** AOT-2, AOT-4, AOT-8
-- [ ] AOT-15 Implement backends and config commands
+- [x] AOT-15 Implement backends and config commands
 
 ### Task AOT-16
 

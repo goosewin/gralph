@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace Gralph.Config;
 
@@ -77,6 +78,33 @@ public sealed class ConfigService
         }
 
         return defaultValue ?? string.Empty;
+    }
+
+    public bool Exists(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return false;
+        }
+
+        if (TryLegacyEnvOverride(key, out _))
+        {
+            return true;
+        }
+
+        var envKey = $"GRALPH_{key.ToUpperInvariant().Replace('.', '_')}";
+        var envValue = Environment.GetEnvironmentVariable(envKey);
+        if (!string.IsNullOrEmpty(envValue))
+        {
+            return true;
+        }
+
+        return _cache.ContainsKey(key);
+    }
+
+    public IReadOnlyList<KeyValuePair<string, string>> ListMerged()
+    {
+        return _cache.OrderBy(pair => pair.Key, StringComparer.Ordinal).ToList();
     }
 
     public void Set(string key, string value)
