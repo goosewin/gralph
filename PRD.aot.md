@@ -240,7 +240,7 @@ Support webhook notifications:
   * Help and version commands work.
   * Unknown commands show error with suggestion.
 - **Dependencies** AOT-2, AOT-3, AOT-7
-- [ ] AOT-8 Implement CLI entry point with command routing
+- [x] AOT-8 Implement CLI entry point with command routing
 
 ### Task AOT-9
 
