@@ -1,0 +1,23 @@
+README.md
+  f87378068b6c0cdd 217,232,444,451,462,469,716,721,1316,1321,1329,1334
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "725ee759d149b9d9162aa7215407d5dfd3060586",
+  "prompts": {
+    "f87378068b6c0cdd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7fefd5c9-6644-4cda-993f-49dbc281ad3f",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 38,
+      "total_deletions": 58,
+      "accepted_lines": 38,
+      "overriden_lines": 0
+    }
+  }
+}
