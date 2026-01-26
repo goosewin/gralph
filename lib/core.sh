@@ -112,6 +112,50 @@ CRITICAL: Never mention the promise unless outputting it as the completion signa
 
 Iteration: {iteration}/{max_iterations}'
 
+# get_task_blocks() - Extract task blocks grouped by task headers
+#
+# Arguments:
+#   $1 - Task file path (required)
+#
+# Output:
+#   Prints each task block separated by NUL characters
+#   Blocks include the '### Task <ID>' header line
+#
+# Returns:
+#   0 on success
+#
+get_task_blocks() {
+    local task_file="$1"
+
+    if [[ -z "$task_file" ]] || [[ ! -f "$task_file" ]]; then
+        return 0
+    fi
+
+    local line
+    local in_block=0
+    local block=""
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" =~ ^[[:space:]]*###\ Task[[:space:]]+ ]]; then
+            if [[ $in_block -eq 1 ]]; then
+                printf '%s\0' "$block"
+            fi
+            in_block=1
+            block="$line"
+        else
+            if [[ $in_block -eq 1 ]]; then
+                block+=$'\n'"$line"
+            fi
+        fi
+    done < "$task_file"
+
+    if [[ $in_block -eq 1 ]]; then
+        printf '%s\0' "$block"
+    fi
+
+    return 0
+}
+
 # render_prompt_template() - Substitute variables in a prompt template
 #
 # Arguments:
