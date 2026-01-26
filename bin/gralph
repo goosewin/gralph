@@ -489,7 +489,7 @@ cmd_start() {
     local gralph_dir="$target_dir/.gralph"
     mkdir -p "$gralph_dir"
 
-    local log_file="$gralph_dir/gralph.log"
+    local log_file="$gralph_dir/${session_name}.log"
     local tmux_session="gralph-$session_name"
 
     # Handle prompt template file (optional)
@@ -960,11 +960,11 @@ cmd_logs() {
     log_file=$(echo "$session" | jq -r '.log_file // empty')
 
     if [[ -z "$log_file" ]]; then
-        # Try to construct log file path from session dir
+        # Try to construct log file path from session dir using per-session naming
         local session_dir
         session_dir=$(echo "$session" | jq -r '.dir // empty')
         if [[ -n "$session_dir" ]]; then
-            log_file="$session_dir/.gralph/gralph.log"
+            log_file="$session_dir/.gralph/${session_name}.log"
         fi
     fi
 
@@ -1083,7 +1083,7 @@ cmd_resume() {
         info "Resuming session: $session_name (was at iteration $iteration)"
 
         local tmux_session="gralph-$session_name"
-        local log_file="$dir/.gralph/gralph.log"
+        local log_file="$dir/.gralph/${session_name}.log"
         local gralph_dir="$dir/.gralph"
 
         # Ensure .gralph directory exists

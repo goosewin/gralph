@@ -323,7 +323,7 @@ check_completion() {
 #   $3 - Max iterations (default: 30)
 #   $4 - Completion marker (default: COMPLETE)
 #   $5 - Model override (optional)
-#   $6 - Session name (optional, for state updates)
+#   $6 - Session name (optional, for state updates and per-session logs)
 #   $7 - Prompt template (optional, uses DEFAULT_PROMPT_TEMPLATE if not provided)
 #
 # Returns:
@@ -369,10 +369,12 @@ run_loop() {
         return 1
     fi
 
-    # Set up logging
+    # Set up logging with per-session log file
     local gralph_dir="$project_dir/.gralph"
     mkdir -p "$gralph_dir"
-    local log_file="$gralph_dir/gralph.log"
+    # Use session name for log file if provided, otherwise default to 'gralph'
+    local log_name="${session_name:-gralph}"
+    local log_file="$gralph_dir/${log_name}.log"
 
     # Track loop start time for duration calculation
     local loop_start_time
