@@ -201,7 +201,7 @@ Support webhook notifications:
   * Codex backend supports quiet and auto-approve flags.
   * All backends parse output correctly.
 - **Dependencies** AOT-4
-- [ ] AOT-5 Implement OpenCode, Gemini, and Codex backends
+- [x] AOT-5 Implement OpenCode, Gemini, and Codex backends
 
 ### Task AOT-6
 

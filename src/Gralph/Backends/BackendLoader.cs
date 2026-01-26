@@ -9,7 +9,10 @@ public static class BackendLoader
     private static readonly IReadOnlyDictionary<string, Func<IBackend>> Factories =
         new Dictionary<string, Func<IBackend>>(StringComparer.OrdinalIgnoreCase)
         {
-            { "claude", () => new ClaudeBackend() }
+            { "claude", () => new ClaudeBackend() },
+            { "opencode", () => new OpenCodeBackend() },
+            { "gemini", () => new GeminiBackend() },
+            { "codex", () => new CodexBackend() }
         };
 
     public static IReadOnlyList<string> ListAvailable()
