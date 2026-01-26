@@ -1,0 +1,25 @@
+config/default.yaml
+  e1d5d9e911d470f3 7,12-13,29-43
+PRD.generated.md
+  e1d5d9e911d470f3 97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "dda3c61d62e8f8a470fe9bb4662c8c9155e13628",
+  "prompts": {
+    "e1d5d9e911d470f3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2af31800-9d73-4dd7-9f1c-1c39754a98f7",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 19,
+      "total_deletions": 2,
+      "accepted_lines": 19,
+      "overriden_lines": 0
+    }
+  }
+}
