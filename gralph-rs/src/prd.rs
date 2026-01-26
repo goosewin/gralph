@@ -1189,7 +1189,12 @@ fn is_open_questions_heading(lower: &str) -> bool {
 }
 
 fn is_heading(line: &str) -> bool {
-    line.trim_start().starts_with("## ")
+    let trimmed = line.trim_start();
+    if !trimmed.starts_with('#') {
+        return false;
+    }
+    let rest = trimmed.trim_start_matches('#');
+    rest.starts_with(' ')
 }
 
 #[cfg(test)]
