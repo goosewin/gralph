@@ -137,7 +137,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
   * Model formats preserved.
   * Integration test stubs created.
 - **Dependencies** RS-4
-- [ ] RS-5 Implement remaining backends (opencode, gemini, codex)
+- [x] RS-5 Implement remaining backends (opencode, gemini, codex)
 
 ---
 

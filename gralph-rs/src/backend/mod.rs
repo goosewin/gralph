@@ -3,6 +3,9 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 pub mod claude;
+pub mod codex;
+pub mod gemini;
+pub mod opencode;
 
 pub trait Backend {
     fn check_installed(&self) -> bool;
