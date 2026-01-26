@@ -224,7 +224,7 @@ The codebase must be structured for unit testing with dependency injection and i
   * Worktree finish command with merge and cleanup working.
   * Dirty working tree detection implemented.
 - **Dependencies** DOTNET-2
-- [ ] DOTNET-12 Implement worktree create and finish commands
+- [x] DOTNET-12 Implement worktree create and finish commands
 
 ### Task DOTNET-13
 

@@ -310,11 +310,23 @@ prd.Add(prdCreate);
 
 var worktree = new Command("worktree", "Manage git worktrees");
 var worktreeCreate = new Command("create", "Create task worktree");
-worktreeCreate.Add(new Argument<string>("id") { Arity = ArgumentArity.ExactlyOne });
-worktreeCreate.SetAction(_ => Console.WriteLine("worktree create is not implemented yet."));
+var worktreeCreateIdArgument = new Argument<string>("id") { Arity = ArgumentArity.ExactlyOne };
+worktreeCreate.Add(worktreeCreateIdArgument);
+worktreeCreate.SetAction(parseResult =>
+{
+    var handler = new WorktreeCommandHandler();
+    var exitCode = handler.ExecuteCreate(parseResult.GetValue(worktreeCreateIdArgument));
+    Environment.ExitCode = exitCode;
+});
 var worktreeFinish = new Command("finish", "Finish task worktree");
-worktreeFinish.Add(new Argument<string>("id") { Arity = ArgumentArity.ExactlyOne });
-worktreeFinish.SetAction(_ => Console.WriteLine("worktree finish is not implemented yet."));
+var worktreeFinishIdArgument = new Argument<string>("id") { Arity = ArgumentArity.ExactlyOne };
+worktreeFinish.Add(worktreeFinishIdArgument);
+worktreeFinish.SetAction(parseResult =>
+{
+    var handler = new WorktreeCommandHandler();
+    var exitCode = handler.ExecuteFinish(parseResult.GetValue(worktreeFinishIdArgument));
+    Environment.ExitCode = exitCode;
+});
 worktree.Add(worktreeCreate);
 worktree.Add(worktreeFinish);
 
