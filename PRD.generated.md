@@ -157,7 +157,7 @@ Each backend must have dedicated test coverage verifying installation detection,
   * Installation status (installed/not installed) is correct for each.
   * Install hints are displayed for backends that are not installed.
 - **Dependencies** G-1, G-2
-- [ ] G-7 Verify gralph backends command integration
+- [x] G-7 Verify gralph backends command integration
 
 ---
 
