@@ -58,6 +58,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - P-EX-2 Updated README task block example to include all required fields.
 - RS-10 Wired Rust CLI subcommands with build-time shell completions.
 - RS-11 Added Rust tests coverage and CI workflow with coverage threshold.
+- RS-12 Documented Rust build/install steps and migration notes.
 
 ### Fixed
 - OSS-1 Removed duplicate introductory text from README.

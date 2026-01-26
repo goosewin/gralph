@@ -87,6 +87,29 @@ cd gralph
 ./install.sh
 ```
 
+### Rust Build and Install (cargo)
+
+If you want the Rust implementation directly, build or install the `gralph-rs` binary with Cargo:
+
+```bash
+# Build a release binary
+cargo build --release --manifest-path gralph-rs/Cargo.toml
+
+# Run it from the target directory
+./gralph-rs/target/release/gralph-rs --version
+```
+
+```bash
+# Install to ~/.cargo/bin
+cargo install --path gralph-rs --locked
+```
+
+The installed binary name is `gralph-rs`. If you want the same command name as the Bash version, add an alias or symlink:
+
+```bash
+ln -s ~/.cargo/bin/gralph-rs ~/.local/bin/gralph
+```
+
 When run from a cloned repository, the installer operates in **local mode**, which:
 1. Detects `bin/gralph` in the current directory
 2. Installs directly from the local files (no download)
@@ -342,6 +365,15 @@ cd .worktrees/task-C-6
 # Finish the task (merge and remove worktree)
 gralph worktree finish C-6
 ```
+
+## Migration Notes (Bash -> Rust)
+
+If you previously used the Bash implementation (`bin/gralph`), the Rust CLI keeps the same commands, flags, PRD format, and file locations. The main differences:
+
+- The Rust binary is `gralph-rs` when installed with Cargo.
+- Rust builds remove the dependency on `jq`, `tmux`, `socat/nc`, and `flock` for core features.
+- Configuration and state stay in `~/.config/gralph/`, and logs remain under `.gralph/` in each project.
+- Shell completions are generated during the Rust build.
 
 ## Configuration
 

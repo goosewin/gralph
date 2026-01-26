@@ -6,6 +6,7 @@ This document captures the high-level structure of gralph. It is a living summar
 
 `bin/gralph` is the CLI entrypoint. It parses commands, loads configuration defaults, wires in the shared libraries, and dispatches to subcommands like start/stop/status/server while managing session setup and logging paths.
 `gralph-rs/src/main.rs` is the Rust CLI entrypoint. It wires clap subcommands to Rust modules, manages session state updates, and coordinates backend execution.
+`gralph-rs/src/lib.rs` holds shared types and helpers used by the Rust modules.
 `gralph-rs/src/cli.rs` defines the clap command tree and options; `gralph-rs/build.rs` generates bash/zsh completions during build.
 
 `lib/core.sh` owns the execution loop. It loads backend adapters, renders prompt templates, runs iterations, counts remaining tasks, checks completion conditions, and handles loop lifecycle including logs, duration, and notifications.
@@ -24,7 +25,7 @@ This document captures the high-level structure of gralph. It is a living summar
 `gralph-rs/src/prd.rs` mirrors PRD validation, sanitization, and stack detection behavior in Rust.
 
 `lib/backends/*.sh` provides backend adapters that invoke external CLIs.
-`gralph-rs/src/backend` defines the backend trait and CLI-backed implementations for the Rust port.
+`gralph-rs/src/backend` defines the backend trait and CLI-backed implementations for the Rust port (`backend/mod.rs` plus `backend/claude.rs`, `backend/opencode.rs`, `backend/gemini.rs`, `backend/codex.rs`).
 
 `lib/notify.sh` formats and sends webhook notifications. It detects webhook targets, builds payloads for Slack/Discord/generic endpoints, and posts completion or failure events.
 `gralph-rs/src/notify.rs` mirrors webhook detection, payload formatting, and delivery in Rust via reqwest.

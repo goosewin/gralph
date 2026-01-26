@@ -235,7 +235,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
   * ARCHITECTURE.md describes Rust modules.
   * Migration notes for Bash users added.
 - **Dependencies** RS-11
-- [ ] RS-12 Update documentation for Rust implementation
+- [x] RS-12 Update documentation for Rust implementation
 
 ---
 
