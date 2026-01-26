@@ -1,166 +1,212 @@
 #compdef gralph
-#
-# Zsh completions for gralph
-#
-# Installation:
-#   - Copy to a directory in your $fpath (e.g., ~/.zsh/completions/)
-#   - Or add to /usr/local/share/zsh/site-functions/_gralph
-#   - Ensure 'compinit' is called in your .zshrc
+compdef _gralph gralph
 
-_gralph() {
-    local -a commands
-    local -a start_opts stop_opts logs_opts server_opts prd_create_opts prd_check_opts
+# zsh completion for gralph                               -*- shell-script -*-
 
-    commands=(
-        'start:Start a new gralph loop'
-        'stop:Stop a running loop'
-        'status:Show status of all loops'
-        'logs:View logs for a loop'
-        'resume:Resume crashed/stopped loops'
-        'prd:Generate or validate PRDs'
-        'backends:List available AI backends'
-        'config:Manage configuration'
-        'server:Start status API server'
-        'version:Show version'
-        'help:Show help message'
-    )
-
-    start_opts=(
-        '(-n --name)'{-n,--name}'[Session name]:name:'
-        '--max-iterations[Max iterations before giving up]:iterations:(10 20 30 50 100)'
-        '(-f --task-file)'{-f,--task-file}'[Task file path]:file:_files -g "*.md"'
-        '--completion-marker[Completion promise text]:marker:(COMPLETE DONE FINISHED ALL_DONE)'
-        '(-b --backend)'{-b,--backend}'[AI backend to use]:backend:(claude opencode gemini codex)'
-        '(-m --model)'{-m,--model}'[Model override]:model:(claude-opus-4-5 opencode/example-code-model anthropic/claude-opus-4-5 google/gemini-1.5-pro gemini-1.5-pro example-codex-model)'
-        '--variant[Model variant override]:variant:(xhigh high medium low)'
-        '--webhook[Notification webhook URL]:url:'
-        '--no-tmux[Run in foreground (blocks)]'
-        '--interactive[Force interactive prompts]'
-        '--no-interactive[Disable interactive prompts]'
-        '(-h --help)'{-h,--help}'[Show help]'
-    )
-
-    stop_opts=(
-        '(-a --all)'{-a,--all}'[Stop all loops]'
-        '(-h --help)'{-h,--help}'[Show help]'
-    )
-
-    logs_opts=(
-        '--follow[Follow log output continuously]'
-        '(-h --help)'{-h,--help}'[Show help]'
-    )
-
-    server_opts=(
-        '(-H --host)'{-H,--host}'[Host/IP to bind to]:host:(127.0.0.1 0.0.0.0 localhost)'
-        '(-p --port)'{-p,--port}'[Port number]:port:(8080 3000 8000 9000)'
-        '(-t --token)'{-t,--token}'[Authentication token]:token:'
-        '--open[Disable token requirement (not recommended)]'
-        '(-h --help)'{-h,--help}'[Show help]'
-    )
-
-    prd_create_opts=(
-        '--dir[Project directory]:directory:_directories'
-        '(-o --output)'{-o,--output}'[Output PRD file path]:file:_files -g "*.md"'
-        '--goal[Short description of what to build]:goal:'
-        '--constraints[Constraints or requirements]:constraints:'
-        '--context[Extra context files (comma-separated)]:context:'
-        '--sources[External URLs or references (comma-separated)]:sources:'
-        '--allow-missing-context[Allow missing Context Bundle paths]'
-        '--multiline[Enable multiline prompts]'
-        '--interactive[Force interactive prompts]'
-        '--no-interactive[Disable interactive prompts]'
-        '--force[Overwrite existing output file]'
-        '(-h --help)'{-h,--help}'[Show help]'
-    )
-
-    prd_check_opts=(
-        '--allow-missing-context[Allow missing Context Bundle paths]'
-        '(-h --help)'{-h,--help}'[Show help]'
-    )
-
-    _arguments -C \
-        '1: :->command' \
-        '*:: :->args'
-
-    case $state in
-        command)
-            _describe -t commands 'gralph commands' commands
-            ;;
-        args)
-            case $words[1] in
-                start)
-                    _arguments $start_opts \
-                        '1:directory:_directories'
-                    ;;
-                stop)
-                    _arguments $stop_opts \
-                        '1:session:_gralph_sessions'
-                    ;;
-                logs)
-                    _arguments $logs_opts \
-                        '1:session:_gralph_sessions'
-                    ;;
-                resume)
-                    _arguments \
-                        '1:session:_gralph_sessions'
-                    ;;
-                server)
-                    _arguments $server_opts
-                    ;;
-                config)
-                    local -a config_cmds
-                    config_cmds=(
-                        'get:Get configuration value'
-                        'set:Set configuration value'
-                        'list:List all configuration'
-                    )
-                    _describe -t config_cmds 'config subcommands' config_cmds
-                    ;;
-                prd)
-                    local -a prd_cmds
-                    prd_cmds=(
-                        'check:Validate a PRD file'
-                        'create:Generate a spec-compliant PRD'
-                    )
-                    if (( CURRENT == 2 )); then
-                        _describe -t prd_cmds 'prd subcommands' prd_cmds
-                        return
-                    fi
-                    case $words[2] in
-                        create|init|new)
-                            _arguments $prd_create_opts
-                            ;;
-                        check)
-                            _arguments $prd_check_opts \
-                                '1:PRD file:_files -g "*.md"'
-                            ;;
-                        *)
-                            _describe -t prd_cmds 'prd subcommands' prd_cmds
-                            ;;
-                    esac
-                    ;;
-                backends|status|version|help)
-                    # No further arguments
-                    ;;
-            esac
-            ;;
-    esac
+__gralph_debug()
+{
+    local file="$BASH_COMP_DEBUG_FILE"
+    if [[ -n ${file} ]]; then
+        echo "$*" >> "${file}"
+    fi
 }
 
-# Helper function to get session names
-_gralph_sessions() {
-    local -a sessions
-    local state_file="${HOME}/.config/gralph/state.json"
+_gralph()
+{
+    local shellCompDirectiveError=1
+    local shellCompDirectiveNoSpace=2
+    local shellCompDirectiveNoFileComp=4
+    local shellCompDirectiveFilterFileExt=8
+    local shellCompDirectiveFilterDirs=16
+    local shellCompDirectiveKeepOrder=32
 
-    if [[ -f "$state_file" ]] && (( $+commands[jq] )); then
-        sessions=(${(f)"$(jq -r '.sessions | keys[]' "$state_file" 2>/dev/null)"})
-        if [[ -n "$sessions" ]]; then
-            _describe -t sessions 'gralph sessions' sessions
-            return
+    local lastParam lastChar flagPrefix requestComp out directive comp lastComp noSpace keepOrder
+    local -a completions
+
+    __gralph_debug "\n========= starting completion logic =========="
+    __gralph_debug "CURRENT: ${CURRENT}, words[*]: ${words[*]}"
+
+    # The user could have moved the cursor backwards on the command-line.
+    # We need to trigger completion from the $CURRENT location, so we need
+    # to truncate the command-line ($words) up to the $CURRENT location.
+    # (We cannot use $CURSOR as its value does not work when a command is an alias.)
+    words=("${=words[1,CURRENT]}")
+    __gralph_debug "Truncated words[*]: ${words[*]},"
+
+    lastParam=${words[-1]}
+    lastChar=${lastParam[-1]}
+    __gralph_debug "lastParam: ${lastParam}, lastChar: ${lastChar}"
+
+    # For zsh, when completing a flag with an = (e.g., gralph -n=<TAB>)
+    # completions must be prefixed with the flag
+    setopt local_options BASH_REMATCH
+    if [[ "${lastParam}" =~ '-.*=' ]]; then
+        # We are dealing with a flag with an =
+        flagPrefix="-P ${BASH_REMATCH}"
+    fi
+
+    # Prepare the command to obtain completions
+    requestComp="${words[1]} __complete ${words[2,-1]}"
+    if [ "${lastChar}" = "" ]; then
+        # If the last parameter is complete (there is a space following it)
+        # We add an extra empty parameter so we can indicate this to the go completion code.
+        __gralph_debug "Adding extra empty parameter"
+        requestComp="${requestComp} \"\""
+    fi
+
+    __gralph_debug "About to call: eval ${requestComp}"
+
+    # Use eval to handle any environment variables and such
+    out=$(eval ${requestComp} 2>/dev/null)
+    __gralph_debug "completion output: ${out}"
+
+    # Extract the directive integer following a : from the last line
+    local lastLine
+    while IFS='\n' read -r line; do
+        lastLine=${line}
+    done < <(printf "%s\n" "${out[@]}")
+    __gralph_debug "last line: ${lastLine}"
+
+    if [ "${lastLine[1]}" = : ]; then
+        directive=${lastLine[2,-1]}
+        # Remove the directive including the : and the newline
+        local suffix
+        (( suffix=${#lastLine}+2))
+        out=${out[1,-$suffix]}
+    else
+        # There is no directive specified.  Leave $out as is.
+        __gralph_debug "No directive found.  Setting do default"
+        directive=0
+    fi
+
+    __gralph_debug "directive: ${directive}"
+    __gralph_debug "completions: ${out}"
+    __gralph_debug "flagPrefix: ${flagPrefix}"
+
+    if [ $((directive & shellCompDirectiveError)) -ne 0 ]; then
+        __gralph_debug "Completion received error. Ignoring completions."
+        return
+    fi
+
+    local activeHelpMarker="_activeHelp_ "
+    local endIndex=${#activeHelpMarker}
+    local startIndex=$((${#activeHelpMarker}+1))
+    local hasActiveHelp=0
+    while IFS='\n' read -r comp; do
+        # Check if this is an activeHelp statement (i.e., prefixed with $activeHelpMarker)
+        if [ "${comp[1,$endIndex]}" = "$activeHelpMarker" ];then
+            __gralph_debug "ActiveHelp found: $comp"
+            comp="${comp[$startIndex,-1]}"
+            if [ -n "$comp" ]; then
+                compadd -x "${comp}"
+                __gralph_debug "ActiveHelp will need delimiter"
+                hasActiveHelp=1
+            fi
+
+            continue
+        fi
+
+        if [ -n "$comp" ]; then
+            # If requested, completions are returned with a description.
+            # The description is preceded by a TAB character.
+            # For zsh's _describe, we need to use a : instead of a TAB.
+            # We first need to escape any : as part of the completion itself.
+            comp=${comp//:/\\:}
+
+            local tab="$(printf '\t')"
+            comp=${comp//$tab/:}
+
+            __gralph_debug "Adding completion: ${comp}"
+            completions+=${comp}
+            lastComp=$comp
+        fi
+    done < <(printf "%s\n" "${out[@]}")
+
+    # Add a delimiter after the activeHelp statements, but only if:
+    # - there are completions following the activeHelp statements, or
+    # - file completion will be performed (so there will be choices after the activeHelp)
+    if [ $hasActiveHelp -eq 1 ]; then
+        if [ ${#completions} -ne 0 ] || [ $((directive & shellCompDirectiveNoFileComp)) -eq 0 ]; then
+            __gralph_debug "Adding activeHelp delimiter"
+            compadd -x "--"
+            hasActiveHelp=0
         fi
     fi
 
-    _message 'no sessions found'
+    if [ $((directive & shellCompDirectiveNoSpace)) -ne 0 ]; then
+        __gralph_debug "Activating nospace."
+        noSpace="-S ''"
+    fi
+
+    if [ $((directive & shellCompDirectiveKeepOrder)) -ne 0 ]; then
+        __gralph_debug "Activating keep order."
+        keepOrder="-V"
+    fi
+
+    if [ $((directive & shellCompDirectiveFilterFileExt)) -ne 0 ]; then
+        # File extension filtering
+        local filteringCmd
+        filteringCmd='_files'
+        for filter in ${completions[@]}; do
+            if [ ${filter[1]} != '*' ]; then
+                # zsh requires a glob pattern to do file filtering
+                filter="\*.$filter"
+            fi
+            filteringCmd+=" -g $filter"
+        done
+        filteringCmd+=" ${flagPrefix}"
+
+        __gralph_debug "File filtering command: $filteringCmd"
+        _arguments '*:filename:'"$filteringCmd"
+    elif [ $((directive & shellCompDirectiveFilterDirs)) -ne 0 ]; then
+        # File completion for directories only
+        local subdir
+        subdir="${completions[1]}"
+        if [ -n "$subdir" ]; then
+            __gralph_debug "Listing directories in $subdir"
+            pushd "${subdir}" >/dev/null 2>&1
+        else
+            __gralph_debug "Listing directories in ."
+        fi
+
+        local result
+        _arguments '*:dirname:_files -/'" ${flagPrefix}"
+        result=$?
+        if [ -n "$subdir" ]; then
+            popd >/dev/null 2>&1
+        fi
+        return $result
+    else
+        __gralph_debug "Calling _describe"
+        if eval _describe $keepOrder "completions" completions $flagPrefix $noSpace; then
+            __gralph_debug "_describe found some completions"
+
+            # Return the success of having called _describe
+            return 0
+        else
+            __gralph_debug "_describe did not find completions."
+            __gralph_debug "Checking if we should do file completion."
+            if [ $((directive & shellCompDirectiveNoFileComp)) -ne 0 ]; then
+                __gralph_debug "deactivating file completion"
+
+                # We must return an error code here to let zsh know that there were no
+                # completions found by _describe; this is what will trigger other
+                # matching algorithms to attempt to find completions.
+                # For example zsh can match letters in the middle of words.
+                return 1
+            else
+                # Perform file completion
+                __gralph_debug "Activating file completion"
+
+                # We must return the result of this command, so it must be the
+                # last command, or else we must store its result to return it.
+                _arguments '*:filename:_files'" ${flagPrefix}"
+            fi
+        fi
+    fi
 }
 
-_gralph "$@"
+# don't run the completion function when being source-ed or eval-ed
+if [ "$funcstack[1]" = "_gralph" ]; then
+    _gralph
+fi

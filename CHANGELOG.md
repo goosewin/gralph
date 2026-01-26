@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - GO-12 Added PRD check and create commands.
 - GO-13 Added worktree create and finish commands to the Go CLI.
 - GO-14 Added backends and config commands to the Go CLI.
+- GO-15 Added Cobra completion command and generated bash, zsh, and fish scripts.
 - Initial public release notes for the gralph CLI.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.

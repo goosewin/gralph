@@ -273,7 +273,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * Generates zsh completions.
   * Generates fish completions.
 - **Dependencies** GO-8, GO-12, GO-13, GO-14
-- [ ] GO-15 Add shell completion generation
+- [x] GO-15 Add shell completion generation
 
 ### Task GO-16
 
