@@ -370,7 +370,7 @@ Support webhook notifications:
   * Command-line argument parsing tested.
   * Cross-platform test matrix passes.
 - **Dependencies** AOT-7, AOT-8
-- [ ] AOT-18 Write integration tests for loop and backends
+- [x] AOT-18 Write integration tests for loop and backends
 
 ---
 

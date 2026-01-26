@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - AOT-15 Implemented config list/get/set commands and backend status output.
 - AOT-16 Added Native AOT publish/verify scripts and documented build metrics.
 - AOT-17 Added .NET unit tests for config, state, and PRD validation modules.
+- AOT-18 Added integration tests for backend parsing, core loop completion, and CLI argument handling.
 - Initial public release notes for the gralph CLI.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.
