@@ -12,13 +12,14 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  prepare:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
 
       - name: Extract version from tag
         id: version
@@ -40,61 +41,125 @@ jobs:
           fi
           echo "Version verified: $CARGO_VERSION"
 
+  build:
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: linux-x86_64
+            binary_path: gralph-rs/target/release/gralph
+            build: cargo
+          - os: ubuntu-latest
+            asset: linux-aarch64
+            binary_path: gralph-rs/target/aarch64-unknown-linux-gnu/release/gralph
+            build: cross
+            target: aarch64-unknown-linux-gnu
+          - os: macos-13
+            asset: macos-x86_64
+            binary_path: gralph-rs/target/release/gralph
+            build: cargo
+          - os: macos-14
+            asset: macos-arm64
+            binary_path: gralph-rs/target/release/gralph
+            build: cargo
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cross
+        if: matrix.build == 'cross'
+        run: cargo install cross --locked
+
       - name: Build release binary
-        run: cargo build --release --manifest-path gralph-rs/Cargo.toml
+        run: |
+          if [ "${{ matrix.build }}" = "cross" ]; then
+            cross build --release --target ${{ matrix.target }} --manifest-path gralph-rs/Cargo.toml
+          else
+            cargo build --release --manifest-path gralph-rs/Cargo.toml
+          fi
 
       - name: Create release tarball
         run: |
-          mkdir -p dist
-          mkdir -p dist/gralph-${{ steps.version.outputs.version }}
-          cp gralph-rs/target/release/gralph dist/gralph-${{ steps.version.outputs.version }}/gralph
-          cp -R completions dist/gralph-${{ steps.version.outputs.version }}/
-          cp -R config dist/gralph-${{ steps.version.outputs.version }}/
-          cp README.md LICENSE dist/gralph-${{ steps.version.outputs.version }}/
-          tar -czvf dist/gralph-${{ steps.version.outputs.version }}-linux-x86_64.tar.gz \
-            -C dist gralph-${{ steps.version.outputs.version }}
+          VERSION=${{ needs.prepare.outputs.version }}
+          mkdir -p dist/gralph-${VERSION}
+          cp ${{ matrix.binary_path }} dist/gralph-${VERSION}/gralph
+          cp -R completions dist/gralph-${VERSION}/
+          cp -R config dist/gralph-${VERSION}/
+          cp README.md LICENSE dist/gralph-${VERSION}/
+          tar -czvf dist/gralph-${VERSION}-${{ matrix.asset }}.tar.gz \
+            -C dist gralph-${VERSION}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gralph-${{ needs.prepare.outputs.version }}-${{ matrix.asset }}
+          path: dist/gralph-${{ needs.prepare.outputs.version }}-${{ matrix.asset }}.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: Generate checksums
         run: |
           cd dist
-          sha256sum gralph-${{ steps.version.outputs.version }}-linux-x86_64.tar.gz > checksums.txt
+          sha256sum gralph-*.tar.gz > checksums.txt
           cat checksums.txt
 
       - name: Generate release notes
-        id: release_notes
         run: |
-          echo "## What's New in ${{ steps.version.outputs.tag }}" > release_notes.md
-          echo "" >> release_notes.md
-          echo "### Installation" >> release_notes.md
-          echo "" >> release_notes.md
-          echo '```bash' >> release_notes.md
-          echo "curl -L -o gralph.tar.gz https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/gralph-${{ steps.version.outputs.version }}-linux-x86_64.tar.gz" >> release_notes.md
-          echo "tar -xzf gralph-${{ steps.version.outputs.version }}-linux-x86_64.tar.gz" >> release_notes.md
-          echo "cd gralph-${{ steps.version.outputs.version }}" >> release_notes.md
-          echo "chmod +x gralph" >> release_notes.md
-          echo "sudo mv gralph /usr/local/bin/gralph" >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### Checksums" >> release_notes.md
-          echo "" >> release_notes.md
-          echo '```' >> release_notes.md
+          cat <<EOF > release_notes.md
+          ## What's New in ${{ needs.prepare.outputs.tag }}
+
+          ### Assets
+          - Linux x86_64: gralph-${{ needs.prepare.outputs.version }}-linux-x86_64.tar.gz
+          - Linux aarch64: gralph-${{ needs.prepare.outputs.version }}-linux-aarch64.tar.gz
+          - macOS x86_64: gralph-${{ needs.prepare.outputs.version }}-macos-x86_64.tar.gz
+          - macOS arm64: gralph-${{ needs.prepare.outputs.version }}-macos-arm64.tar.gz
+
+          ### Installation
+          ```bash
+          VERSION="${{ needs.prepare.outputs.version }}"
+          ASSET="linux-x86_64" # linux-aarch64, macos-x86_64, or macos-arm64
+          curl -L -o gralph.tar.gz https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/gralph-\${VERSION}-\${ASSET}.tar.gz
+          tar -xzf gralph.tar.gz
+          cd gralph-\${VERSION}
+          chmod +x gralph
+          sudo mv gralph /usr/local/bin/gralph
+          ```
+
+          ### Checksums
+          ```
+          EOF
           cat dist/checksums.txt >> release_notes.md
-          echo '```' >> release_notes.md
-          echo "" >> release_notes.md
-          echo "### Requirements" >> release_notes.md
-          echo "" >> release_notes.md
-          echo "- AI backend CLI (claude, opencode, gemini, or codex)" >> release_notes.md
-          echo "- \`tmux\` for background session management (optional with --no-tmux)" >> release_notes.md
+          cat <<'EOF' >> release_notes.md
+          ```
+
+          ### Requirements
+          - AI backend CLI (claude, opencode, gemini, or codex)
+          - `tmux` for background session management (optional with --no-tmux)
+          EOF
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Gralph CLI ${{ steps.version.outputs.tag }}
+          name: Gralph CLI ${{ needs.prepare.outputs.tag }}
           body_path: release_notes.md
           draft: false
-          prerelease: ${{ contains(steps.version.outputs.tag, '-') }}
+          prerelease: ${{ contains(needs.prepare.outputs.tag, '-') }}
           files: |
-            dist/gralph-${{ steps.version.outputs.version }}-linux-x86_64.tar.gz
+            dist/gralph-*.tar.gz
             dist/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -103,6 +168,10 @@ jobs:
         run: |
           echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version:** ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tarball:** gralph-${{ steps.version.outputs.version }}-linux-x86_64.tar.gz" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ needs.prepare.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Assets:**" >> $GITHUB_STEP_SUMMARY
+          echo "  - gralph-${{ needs.prepare.outputs.version }}-linux-x86_64.tar.gz" >> $GITHUB_STEP_SUMMARY
+          echo "  - gralph-${{ needs.prepare.outputs.version }}-linux-aarch64.tar.gz" >> $GITHUB_STEP_SUMMARY
+          echo "  - gralph-${{ needs.prepare.outputs.version }}-macos-x86_64.tar.gz" >> $GITHUB_STEP_SUMMARY
+          echo "  - gralph-${{ needs.prepare.outputs.version }}-macos-arm64.tar.gz" >> $GITHUB_STEP_SUMMARY
           echo "- **Status:** Released successfully" >> $GITHUB_STEP_SUMMARY

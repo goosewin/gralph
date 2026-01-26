@@ -41,18 +41,19 @@ Gralph is distributed as a Rust CLI. Install from a release tarball or build fro
 
 ### Quick Install (curl)
 
-Download a release asset and place the binary on your PATH:
+Release assets are published per OS/arch. Pick the matching asset and place the binary on your PATH:
 
 ```bash
 VERSION="0.1.0" # replace with the latest tag
-curl -L -o gralph.tar.gz https://github.com/goosewin/gralph/releases/download/v${VERSION}/gralph-${VERSION}-linux-x86_64.tar.gz
+ASSET="linux-x86_64" # linux-aarch64, macos-x86_64, macos-arm64
+curl -L -o gralph.tar.gz https://github.com/goosewin/gralph/releases/download/v${VERSION}/gralph-${VERSION}-${ASSET}.tar.gz
 tar -xzf gralph.tar.gz
 cd gralph-${VERSION}
 chmod +x gralph
 sudo mv gralph /usr/local/bin/gralph
 ```
 
-Release assets currently target Linux x86_64. For macOS or other platforms, build from source.
+Use `uname -s` and `uname -m` to map your OS/arch to an asset name. Release assets are available for Linux x86_64/aarch64 and macOS x86_64/arm64; build from source for other platforms.
 
 ### From Source (git clone)
 

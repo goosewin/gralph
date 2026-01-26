@@ -14,6 +14,7 @@ Environment: Ubuntu 24.04.3 LTS
 - `./gralph-rs/target/release/gralph config list` shows configuration
 - Help output includes flags: `--no-tmux`, `--backend`, `--webhook`, `--variant`, `--prompt-template`
 - Server command available in help
+- If testing a release asset, confirm the tarball matches the host architecture (linux-x86_64 vs linux-aarch64).
 
 ## Command Output
 

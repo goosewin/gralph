@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Added multi-arch release assets for Linux and macOS.
 - Initial public release notes for the gralph CLI.
 - RS-1 Scaffolded Rust project with clap CLI skeleton.
 - RS-2 Added Rust config loader with serde_yaml merging and env overrides.
