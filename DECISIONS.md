@@ -45,3 +45,27 @@ working.
 - Only include the unchecked line and rely on the agent to look up context.
 - Require task blocks and break legacy PRDs.
 - Attach the entire PRD instead of a scoped task block.
+
+## D-003 Inject Context Files into Prompts
+- Date: 2026-01-25
+- Status: Accepted
+
+### Context
+Even with shared docs present, agents can skip reading them without explicit
+instructions. We need a configurable list of shared context files that is
+visible in each iteration prompt.
+
+### Decision
+Add a configurable context file list and inject it into the prompt with a
+clear instruction to read those files first. Keep the list optional so existing
+behavior remains when unset.
+
+### Rationale
+- Ensures shared docs are surfaced at the start of each iteration.
+- Keeps context file selection configurable without code changes.
+- Preserves backward compatibility when no list is provided.
+
+### Alternatives
+- Rely on the agent to discover shared docs without explicit instructions.
+- Hardcode a fixed list of context files in the prompt.
+- Inject the entire repository contents into the prompt.

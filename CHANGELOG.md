@@ -20,3 +20,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - P-4 Injected selected task block into iteration prompts.
 - P-5 Added tests for task block parsing and fallback behavior.
 - P-6 Documented task block format and legacy fallback behavior.
+- B-6 Recorded Stage B context file injection notes and decision.
