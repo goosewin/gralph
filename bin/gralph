@@ -1292,6 +1292,45 @@ cmd_config() {
     esac
 }
 
+cmd_worktree_create() {
+    local task_id="${POSITIONAL_ARGS[1]}"
+
+    if [[ -z "$task_id" ]]; then
+        die "Usage: gralph worktree create <ID>"
+    fi
+
+    die "Worktree create is not implemented yet"
+}
+
+cmd_worktree_finish() {
+    local task_id="${POSITIONAL_ARGS[1]}"
+
+    if [[ -z "$task_id" ]]; then
+        die "Usage: gralph worktree finish <ID>"
+    fi
+
+    die "Worktree finish is not implemented yet"
+}
+
+cmd_worktree() {
+    local subcommand="${POSITIONAL_ARGS[0]}"
+
+    case "$subcommand" in
+        create)
+            cmd_worktree_create
+            ;;
+        finish)
+            cmd_worktree_finish
+            ;;
+        "")
+            die "Usage: gralph worktree <create|finish> <ID>"
+            ;;
+        *)
+            die "Unknown worktree command: $subcommand. Use 'gralph worktree create <ID>' or 'gralph worktree finish <ID>'"
+            ;;
+    esac
+}
+
 cmd_server() {
     # Source server library
     if [[ -f "$LIB_DIR/server.sh" ]]; then
@@ -1340,6 +1379,9 @@ main() {
             ;;
         config)
             cmd_config
+            ;;
+        worktree)
+            cmd_worktree
             ;;
         server)
             cmd_server
