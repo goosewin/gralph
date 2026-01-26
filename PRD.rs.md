@@ -109,7 +109,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
   * State file format matches Bash version.
   * Unit tests for locking and atomic writes.
 - **Dependencies** RS-1
-- [ ] RS-3 Implement state management with file locking
+- [x] RS-3 Implement state management with file locking
 
 ---
 
