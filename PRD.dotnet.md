@@ -74,7 +74,7 @@ The codebase must be structured for unit testing with dependency injection and i
 ### Task DOTNET-1
 
 - **ID** DOTNET-1
-- **Context Bundle** `README.md`, `bin/gralph`
+- **Context Bundle** `README.md`, `src/Gralph/Program.cs`
 - **DoD** .NET 10 solution scaffolded with project structure and Spectre.Console reference.
 - **Checklist**
   * Solution file created with console app project.
@@ -86,7 +86,7 @@ The codebase must be structured for unit testing with dependency injection and i
 ### Task DOTNET-2
 
 - **ID** DOTNET-2
-- **Context Bundle** `bin/gralph`, `README.md`
+- **Context Bundle** `src/Gralph/Program.cs`, `README.md`
 - **DoD** CLI entrypoint with root command and subcommand structure matching bash version.
 - **Checklist**
   * Root command defined with version and help options.
@@ -98,7 +98,7 @@ The codebase must be structured for unit testing with dependency injection and i
 ### Task DOTNET-3
 
 - **ID** DOTNET-3
-- **Context Bundle** `lib/config.sh`, `config/default.yaml`
+- **Context Bundle** `src/Gralph/Configuration/ConfigStore.cs`, `config/default.yaml`
 - **DoD** Configuration system ported to C# with YAML parsing and environment variable overrides.
 - **Checklist**
   * YAML configuration file loading implemented.
@@ -111,7 +111,7 @@ The codebase must be structured for unit testing with dependency injection and i
 ### Task DOTNET-4
 
 - **ID** DOTNET-4
-- **Context Bundle** `lib/state.sh`
+- **Context Bundle** `src/Gralph/State/StateStore.cs`
 - **DoD** Session state management ported to C# with JSON persistence and file locking.
 - **Checklist**
   * State file JSON schema defined.
@@ -125,7 +125,7 @@ The codebase must be structured for unit testing with dependency injection and i
 ### Task DOTNET-5
 
 - **ID** DOTNET-5
-- **Context Bundle** `lib/backends/common.sh`, `lib/backends/claude.sh`
+- **Context Bundle** `src/Gralph/Backends/BackendRegistry.cs`, `src/Gralph/Backends/ClaudeBackend.cs`
 - **DoD** Backend abstraction layer implemented with IBackend interface and Claude adapter.
 - **Checklist**
   * IBackend interface defined with required methods.
@@ -138,7 +138,7 @@ The codebase must be structured for unit testing with dependency injection and i
 ### Task DOTNET-6
 
 - **ID** DOTNET-6
-- **Context Bundle** `lib/core.sh`
+- **Context Bundle** `src/Gralph/Core/CoreLoop.cs`
 - **DoD** Core loop logic ported including task counting, prompt rendering, and completion detection.
 - **Checklist**
   * Task block parsing from PRD files implemented.
@@ -151,7 +151,7 @@ The codebase must be structured for unit testing with dependency injection and i
 ### Task DOTNET-7
 
 - **ID** DOTNET-7
-- **Context Bundle** `bin/gralph`, `lib/core.sh`
+- **Context Bundle** `src/Gralph/Commands/StartCommandHandler.cs`, `src/Gralph/Core/CoreLoop.cs`
 - **DoD** Start command fully implemented with all options.
 - **Checklist**
   * All start command options parsed and validated.
@@ -164,7 +164,7 @@ The codebase must be structured for unit testing with dependency injection and i
 ### Task DOTNET-8
 
 - **ID** DOTNET-8
-- **Context Bundle** `bin/gralph`, `lib/state.sh`
+- **Context Bundle** `src/Gralph/Commands/StatusCommandHandler.cs`, `src/Gralph/State/StateStore.cs`
 - **DoD** Status, stop, logs, and resume commands implemented.
 - **Checklist**
   * Status command displays session table with Spectre.Console.
@@ -177,7 +177,7 @@ The codebase must be structured for unit testing with dependency injection and i
 ### Task DOTNET-9
 
 - **ID** DOTNET-9
-- **Context Bundle** `lib/prd.sh`
+- **Context Bundle** `src/Gralph/Prd/PrdValidator.cs`, `src/Gralph/Prd/PrdGenerator.cs`
 - **DoD** PRD validation and generation commands implemented.
 - **Checklist**
   * PRD task block extraction and validation logic ported.
@@ -190,7 +190,7 @@ The codebase must be structured for unit testing with dependency injection and i
 ### Task DOTNET-10
 
 - **ID** DOTNET-10
-- **Context Bundle** `lib/server.sh`
+- **Context Bundle** `src/Gralph/Commands/ServerCommandHandler.cs`
 - **DoD** HTTP status server implemented using Kestrel or minimal APIs.
 - **Checklist**
   * HTTP endpoints for /status, /status/:name, /stop/:name implemented.
@@ -203,7 +203,7 @@ The codebase must be structured for unit testing with dependency injection and i
 ### Task DOTNET-11
 
 - **ID** DOTNET-11
-- **Context Bundle** `lib/notify.sh`
+- **Context Bundle** `src/Gralph/Notifications/WebhookNotifier.cs`
 - **DoD** Webhook notification system implemented for Discord, Slack, and generic endpoints.
 - **Checklist**
   * Webhook type detection from URL implemented.
@@ -217,7 +217,7 @@ The codebase must be structured for unit testing with dependency injection and i
 ### Task DOTNET-12
 
 - **ID** DOTNET-12
-- **Context Bundle** `bin/gralph`
+- **Context Bundle** `src/Gralph/Commands/WorktreeCommandHandler.cs`
 - **DoD** Git worktree commands implemented.
 - **Checklist**
   * Worktree create command with task-ID naming convention working.
@@ -229,7 +229,7 @@ The codebase must be structured for unit testing with dependency injection and i
 ### Task DOTNET-13
 
 - **ID** DOTNET-13
-- **Context Bundle** `lib/backends/codex.sh`, `lib/backends/gemini.sh`, `lib/backends/opencode.sh`
+- **Context Bundle** `src/Gralph/Backends/CodexBackend.cs`, `src/Gralph/Backends/GeminiBackend.cs`, `src/Gralph/Backends/OpencodeBackend.cs`
 - **DoD** Additional backend adapters implemented (opencode, gemini, codex).
 - **Checklist**
   * OpenCode backend adapter implemented.
@@ -242,7 +242,7 @@ The codebase must be structured for unit testing with dependency injection and i
 ### Task DOTNET-14
 
 - **ID** DOTNET-14
-- **Context Bundle** `README.md`, `bin/gralph`
+- **Context Bundle** `README.md`, `src/Gralph/Commands/ConfigCommandHandler.cs`
 - **DoD** Config command implemented for viewing and modifying configuration.
 - **Checklist**
   * Config list subcommand displays merged configuration.
@@ -254,7 +254,7 @@ The codebase must be structured for unit testing with dependency injection and i
 ### Task DOTNET-15
 
 - **ID** DOTNET-15
-- **Context Bundle** `tests/state-test.sh`, `tests/config-test.sh`
+- **Context Bundle** `tests/Gralph.Tests/StateStoreTests.cs`, `tests/Gralph.Tests/ConfigStoreTests.cs`
 - **DoD** Unit test project created with tests for core components.
 - **Checklist**
   * Test project created with xUnit or NUnit.

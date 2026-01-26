@@ -99,4 +99,4 @@ Provide the baseline shared documents with minimal structure and content.
 
 ## Open Questions
 
-- [ ] None.
+None.

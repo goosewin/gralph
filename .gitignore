@@ -43,6 +43,16 @@ coverage/
 dist/
 build/
 
+# .NET build artifacts
+**/bin/
+**/obj/
+TestResults/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+
 # Environment variables
 .env
 .env.local

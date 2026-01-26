@@ -36,7 +36,7 @@ Expose the task block format in documentation to reduce confusion.
 ### Task P-EX-1
 
 - **ID** P-EX-1
-- **Context Bundle** `gralph/lib/core.sh`, `gralph/lib/config.sh`
+- **Context Bundle** `src/Gralph/Core/TaskBlockParser.cs`, `src/Gralph/Core/CoreLoop.cs`
 - **DoD** Select the next unchecked task block or fall back to legacy single-line tasks.
 - **Checklist**
   * Selector returns the first unchecked task block.
@@ -47,7 +47,7 @@ Expose the task block format in documentation to reduce confusion.
 ### Task P-EX-2
 
 - **ID** P-EX-2
-- **Context Bundle** `gralph/README.md`, `gralph/PRD.template.md`
+- **Context Bundle** `README.md`, `PRD.template.md`
 - **DoD** Document the task block format in README and align the template.
 - **Checklist**
   * README includes a task block example.
