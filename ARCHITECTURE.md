@@ -4,18 +4,18 @@ This document captures the high-level structure of gralph. It is a living summar
 
 ## Modules
 
-`gralph-rs/src/main.rs` is the Rust CLI entrypoint. It wires clap subcommands to Rust modules, manages session state updates, and coordinates backend execution.
-`gralph-rs/src/lib.rs` holds shared types and helpers used by the Rust modules.
-`gralph-rs/src/cli.rs` defines the clap command tree and options; `gralph-rs/build.rs` generates bash/zsh completions during build.
+`src/main.rs` is the Rust CLI entrypoint. It wires clap subcommands to Rust modules, manages session state updates, and coordinates backend execution.
+`src/lib.rs` holds shared types and helpers used by the Rust modules.
+`src/cli.rs` defines the clap command tree and options; `build.rs` generates bash/zsh completions during build.
 
-`gralph-rs/src/core.rs` owns the execution loop for iteration execution, task counting, completion checks, and loop orchestration.
-`gralph-rs/src/state.rs` manages persistent session state with file locking and atomic writes.
-`gralph-rs/src/server.rs` implements the HTTP status server, CORS handling, and bearer auth.
-`gralph-rs/src/config.rs` loads default/global/project YAML config with env overrides.
-`gralph-rs/src/prd.rs` provides PRD validation, sanitization, and stack detection utilities.
+`src/core.rs` owns the execution loop for iteration execution, task counting, completion checks, and loop orchestration.
+`src/state.rs` manages persistent session state with file locking and atomic writes.
+`src/server.rs` implements the HTTP status server, CORS handling, and bearer auth.
+`src/config.rs` loads default/global/project YAML config with env overrides.
+`src/prd.rs` provides PRD validation, sanitization, and stack detection utilities.
 
-`gralph-rs/src/backend` defines the backend trait and CLI-backed implementations (`backend/mod.rs` plus `backend/claude.rs`, `backend/opencode.rs`, `backend/gemini.rs`, `backend/codex.rs`).
-`gralph-rs/src/notify.rs` formats and sends webhook notifications via reqwest.
+`src/backend` defines the backend trait and CLI-backed implementations (`backend/mod.rs` plus `backend/claude.rs`, `backend/opencode.rs`, `backend/gemini.rs`, `backend/codex.rs`).
+`src/notify.rs` formats and sends webhook notifications via reqwest.
 
 ## Runtime Flow
 

@@ -12,7 +12,7 @@ mod cli;
 fn main() {
     println!("cargo:rerun-if-changed=src/cli.rs");
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    let completions_dir = manifest_dir.join("..").join("completions");
+    let completions_dir = manifest_dir.join("completions");
     let _ = std::fs::create_dir_all(&completions_dir);
 
     let mut cmd = cli::Cli::command();

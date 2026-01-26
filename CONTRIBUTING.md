@@ -18,7 +18,7 @@ Thanks for taking the time to contribute to gralph.
 Run the test suite locally before submitting a PR:
 
 ```bash
-cargo test --manifest-path gralph-rs/Cargo.toml --workspace
+cargo test --workspace
 ```
 
 ## Workflow

@@ -3,7 +3,7 @@
 ## Worktree Protocol
 1) Read: ARCHITECTURE.md, PROCESS.md, DECISIONS.md, CHANGELOG.md, RISK_REGISTER.md.
 2) Create worktree: `.worktrees/task-<ID>`.
-3) Implement ONLY the assigned task in the Rust codebase (`gralph-rs/`) or scoped docs.
+3) Implement ONLY the assigned task in the Rust codebase (`src/`) or scoped docs.
 4) Update:
    - CHANGELOG.md (include Task ID)
    - DECISIONS.md (if decision made)

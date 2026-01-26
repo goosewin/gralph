@@ -42,7 +42,7 @@ coverage/
 # Build artifacts
 dist/
 build/
-gralph-rs/target/
+target/
 
 # Environment variables
 .env

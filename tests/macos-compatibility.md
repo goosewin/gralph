@@ -14,7 +14,7 @@ are limited to optional `tmux` for background sessions and external backend CLIs
 macOS smoke tests run in GitHub Actions on `macos-14` using:
 
 ```bash
-cargo test --manifest-path gralph-rs/Cargo.toml --workspace
+cargo test --workspace
 ```
 
 ## Compatibility Checklist
@@ -50,8 +50,8 @@ The binary can be placed in either:
 ```bash
 brew install tmux
 curl https://sh.rustup.rs -sSf | sh
-cargo build --release --manifest-path gralph-rs/Cargo.toml
-./gralph-rs/target/release/gralph version
+cargo build --release
+./target/release/gralph version
 ```
 
 ### Scenario 2: Basic Loop Execution

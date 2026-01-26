@@ -11,7 +11,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Run cargo tests
-        run: cargo test --manifest-path gralph-rs/Cargo.toml --workspace
+        run: cargo test --workspace
 
   coverage:
     runs-on: ubuntu-latest
@@ -21,4 +21,4 @@ jobs:
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin --locked
       - name: Run coverage threshold
-        run: cargo tarpaulin --manifest-path gralph-rs/Cargo.toml --workspace --fail-under 60
+        run: cargo tarpaulin --workspace --fail-under 60

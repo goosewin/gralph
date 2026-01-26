@@ -30,13 +30,13 @@ jobs:
 
       - name: Verify version in Cargo.toml matches tag
         run: |
-          CARGO_VERSION=$(grep -E '^version\s*=\s*"' gralph-rs/Cargo.toml | head -1 | cut -d'"' -f2)
+          CARGO_VERSION=$(grep -E '^version\s*=\s*"' Cargo.toml | head -1 | cut -d'"' -f2)
           TAG_VERSION=${{ steps.version.outputs.version }}
           if [ "$CARGO_VERSION" != "$TAG_VERSION" ]; then
             echo "Error: Version mismatch!"
             echo "  Cargo version: $CARGO_VERSION"
             echo "  Tag version: $TAG_VERSION"
-            echo "Please update gralph-rs/Cargo.toml to match the tag."
+            echo "Please update Cargo.toml to match the tag."
             exit 1
           fi
           echo "Version verified: $CARGO_VERSION"
@@ -50,20 +50,20 @@ jobs:
         include:
           - os: ubuntu-latest
             asset: linux-x86_64
-            binary_path: gralph-rs/target/release/gralph
+            binary_path: target/release/gralph
             build: cargo
           - os: ubuntu-latest
             asset: linux-aarch64
-            binary_path: gralph-rs/target/aarch64-unknown-linux-gnu/release/gralph
+            binary_path: target/aarch64-unknown-linux-gnu/release/gralph
             build: cross
             target: aarch64-unknown-linux-gnu
           - os: macos-13
             asset: macos-x86_64
-            binary_path: gralph-rs/target/release/gralph
+            binary_path: target/release/gralph
             build: cargo
           - os: macos-14
             asset: macos-arm64
-            binary_path: gralph-rs/target/release/gralph
+            binary_path: target/release/gralph
             build: cargo
     steps:
       - name: Checkout code
@@ -78,9 +78,9 @@ jobs:
       - name: Build release binary
         run: |
           if [ "${{ matrix.build }}" = "cross" ]; then
-            cross build --release --target ${{ matrix.target }} --manifest-path gralph-rs/Cargo.toml
+            cross build --release --target ${{ matrix.target }}
           else
-            cargo build --release --manifest-path gralph-rs/Cargo.toml
+            cargo build --release
           fi
 
       - name: Create release tarball

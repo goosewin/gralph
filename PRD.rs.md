@@ -74,10 +74,10 @@ Expose /status and /stop endpoints with optional bearer token authentication and
 ### Task RS-1
 
 - **ID** RS-1
-- **Context Bundle** `gralph-rs/src/main.rs`, `README.md`
+- **Context Bundle** `src/main.rs`, `README.md`
 - **DoD** Rust project initialised with Cargo.toml, clap dependency, and skeleton main.rs that prints version.
 - **Checklist**
-  * cargo new gralph-rs created.
+  * cargo init created.
   * Cargo.toml includes clap with derive feature.
   * Running cargo run -- --version prints version string.
 - **Dependencies** None
@@ -88,7 +88,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
 ### Task RS-2
 
 - **ID** RS-2
-- **Context Bundle** `gralph-rs/src/config.rs`, `config/default.yaml`
+- **Context Bundle** `src/config.rs`, `config/default.yaml`
 - **DoD** Config module loads, merges, and queries YAML configuration using serde_yaml.
 - **Checklist**
   * Reads default.yaml, global config, and project config.
@@ -102,7 +102,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
 ### Task RS-3
 
 - **ID** RS-3
-- **Context Bundle** `gralph-rs/src/state.rs`
+- **Context Bundle** `src/state.rs`
 - **DoD** State module provides session CRUD with file locking via fs2 or fd-lock.
 - **Checklist**
   * init_state, get_session, set_session, list_sessions, delete_session, cleanup_stale implemented.
@@ -116,7 +116,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
 ### Task RS-4
 
 - **ID** RS-4
-- **Context Bundle** `gralph-rs/src/backend/mod.rs`, `gralph-rs/src/backend/claude.rs`
+- **Context Bundle** `src/backend/mod.rs`, `src/backend/claude.rs`
 - **DoD** Backend trait defined with Claude implementation that spawns the CLI and parses JSON output.
 - **Checklist**
   * Backend trait has check_installed, run_iteration, parse_text, get_models.
@@ -130,7 +130,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
 ### Task RS-5
 
 - **ID** RS-5
-- **Context Bundle** `gralph-rs/src/backend/opencode.rs`, `gralph-rs/src/backend/gemini.rs`, `gralph-rs/src/backend/codex.rs`
+- **Context Bundle** `src/backend/opencode.rs`, `src/backend/gemini.rs`, `src/backend/codex.rs`
 - **DoD** OpenCode, Gemini, and Codex backends implemented following the backend trait.
 - **Checklist**
   * Each backend spawns its respective CLI.
@@ -144,7 +144,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
 ### Task RS-6
 
 - **ID** RS-6
-- **Context Bundle** `gralph-rs/src/core.rs`
+- **Context Bundle** `src/core.rs`
 - **DoD** Core loop logic ported: run_iteration, count_remaining_tasks, check_completion, and run_loop.
 - **Checklist**
   * Task block extraction works.
@@ -158,7 +158,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
 ### Task RS-7
 
 - **ID** RS-7
-- **Context Bundle** `gralph-rs/src/notify.rs`
+- **Context Bundle** `src/notify.rs`
 - **DoD** Notification module sends webhooks with Discord, Slack, and generic payload formats using reqwest.
 - **Checklist**
   * detect_webhook_type implemented.
@@ -172,7 +172,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
 ### Task RS-8
 
 - **ID** RS-8
-- **Context Bundle** `gralph-rs/src/prd.rs`
+- **Context Bundle** `src/prd.rs`
 - **DoD** PRD validation and sanitization ported with regex-based task block parsing.
 - **Checklist**
   * prd_validate_file and prd_sanitize_generated_file match Bash behavior.
@@ -186,7 +186,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
 ### Task RS-9
 
 - **ID** RS-9
-- **Context Bundle** `gralph-rs/src/server.rs`
+- **Context Bundle** `src/server.rs`
 - **DoD** HTTP status server implemented using hyper or axum with bearer token auth.
 - **Checklist**
   * GET /status, GET /status/:name, POST /stop/:name endpoints work.
@@ -200,7 +200,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
 ### Task RS-10
 
 - **ID** RS-10
-- **Context Bundle** `gralph-rs/src/cli.rs`, `gralph-rs/build.rs`, `completions/gralph.bash`, `completions/gralph.zsh`
+- **Context Bundle** `src/cli.rs`, `build.rs`, `completions/gralph.bash`, `completions/gralph.zsh`
 - **DoD** All CLI subcommands wired to Rust modules; shell completions generated via clap_complete.
 - **Checklist**
   * gralph start, stop, status, logs, resume, prd, worktree, backends, config, server, version, help all functional.
@@ -214,7 +214,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
 ### Task RS-11
 
 - **ID** RS-11
-- **Context Bundle** `gralph-rs/tests/backend_codex.rs`, `gralph-rs/tests/backend_gemini.rs`, `gralph-rs/tests/backend_opencode.rs`
+- **Context Bundle** `tests/backend_codex.rs`, `tests/backend_gemini.rs`, `tests/backend_opencode.rs`
 - **DoD** Unit and integration tests ported; CI workflow added for cargo test.
 - **Checklist**
   * Tests cover config, state, backends, core, prd, notify, server modules.

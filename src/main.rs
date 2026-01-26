@@ -1276,7 +1276,7 @@ fn invalid_prd_path(output: &Path, force: bool) -> PathBuf {
 fn read_prd_template(dir: &Path) -> Result<String, CliError> {
     let candidates = [
         dir.join("PRD.template.md"),
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../PRD.template.md"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("PRD.template.md"),
     ];
     for path in candidates {
         if path.is_file() {
@@ -1324,21 +1324,21 @@ fn build_context_file_list(
         "opencode.json",
         "completions/gralph.bash",
         "completions/gralph.zsh",
-        "gralph-rs/Cargo.toml",
-        "gralph-rs/src/main.rs",
-        "gralph-rs/src/cli.rs",
-        "gralph-rs/src/core.rs",
-        "gralph-rs/src/state.rs",
-        "gralph-rs/src/config.rs",
-        "gralph-rs/src/server.rs",
-        "gralph-rs/src/notify.rs",
-        "gralph-rs/src/prd.rs",
-        "gralph-rs/src/lib.rs",
-        "gralph-rs/src/backend/mod.rs",
-        "gralph-rs/src/backend/claude.rs",
-        "gralph-rs/src/backend/opencode.rs",
-        "gralph-rs/src/backend/gemini.rs",
-        "gralph-rs/src/backend/codex.rs",
+        "Cargo.toml",
+        "src/main.rs",
+        "src/cli.rs",
+        "src/core.rs",
+        "src/state.rs",
+        "src/config.rs",
+        "src/server.rs",
+        "src/notify.rs",
+        "src/prd.rs",
+        "src/lib.rs",
+        "src/backend/mod.rs",
+        "src/backend/claude.rs",
+        "src/backend/opencode.rs",
+        "src/backend/gemini.rs",
+        "src/backend/codex.rs",
     ] {
         add_context_entry(target_dir, item, &mut entries, &mut seen);
     }

@@ -60,14 +60,14 @@ Use `uname -s` and `uname -m` to map your OS/arch to an asset name. Release asse
 ```bash
 git clone git@github.com:goosewin/gralph.git
 cd gralph
-cargo build --release --manifest-path gralph-rs/Cargo.toml
-./gralph-rs/target/release/gralph --version
+cargo build --release
+./target/release/gralph --version
 ```
 
 ### Rust Build and Install (cargo)
 
 ```bash
-cargo install --path gralph-rs --locked
+cargo install --path . --locked
 ```
 
 The installed binary name is `gralph`.
@@ -1033,7 +1033,7 @@ unchecked `- [ ]` line.
 ### Task P-1
 
 - **ID** P-1
-- **Context Bundle** `gralph-rs/src/core.rs`
+- **Context Bundle** `src/core.rs`
 - **DoD** Add task block parsing
 - **Checklist**
   * Parser extracts task blocks from PRD.
