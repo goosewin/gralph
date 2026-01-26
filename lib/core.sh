@@ -199,6 +199,7 @@ get_next_unchecked_task_block() {
 #   $4 - Current iteration (required)
 #   $5 - Max iterations (required)
 #   $6 - Task block text (optional)
+#   $7 - Context files list (optional)
 #
 # Returns:
 #   Prints the rendered prompt to stdout
@@ -210,6 +211,7 @@ render_prompt_template() {
     local iteration="$4"
     local max_iterations="$5"
     local task_block="${6:-}"
+    local context_files="${7:-}"
 
     if [[ -z "$task_block" ]]; then
         task_block="No task block available."
@@ -222,6 +224,7 @@ render_prompt_template() {
     rendered="${rendered//\{iteration\}/$iteration}"
     rendered="${rendered//\{max_iterations\}/$max_iterations}"
     rendered="${rendered//\{task_block\}/$task_block}"
+    rendered="${rendered//\{context_files\}/$context_files}"
 
     echo "$rendered"
 }
@@ -325,9 +328,13 @@ run_iteration() {
         fi
     fi
 
+    # Read context files list from config
+    local context_files
+    context_files=$(get_config "defaults.context_files" "")
+
     # Build the prompt using template
     local prompt
-    prompt=$(render_prompt_template "$prompt_template" "$task_file" "$completion_marker" "$iteration" "$max_iterations" "$task_block")
+    prompt=$(render_prompt_template "$prompt_template" "$task_file" "$completion_marker" "$iteration" "$max_iterations" "$task_block" "$context_files")
 
     # Change to project directory and run backend
     pushd "$project_dir" > /dev/null || return 1
