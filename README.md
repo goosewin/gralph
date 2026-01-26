@@ -22,6 +22,7 @@ Autonomous AI coding loops using Claude Code or OpenCode.
 - `tmux` for session management
 - `bash` 4.0+
 - `curl` (optional, for notifications)
+- `socat` or `nc` (optional, required for `gralph server`)
 - `flock` (optional, for safer concurrent state access - built-in on Linux, available via Homebrew on macOS)
 
 ### Platform Support
@@ -586,6 +587,10 @@ gralph server [options]
 | GET | `/status` | List all sessions |
 | GET | `/status/:name` | Get specific session |
 | POST | `/stop/:name` | Stop a session |
+
+**Dependencies:** `socat` is preferred; `nc` (netcat) is used as a fallback.
+
+**Security note:** The server listens on all interfaces by default. Use `--token` and restrict network access (firewall/VPN) when exposing it.
 
 **Examples:**
 ```bash
