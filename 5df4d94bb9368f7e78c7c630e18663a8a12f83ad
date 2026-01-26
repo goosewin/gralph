@@ -1,0 +1,23 @@
+PRD.generated.md
+  4a25736d433cfc81 160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "5df4d94bb9368f7e78c7c630e18663a8a12f83ad",
+  "prompts": {
+    "4a25736d433cfc81": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3da5d6d7-197b-4ec5-b21c-6603131a2360",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
