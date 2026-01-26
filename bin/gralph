@@ -102,6 +102,13 @@ success() {
     echo -e "${GREEN}Success:${NC} $1"
 }
 
+# Escape a string for safe inclusion in single-quoted shell arguments
+# This replaces ' with '\'' (end quote, escaped quote, start quote)
+escape_single_quote() {
+    local str="$1"
+    printf '%s' "${str//\'/\'\\\'\'}"
+}
+
 # Parse command line arguments
 # Sets global variables based on parsed arguments
 parse_args() {
@@ -605,28 +612,41 @@ cmd_start() {
 
         # Build the command to run in tmux
         # We need to source the libs and call run_loop
-        local gralph_cmd="source '$LIB_DIR/state.sh' && source '$LIB_DIR/backends/common.sh' && source '$LIB_DIR/core.sh' && "
-        gralph_cmd+="export GRALPH_BACKEND='$backend' && "
+        # Escape all user-provided values to handle special characters safely
+        local esc_lib_dir esc_backend esc_variant esc_target_dir esc_task_file
+        local esc_max_iterations esc_completion_marker esc_model esc_session_name
+        esc_lib_dir=$(escape_single_quote "$LIB_DIR")
+        esc_backend=$(escape_single_quote "$backend")
+        esc_variant=$(escape_single_quote "$OPT_VARIANT")
+        esc_target_dir=$(escape_single_quote "$target_dir")
+        esc_task_file=$(escape_single_quote "$OPT_TASK_FILE")
+        esc_max_iterations=$(escape_single_quote "$OPT_MAX_ITERATIONS")
+        esc_completion_marker=$(escape_single_quote "$OPT_COMPLETION_MARKER")
+        esc_model=$(escape_single_quote "$OPT_MODEL")
+        esc_session_name=$(escape_single_quote "$session_name")
+
+        local gralph_cmd="source '${esc_lib_dir}/state.sh' && source '${esc_lib_dir}/backends/common.sh' && source '${esc_lib_dir}/core.sh' && "
+        gralph_cmd+="export GRALPH_BACKEND='${esc_backend}' && "
         if [[ -n "$OPT_VARIANT" ]]; then
-            gralph_cmd+="export GRALPH_VARIANT='$OPT_VARIANT' && "
+            gralph_cmd+="export GRALPH_VARIANT='${esc_variant}' && "
         fi
-        gralph_cmd+="init_backend '$backend' && "
+        gralph_cmd+="init_backend '${esc_backend}' && "
         gralph_cmd+="GRALPH_STATE_CALLBACK=_update_session_state "
         gralph_cmd+="_update_session_state() { "
         gralph_cmd+="  set_session \"\$1\" iteration=\"\$2\" status=\"\$3\" last_task_count=\"\$4\"; "
         gralph_cmd+="}; "
         gralph_cmd+="run_loop "
-        gralph_cmd+="'$target_dir' "
-        gralph_cmd+="'$OPT_TASK_FILE' "
-        gralph_cmd+="'$OPT_MAX_ITERATIONS' "
-        gralph_cmd+="'$OPT_COMPLETION_MARKER' "
-        gralph_cmd+="'$OPT_MODEL' "
-        gralph_cmd+="'$session_name'; "
+        gralph_cmd+="'${esc_target_dir}' "
+        gralph_cmd+="'${esc_task_file}' "
+        gralph_cmd+="'${esc_max_iterations}' "
+        gralph_cmd+="'${esc_completion_marker}' "
+        gralph_cmd+="'${esc_model}' "
+        gralph_cmd+="'${esc_session_name}'; "
         gralph_cmd+="exit_code=\$?; "
         gralph_cmd+="if [ \$exit_code -eq 0 ]; then "
-        gralph_cmd+="  set_session '$session_name' status=complete; "
+        gralph_cmd+="  set_session '${esc_session_name}' status=complete; "
         gralph_cmd+="else "
-        gralph_cmd+="  set_session '$session_name' status=failed; "
+        gralph_cmd+="  set_session '${esc_session_name}' status=failed; "
         gralph_cmd+="fi"
 
         # Start tmux session
@@ -1097,28 +1117,41 @@ cmd_resume() {
         tmux kill-session -t "$tmux_session" 2>/dev/null || true
 
         # Build the command to run in tmux
-        local gralph_cmd="source '$LIB_DIR/state.sh' && source '$LIB_DIR/backends/common.sh' && source '$LIB_DIR/core.sh' && "
-        gralph_cmd+="export GRALPH_BACKEND='$backend' && "
+        # Escape all user-provided values to handle special characters safely
+        local esc_lib_dir esc_backend esc_variant esc_dir esc_task_file
+        local esc_max_iterations esc_completion_marker esc_model esc_session_name
+        esc_lib_dir=$(escape_single_quote "$LIB_DIR")
+        esc_backend=$(escape_single_quote "$backend")
+        esc_variant=$(escape_single_quote "$variant")
+        esc_dir=$(escape_single_quote "$dir")
+        esc_task_file=$(escape_single_quote "$task_file")
+        esc_max_iterations=$(escape_single_quote "$max_iterations")
+        esc_completion_marker=$(escape_single_quote "$completion_marker")
+        esc_model=$(escape_single_quote "$model")
+        esc_session_name=$(escape_single_quote "$session_name")
+
+        local gralph_cmd="source '${esc_lib_dir}/state.sh' && source '${esc_lib_dir}/backends/common.sh' && source '${esc_lib_dir}/core.sh' && "
+        gralph_cmd+="export GRALPH_BACKEND='${esc_backend}' && "
         if [[ -n "$variant" ]]; then
-            gralph_cmd+="export GRALPH_VARIANT='$variant' && "
+            gralph_cmd+="export GRALPH_VARIANT='${esc_variant}' && "
         fi
-        gralph_cmd+="init_backend '$backend' && "
+        gralph_cmd+="init_backend '${esc_backend}' && "
         gralph_cmd+="GRALPH_STATE_CALLBACK=_update_session_state "
         gralph_cmd+="_update_session_state() { "
         gralph_cmd+="  set_session \"\$1\" iteration=\"\$2\" status=\"\$3\" last_task_count=\"\$4\"; "
         gralph_cmd+="}; "
         gralph_cmd+="run_loop "
-        gralph_cmd+="'$dir' "
-        gralph_cmd+="'$task_file' "
-        gralph_cmd+="'$max_iterations' "
-        gralph_cmd+="'$completion_marker' "
-        gralph_cmd+="'$model' "
-        gralph_cmd+="'$session_name'; "
+        gralph_cmd+="'${esc_dir}' "
+        gralph_cmd+="'${esc_task_file}' "
+        gralph_cmd+="'${esc_max_iterations}' "
+        gralph_cmd+="'${esc_completion_marker}' "
+        gralph_cmd+="'${esc_model}' "
+        gralph_cmd+="'${esc_session_name}'; "
         gralph_cmd+="exit_code=\$?; "
         gralph_cmd+="if [ \$exit_code -eq 0 ]; then "
-        gralph_cmd+="  set_session '$session_name' status=complete; "
+        gralph_cmd+="  set_session '${esc_session_name}' status=complete; "
         gralph_cmd+="else "
-        gralph_cmd+="  set_session '$session_name' status=failed; "
+        gralph_cmd+="  set_session '${esc_session_name}' status=failed; "
         gralph_cmd+="fi"
 
         # Start tmux session
