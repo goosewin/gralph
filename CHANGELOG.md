@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - Initial public release notes for the gralph CLI.
+- RS-1 Scaffolded Rust project with clap CLI skeleton.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.
 - C-2 Added worktree command routing and validation.
