@@ -299,7 +299,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * Migration notes from bash version.
   * Shell completion setup documented.
 - **Dependencies** GO-16
-- [ ] GO-17 Update installation documentation
+- [x] GO-17 Update installation documentation
 
 ### Task GO-18
 

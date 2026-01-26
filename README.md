@@ -13,151 +13,103 @@ Autonomous AI coding loops using Claude Code or OpenCode. Spawns fresh AI coding
 
 ## Requirements
 
-- At least one AI backend:
-  - `claude` CLI (Claude Code) - `npm install -g @anthropic-ai/claude-code`
-  - `opencode` CLI (OpenCode) - See https://opencode.ai/docs/cli/
-  - `gemini` CLI (Gemini CLI) - `npm install -g @google/gemini-cli` (optional)
-  - `codex` CLI (Codex CLI) - `npm install -g @openai/codex` (optional)
-- `jq` for JSON parsing
-- `tmux` for session management
-- `bash` 4.0+
-- `curl` (optional, for notifications)
-- `socat` or `nc` (optional, required for `gralph server`)
-- `flock` (optional, for safer concurrent state access - built-in on Linux, available via Homebrew on macOS)
+- At least one AI backend CLI:
+  - `claude` (Claude Code) - `npm install -g @anthropic-ai/claude-code`
+  - `opencode` (OpenCode) - See https://opencode.ai/docs/cli/
+  - `gemini` (Gemini CLI) - `npm install -g @google/gemini-cli` (optional)
+  - `codex` (Codex CLI) - `npm install -g @openai/codex` (optional)
+- `tmux` (optional) for background sessions; use `--no-tmux` to run in foreground
 
 ### Platform Support
 
 | Platform | Status | Notes |
 |----------|--------|-------|
 | Linux | ✅ Fully supported | Primary development platform |
-| macOS 12+ | ✅ Supported | Requires Homebrew dependencies |
+| macOS 12+ | ✅ Supported | No additional runtime dependencies |
 | WSL2 | ⚠️ Best effort | Should work like Linux |
-
-**macOS Users:** Install dependencies via Homebrew:
-```bash
-brew install bash jq tmux
-```
 
 ## Installation
 
-Gralph uses a dual-mode installer that automatically detects whether it's being piped from curl or run from a local clone. Both methods use the same `install.sh` script.
+Gralph ships as a single Go binary with no runtime dependencies beyond your chosen backend CLI.
 
-### Quick Install (curl)
+### Download a Release (Recommended)
 
-The recommended installation method uses the latest GitHub release tarball:
+Release artifacts are published on GitHub. Replace `<VERSION>` with a release tag (for example `v1.2.0`).
 
-```bash
-curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
-```
+| Platform | Asset | Download |
+|----------|-------|----------|
+| macOS arm64 | `gralph_<VERSION>_darwin_arm64.tar.gz` | https://github.com/goosewin/gralph/releases/download/<VERSION>/gralph_<VERSION>_darwin_arm64.tar.gz |
+| macOS amd64 | `gralph_<VERSION>_darwin_amd64.tar.gz` | https://github.com/goosewin/gralph/releases/download/<VERSION>/gralph_<VERSION>_darwin_amd64.tar.gz |
+| Linux arm64 | `gralph_<VERSION>_linux_arm64.tar.gz` | https://github.com/goosewin/gralph/releases/download/<VERSION>/gralph_<VERSION>_linux_arm64.tar.gz |
+| Linux amd64 | `gralph_<VERSION>_linux_amd64.tar.gz` | https://github.com/goosewin/gralph/releases/download/<VERSION>/gralph_<VERSION>_linux_amd64.tar.gz |
+| Checksums | `checksums.txt` | https://github.com/goosewin/gralph/releases/download/<VERSION>/checksums.txt |
 
-This downloads the installer and runs it in **bootstrap mode**, which:
-1. Fetches the latest release tarball from GitHub
-2. Extracts it to a temporary directory
-3. Installs the binary, libraries, and completions
-4. Cleans up the temporary files
-
-#### Bootstrap Environment Overrides
-
-When installing via `curl|bash`, you can customize the download source using environment variables:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GRALPH_REPO` | GitHub repository slug | `goosewin/gralph` |
-| `GRALPH_REF` | Git ref (tag or branch) to download | Latest release |
-| `GRALPH_ASSET_URL` | Direct URL to tarball (overrides repo/ref) | (none) |
-
-**Examples:**
+Example install (macOS arm64):
 
 ```bash
-# Install from a fork
-GRALPH_REPO=myuser/gralph-fork curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
+VERSION="v1.2.0"
+OS="darwin"
+ARCH="arm64"
 
-# Install a specific version
-GRALPH_REF=v1.2.0 curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
+curl -LO "https://github.com/goosewin/gralph/releases/download/${VERSION}/gralph_${VERSION}_${OS}_${ARCH}.tar.gz"
+curl -LO "https://github.com/goosewin/gralph/releases/download/${VERSION}/checksums.txt"
 
-# Install from a custom URL
-GRALPH_ASSET_URL=https://example.com/gralph.tar.gz curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
+# Verify (macOS)
+shasum -a 256 -c checksums.txt --ignore-missing
+
+tar -xzf "gralph_${VERSION}_${OS}_${ARCH}.tar.gz"
+install -m 0755 gralph /usr/local/bin/gralph
 ```
 
-### From Source (git clone)
+On Linux, replace the checksum command with:
 
 ```bash
-git clone git@github.com:goosewin/gralph.git
-cd gralph
-./install.sh
+sha256sum -c checksums.txt --ignore-missing
 ```
 
-When run from a cloned repository, the installer operates in **local mode**, which:
-1. Detects `bin/gralph` in the current directory
-2. Installs directly from the local files (no download)
-3. Copies binary, libraries, config, and completions to their destinations
+### Install with Go (From Source)
 
-Both modes perform the same installation steps:
-- Check and optionally install dependencies (`jq`, `tmux`, backend CLI)
-- Copy `gralph` binary to `~/.local/bin` (or `/usr/local/bin`)
-- Copy library files to `~/.config/gralph/lib/`
-- Create default config at `~/.config/gralph/config.yaml`
-- Install shell completions for bash/zsh
+```bash
+go install github.com/goosewin/gralph@latest
+```
 
-### Manual Installation
+Ensure `$(go env GOPATH)/bin` (or `GOBIN`) is in your `PATH`.
 
-If you prefer not to use the installer:
+### Shell Completions
 
-1. Clone this repository
-2. Copy `bin/gralph` to a directory in your PATH (e.g., `~/.local/bin/` or `/usr/local/bin/`)
-3. Copy `lib/` to `~/.config/gralph/lib/`
-4. Copy `config/default.yaml` to `~/.config/gralph/config.yaml`
-5. (Optional) Copy `completions/` to `~/.config/gralph/completions/`
+Generate completions from the Go binary:
+
+```bash
+# Bash
+gralph completion bash > ~/.local/share/bash-completion/completions/gralph
+
+# Zsh
+mkdir -p ~/.zsh/completions
+gralph completion zsh > ~/.zsh/completions/_gralph
+
+# Fish
+gralph completion fish > ~/.config/fish/completions/gralph.fish
+```
+
+Reload your shell (or run `exec $SHELL`) after installing completions.
 
 ### Uninstalling
 
-To remove gralph from your system, use the provided uninstaller:
+Remove the binary from your `PATH`, then remove config/state as needed:
 
 ```bash
-# Interactive uninstall (prompts for confirmation)
-./uninstall.sh
-
-# Or download and run directly
-curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/uninstall.sh | bash
+rm -f /usr/local/bin/gralph
+rm -rf ~/.config/gralph
 ```
-
-**Options:**
-
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--all` | `-a` | Remove everything including logs and state data |
-| `--force` | `-f` | Skip confirmation prompts |
-| `--help` | `-h` | Show help message |
-
-**What gets removed by default:**
-- gralph binary (from `~/.local/bin` or `/usr/local/bin`)
-- Library files (`~/.config/gralph/lib/`)
-- Shell completions (`~/.config/gralph/completions/` and system locations)
-- Configuration file (`~/.config/gralph/config.yaml`)
-
-**What gets removed with `--all`:**
-- All of the above
-- State files (`~/.config/gralph/state.json` and `~/.config/gralph/state.lock`)
-- Default config template (`~/.config/gralph/config/default.yaml`) if present
-- Any remaining `~/.config/gralph/` data
 
 Project logs live under each project's `.gralph/` directory and are not removed automatically.
 
-**Examples:**
+### Migration from the Bash Version
 
-```bash
-# Uninstall but keep logs and session data
-./uninstall.sh
-
-# Uninstall everything including user data
-./uninstall.sh --all
-
-# Uninstall without prompts (for scripts)
-./uninstall.sh --force
-
-# Complete removal without prompts
-./uninstall.sh --all --force
-```
+- The Go binary replaces the old `install.sh` and `uninstall.sh` scripts.
+- `bash`, `jq`, `curl`, `socat`, and `nc` are no longer required for normal operation.
+- `tmux` is still required only for background sessions; use `--no-tmux` to run in foreground.
+- Configuration and state paths remain under `~/.config/gralph/`, and project logs still live in `.gralph/`.
 
 ## Backends
 
@@ -981,7 +933,7 @@ gralph server [options]
 | GET | `/status/:name` | Get specific session |
 | POST | `/stop/:name` | Stop a session |
 
-**Dependencies:** `socat` is preferred; `nc` (netcat) is used as a fallback.
+**Dependencies:** None. The Go binary serves HTTP directly.
 
 **Security note:** The server defaults to localhost-only binding. When binding to non-localhost addresses (e.g., `0.0.0.0`), a `--token` is required for security. Use `--open` to explicitly disable this requirement (not recommended). Always restrict network access via firewall/VPN when exposing the server.
 
