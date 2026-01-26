@@ -128,7 +128,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * URL https://opencode.ai/docs/cli/ must be verified.
   * Update installation instructions if URL is invalid.
 - **Dependencies** None
-- [ ] OSS-6 Verify OpenCode CLI documentation URL and update
+- [x] OSS-6 Verify OpenCode CLI documentation URL and update
 
 ---
 
