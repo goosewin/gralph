@@ -93,7 +93,7 @@ The codebase must be structured for unit testing with dependency injection and i
   * Subcommands registered: start, stop, status, logs, resume, prd, worktree, backends, config, server, version.
   * Help output matches bash version structure.
 - **Dependencies** DOTNET-1
-- [ ] DOTNET-2 Implement CLI command structure with System.CommandLine
+- [x] DOTNET-2 Implement CLI command structure with System.CommandLine
 
 ### Task DOTNET-3
 
