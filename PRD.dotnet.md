@@ -249,7 +249,7 @@ The codebase must be structured for unit testing with dependency injection and i
   * Config get subcommand retrieves specific keys.
   * Config set subcommand writes to global config file.
 - **Dependencies** DOTNET-2, DOTNET-3
-- [ ] DOTNET-14 Implement config command
+- [x] DOTNET-14 Implement config command
 
 ### Task DOTNET-15
 

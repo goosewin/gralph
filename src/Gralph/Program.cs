@@ -339,7 +339,42 @@ backends.SetAction(_ =>
 });
 
 var config = new Command("config", "Manage configuration");
-config.SetAction(_ => Console.WriteLine("config is not implemented yet."));
+var configList = new Command("list", "List merged configuration values");
+configList.SetAction(_ =>
+{
+    var handler = new ConfigCommandHandler();
+    var exitCode = handler.ExecuteList(Directory.GetCurrentDirectory());
+    Environment.ExitCode = exitCode;
+});
+var configGet = new Command("get", "Get a configuration value");
+var configGetKeyArgument = new Argument<string>("key") { Arity = ArgumentArity.ExactlyOne };
+configGet.Add(configGetKeyArgument);
+configGet.SetAction(parseResult =>
+{
+    var handler = new ConfigCommandHandler();
+    var exitCode = handler.ExecuteGet(Directory.GetCurrentDirectory(), parseResult.GetValue(configGetKeyArgument));
+    Environment.ExitCode = exitCode;
+});
+var configSet = new Command("set", "Set a configuration value in the global config");
+var configSetKeyArgument = new Argument<string>("key") { Arity = ArgumentArity.ExactlyOne };
+var configSetValueArgument = new Argument<string>("value") { Arity = ArgumentArity.ExactlyOne };
+configSet.Add(configSetKeyArgument);
+configSet.Add(configSetValueArgument);
+configSet.SetAction(parseResult =>
+{
+    var handler = new ConfigCommandHandler();
+    var exitCode = handler.ExecuteSet(parseResult.GetValue(configSetKeyArgument), parseResult.GetValue(configSetValueArgument));
+    Environment.ExitCode = exitCode;
+});
+config.SetAction(_ =>
+{
+    var handler = new ConfigCommandHandler();
+    var exitCode = handler.ExecuteList(Directory.GetCurrentDirectory());
+    Environment.ExitCode = exitCode;
+});
+config.Add(configList);
+config.Add(configGet);
+config.Add(configSet);
 
 var server = new Command("server", "Start status API server");
 var serverHostOption = new Option<string?>("--host", "Host/IP to bind to");
