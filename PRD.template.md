@@ -41,21 +41,19 @@ Describe supporting behavior.
 
 ## Implementation Tasks
 
-### Unit 01: Project Setup
+Each task must use a `### Task <ID>` block header and include the required fields.
+Each task block must contain exactly one unchecked task line.
 
-- [ ] Initialize repository
-- [ ] Create baseline directory structure
-- [ ] Add README with install/run instructions
+### Task EX-1
 
-### Unit 02: Core Logic
-
-- [ ] Implement main execution flow
-- [ ] Add basic error handling
-
-### Unit 03: Testing & Documentation
-
-- [ ] Add usage examples
-- [ ] Write troubleshooting notes
+- **ID** EX-1
+- **Context Bundle** `path/to/file`, `path/to/other`
+- **DoD** Define the done criteria for this task.
+- **Checklist**
+  * First verification item.
+  * Second verification item.
+- **Dependencies** None
+- [ ] EX-1 Short task summary
 
 ---
 
