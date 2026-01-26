@@ -115,7 +115,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * URL https://developers.openai.com/codex/cli/ may not exist.
   * Update with valid documentation URL or remove if Codex CLI is fictional.
 - **Dependencies** None
-- [ ] OSS-5 Verify and fix Codex CLI documentation URLs
+- [x] OSS-5 Verify and fix Codex CLI documentation URLs
 
 ---
 

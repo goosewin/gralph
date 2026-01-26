@@ -3,7 +3,7 @@
 #
 # This backend uses the OpenAI Codex CLI.
 # Install: npm install -g @openai/codex
-# See: https://developers.openai.com/codex/cli/
+# See: https://developers.openai.com/codex/cli
 
 # backend_name() - Returns the backend name
 backend_name() {

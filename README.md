@@ -218,7 +218,7 @@ gralph start . --backend gemini
 
 ### Codex CLI
 
-[Codex CLI](https://developers.openai.com/codex/cli/) is OpenAI's AI coding CLI.
+[Codex CLI](https://developers.openai.com/codex/cli) is OpenAI's AI coding CLI.
 
 ```bash
 # Install Codex CLI

@@ -53,3 +53,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - OSS-2 Corrected Gemini CLI install hints and README instructions.
 - OSS-3 Updated backend model names to real or placeholder values.
 - OSS-4 Updated shell completions to match backend model names.
+- OSS-5 Verified Codex CLI docs URL and install reference.
