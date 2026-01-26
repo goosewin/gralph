@@ -236,7 +236,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * Create generates PRD via backend with interactive prompts.
   * Sanitization applied to generated output.
 - **Dependencies** GO-4, GO-11
-- [ ] GO-12 Implement PRD check and create commands
+- [x] GO-12 Implement PRD check and create commands
 
 ### Task GO-13
 
