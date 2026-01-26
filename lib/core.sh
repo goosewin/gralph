@@ -416,10 +416,22 @@ run_iteration() {
 
     # Extract the final result using backend's parser
     local result
+    local parse_exit_code
     result=$(backend_parse_text "$tmpfile")
+    parse_exit_code=$?
 
     # Export result for caller to access
     export GRALPH_ITERATION_RESULT="$result"
+
+    if [[ $parse_exit_code -ne 0 || -z "$result" ]]; then
+        if [[ -n "$log_file" ]]; then
+            echo "Error: backend '$GRALPH_BACKEND' returned no parsed result." | tee -a "$log_file"
+            if [[ -n "$raw_output_file" ]] && [[ -s "$raw_output_file" ]]; then
+                echo "Raw output saved to: $raw_output_file" | tee -a "$log_file"
+            fi
+        fi
+        backend_exit_code=1
+    fi
 
     # Return based on backend's exit code
     return $backend_exit_code
@@ -467,7 +479,7 @@ count_remaining_tasks() {
 # Logic:
 #   1. Count remaining '- [ ]' tasks in file
 #   2. If count > 0, return 1 (not complete)
-#   3. Check if promise appears at END of output (last 500 chars)
+#   3. Require promise as the last non-empty line
 #   4. Verify promise is not negated (e.g., "cannot output <promise>...")
 #   5. Return 0 only if both conditions met
 #
@@ -485,6 +497,10 @@ check_completion() {
         # No output means not complete
         return 1
     fi
+    if [[ ! -f "$task_file" ]]; then
+        echo "Error: task_file does not exist: $task_file" >&2
+        return 1
+    fi
 
     # Count remaining tasks
     local remaining
@@ -495,26 +511,15 @@ check_completion() {
         return 1
     fi
 
-    # Promise must appear as a standalone line OR as the final statement
-    local tail_result
-    local tail_end
+    # Promise must be the last non-empty line
     local promise_line
-
-    tail_result=$(echo "$result" | tail -c 500)
-
-    if echo "$tail_result" | grep -qE "^[[:space:]]*<promise>$completion_marker</promise>[[:space:]]*$"; then
-        promise_line=$(echo "$tail_result" | grep -E "^[[:space:]]*<promise>$completion_marker</promise>[[:space:]]*$" | tail -n 1)
-    else
-        tail_end=$(echo "$result" | tail -c 200)
-        if echo "$tail_end" | grep -qE "<promise>$completion_marker</promise>[[:space:]]*$"; then
-            promise_line="$tail_end"
-        else
-            return 1
-        fi
+    promise_line=$(printf '%s' "$result" | awk 'NF{line=$0} END{print line}')
+    if ! printf '%s' "$promise_line" | grep -qE "^[[:space:]]*<promise>$completion_marker</promise>[[:space:]]*$"; then
+        return 1
     fi
 
     # Verify it's not negated (common patterns like "cannot", "won't", etc.)
-    if echo "$promise_line" | grep -qiE "(cannot|can't|won't|will not|do not|don't|should not|shouldn't|must not|mustn't)[^<]*<promise>"; then
+    if printf '%s' "$promise_line" | grep -qiE "(cannot|can't|won't|will not|do not|don't|should not|shouldn't|must not|mustn't)[^<]*<promise>"; then
         return 1
     fi
 

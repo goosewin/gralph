@@ -266,7 +266,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * Task block parsing handles edge cases.
   * Error handling is comprehensive.
 - **Dependencies** None
-- [ ] OSS-16 Audit core loop logic
+- [x] OSS-16 Audit core loop logic
 
 ---
 

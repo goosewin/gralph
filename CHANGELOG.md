@@ -64,3 +64,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - OSS-13 Aligned CLI backend validation and help text.
 - OSS-14 Hardened state locking, atomic writes, and corruption recovery.
 - OSS-15 Added simple YAML array parsing and documented supported config lists.
+- OSS-16 Hardened core loop completion detection and parse error handling.
