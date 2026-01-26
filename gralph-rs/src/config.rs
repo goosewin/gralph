@@ -370,12 +370,14 @@ mod tests {
         let _guard = ENV_LOCK.lock().unwrap();
         let temp = tempfile::tempdir().unwrap();
         let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("global.yaml");
 
         write_file(
             &default_path,
             "defaults:\n  max_iterations: 5\nlogging:\n  level: info\n",
         );
         set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
 
         let config = Config::load(None).unwrap();
         let list = config.list();
@@ -386,6 +388,7 @@ mod tests {
             .iter()
             .any(|(key, value)| key == "logging.level" && value == "info"));
 
+        remove_env("GRALPH_GLOBAL_CONFIG");
         remove_env("GRALPH_DEFAULT_CONFIG");
     }
 
