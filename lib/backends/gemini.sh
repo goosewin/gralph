@@ -2,7 +2,7 @@
 # gemini.sh - Gemini CLI backend implementation
 #
 # This backend uses the Gemini CLI from Google.
-# Install: npm install -g @anthropic-ai/gemini-cli
+# Install: npm install -g @google/gemini-cli
 # See: https://geminicli.com/docs/
 
 # backend_name() - Returns the backend name
@@ -20,7 +20,7 @@ backend_check_installed() {
 
 # backend_get_install_hint() - Get installation instructions
 backend_get_install_hint() {
-    echo "npm install -g @anthropic-ai/gemini-cli"
+    echo "npm install -g @google/gemini-cli"
 }
 
 # backend_run_iteration() - Execute a single Gemini CLI iteration
@@ -101,15 +101,13 @@ backend_parse_text() {
 
 # backend_get_models() - Get list of supported models
 #
-# Gemini CLI supports various Gemini models:
-# - gemini-2.5-pro
-# - gemini-2.5-flash
-# - gemini-2.0-pro
+# Gemini CLI supports Gemini models:
+# - gemini-3-pro
 backend_get_models() {
-    echo "gemini-2.5-pro gemini-2.5-flash gemini-2.0-pro"
+    echo "gemini-3-pro"
 }
 
 # backend_get_default_model() - Get the default model for this backend
 backend_get_default_model() {
-    echo "gemini-2.5-pro"
+    echo "gemini-3-pro"
 }

@@ -16,7 +16,7 @@ Autonomous AI coding loops using Claude Code or OpenCode. Spawns fresh AI coding
 - At least one AI backend:
   - `claude` CLI (Claude Code) - `npm install -g @anthropic-ai/claude-code`
   - `opencode` CLI (OpenCode) - See https://opencode.ai/docs/cli/
-  - `gemini` CLI (Gemini CLI) - `npm install -g @anthropic-ai/gemini-cli` (optional)
+  - `gemini` CLI (Gemini CLI) - `npm install -g @google/gemini-cli` (optional)
   - `codex` CLI (Codex CLI) - `npm install -g @openai/codex` (optional)
 - `jq` for JSON parsing
 - `tmux` for session management
@@ -207,7 +207,7 @@ gralph start . --backend opencode --model google/gemini-3-pro
 
 ```bash
 # Install Gemini CLI
-npm install -g @anthropic-ai/gemini-cli
+npm install -g @google/gemini-cli
 
 # Use Gemini CLI
 gralph start . --backend gemini

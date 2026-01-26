@@ -75,7 +75,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * Update to valid Gemini CLI installation instructions.
   * Update README.md section for Gemini CLI installation.
 - **Dependencies** None
-- [ ] OSS-2 Fix gemini backend installation hint and README documentation
+- [x] OSS-2 Fix gemini backend installation hint and README documentation
 
 ---
 
