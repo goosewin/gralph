@@ -207,8 +207,8 @@ defaults:
   max_iterations: 30
   task_file: PRD.md
   completion_marker: COMPLETE
-  backend: opencode
-  model: opencode/gpt-5.2-codex
+  backend: claude
+  model: claude-opus-4.5
 
 claude:
   flags:
@@ -248,8 +248,8 @@ Default values for loop behavior.
 | `defaults.max_iterations` | integer | `30` | Maximum number of loop iterations before giving up. Prevents infinite loops. |
 | `defaults.task_file` | string | `PRD.md` | Path to the task file relative to project directory. |
 | `defaults.completion_marker` | string | `COMPLETE` | The text used in `<promise>MARKER</promise>` to signal completion. |
-| `defaults.backend` | string | `opencode` | AI backend to use: `claude` or `opencode`. |
-| `defaults.model` | string | `opencode/gpt-5.2-codex` | Model to use. Format depends on backend (see Backends section). |
+| `defaults.backend` | string | `claude` | AI backend to use: `claude` or `opencode`. |
+| `defaults.model` | string | (none) | Model to use. Format depends on backend (see Backends section). |
 
 ### Section: `claude`
 
@@ -513,8 +513,8 @@ defaults:
   max_iterations: 50          # Allow more iterations
   task_file: PRD.md           # Default task file
   completion_marker: COMPLETE # Completion signal
-  backend: opencode           # AI backend (claude or opencode)
-  model: opencode/gpt-5.2-codex
+  backend: claude             # AI backend (claude or opencode)
+  model: claude-opus-4.5      # Model override (optional)
 
 claude:
   flags:
@@ -586,14 +586,14 @@ gralph start <directory> [options]
 | `--max-iterations` | | Maximum loop iterations | 30 |
 | `--task-file` | `-f` | Path to task file relative to project | PRD.md |
 | `--completion-marker` | | Completion promise text | COMPLETE |
-| `--backend` | `-b` | AI backend to use (claude or opencode) | opencode |
+| `--backend` | `-b` | AI backend to use (claude or opencode) | claude |
 | `--model` | `-m` | Model to use (format depends on backend) | (from config) |
 | `--webhook` | | Notification webhook URL | (none) |
 | `--no-tmux` | | Run in foreground (blocking) | false |
 
 **Examples:**
 ```bash
-# Start with defaults (uses OpenCode)
+# Start with defaults (uses Claude)
 gralph start .
 
 # Start with custom name and iterations

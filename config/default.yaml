@@ -6,9 +6,9 @@ defaults:
   # Backend: claude or opencode
   backend: claude
   # Model depends on backend:
-  #   claude: claude-sonnet-4-20250514, claude-opus-4-20250514
-  #   opencode: anthropic/claude-sonnet-4-20250514, openai/gpt-4o, etc.
-  model: claude-sonnet-4-20250514
+  #   claude: claude-opus-4.5
+  #   opencode: opencode/gpt-5.2-codex, anthropic/claude-opus-4.5, google/gemini-3-pro
+  # model:
 
 # Claude Code backend settings
 claude:
@@ -19,9 +19,9 @@ claude:
 
 # OpenCode backend settings
 opencode:
-  # Model format: provider/model (e.g., anthropic/claude-sonnet-4-20250514)
+  # Model format: provider/model (e.g., opencode/gpt-5.2-codex)
   # Leave empty to use opencode's default
-  default_model: anthropic/claude-sonnet-4-20250514
+  default_model: opencode/gpt-5.2-codex
 
 notifications:
   on_complete: true
