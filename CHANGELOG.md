@@ -41,3 +41,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - D-6 Recorded Stage D validation changes and strict mode rationale.
 - E-1 Added example README for self-hosting PRDs.
 - E-2 Added Stage P example PRD.
+- E-3 Added Stage A example PRD.
