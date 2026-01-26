@@ -41,10 +41,10 @@ jobs:
       - name: Run shellcheck on scripts
         run: |
           sudo apt-get update && sudo apt-get install -y shellcheck
-          shellcheck bin/gralph || true
-          shellcheck install.sh || true
-          shellcheck uninstall.sh || true
-          shellcheck lib/*.sh || true
+          shellcheck bin/gralph
+          shellcheck install.sh
+          shellcheck uninstall.sh
+          shellcheck lib/*.sh
 
       - name: Create release tarball
         run: |
