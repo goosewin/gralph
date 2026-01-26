@@ -994,6 +994,20 @@ Gralph runs stateless iterations, so shared documents provide durable context be
 - [DECISIONS.md](DECISIONS.md) - Recorded architectural choices with rationale.
 - [RISK_REGISTER.md](RISK_REGISTER.md) - Risks and mitigations for context loss and process drift.
 
+## Using gralph to build gralph
+
+The repo includes a minimal self-hosting example set plus a runner script that
+executes the example stages in order.
+
+- Example PRDs: `gralph/examples/README.md` (see `gralph/examples/PRD-Stage-P-Example.md` and `gralph/examples/PRD-Stage-A-Example.md`).
+- Runner script: `gralph/scripts/run-release.sh`.
+
+Run the example release flow from the repo root:
+
+```bash
+./gralph/scripts/run-release.sh
+```
+
 ## Usage Examples
 
 ### Example 1: Basic Single Project Loop
