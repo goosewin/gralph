@@ -284,6 +284,18 @@ mod tests {
         fs::write(path, contents).unwrap();
     }
 
+    fn set_env(key: &str, value: impl AsRef<std::ffi::OsStr>) {
+        unsafe {
+            env::set_var(key, value);
+        }
+    }
+
+    fn remove_env(key: &str) {
+        unsafe {
+            env::remove_var(key);
+        }
+    }
+
     #[test]
     fn merge_precedence_default_global_project() {
         let _guard = ENV_LOCK.lock().unwrap();
@@ -305,18 +317,18 @@ mod tests {
         );
         write_file(&project_path, "defaults:\n  backend: gemini\n");
 
-        env::set_var("GRALPH_DEFAULT_CONFIG", &default_path);
-        env::set_var("GRALPH_GLOBAL_CONFIG", &global_path);
-        env::set_var("GRALPH_PROJECT_CONFIG_NAME", ".gralph.yaml");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+        set_env("GRALPH_PROJECT_CONFIG_NAME", ".gralph.yaml");
 
         let config = Config::load(Some(&project_dir)).unwrap();
         assert_eq!(config.get("defaults.max_iterations").as_deref(), Some("20"));
         assert_eq!(config.get("defaults.backend").as_deref(), Some("gemini"));
         assert_eq!(config.get("logging.level").as_deref(), Some("debug"));
 
-        env::remove_var("GRALPH_DEFAULT_CONFIG");
-        env::remove_var("GRALPH_GLOBAL_CONFIG");
-        env::remove_var("GRALPH_PROJECT_CONFIG_NAME");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_PROJECT_CONFIG_NAME");
     }
 
     #[test]
@@ -326,14 +338,14 @@ mod tests {
         let default_path = temp.path().join("default.yaml");
 
         write_file(&default_path, "defaults:\n  max_iterations: 10\n");
-        env::set_var("GRALPH_DEFAULT_CONFIG", &default_path);
-        env::set_var("GRALPH_DEFAULTS_MAX_ITERATIONS", "42");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_DEFAULTS_MAX_ITERATIONS", "42");
 
         let config = Config::load(None).unwrap();
         assert_eq!(config.get("defaults.max_iterations").as_deref(), Some("42"));
 
-        env::remove_var("GRALPH_DEFAULTS_MAX_ITERATIONS");
-        env::remove_var("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_DEFAULTS_MAX_ITERATIONS");
+        remove_env("GRALPH_DEFAULT_CONFIG");
     }
 
     #[test]
@@ -343,14 +355,14 @@ mod tests {
         let default_path = temp.path().join("default.yaml");
 
         write_file(&default_path, "defaults:\n  max_iterations: 10\n");
-        env::set_var("GRALPH_DEFAULT_CONFIG", &default_path);
-        env::set_var("GRALPH_MAX_ITERATIONS", "77");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_MAX_ITERATIONS", "77");
 
         let config = Config::load(None).unwrap();
         assert_eq!(config.get("defaults.max_iterations").as_deref(), Some("77"));
 
-        env::remove_var("GRALPH_MAX_ITERATIONS");
-        env::remove_var("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_MAX_ITERATIONS");
+        remove_env("GRALPH_DEFAULT_CONFIG");
     }
 
     #[test]
@@ -363,7 +375,7 @@ mod tests {
             &default_path,
             "defaults:\n  max_iterations: 5\nlogging:\n  level: info\n",
         );
-        env::set_var("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
 
         let config = Config::load(None).unwrap();
         let list = config.list();
@@ -374,7 +386,7 @@ mod tests {
             .iter()
             .any(|(key, value)| key == "logging.level" && value == "info"));
 
-        env::remove_var("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
     }
 
     #[test]
@@ -387,7 +399,7 @@ mod tests {
             &default_path,
             "test:\n  flags:\n    - --headless\n    - --verbose\n",
         );
-        env::set_var("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
 
         let config = Config::load(None).unwrap();
         assert_eq!(
@@ -395,7 +407,7 @@ mod tests {
             Some("--headless,--verbose")
         );
 
-        env::remove_var("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
     }
 
     #[test]
@@ -405,13 +417,13 @@ mod tests {
         let default_path = temp.path().join("default.yaml");
 
         write_file(&default_path, "defaults:\n  max_iterations: 1\n");
-        env::set_var("GRALPH_DEFAULT_CONFIG", &default_path);
-        env::set_var("GRALPH_TEST_FLAGS", "1");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_TEST_FLAGS", "1");
 
         let config = Config::load(None).unwrap();
         assert!(config.exists("test.flags"));
 
-        env::remove_var("GRALPH_TEST_FLAGS");
-        env::remove_var("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_TEST_FLAGS");
+        remove_env("GRALPH_DEFAULT_CONFIG");
     }
 }
