@@ -227,7 +227,7 @@ Support webhook notifications:
   * Completion detected via zero tasks and promise marker.
   * State callbacks update session progress.
 - **Dependencies** AOT-3, AOT-4, AOT-6
-- [ ] AOT-7 Implement core execution loop with completion detection
+- [x] AOT-7 Implement core execution loop with completion detection
 
 ### Task AOT-8
 

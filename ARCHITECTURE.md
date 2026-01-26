@@ -8,6 +8,8 @@ This document captures the high-level structure of gralph. It is a living summar
 
 `src/Gralph` is the .NET 10 console application entrypoint that will replace the bash CLI, providing the same command surface with Native AOT publishing.
 
+`src/Gralph/Core` implements the .NET execution loop. It renders prompts, runs backend iterations, checks completion markers, and reports loop progress back to state callbacks.
+
 `lib/core.sh` owns the execution loop. It loads backend adapters, renders prompt templates, runs iterations, counts remaining tasks, checks completion conditions, and handles loop lifecycle including logs, duration, and notifications.
 
 `lib/state.sh` provides persistent session state. It manages the state file, locking, and CRUD operations for sessions plus stale session cleanup so concurrent loops remain consistent.
