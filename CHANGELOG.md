@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - RS-5 Added OpenCode, Gemini, and Codex Rust backends with integration test stubs.
 - RS-6 Added Rust core loop module with iteration execution and completion checks.
 - RS-7 Added Rust webhook notifications with Discord, Slack, and generic payloads via reqwest.
+- RS-8 Added Rust PRD validation, sanitization, and stack detection utilities with tests.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.
 - C-2 Added worktree command routing and validation.

@@ -179,7 +179,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
   * Stack detection produces same output.
   * Unit tests for edge cases.
 - **Dependencies** RS-2
-- [ ] RS-8 Port PRD validation and sanitization
+- [x] RS-8 Port PRD validation and sanitization
 
 ---
 

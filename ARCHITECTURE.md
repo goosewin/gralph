@@ -17,6 +17,9 @@ This document captures the high-level structure of gralph. It is a living summar
 `lib/config.sh` handles configuration loading and overrides. It merges default, global, and project YAML into a cache and exposes getters and setters used by the CLI and core loop.
 `gralph-rs/src/config.rs` mirrors configuration loading in Rust using serde_yaml for the ported CLI.
 
+`lib/prd.sh` implements PRD validation, sanitization, and stack detection utilities for task blocks.
+`gralph-rs/src/prd.rs` mirrors PRD validation, sanitization, and stack detection behavior in Rust.
+
 `lib/backends/*.sh` provides backend adapters that invoke external CLIs.
 `gralph-rs/src/backend` defines the backend trait and CLI-backed implementations for the Rust port.
 
