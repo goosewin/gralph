@@ -106,7 +106,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * Environment variable overrides work with GRALPH_ prefix.
   * Unit tests cover config merging and overrides.
 - **Dependencies** GO-1
-- [ ] GO-2 Implement configuration loading package
+- [x] GO-2 Implement configuration loading package
 
 ### Task GO-3
 

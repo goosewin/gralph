@@ -14,6 +14,8 @@ This document captures the high-level structure of gralph. It is a living summar
 
 `lib/config.sh` handles configuration loading and overrides. It merges default, global, and project YAML into a cache and exposes getters and setters used by the CLI and core loop.
 
+`internal/config` provides the Go configuration package. It loads and merges default, global, and project YAML files using Viper with GRALPH_ environment overrides.
+
 `lib/notify.sh` formats and sends webhook notifications. It detects webhook targets, builds payloads for Slack/Discord/generic endpoints, and posts completion or failure events.
 
 ## Runtime Flow
