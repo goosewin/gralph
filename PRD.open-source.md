@@ -169,7 +169,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * No dead code paths.
   * Error handling is consistent.
 - **Dependencies** None
-- [ ] OSS-9 Audit notification module for dead code
+- [x] OSS-9 Audit notification module for dead code
 
 ---
 

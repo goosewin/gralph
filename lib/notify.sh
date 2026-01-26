@@ -1,9 +1,6 @@
 #!/bin/bash
 # notify.sh - Notifications
 
-# Get the directory where this script is located
-NOTIFY_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # detect_webhook_type - Detect webhook platform from URL
 # Arguments:
 #   $1 - webhook URL
@@ -367,7 +364,6 @@ send_webhook() {
   fi
 
   # Send the webhook request
-  local response
   local http_code
 
   # Use curl to POST the JSON payload

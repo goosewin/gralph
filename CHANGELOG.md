@@ -57,3 +57,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - OSS-6 Verified OpenCode CLI docs URL and install reference.
 - OSS-7 Verified Claude Code model alias claude-opus-4-5.
 - OSS-8 Removed stale platform notes reference in README.
+- OSS-9 Removed unused notification helpers and variables.
