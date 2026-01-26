@@ -1,0 +1,25 @@
+PRD.generated.md
+  54783aed4d0a927a 145
+README.md
+  54783aed4d0a927a 21-22,206-245,411,450-486,727-737,802,1327-1358
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "c4cdd24e1dfa8772cf816b4386d31fc3ca99e848",
+  "prompts": {
+    "54783aed4d0a927a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "da64a7e3-0576-4d61-a4da-b61f690da1ed",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 125,
+      "total_deletions": 3,
+      "accepted_lines": 125,
+      "overriden_lines": 0
+    }
+  }
+}
