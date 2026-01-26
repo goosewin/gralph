@@ -1,10 +1,56 @@
 #!/bin/bash
 # Installation script for gralph
 # See PRD.md Unit 06 for full specification
+#
+# Dual-mode installer:
+#   - Local mode: Run from cloned repo (./install.sh)
+#   - Bootstrap mode: Run via curl|bash (curl ... | bash)
 
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# =============================================================================
+# Install Mode Detection (INS-1)
+# =============================================================================
+
+# Detect install context: local repo vs piped install
+# Sets INSTALL_MODE to "local" or "bootstrap"
+detect_install_mode() {
+    # When piped via curl|bash, BASH_SOURCE[0] is typically empty or "bash"
+    # When run from a file, BASH_SOURCE[0] contains the script path
+    local script_source="${BASH_SOURCE[0]:-}"
+
+    # Check if we're being piped (stdin is not a terminal and BASH_SOURCE is empty/bash)
+    if [ -z "$script_source" ] || [ "$script_source" = "bash" ] || [ "$script_source" = "/bin/bash" ] || [ "$script_source" = "/usr/bin/bash" ]; then
+        # Piped execution - bootstrap mode
+        INSTALL_MODE="bootstrap"
+        SCRIPT_DIR=""
+        return 0
+    fi
+
+    # We have a script path - check if it's a local repo
+    local script_dir
+    script_dir="$(cd "$(dirname "$script_source")" && pwd)"
+
+    # Check if the local repo structure exists
+    if [ -f "$script_dir/bin/gralph" ]; then
+        INSTALL_MODE="local"
+        SCRIPT_DIR="$script_dir"
+        return 0
+    fi
+
+    # Script exists but no bin/gralph - likely extracted tarball or incomplete
+    # Treat as bootstrap to trigger download
+    INSTALL_MODE="bootstrap"
+    SCRIPT_DIR=""
+    return 0
+}
+
+# Global variables for install mode
+INSTALL_MODE=""
+SCRIPT_DIR=""
+
+# Detect mode immediately
+detect_install_mode
 
 # Colors for output
 RED='\033[0;31m'
@@ -487,6 +533,21 @@ USE_SUDO=false
 
 echo "gralph installer"
 echo "==============="
+echo ""
+
+# Display detected install mode
+if [ "$INSTALL_MODE" = "local" ]; then
+    echo_info "Install mode: local (from cloned repo)"
+    echo_info "Source directory: $SCRIPT_DIR"
+elif [ "$INSTALL_MODE" = "bootstrap" ]; then
+    echo_info "Install mode: bootstrap (curl|bash)"
+    echo_warn "Bootstrap download not yet implemented (see INS-2)"
+    echo "      For now, please clone the repo and run ./install.sh"
+    echo ""
+    echo "      git clone https://github.com/goosewin/gralph.git"
+    echo "      cd gralph && ./install.sh"
+    exit 1
+fi
 echo ""
 
 # Check dependencies first
