@@ -1,0 +1,27 @@
+examples/PRD-Stage-P-Example.md
+  cd862b00547d606e 56
+CHANGELOG.md
+  cd862b00547d606e 48
+README.md
+  cd862b00547d606e 962,966-969
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "a8ed24b9d473efac3520607700a86eaf01e756ac",
+  "prompts": {
+    "cd862b00547d606e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "37b42d4d-0326-47c1-ac0e-c73b37fa8fcb",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 7,
+      "total_deletions": 1,
+      "accepted_lines": 7,
+      "overriden_lines": 0
+    }
+  }
+}
