@@ -38,8 +38,6 @@ Autonomous AI coding loops using Claude Code or OpenCode. Spawns fresh AI coding
 brew install bash jq tmux
 ```
 
-See `tests/macos-compatibility.md` for detailed platform notes.
-
 ## Installation
 
 Gralph uses a dual-mode installer that automatically detects whether it's being piped from curl or run from a local clone. Both methods use the same `install.sh` script.

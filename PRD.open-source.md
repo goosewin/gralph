@@ -155,7 +155,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * Reference to uninstall.sh in uninstall section - verify file exists.
   * Update or remove invalid references.
 - **Dependencies** None
-- [ ] OSS-8 Fix invalid file references in README
+- [x] OSS-8 Fix invalid file references in README
 
 ---
 
