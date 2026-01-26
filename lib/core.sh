@@ -9,6 +9,16 @@ if [[ -f "$SCRIPT_DIR/backends/common.sh" ]]; then
     source "$SCRIPT_DIR/backends/common.sh"
 fi
 
+# Source notification module
+if [[ -f "$SCRIPT_DIR/notify.sh" ]]; then
+    source "$SCRIPT_DIR/notify.sh"
+fi
+
+# Source config module
+if [[ -f "$SCRIPT_DIR/config.sh" ]]; then
+    source "$SCRIPT_DIR/config.sh"
+fi
+
 # Default backend (can be overridden via config or CLI)
 GRALPH_BACKEND="${GRALPH_BACKEND:-claude}"
 
@@ -435,6 +445,18 @@ run_loop() {
             # Update state if callback is defined
             if [[ -n "$GRALPH_STATE_CALLBACK" ]] && declare -f "$GRALPH_STATE_CALLBACK" > /dev/null; then
                 "$GRALPH_STATE_CALLBACK" "$session_name" "$iteration" "complete" "0"
+            fi
+
+            # Send completion notification if configured
+            local notify_on_complete webhook_url
+            notify_on_complete=$(get_config "notifications.on_complete" "false")
+            webhook_url=$(get_config "notifications.webhook" "")
+
+            if [[ "$notify_on_complete" == "true" && -n "$webhook_url" ]]; then
+                if declare -f notify_complete > /dev/null; then
+                    notify_complete "$session_name" "$webhook_url" "$project_dir" "$iteration" "$loop_duration_secs" || \
+                        echo "Warning: Failed to send completion notification" >&2
+                fi
             fi
 
             return 0
