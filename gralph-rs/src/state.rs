@@ -394,6 +394,7 @@ fn is_process_alive(pid: i64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
     use std::sync::Arc;
 
     fn store_for_test(dir: &Path, timeout: Duration) -> StateStore {

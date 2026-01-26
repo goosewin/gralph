@@ -1,4 +1,5 @@
 use gralph_rs::backend::gemini::GeminiBackend;
+use gralph_rs::backend::Backend;
 
 #[test]
 #[ignore]
