@@ -395,6 +395,115 @@ logging:
 
 For complex configuration needs (arrays, deep nesting), use environment variable overrides or CLI arguments instead.
 
+## Notifications
+
+Gralph can send webhook notifications when loops complete or fail. This is useful for monitoring long-running loops on remote servers.
+
+### Enabling Notifications
+
+Set a webhook URL via CLI flag, config file, or environment variable:
+
+```bash
+# Via CLI flag (per-session)
+gralph start . --webhook "https://discord.com/api/webhooks/123/abc"
+
+# Via config file (global)
+gralph config set notifications.webhook "https://hooks.slack.com/services/T00/B00/xxx"
+
+# Via environment variable
+export GRALPH_NOTIFICATIONS_WEBHOOK="https://example.com/webhook"
+```
+
+### Notification Events
+
+Gralph sends notifications for two types of events:
+
+| Event | Trigger | Information Included |
+|-------|---------|---------------------|
+| **Complete** | Loop finishes with all tasks done | Session name, project, iterations, duration |
+| **Failed** | Loop stops before completion | Session name, project, reason, iterations, max iterations, remaining tasks, duration |
+
+**Failure reasons:**
+- `max_iterations` - Loop hit the maximum iteration limit
+- `error` - Loop encountered an error
+- `manual_stop` - User stopped the loop with `gralph stop`
+
+### Supported Webhook Platforms
+
+Gralph auto-detects the webhook platform from the URL and formats payloads accordingly:
+
+| Platform | URL Pattern | Format |
+|----------|-------------|--------|
+| Discord | `discord.com/api/webhooks/` | Discord embed with colored status |
+| Slack | `hooks.slack.com/services/` | Slack block kit attachment |
+| Generic | Any other URL | JSON POST (see below) |
+
+### Webhook Payload Formats
+
+**Discord** notifications use embeds with green (success) or red (failure) colors:
+
+```json
+{
+  "embeds": [{
+    "title": "✅ Gralph Complete",
+    "description": "Session **myapp** has finished all tasks successfully.",
+    "color": 5763719,
+    "fields": [
+      {"name": "Project", "value": "`/path/to/project`"},
+      {"name": "Iterations", "value": "15"},
+      {"name": "Duration", "value": "2h 15m 30s"}
+    ]
+  }]
+}
+```
+
+**Slack** notifications use attachments with block kit:
+
+```json
+{
+  "attachments": [{
+    "color": "#57F287",
+    "blocks": [
+      {"type": "header", "text": {"type": "plain_text", "text": "✅ Gralph Complete"}},
+      {"type": "section", "text": {"type": "mrkdwn", "text": "Session *myapp* has finished."}}
+    ]
+  }]
+}
+```
+
+**Generic** webhooks receive a simple JSON POST:
+
+```json
+{
+  "event": "complete",
+  "status": "success",
+  "session": "myapp",
+  "project": "/path/to/project",
+  "iterations": "15",
+  "duration": "2h 15m 30s",
+  "timestamp": "2024-01-15T10:30:00-05:00",
+  "message": "Gralph loop 'myapp' completed successfully after 15 iterations (2h 15m 30s)"
+}
+```
+
+For failures, the generic payload includes additional fields:
+
+```json
+{
+  "event": "failed",
+  "status": "failure",
+  "session": "myapp",
+  "project": "/path/to/project",
+  "reason": "max_iterations",
+  "iterations": "30",
+  "max_iterations": "30",
+  "remaining_tasks": "5",
+  "duration": "1h 45m 20s",
+  "timestamp": "2024-01-15T12:00:00-05:00",
+  "message": "Gralph loop 'myapp' failed: hit max iterations (30/30) with 5 tasks remaining"
+}
+```
+
 ### Complete Configuration Example
 
 ```yaml
@@ -800,7 +909,7 @@ curl -X POST -H "Authorization: Bearer your-secret-token" \
 
 ### Example 5: Webhook Notifications
 
-Get notified when loops complete:
+Get notified when loops complete or fail:
 
 ```bash
 # Discord webhook
@@ -812,6 +921,8 @@ gralph start . --webhook "https://hooks.slack.com/services/T00/B00/xxx"
 # Or set globally
 gralph config set notifications.webhook "https://discord.com/api/webhooks/123/abc"
 ```
+
+See [Notifications](#notifications) for details on webhook formats and notification events.
 
 ### Example 6: Recovery After Reboot
 
