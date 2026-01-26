@@ -364,6 +364,10 @@ run_loop() {
     mkdir -p "$gralph_dir"
     local log_file="$gralph_dir/gralph.log"
 
+    # Track loop start time for duration calculation
+    local loop_start_time
+    loop_start_time=$(date +%s)
+
     # Initialize iteration counter
     local iteration=1
 
@@ -417,8 +421,15 @@ run_loop() {
 
         # Check for genuine completion
         if check_completion "$full_task_path" "$result" "$completion_marker"; then
+            # Calculate loop duration
+            local loop_end_time loop_duration_secs
+            loop_end_time=$(date +%s)
+            loop_duration_secs=$((loop_end_time - loop_start_time))
+            export GRALPH_LOOP_DURATION_SECS="$loop_duration_secs"
+
             echo "" | tee -a "$log_file"
             echo "Gralph complete after $iteration iterations." | tee -a "$log_file"
+            echo "Duration: ${loop_duration_secs}s" | tee -a "$log_file"
             echo "FINISHED: $(date -Iseconds)" | tee -a "$log_file"
 
             # Update state if callback is defined
@@ -452,9 +463,16 @@ run_loop() {
     local final_remaining
     final_remaining=$(count_remaining_tasks "$full_task_path")
 
+    # Calculate loop duration
+    local loop_end_time loop_duration_secs
+    loop_end_time=$(date +%s)
+    loop_duration_secs=$((loop_end_time - loop_start_time))
+    export GRALPH_LOOP_DURATION_SECS="$loop_duration_secs"
+
     echo "" | tee -a "$log_file"
     echo "Hit max iterations ($max_iterations)" | tee -a "$log_file"
     echo "Remaining tasks: $final_remaining" | tee -a "$log_file"
+    echo "Duration: ${loop_duration_secs}s" | tee -a "$log_file"
     echo "FINISHED: $(date -Iseconds)" | tee -a "$log_file"
 
     # Update state if callback is defined
