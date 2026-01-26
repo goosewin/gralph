@@ -18,8 +18,16 @@ This document captures the high-level structure of gralph. It is a living summar
 
 ## Runtime Flow
 
-Placeholder for the main loop flow, including major phases and handoffs.
+The CLI initializes configuration and starts the core loop. The loop
+prepares logging, counts remaining tasks, and iterates until completion
+or max iterations. Each iteration builds the prompt, invokes the backend,
+parses the result, checks for completion promises, and updates optional
+state callbacks with remaining task counts. On completion or failure, the
+loop records duration, writes final status to logs, and optionally sends
+notifications.
 
 ## Storage
 
-Placeholder for state, log, and configuration storage locations.
+Session state is stored in `~/.config/gralph/state.json` with a lock file
+at `~/.config/gralph/state.lock` (or a lock dir fallback). Loop logs are
+written to `.gralph/<session>.log` inside the target project directory.
