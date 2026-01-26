@@ -42,6 +42,8 @@ coverage/
 # Build artifacts
 dist/
 build/
+**/bin/
+**/obj/
 
 # Environment variables
 .env
