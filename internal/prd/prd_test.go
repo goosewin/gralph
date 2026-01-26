@@ -234,7 +234,7 @@ func TestValidateFileAllowMissingContext(t *testing.T) {
 		"",
 		"### Task GO-11",
 		"- **ID** GO-11",
-		"- **Context Bundle**",
+		"- **Context Bundle** `missing.md`",
 		"- **DoD** Done",
 		"- **Checklist**",
 		"  * one",

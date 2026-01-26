@@ -600,7 +600,7 @@ var (
 	openQuestionsHeaderRe = regexp.MustCompile(`^\s*##\s+open\s+questions\b`)
 	contextHeaderRe       = regexp.MustCompile(`^(\s*)-\s*\*\*Context Bundle\*\*`)
 	contextFieldRe        = regexp.MustCompile(`^\s*-\s*\*\*[^*]+\*\*`)
-	fieldLineRe           = regexp.MustCompile(`^\s*-\s*\*\*%s\*\*`)
+	fieldLineRe           = regexp.MustCompile(`(?m)^\s*-\s*\*\*%s\*\*`)
 	headerIDRe            = regexp.MustCompile(`^\s*###\s+Task\s+(.+)$`)
 	idFieldRe             = regexp.MustCompile(`^\s*-\s*\*\*ID\*\*\s*(.*)$`)
 	contextEntryRe        = regexp.MustCompile("`([^`]*)`")
