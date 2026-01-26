@@ -97,6 +97,7 @@ init_backend() {
 #   {iteration}          - Current iteration number
 #   {max_iterations}     - Maximum iterations allowed
 #   {task_block}         - Selected task block or placeholder string
+#   {context_files_section} - Context files section (optional)
 DEFAULT_PROMPT_TEMPLATE='Read {task_file} carefully. Find any task marked '\''- [ ]'\'' (unchecked).
 
 If unchecked tasks exist:
@@ -111,6 +112,7 @@ If ZERO '\''- [ ]'\'' remain (all complete):
 
 CRITICAL: Never mention the promise unless outputting it as the completion signal.
 
+{context_files_section}
 Task Block:
 {task_block}
 
@@ -217,6 +219,11 @@ render_prompt_template() {
         task_block="No task block available."
     fi
 
+    local context_files_section=""
+    if [[ -n "$context_files" ]]; then
+        context_files_section=$'Context Files (read these first):\n'"$context_files"$'\n'
+    fi
+
     # Substitute all template variables
     local rendered="$template"
     rendered="${rendered//\{task_file\}/$task_file}"
@@ -225,6 +232,7 @@ render_prompt_template() {
     rendered="${rendered//\{max_iterations\}/$max_iterations}"
     rendered="${rendered//\{task_block\}/$task_block}"
     rendered="${rendered//\{context_files\}/$context_files}"
+    rendered="${rendered//\{context_files_section\}/$context_files_section}"
 
     echo "$rendered"
 }
