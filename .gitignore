@@ -2,6 +2,7 @@
 
 # State and runtime files
 .gralph/
+.worktrees/
 *.log
 *.tmp
 *.pid
