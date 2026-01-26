@@ -253,7 +253,7 @@ Support webhook notifications:
   * Background mode spawns detached process.
   * Webhook option stored in session.
 - **Dependencies** AOT-7, AOT-8
-- [ ] AOT-9 Implement start command with session management
+- [x] AOT-9 Implement start command with session management
 
 ### Task AOT-10
 

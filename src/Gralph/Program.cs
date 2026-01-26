@@ -1,16 +1,22 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Gralph.Backends;
 using Gralph.Config;
+using Gralph.Core;
 using Gralph.Prd;
+using Gralph.State;
 
 namespace Gralph;
 
 public static class Program
 {
     private const string Version = "1.1.0";
+    private const string StartWorkerEnv = "GRALPH_START_WORKER";
 
     private static readonly string[] CommandNames =
     [
@@ -253,6 +259,12 @@ public static class Program
             }
         }
 
+        if (IsStartWorker())
+        {
+            options.NoTmux = true;
+            options.NoTmuxSet = true;
+        }
+
         if (positional.Count == 0)
         {
             return Fail("Directory is required. Usage: gralph start <directory>");
@@ -319,8 +331,133 @@ public static class Program
             }
         }
 
-        Console.WriteLine("start command is registered but not implemented in this build.");
-        return 0;
+        var sessionName = options.NameSet && !string.IsNullOrWhiteSpace(options.Name)
+            ? options.Name
+            : Path.GetFileName(targetDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        sessionName = SanitizeSessionName(sessionName);
+
+        if (string.IsNullOrWhiteSpace(sessionName))
+        {
+            sessionName = "gralph";
+        }
+
+        var backendName = options.Backend;
+        IBackend backend;
+        try
+        {
+            backend = BackendLoader.Load(backendName);
+        }
+        catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException)
+        {
+            return Fail(ex.Message);
+        }
+
+        if (!backend.IsInstalled())
+        {
+            return Fail($"Backend '{backend.Name}' is not installed. {backend.GetInstallHint()}");
+        }
+
+        var state = new StateStore(StatePaths.FromEnvironment());
+        state.Init();
+
+        if (!IsStartWorker())
+        {
+            var existing = state.GetSession(sessionName);
+            if (existing != null)
+            {
+                var status = GetSessionString(existing, "status") ?? "unknown";
+                if (string.Equals(status, "running", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (TryGetSessionInt(existing, "pid", out var pid) && new ProcessInspector().IsAlive(pid))
+                    {
+                        return Fail($"Session '{sessionName}' is already running (PID: {pid}). Use 'gralph stop {sessionName}' first.");
+                    }
+
+                    Console.Error.WriteLine($"Warning: Session '{sessionName}' exists but appears stale. Restarting...");
+                }
+            }
+        }
+
+        var gralphDir = Path.Combine(targetDir, ".gralph");
+        Directory.CreateDirectory(gralphDir);
+        var logFile = Path.Combine(gralphDir, $"{sessionName}.log");
+        var initialRemaining = CountRemainingTasks(taskFilePath);
+
+        var sessionData = new Dictionary<string, object?>
+        {
+            ["dir"] = targetDir,
+            ["task_file"] = options.TaskFile,
+            ["pid"] = Environment.ProcessId,
+            ["tmux_session"] = string.Empty,
+            ["started_at"] = DateTimeOffset.Now.ToString("O"),
+            ["iteration"] = 1,
+            ["max_iterations"] = options.MaxIterations,
+            ["status"] = "running",
+            ["last_task_count"] = initialRemaining,
+            ["completion_marker"] = options.CompletionMarker,
+            ["log_file"] = logFile,
+            ["backend"] = backend.Name,
+            ["model"] = options.Model ?? string.Empty,
+            ["variant"] = options.Variant ?? string.Empty,
+            ["webhook"] = options.Webhook ?? string.Empty
+        };
+
+        if (!options.NoTmux && !IsStartWorker())
+        {
+            var process = StartBackgroundProcess(targetDir, sessionName, options);
+            sessionData["pid"] = process.Id;
+            state.SetSession(sessionName, sessionData);
+            Console.WriteLine($"Started gralph session '{sessionName}' in background (PID: {process.Id}).");
+            Console.WriteLine($"Logs: {logFile}");
+            return 0;
+        }
+
+        state.SetSession(sessionName, sessionData);
+
+        var loopOptions = new CoreLoopOptions(targetDir)
+        {
+            TaskFile = options.TaskFile,
+            MaxIterations = options.MaxIterations,
+            CompletionMarker = options.CompletionMarker,
+            ModelOverride = options.Model,
+            SessionName = sessionName,
+            PromptTemplatePath = string.IsNullOrWhiteSpace(options.PromptTemplatePath)
+                ? null
+                : Path.GetFullPath(options.PromptTemplatePath),
+            LogFilePath = logFile
+        };
+
+        var loop = new CoreLoop(config, backend);
+        var result = loop.RunAsync(loopOptions, update =>
+        {
+            state.SetSession(sessionName, new Dictionary<string, object?>
+            {
+                ["iteration"] = update.Iteration,
+                ["status"] = update.Status,
+                ["last_task_count"] = update.RemainingTasks
+            });
+        }).GetAwaiter().GetResult();
+
+        var finalStatus = result.Status switch
+        {
+            CoreLoopStatus.Complete => "complete",
+            CoreLoopStatus.MaxIterations => "max_iterations",
+            _ => "failed"
+        };
+
+        state.SetSession(sessionName, new Dictionary<string, object?>
+        {
+            ["iteration"] = result.Iterations,
+            ["status"] = finalStatus,
+            ["last_task_count"] = result.RemainingTasks
+        });
+
+        if (result.Status == CoreLoopStatus.Failed && !string.IsNullOrWhiteSpace(result.ErrorMessage))
+        {
+            Console.Error.WriteLine($"Error: {result.ErrorMessage}");
+        }
+
+        return result.Status == CoreLoopStatus.Complete ? 0 : 1;
     }
 
     private static int HandleStop(string[] args)
@@ -835,6 +972,163 @@ public static class Program
     {
         return string.Equals(arg, "-v", StringComparison.Ordinal)
             || string.Equals(arg, "--version", StringComparison.Ordinal);
+    }
+
+    private static bool IsStartWorker()
+    {
+        return string.Equals(Environment.GetEnvironmentVariable(StartWorkerEnv), "1", StringComparison.Ordinal);
+    }
+
+    private static string SanitizeSessionName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        return Regex.Replace(value.Trim(), "[^a-zA-Z0-9_-]", "-");
+    }
+
+    private static int CountRemainingTasks(string taskFilePath)
+    {
+        if (string.IsNullOrWhiteSpace(taskFilePath) || !File.Exists(taskFilePath))
+        {
+            return 0;
+        }
+
+        var blocks = PrdParser.GetTaskBlocks(taskFilePath);
+        if (blocks.Count > 0)
+        {
+            return blocks.Sum(block => block.UncheckedCount);
+        }
+
+        var count = 0;
+        foreach (var line in File.ReadLines(taskFilePath))
+        {
+            if (line.AsSpan().TrimStart().StartsWith("- [ ]", StringComparison.Ordinal))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static Process StartBackgroundProcess(string targetDir, string sessionName, StartOptions options)
+    {
+        var exePath = Environment.ProcessPath
+            ?? Process.GetCurrentProcess().MainModule?.FileName
+            ?? throw new InvalidOperationException("Unable to resolve gralph executable path.");
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = exePath,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WorkingDirectory = targetDir
+        };
+
+        startInfo.ArgumentList.Add("start");
+        startInfo.ArgumentList.Add(targetDir);
+        startInfo.ArgumentList.Add("--name");
+        startInfo.ArgumentList.Add(sessionName);
+        startInfo.ArgumentList.Add("--max-iterations");
+        startInfo.ArgumentList.Add(options.MaxIterations.ToString());
+        startInfo.ArgumentList.Add("--task-file");
+        startInfo.ArgumentList.Add(options.TaskFile);
+        startInfo.ArgumentList.Add("--completion-marker");
+        startInfo.ArgumentList.Add(options.CompletionMarker);
+        startInfo.ArgumentList.Add("--backend");
+        startInfo.ArgumentList.Add(options.Backend);
+        startInfo.ArgumentList.Add("--no-tmux");
+
+        if (!string.IsNullOrWhiteSpace(options.Model))
+        {
+            startInfo.ArgumentList.Add("--model");
+            startInfo.ArgumentList.Add(options.Model);
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.Variant))
+        {
+            startInfo.ArgumentList.Add("--variant");
+            startInfo.ArgumentList.Add(options.Variant);
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.PromptTemplatePath))
+        {
+            startInfo.ArgumentList.Add("--prompt-template");
+            startInfo.ArgumentList.Add(Path.GetFullPath(options.PromptTemplatePath));
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.Webhook))
+        {
+            startInfo.ArgumentList.Add("--webhook");
+            startInfo.ArgumentList.Add(options.Webhook);
+        }
+
+        if (options.StrictPrd)
+        {
+            startInfo.ArgumentList.Add("--strict-prd");
+        }
+
+        startInfo.Environment[StartWorkerEnv] = "1";
+
+        var process = new Process { StartInfo = startInfo };
+        if (!process.Start())
+        {
+            throw new InvalidOperationException("Failed to spawn background process.");
+        }
+
+        return process;
+    }
+
+    private static string? GetSessionString(JsonObject session, string key)
+    {
+        if (!session.TryGetPropertyValue(key, out var node) || node is null)
+        {
+            return null;
+        }
+
+        if (node is JsonValue value && value.TryGetValue<string>(out var stringValue))
+        {
+            return stringValue;
+        }
+
+        return node.ToString();
+    }
+
+    private static bool TryGetSessionInt(JsonObject session, string key, out int result)
+    {
+        result = 0;
+        if (!session.TryGetPropertyValue(key, out var node) || node is null)
+        {
+            return false;
+        }
+
+        if (node is JsonValue value)
+        {
+            if (value.TryGetValue<int>(out var intValue))
+            {
+                result = intValue;
+                return true;
+            }
+
+            if (value.TryGetValue<long>(out var longValue)
+                && longValue is > int.MinValue and < int.MaxValue)
+            {
+                result = (int)longValue;
+                return true;
+            }
+
+            if (value.TryGetValue<string>(out var stringValue)
+                && int.TryParse(stringValue, out var parsed))
+            {
+                result = parsed;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void PrintUsage()
