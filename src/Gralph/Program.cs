@@ -1,6 +1,7 @@
 using System.CommandLine;
 using Gralph.Backends;
 using Gralph.Commands;
+using Gralph.Prd;
 using Gralph.State;
 
 const string Version = "1.1.0";
@@ -214,10 +215,96 @@ resume.SetAction(parseResult =>
 
 var prd = new Command("prd", "Validate or generate PRDs");
 var prdCheck = new Command("check", "Validate PRD task blocks");
-prdCheck.Add(new Argument<string>("file") { Arity = ArgumentArity.ExactlyOne });
-prdCheck.SetAction(_ => Console.WriteLine("prd check is not implemented yet."));
+var prdCheckFileArgument = new Argument<string>("file") { Arity = ArgumentArity.ExactlyOne };
+var prdCheckAllowMissingContextOption = new Option<bool>("--allow-missing-context", "Allow missing Context Bundle paths");
+prdCheck.Add(prdCheckFileArgument);
+prdCheck.Add(prdCheckAllowMissingContextOption);
+prdCheck.SetAction(parseResult =>
+{
+    var handler = new PrdCheckCommandHandler();
+    var exitCode = handler.Execute(new PrdCheckSettings
+    {
+        FilePath = parseResult.GetValue(prdCheckFileArgument),
+        AllowMissingContext = parseResult.GetValue(prdCheckAllowMissingContextOption)
+    });
+
+    Environment.ExitCode = exitCode;
+});
 var prdCreate = new Command("create", "Generate a spec-compliant PRD");
-prdCreate.SetAction(_ => Console.WriteLine("prd create is not implemented yet."));
+var prdCreateDirOption = new Option<string?>("--dir", "Project directory (default: current)");
+var prdCreateOutputOption = new Option<string?>("--output", "Output PRD file path (default: PRD.generated.md)");
+var prdCreateOutputShortOption = new Option<string?>("-o", "Output PRD file path (default: PRD.generated.md)");
+var prdCreateGoalOption = new Option<string?>("--goal", "Short description of what to build");
+var prdCreateConstraintsOption = new Option<string?>("--constraints", "Constraints or non-functional requirements");
+var prdCreateContextOption = new Option<string?>("--context", "Extra context files (comma-separated)");
+var prdCreateSourcesOption = new Option<string?>("--sources", "External URLs or references (comma-separated)");
+var prdCreateBackendOption = new Option<string?>("--backend", "Backend for PRD generation");
+var prdCreateBackendShortOption = new Option<string?>("-b", "Backend for PRD generation");
+var prdCreateModelOption = new Option<string?>("--model", "Model override for PRD generation");
+var prdCreateModelShortOption = new Option<string?>("-m", "Model override for PRD generation");
+var prdCreateAllowMissingContextOption = new Option<bool>("--allow-missing-context", "Allow missing Context Bundle paths");
+var prdCreateMultilineOption = new Option<bool>("--multiline", "Enable multiline prompts (interactive)");
+var prdCreateNoInteractiveOption = new Option<bool>("--no-interactive", "Disable interactive prompts");
+var prdCreateInteractiveOption = new Option<bool>("--interactive", "Force interactive prompts");
+var prdCreateForceOption = new Option<bool>("--force", "Overwrite existing output file");
+
+prdCreate.Add(prdCreateDirOption);
+prdCreate.Add(prdCreateOutputOption);
+prdCreate.Add(prdCreateOutputShortOption);
+prdCreate.Add(prdCreateGoalOption);
+prdCreate.Add(prdCreateConstraintsOption);
+prdCreate.Add(prdCreateContextOption);
+prdCreate.Add(prdCreateSourcesOption);
+prdCreate.Add(prdCreateBackendOption);
+prdCreate.Add(prdCreateBackendShortOption);
+prdCreate.Add(prdCreateModelOption);
+prdCreate.Add(prdCreateModelShortOption);
+prdCreate.Add(prdCreateAllowMissingContextOption);
+prdCreate.Add(prdCreateMultilineOption);
+prdCreate.Add(prdCreateNoInteractiveOption);
+prdCreate.Add(prdCreateInteractiveOption);
+prdCreate.Add(prdCreateForceOption);
+
+prdCreate.SetAction(parseResult =>
+{
+    var noInteractive = parseResult.GetValue(prdCreateNoInteractiveOption);
+    var interactive = parseResult.GetValue(prdCreateInteractiveOption);
+    if (noInteractive && interactive)
+    {
+        Console.Error.WriteLine("Error: --interactive and --no-interactive cannot be used together.");
+        Environment.ExitCode = 1;
+        return;
+    }
+
+    bool? interactiveSetting = null;
+    if (noInteractive)
+    {
+        interactiveSetting = false;
+    }
+    else if (interactive)
+    {
+        interactiveSetting = true;
+    }
+
+    var handler = new PrdCreateCommandHandler(BackendRegistry.CreateDefault());
+    var exitCode = handler.ExecuteAsync(new PrdCreateSettings
+    {
+        Directory = parseResult.GetValue(prdCreateDirOption),
+        Output = parseResult.GetValue(prdCreateOutputOption) ?? parseResult.GetValue(prdCreateOutputShortOption),
+        Goal = parseResult.GetValue(prdCreateGoalOption),
+        Constraints = parseResult.GetValue(prdCreateConstraintsOption),
+        Context = parseResult.GetValue(prdCreateContextOption),
+        Sources = parseResult.GetValue(prdCreateSourcesOption),
+        Backend = parseResult.GetValue(prdCreateBackendOption) ?? parseResult.GetValue(prdCreateBackendShortOption),
+        Model = parseResult.GetValue(prdCreateModelOption) ?? parseResult.GetValue(prdCreateModelShortOption),
+        AllowMissingContext = parseResult.GetValue(prdCreateAllowMissingContextOption),
+        Multiline = parseResult.GetValue(prdCreateMultilineOption),
+        Force = parseResult.GetValue(prdCreateForceOption),
+        Interactive = interactiveSetting
+    }, CancellationToken.None).GetAwaiter().GetResult();
+
+    Environment.ExitCode = exitCode;
+});
 prd.Add(prdCheck);
 prd.Add(prdCreate);
 

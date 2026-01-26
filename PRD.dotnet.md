@@ -185,7 +185,7 @@ The codebase must be structured for unit testing with dependency injection and i
   * PRD generation command with AI backend integration working.
   * Sanitization of generated PRDs implemented.
 - **Dependencies** DOTNET-2, DOTNET-5
-- [ ] DOTNET-9 Implement PRD validation and generation
+- [x] DOTNET-9 Implement PRD validation and generation
 
 ### Task DOTNET-10
 
