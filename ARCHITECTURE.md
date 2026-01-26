@@ -15,6 +15,7 @@ This document captures the high-level structure of gralph. It is a living summar
 `lib/server.sh` implements the lightweight status API. It exposes endpoints for session status and stop commands, handles auth, and supports running via netcat or socat.
 
 `lib/config.sh` handles configuration loading and overrides. It merges default, global, and project YAML into a cache and exposes getters and setters used by the CLI and core loop.
+`src/Gralph/Config` mirrors the configuration system in .NET, including YAML parsing, precedence merges, and environment overrides.
 
 `lib/notify.sh` formats and sends webhook notifications. It detects webhook targets, builds payloads for Slack/Discord/generic endpoints, and posts completion or failure events.
 

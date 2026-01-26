@@ -162,7 +162,7 @@ Support webhook notifications:
   * Environment variables override config values.
   * get_config and set_config methods work correctly.
 - **Dependencies** AOT-1
-- [ ] AOT-2 Implement configuration loading and merging system
+- [x] AOT-2 Implement configuration loading and merging system
 
 ### Task AOT-3
 
