@@ -60,3 +60,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - OSS-9 Removed unused notification helpers and variables.
 - OSS-10 Hardened server request handling and tightened CORS defaults.
 - OSS-11 Updated backend tests to assert corrected model names.
+- OSS-12 Hardened installer path handling and bootstrap checks.

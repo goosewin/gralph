@@ -210,7 +210,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * macOS and Linux installation works.
   * Error handling is robust.
 - **Dependencies** None
-- [ ] OSS-12 Audit installer for correctness
+- [x] OSS-12 Audit installer for correctness
 
 ---
 

@@ -7,6 +7,7 @@
 #   - Bootstrap mode: Run via curl|bash (curl ... | bash)
 
 set -e
+set -o pipefail
 
 # =============================================================================
 # Install Mode Detection (INS-1)
@@ -422,10 +423,14 @@ determine_install_path() {
     fi
 
     # Option 2: /usr/local/bin is writable (running as root or has permissions)
-    if can_write_to "$system_bin" && is_in_path "$system_bin"; then
+    if can_write_to "$system_bin"; then
         echo_info "  $system_bin is writable"
         INSTALL_PATH="$system_bin"
-        NEEDS_PATH_UPDATE=false
+        if is_in_path "$system_bin"; then
+            NEEDS_PATH_UPDATE=false
+        else
+            NEEDS_PATH_UPDATE=true
+        fi
         return 0
     fi
 
@@ -498,28 +503,36 @@ print_path_instructions() {
     echo ""
 
     # Detect current shell
-    local shell_name=$(basename "$SHELL")
+    local shell_name="${SHELL##*/}"
+    if [ -z "$shell_name" ]; then
+        shell_name="unknown"
+    fi
 
     case "$shell_name" in
         bash)
-            echo "    # Add to ~/.bashrc or ~/.bash_profile:"
+            echo "    # Add to ~/.bashrc (Linux) or ~/.bash_profile (macOS):"
             echo "    export PATH=\"$install_dir:\$PATH\""
+            echo ""
+            echo "    Then run: source ~/.bashrc  (or start a new terminal)"
             ;;
         zsh)
             echo "    # Add to ~/.zshrc:"
             echo "    export PATH=\"$install_dir:\$PATH\""
+            echo ""
+            echo "    Then run: source ~/.zshrc  (or start a new terminal)"
             ;;
         fish)
             echo "    # Add to ~/.config/fish/config.fish:"
             echo "    set -gx PATH $install_dir \$PATH"
+            echo ""
+            echo "    Then run: source ~/.config/fish/config.fish  (or start a new terminal)"
             ;;
         *)
             echo "    export PATH=\"$install_dir:\$PATH\""
+            echo ""
+            echo "    Then start a new terminal to pick up PATH"
             ;;
     esac
-
-    echo ""
-    echo "    Then run: source ~/.<shell>rc  (or start a new terminal)"
 }
 
 # =============================================================================
@@ -542,6 +555,13 @@ bootstrap_cleanup() {
 # Sets SCRIPT_DIR to the extracted directory on success
 bootstrap_download() {
     echo_info "Downloading gralph..."
+
+    # Verify tar is available for extraction
+    if ! check_command tar; then
+        echo_error "tar is required to extract the release archive."
+        echo "      Please install tar and try again."
+        return 1
+    fi
 
     # Verify curl is available
     if ! check_command curl; then
@@ -895,6 +915,35 @@ if ! create_default_config; then
     exit 1
 fi
 
+# Ensure default config template is available for runtime defaults
+install_default_config_template() {
+    local source_config="$SCRIPT_DIR/config/default.yaml"
+    local dest_dir="$CONFIG_DIR/config"
+    local dest_config="$dest_dir/default.yaml"
+
+    if [ -f "$dest_config" ]; then
+        return 0
+    fi
+
+    if [ ! -f "$source_config" ]; then
+        echo_warn "  Default config template not found at $source_config"
+        return 0
+    fi
+
+    if ! mkdir -p "$dest_dir"; then
+        echo_warn "  Failed to create $dest_dir"
+        return 0
+    fi
+
+    if cp "$source_config" "$dest_config"; then
+        echo_info "  Installed default config template at $dest_config"
+    else
+        echo_warn "  Failed to install default config template at $dest_config"
+    fi
+}
+
+install_default_config_template
+
 # =============================================================================
 # Install shell completions
 # =============================================================================
@@ -939,7 +988,10 @@ install_shell_completions() {
     fi
 
     # Detect shell and provide setup instructions
-    local shell_name=$(basename "$SHELL")
+    local shell_name="${SHELL##*/}"
+    if [ -z "$shell_name" ]; then
+        shell_name="unknown"
+    fi
 
     # Try to install to system directories if possible
     local bash_installed=false
@@ -1006,7 +1058,10 @@ install_shell_completions() {
 
 # Print shell completion setup instructions
 print_completion_instructions() {
-    local shell_name=$(basename "$SHELL")
+    local shell_name="${SHELL##*/}"
+    if [ -z "$shell_name" ]; then
+        shell_name="unknown"
+    fi
 
     # Only print if completions weren't auto-installed
     if [ "$BASH_COMPLETION_INSTALLED" = true ] && [ "$ZSH_COMPLETION_INSTALLED" = true ]; then
@@ -1092,6 +1147,12 @@ print_success_message() {
     echo ""
     echo "  # Resume loops after reboot/crash"
     echo "  gralph resume"
+    echo ""
+    echo "  # Generate a spec-compliant PRD"
+    echo "  gralph prd create --dir . --output PRD.generated.md --goal \"Add a billing dashboard\""
+    echo ""
+    echo "  # Validate an existing PRD"
+    echo "  gralph prd check PRD.generated.md"
     echo ""
     echo "Documentation:"
     echo "  gralph --help              Show all commands and options"
