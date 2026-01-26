@@ -133,7 +133,7 @@ The codebase must be structured for unit testing with dependency injection and i
   * Claude backend adapter implemented.
   * Backend CLI check and install hint methods working.
 - **Dependencies** DOTNET-1
-- [ ] DOTNET-5 Implement backend abstraction and Claude adapter
+- [x] DOTNET-5 Implement backend abstraction and Claude adapter
 
 ### Task DOTNET-6
 
