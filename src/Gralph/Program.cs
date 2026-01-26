@@ -139,7 +139,7 @@ start.SetAction(parseResult =>
     var handler = new StartCommandHandler(BackendRegistry.CreateDefault(), new StateStore());
     var exitCode = handler.ExecuteAsync(new StartCommandSettings
     {
-        Directory = parseResult.GetValue(startDirArgument),
+        Directory = parseResult.GetValue(startDirArgument) ?? string.Empty,
         Name = parseResult.GetValue(startNameOption) ?? parseResult.GetValue(startNameShortOption),
         MaxIterations = parseResult.GetValue(startMaxIterationsOption),
         TaskFile = parseResult.GetValue(startTaskFileOption) ?? parseResult.GetValue(startTaskFileShortOption),
@@ -224,7 +224,7 @@ prdCheck.SetAction(parseResult =>
     var handler = new PrdCheckCommandHandler();
     var exitCode = handler.Execute(new PrdCheckSettings
     {
-        FilePath = parseResult.GetValue(prdCheckFileArgument),
+        FilePath = parseResult.GetValue(prdCheckFileArgument) ?? string.Empty,
         AllowMissingContext = parseResult.GetValue(prdCheckAllowMissingContextOption)
     });
 
