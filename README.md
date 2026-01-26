@@ -1096,6 +1096,11 @@ If you continue to experience issues:
 2. **Verify dependencies** - Run `./install.sh` to check all requirements
 3. **Open an issue** - Include logs and system info (OS, bash version, etc.)
 
+## Security
+
+Please report vulnerabilities via the private advisory workflow in
+[SECURITY.md](SECURITY.md).
+
 ## License
 
 MIT
