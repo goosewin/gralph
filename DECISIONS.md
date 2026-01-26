@@ -92,3 +92,26 @@ run when `git status` is dirty.
 - Expose low-level `add`/`remove` wrappers without task ID conventions.
 - Allow custom worktree paths and branch names per invocation.
 - Attempt auto-stash or auto-clean instead of refusing dirty state.
+
+## D-005 Strict PRD Validation Gate
+- Date: 2026-01-25
+- Status: Accepted
+
+### Context
+PRD task blocks can be malformed, which leads to incomplete or incorrect loops.
+We need a guardrail that blocks execution when validation fails, while preserving
+the existing behavior for users who are not ready to enforce strict checks.
+
+### Decision
+Add a `--strict-prd` flag to `gralph start` that validates PRDs and aborts on
+schema errors. Keep the default behavior unchanged when strict mode is not set.
+
+### Rationale
+- Prevents running loops on invalid or ambiguous task definitions.
+- Makes validation explicit and opt-in to avoid breaking existing workflows.
+- Surfaces actionable error output before work begins.
+
+### Alternatives
+- Always enforce strict validation and break existing flows.
+- Emit warnings only and allow the loop to proceed.
+- Require manual pre-checks without CLI support.

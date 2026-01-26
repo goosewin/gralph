@@ -34,3 +34,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - B-5 Documented defaults.context_files and env override in README.
 - B-6 Recorded Stage B context file injection notes and decision.
 - D-3 Added strict PRD validation gate for gralph start.
+- D-1 Added PRD validation helpers for task block schema checks.
+- D-2 Added gralph prd check command with validation errors.
+- D-4 Added PRD validation shell tests for invalid cases.
+- D-5 Documented PRD validation and strict mode in README.
+- D-6 Recorded Stage D validation changes and strict mode rationale.
