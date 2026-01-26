@@ -110,7 +110,7 @@ Each backend must have dedicated test coverage verifying installation detection,
   * Tests verify `backend_get_default_model` returns a valid default.
   * Tests verify `backend_check_installed` returns correct status based on CLI presence.
 - **Dependencies** G-1
-- [ ] G-4 Add unit tests for gemini backend
+- [x] G-4 Add unit tests for gemini backend
 
 ---
 
