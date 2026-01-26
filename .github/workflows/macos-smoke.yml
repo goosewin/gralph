@@ -13,11 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: brew install bash jq tmux
+      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Prefer Homebrew bash
-        run: echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
-
-      - name: Run smoke test
-        run: bash tests/macos-smoke.sh
+      - name: Run cargo tests
+        run: cargo test --manifest-path gralph-rs/Cargo.toml --workspace

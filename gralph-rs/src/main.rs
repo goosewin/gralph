@@ -1320,50 +1320,27 @@ fn build_context_file_list(
         "RISK_REGISTER.md",
         "PROCESS.md",
         "PRD.template.md",
-        "bin/gralph",
         "config/default.yaml",
         "opencode.json",
         "completions/gralph.bash",
         "completions/gralph.zsh",
+        "gralph-rs/Cargo.toml",
+        "gralph-rs/src/main.rs",
+        "gralph-rs/src/cli.rs",
+        "gralph-rs/src/core.rs",
+        "gralph-rs/src/state.rs",
+        "gralph-rs/src/config.rs",
+        "gralph-rs/src/server.rs",
+        "gralph-rs/src/notify.rs",
+        "gralph-rs/src/prd.rs",
+        "gralph-rs/src/lib.rs",
+        "gralph-rs/src/backend/mod.rs",
+        "gralph-rs/src/backend/claude.rs",
+        "gralph-rs/src/backend/opencode.rs",
+        "gralph-rs/src/backend/gemini.rs",
+        "gralph-rs/src/backend/codex.rs",
     ] {
         add_context_entry(target_dir, item, &mut entries, &mut seen);
-    }
-
-    if let Ok(lib_entries) = fs::read_dir(target_dir.join("lib")) {
-        for entry in lib_entries.flatten() {
-            if entry.path().extension().and_then(|ext| ext.to_str()) == Some("sh") {
-                add_context_entry(
-                    target_dir,
-                    entry.path().to_string_lossy().as_ref(),
-                    &mut entries,
-                    &mut seen,
-                );
-            }
-        }
-    }
-    if let Ok(backend_entries) = fs::read_dir(target_dir.join("lib").join("backends")) {
-        for entry in backend_entries.flatten() {
-            if entry.path().extension().and_then(|ext| ext.to_str()) == Some("sh") {
-                add_context_entry(
-                    target_dir,
-                    entry.path().to_string_lossy().as_ref(),
-                    &mut entries,
-                    &mut seen,
-                );
-            }
-        }
-    }
-    if let Ok(test_entries) = fs::read_dir(target_dir.join("tests")) {
-        for entry in test_entries.flatten() {
-            if entry.path().extension().and_then(|ext| ext.to_str()) == Some("sh") {
-                add_context_entry(
-                    target_dir,
-                    entry.path().to_string_lossy().as_ref(),
-                    &mut entries,
-                    &mut seen,
-                );
-            }
-        }
     }
 
     entries
