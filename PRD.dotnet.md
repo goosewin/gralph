@@ -212,7 +212,7 @@ The codebase must be structured for unit testing with dependency injection and i
   * Generic JSON payload format implemented.
   * HttpClient-based webhook delivery working.
 - **Dependencies** DOTNET-1
-- [ ] DOTNET-11 Implement webhook notifications
+- [x] DOTNET-11 Implement webhook notifications
 
 ### Task DOTNET-12
 

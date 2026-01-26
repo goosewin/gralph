@@ -1,6 +1,7 @@
 using System.Globalization;
 using Gralph.Backends;
 using Gralph.Configuration;
+using Gralph.Notifications;
 
 namespace Gralph.Core;
 
@@ -57,6 +58,8 @@ public sealed class CoreLoop
         var logFile = Path.Combine(logDir, $"{logName}.log");
 
         var startTime = DateTimeOffset.UtcNow;
+        var webhookUrl = ResolveWebhookUrl(options);
+        var notifier = new WebhookNotifier();
         WriteLog(logFile, $"Starting gralph loop in {projectDir}");
         WriteLog(logFile, $"Task file: {taskFile}");
         WriteLog(logFile, $"Max iterations: {options.MaxIterations}");
@@ -105,6 +108,27 @@ public sealed class CoreLoop
 
                 options.StateCallback?.Invoke(new LoopStateUpdate(logName, iteration, "failed", remainingBefore));
 
+                if (ShouldNotify("notifications.on_fail", false) && !string.IsNullOrWhiteSpace(webhookUrl))
+                {
+                    var duration = DateTimeOffset.UtcNow - startTime;
+                    var sent = await SafeNotifyFailedAsync(
+                        notifier,
+                        webhookUrl,
+                        options.SessionName ?? logName,
+                        projectDir,
+                        "error",
+                        iteration,
+                        options.MaxIterations,
+                        remainingBefore,
+                        duration,
+                        cancellationToken,
+                        logFile);
+                    if (!sent)
+                    {
+                        WriteLog(logFile, "Warning: Failed to send failure notification.");
+                    }
+                }
+
                 return new LoopResult
                 {
                     Completed = false,
@@ -123,6 +147,23 @@ public sealed class CoreLoop
                 WriteLog(logFile, $"Duration: {duration.TotalSeconds.ToString(CultureInfo.InvariantCulture)}s");
                 WriteLog(logFile, $"FINISHED: {DateTimeOffset.Now:O}");
                 options.StateCallback?.Invoke(new LoopStateUpdate(logName, iteration, "complete", 0));
+
+                if (ShouldNotify("notifications.on_complete", false) && !string.IsNullOrWhiteSpace(webhookUrl))
+                {
+                    var sent = await SafeNotifyCompleteAsync(
+                        notifier,
+                        webhookUrl,
+                        options.SessionName ?? logName,
+                        projectDir,
+                        iteration,
+                        duration,
+                        cancellationToken,
+                        logFile);
+                    if (!sent)
+                    {
+                        WriteLog(logFile, "Warning: Failed to send completion notification.");
+                    }
+                }
 
                 return new LoopResult
                 {
@@ -152,6 +193,26 @@ public sealed class CoreLoop
         WriteLog(logFile, $"Duration: {totalDuration.TotalSeconds.ToString(CultureInfo.InvariantCulture)}s");
         WriteLog(logFile, $"FINISHED: {DateTimeOffset.Now:O}");
         options.StateCallback?.Invoke(new LoopStateUpdate(logName, options.MaxIterations, "max_iterations", finalRemaining));
+
+        if (ShouldNotify("notifications.on_fail", false) && !string.IsNullOrWhiteSpace(webhookUrl))
+        {
+            var sent = await SafeNotifyFailedAsync(
+                notifier,
+                webhookUrl,
+                options.SessionName ?? logName,
+                projectDir,
+                "max_iterations",
+                options.MaxIterations,
+                options.MaxIterations,
+                finalRemaining,
+                totalDuration,
+                cancellationToken,
+                logFile);
+            if (!sent)
+            {
+                WriteLog(logFile, "Warning: Failed to send failure notification.");
+            }
+        }
 
         return new LoopResult
         {
@@ -348,6 +409,86 @@ public sealed class CoreLoop
 
         return logFile + ".raw.log";
     }
+
+    private static string ResolveWebhookUrl(CoreLoopOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(options.Webhook))
+        {
+            return options.Webhook;
+        }
+
+        return Config.Get("notifications.webhook", string.Empty);
+    }
+
+    private static bool ShouldNotify(string key, bool defaultValue)
+    {
+        var raw = Config.Get(key, defaultValue.ToString().ToLowerInvariant());
+        return bool.TryParse(raw, out var parsed) ? parsed : defaultValue;
+    }
+
+    private static async Task<bool> SafeNotifyCompleteAsync(
+        WebhookNotifier notifier,
+        string webhookUrl,
+        string sessionName,
+        string projectDir,
+        int iterations,
+        TimeSpan duration,
+        CancellationToken cancellationToken,
+        string logFile)
+    {
+        try
+        {
+            return await notifier.NotifyCompleteAsync(new NotifyCompleteRequest
+            {
+                WebhookUrl = webhookUrl,
+                SessionName = sessionName,
+                ProjectDir = projectDir,
+                Iterations = iterations,
+                Duration = duration,
+                Timestamp = DateTimeOffset.UtcNow
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            WriteLog(logFile, $"Warning: Notification error: {ex.Message}");
+            return false;
+        }
+    }
+
+    private static async Task<bool> SafeNotifyFailedAsync(
+        WebhookNotifier notifier,
+        string webhookUrl,
+        string sessionName,
+        string projectDir,
+        string reason,
+        int iterations,
+        int maxIterations,
+        int remainingTasks,
+        TimeSpan duration,
+        CancellationToken cancellationToken,
+        string logFile)
+    {
+        try
+        {
+            return await notifier.NotifyFailedAsync(new NotifyFailedRequest
+            {
+                WebhookUrl = webhookUrl,
+                SessionName = sessionName,
+                ProjectDir = projectDir,
+                Reason = reason,
+                Iterations = iterations,
+                MaxIterations = maxIterations,
+                RemainingTasks = remainingTasks,
+                Duration = duration,
+                Timestamp = DateTimeOffset.UtcNow
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            WriteLog(logFile, $"Warning: Notification error: {ex.Message}");
+            return false;
+        }
+    }
 }
 
 public sealed class CoreLoopOptions
@@ -360,6 +501,7 @@ public sealed class CoreLoopOptions
     public string? SessionName { get; init; }
     public string? PromptTemplate { get; init; }
     public string? BackendName { get; init; }
+    public string? Webhook { get; init; }
     public Action<LoopStateUpdate>? StateCallback { get; init; }
 
     internal int CurrentIteration { get; set; }

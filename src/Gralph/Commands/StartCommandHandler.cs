@@ -144,6 +144,7 @@ public sealed class StartCommandHandler
             Model = model,
             SessionName = sessionName,
             BackendName = backendName,
+            Webhook = settings.Webhook,
             StateCallback = update => UpdateSessionState(sessionName, update)
         };
 
