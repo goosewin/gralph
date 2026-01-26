@@ -1355,7 +1355,38 @@ cmd_worktree_finish() {
         die "Usage: gralph worktree finish <ID>"
     fi
 
-    die "Worktree finish is not implemented yet"
+    if ! [[ "$task_id" =~ ^[A-Za-z]+-[0-9]+$ ]]; then
+        die "Invalid task ID format: $task_id (expected like A-1)"
+    fi
+
+    local repo_root
+    if ! repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+        die "Not a git repository (or any of the parent directories)"
+    fi
+
+    local branch_name="task-$task_id"
+    local worktrees_dir="$repo_root/.worktrees"
+    local worktree_path="$worktrees_dir/$branch_name"
+
+    if ! git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch_name"; then
+        die "Branch does not exist: $branch_name"
+    fi
+
+    local current_branch
+    current_branch=$(git -C "$repo_root" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+    if [[ "$current_branch" == "$branch_name" ]]; then
+        die "Cannot finish while on branch $branch_name"
+    fi
+
+    if ! git -C "$repo_root" merge --no-ff "$branch_name"; then
+        die "Failed to merge branch: $branch_name"
+    fi
+
+    if ! git -C "$repo_root" worktree remove "$worktree_path"; then
+        die "Failed to remove worktree at $worktree_path"
+    fi
+
+    success "Finished worktree $worktree_path and merged $branch_name"
 }
 
 cmd_worktree() {
