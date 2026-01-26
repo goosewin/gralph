@@ -7,8 +7,8 @@ defaults:
   # Backend: claude or opencode
   backend: claude
   # Model depends on backend:
-  #   claude: claude-opus-4.5
-  #   opencode: opencode/gpt-5.2-codex, anthropic/claude-opus-4.5, google/gemini-3-pro
+  #   claude: claude-opus-4-5
+  #   opencode: opencode/gpt-5.2-codex, anthropic/claude-opus-4-5, google/gemini-3-pro
   # model:
 
 # Claude Code backend settings

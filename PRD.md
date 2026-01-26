@@ -36,7 +36,7 @@ gralph start ./my-project \
   --max-iterations 50 \
   --task-file PRD.md \
   --completion-marker "ALL_DONE" \
-  --model claude-sonnet-4-20250514
+  --model claude-opus-4-5
 ```
 
 **Loop logic:**
@@ -167,7 +167,7 @@ defaults:
   max_iterations: 30
   task_file: PRD.md
   completion_marker: COMPLETE
-  model: claude-sonnet-4-20250514
+  model: claude-opus-4-5
   
 claude:
   flags:

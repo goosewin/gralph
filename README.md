@@ -179,7 +179,7 @@ gralph start . --backend claude
 ```
 
 **Models:**
-- `claude-opus-4.5`
+- `claude-opus-4-5`
 
 ### OpenCode
 
@@ -198,7 +198,7 @@ gralph start . --backend opencode --model google/gemini-3-pro
 
 **Models (format: provider/model):**
 - `opencode/gpt-5.2-codex` (default for opencode)
-- `anthropic/claude-opus-4.5`
+- `anthropic/claude-opus-4-5`
 - `google/gemini-3-pro`
 
 ### Setting Default Backend
@@ -325,7 +325,7 @@ defaults:
   task_file: PRD.md
   completion_marker: COMPLETE
   backend: claude
-  model: claude-opus-4.5
+  model: claude-opus-4-5
 
 claude:
   flags:
@@ -634,7 +634,7 @@ defaults:
   completion_marker: COMPLETE # Completion signal
   context_files: ARCHITECTURE.md,DECISIONS.md,CHANGELOG.md,RISK_REGISTER.md,PROCESS.md
   backend: claude             # AI backend (claude or opencode)
-  model: claude-opus-4.5      # Model override (optional)
+  model: claude-opus-4-5      # Model override (optional)
 
 claude:
   flags:
@@ -884,7 +884,7 @@ gralph backends
 Available AI backends:
 
   claude (installed)
-      Models: claude-opus-4.5
+      Models: claude-opus-4-5
 
   opencode (not installed)
       Install: See https://opencode.ai/docs/cli/ for installation
@@ -1140,10 +1140,10 @@ Use a different Claude model:
 
 ```bash
 # Use Claude Opus for more complex tasks
-gralph start . --model claude-opus-4.5
+gralph start . --model claude-opus-4-5
 
 # Or set as default in config
-gralph config set defaults.model claude-opus-4.5
+gralph config set defaults.model claude-opus-4-5
 ```
 
 ### Example 9: Using OpenCode Backend

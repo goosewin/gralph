@@ -860,7 +860,7 @@ defaults:
   max_iterations: 30
   task_file: PRD.md
   completion_marker: COMPLETE
-  model: claude-sonnet-4-20250514
+  model: claude-opus-4-5
 
 claude:
   flags:

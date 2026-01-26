@@ -12,6 +12,6 @@ demonstrate the current schema and the expected task block format.
 Run the examples in order from the repo root:
 
 ```sh
-gralph start --prd gralph/examples/PRD-Stage-P-Example.md --no-tmux && \
-  gralph start --prd gralph/examples/PRD-Stage-A-Example.md --no-tmux
+gralph start ./gralph --task-file gralph/examples/PRD-Stage-P-Example.md --no-tmux --backend claude --model claude-opus-4-5 && \
+  gralph start ./gralph --task-file gralph/examples/PRD-Stage-A-Example.md --no-tmux --backend claude --model claude-opus-4-5
 ```

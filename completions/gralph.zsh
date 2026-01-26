@@ -30,7 +30,7 @@ _gralph() {
         '(-f --task-file)'{-f,--task-file}'[Task file path]:file:_files -g "*.md"'
         '--completion-marker[Completion promise text]:marker:(COMPLETE DONE FINISHED ALL_DONE)'
         '(-b --backend)'{-b,--backend}'[AI backend to use]:backend:(claude opencode)'
-        '(-m --model)'{-m,--model}'[Model override]:model:(opencode/gpt-5.2-codex claude-opus-4.5 anthropic/claude-opus-4.5 google/gemini-3-pro)'
+        '(-m --model)'{-m,--model}'[Model override]:model:(opencode/gpt-5.2-codex claude-opus-4-5 anthropic/claude-opus-4-5 google/gemini-3-pro)'
         '--variant[Model variant override]:variant:(xhigh high medium low)'
         '--webhook[Notification webhook URL]:url:'
         '--no-tmux[Run in foreground (blocks)]'

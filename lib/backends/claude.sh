@@ -101,10 +101,10 @@ backend_parse_text() {
 
 # backend_get_models() - Get list of supported models
 backend_get_models() {
-    echo "claude-sonnet-4-20250514 claude-opus-4-20250514 claude-haiku-3-5-20241022"
+    echo "claude-opus-4-5"
 }
 
 # backend_get_default_model() - Get the default model for this backend
 backend_get_default_model() {
-    echo "claude-sonnet-4-20250514"
+    echo "claude-opus-4-5"
 }

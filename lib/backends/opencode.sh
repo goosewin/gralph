@@ -91,16 +91,15 @@ backend_parse_text() {
 
 # backend_get_models() - Get list of supported models
 #
-# OpenCode supports multiple providers. Common models include:
-# - anthropic/claude-3-5-sonnet-latest
-# - openai/gpt-4o
-# - google/gemini-2.0-flash
-# - deepseek/deepseek-chat
+# OpenCode supports multiple providers. Supported models include:
+# - opencode/gpt-5.2-codex
+# - anthropic/claude-opus-4-5
+# - google/gemini-3-pro
 backend_get_models() {
-    echo "anthropic/claude-sonnet-4-20250514 anthropic/claude-opus-4-20250514 openai/gpt-4o google/gemini-2.0-flash deepseek/deepseek-chat"
+    echo "opencode/gpt-5.2-codex anthropic/claude-opus-4-5 google/gemini-3-pro"
 }
 
 # backend_get_default_model() - Get the default model for this backend
 backend_get_default_model() {
-    echo "anthropic/claude-sonnet-4-20250514"
+    echo "opencode/gpt-5.2-codex"
 }

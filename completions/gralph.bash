@@ -82,9 +82,9 @@ _gralph_completions() {
                 -m|--model)
                     # Suggest models for both backends
                     # Claude models
-                    local claude_models="claude-opus-4.5"
+                    local claude_models="claude-opus-4-5"
                     # OpenCode models (provider/model format)
-                    local opencode_models="opencode/gpt-5.2-codex anthropic/claude-opus-4.5 google/gemini-3-pro"
+                    local opencode_models="opencode/gpt-5.2-codex anthropic/claude-opus-4-5 google/gemini-3-pro"
                     COMPREPLY=($(compgen -W "$claude_models $opencode_models" -- "$cur"))
                     return 0
                     ;;
