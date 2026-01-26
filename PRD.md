@@ -140,7 +140,7 @@ State file: `~/.config/gralph/state.json`
       "status": "running",
       "last_task_count": 12,
       "completion_marker": "COMPLETE",
-      "log_file": "/root/projects/app1/.gralph/ralph.log"
+      "log_file": "/root/projects/app1/.gralph/gralph.log"
     }
   }
 }
@@ -238,7 +238,7 @@ USAGE:
   gralph <command> [options]
 
 COMMANDS:
-  start <dir>         Start a new ralph loop
+  start <dir>         Start a new gralph loop
   stop <name>         Stop a running loop  
   stop --all          Stop all loops
   status              Show status of all loops
@@ -480,7 +480,7 @@ cd "$PROJECT_DIR"
 mkdir -p .gralph
 
 TASK_FILE="PRD.md"
-LOG_FILE=".gralph/ralph.log"
+LOG_FILE=".gralph/gralph.log"
 
 stream_text='select(.type == "assistant").message.content[]? | select(.type == "text").text // empty | gsub("\n"; "\r\n") | . + "\r\n\n"'
 final_result='select(.type == "result").result // empty'
@@ -511,7 +511,7 @@ check_genuine_completion() {
   return 1
 }
 
-echo "Starting ralph loop in $PROJECT_DIR" | tee "$LOG_FILE"
+echo "Starting gralph loop in $PROJECT_DIR" | tee "$LOG_FILE"
 echo "Max iterations: $MAX_ITERATIONS" | tee -a "$LOG_FILE"
 echo "Started at: $(date -Iseconds)" | tee -a "$LOG_FILE"
 echo "Initial remaining tasks: $(count_remaining)" | tee -a "$LOG_FILE"
@@ -557,7 +557,7 @@ Iteration: $i/$MAX_ITERATIONS" \
 
   if check_genuine_completion "$result"; then
     echo "" | tee -a "$LOG_FILE"
-    echo "✅ Ralph complete after $i iterations." | tee -a "$LOG_FILE"
+    echo "✅ Gralph complete after $i iterations." | tee -a "$LOG_FILE"
     echo "FINISHED: $(date -Iseconds)" | tee -a "$LOG_FILE"
     exit 0
   fi
