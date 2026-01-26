@@ -22,6 +22,45 @@ fi
 # Default backend (can be overridden via config or CLI)
 GRALPH_BACKEND="${GRALPH_BACKEND:-claude}"
 
+# cleanup_old_logs() - Delete log files older than retain_days
+#
+# Arguments:
+#   $1 - Log directory path (required)
+#   $2 - Retention days (optional, defaults to config value or 7)
+#
+# Returns:
+#   0 on success
+#
+# Note:
+#   Uses `find` with -mtime to identify files older than retain_days.
+#   Only deletes .log files to avoid removing other state files.
+#
+cleanup_old_logs() {
+    local log_dir="$1"
+    local retain_days="${2:-}"
+
+    # If no retain_days provided, get from config
+    if [[ -z "$retain_days" ]]; then
+        retain_days=$(get_config "logging.retain_days" "7")
+    fi
+
+    # Validate inputs
+    if [[ -z "$log_dir" ]] || [[ ! -d "$log_dir" ]]; then
+        return 0
+    fi
+
+    # Ensure retain_days is a positive integer
+    if ! [[ "$retain_days" =~ ^[0-9]+$ ]] || [[ "$retain_days" -le 0 ]]; then
+        retain_days=7
+    fi
+
+    # Find and delete log files older than retain_days
+    # Using -mtime +N means "more than N days ago"
+    find "$log_dir" -maxdepth 1 -name "*.log" -type f -mtime +"$retain_days" -delete 2>/dev/null || true
+
+    return 0
+}
+
 # init_backend() - Initialize the backend for use
 #
 # Arguments:
@@ -372,6 +411,10 @@ run_loop() {
     # Set up logging with per-session log file
     local gralph_dir="$project_dir/.gralph"
     mkdir -p "$gralph_dir"
+
+    # Clean up old log files based on retention policy
+    cleanup_old_logs "$gralph_dir"
+
     # Use session name for log file if provided, otherwise default to 'gralph'
     local log_name="${session_name:-gralph}"
     local log_file="$gralph_dir/${log_name}.log"
