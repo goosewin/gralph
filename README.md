@@ -344,6 +344,7 @@ Default values for loop behavior.
 | `defaults.max_iterations` | integer | `30` | Maximum number of loop iterations before giving up. Prevents infinite loops. |
 | `defaults.task_file` | string | `PRD.md` | Path to the task file relative to project directory. |
 | `defaults.completion_marker` | string | `COMPLETE` | The text used in `<promise>MARKER</promise>` to signal completion. |
+| `defaults.context_files` | string | (none) | Comma-separated list of shared context files to inject into the prompt. |
 | `defaults.backend` | string | `claude` | AI backend to use: `claude` or `opencode`. |
 | `defaults.model` | string | (none) | Model to use. Format depends on backend (see Backends section). |
 
@@ -430,6 +431,7 @@ All configuration keys can be overridden using environment variables. The conver
 | `defaults.max_iterations` | `GRALPH_DEFAULTS_MAX_ITERATIONS` |
 | `defaults.task_file` | `GRALPH_DEFAULTS_TASK_FILE` |
 | `defaults.completion_marker` | `GRALPH_DEFAULTS_COMPLETION_MARKER` |
+| `defaults.context_files` | `GRALPH_DEFAULTS_CONTEXT_FILES` |
 | `defaults.backend` | `GRALPH_DEFAULTS_BACKEND` |
 | `notifications.webhook` | `GRALPH_NOTIFICATIONS_WEBHOOK` |
 | `logging.level` | `GRALPH_LOGGING_LEVEL` |
@@ -609,6 +611,7 @@ defaults:
   max_iterations: 50          # Allow more iterations
   task_file: PRD.md           # Default task file
   completion_marker: COMPLETE # Completion signal
+  context_files: ARCHITECTURE.md,DECISIONS.md,CHANGELOG.md,RISK_REGISTER.md,PROCESS.md
   backend: claude             # AI backend (claude or opencode)
   model: claude-opus-4.5      # Model override (optional)
 
