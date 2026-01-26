@@ -183,7 +183,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * No security vulnerabilities in request handling.
   * All endpoints documented.
 - **Dependencies** None
-- [ ] OSS-10 Audit HTTP server module for security
+- [x] OSS-10 Audit HTTP server module for security
 
 ---
 

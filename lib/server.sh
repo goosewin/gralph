@@ -7,6 +7,8 @@ GRALPH_SERVER_PORT="${GRALPH_SERVER_PORT:-8080}"
 GRALPH_SERVER_HOST="${GRALPH_SERVER_HOST:-127.0.0.1}"
 GRALPH_SERVER_TOKEN="${GRALPH_SERVER_TOKEN:-}"
 GRALPH_SERVER_PID_FILE="${GRALPH_STATE_DIR:-$HOME/.config/gralph}/server.pid"
+GRALPH_SERVER_MAX_BODY_BYTES="${GRALPH_SERVER_MAX_BODY_BYTES:-4096}"
+GRALPH_SERVER_OPEN="${GRALPH_SERVER_OPEN:-false}"
 
 # Source state.sh if not already sourced
 if ! declare -f list_sessions &>/dev/null; then
@@ -49,22 +51,29 @@ _check_auth() {
 #   $2 - Status text (e.g., "OK", "Unauthorized")
 #   $3 - Content type (e.g., "application/json")
 #   $4 - Response body
+#   $5 - Allowed CORS origin (optional, empty to omit)
 _send_response() {
     local status_code="$1"
     local status_text="$2"
     local content_type="$3"
     local body="$4"
+    local cors_origin="${5:-}"
     local body_length=${#body}
 
     printf "HTTP/1.1 %s %s\r\n" "$status_code" "$status_text"
     printf "Content-Type: %s\r\n" "$content_type"
     printf "Content-Length: %d\r\n" "$body_length"
-    # CORS headers for browser access
-    printf "Access-Control-Allow-Origin: *\r\n"
-    printf "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
-    printf "Access-Control-Allow-Headers: Authorization, Content-Type\r\n"
-    printf "Access-Control-Expose-Headers: Content-Length, Content-Type\r\n"
-    printf "Access-Control-Max-Age: 86400\r\n"
+    # CORS headers for browser access (only when allowed)
+    if [[ -n "$cors_origin" ]]; then
+        printf "Access-Control-Allow-Origin: %s\r\n" "$cors_origin"
+        if [[ "$cors_origin" != "*" ]]; then
+            printf "Vary: Origin\r\n"
+        fi
+        printf "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
+        printf "Access-Control-Allow-Headers: Authorization, Content-Type\r\n"
+        printf "Access-Control-Expose-Headers: Content-Length, Content-Type\r\n"
+        printf "Access-Control-Max-Age: 86400\r\n"
+    fi
     printf "Connection: close\r\n"
     printf "\r\n"
     printf "%s" "$body"
@@ -74,7 +83,7 @@ _send_response() {
 # Arguments:
 #   $1 - JSON body
 _send_json() {
-    _send_response 200 "OK" "application/json" "$1"
+    _send_response 200 "OK" "application/json" "$1" "${2:-}"
 }
 
 # _send_error() - Send JSON error response
@@ -86,9 +95,43 @@ _send_error() {
     local status_code="$1"
     local status_text="$2"
     local message="$3"
+    local cors_origin="${4:-}"
     local body
     body=$(jq -n --arg msg "$message" '{"error": $msg}')
-    _send_response "$status_code" "$status_text" "application/json" "$body"
+    _send_response "$status_code" "$status_text" "application/json" "$body" "$cors_origin"
+}
+
+# _resolve_cors_origin() - Resolve allowed CORS origin
+# Arguments:
+#   $1 - Origin header value
+# Returns:
+#   Prints allowed origin (or empty if not allowed)
+_resolve_cors_origin() {
+    local origin="$1"
+    local host="$GRALPH_SERVER_HOST"
+
+    if [[ -z "$origin" ]]; then
+        return
+    fi
+
+    if [[ "$GRALPH_SERVER_OPEN" == "true" ]]; then
+        echo "*"
+        return
+    fi
+
+    case "$origin" in
+        http://localhost|http://127.0.0.1|http://[::1])
+            echo "$origin"
+            return
+            ;;
+    esac
+
+    if [[ -n "$host" ]] && [[ "$host" != "0.0.0.0" ]] && [[ "$host" != "::" ]]; then
+        if [[ "$origin" == "http://$host" ]]; then
+            echo "$origin"
+            return
+        fi
+    fi
 }
 
 # _get_all_sessions_json() - Get JSON array of all sessions with current status
@@ -235,12 +278,19 @@ _stop_session() {
 
 # _handle_request() - Parse and handle an HTTP request
 # Reads request from stdin, writes response to stdout
+# Endpoints:
+#   GET  /            - Health check
+#   GET  /status      - List all sessions
+#   GET  /status/:id  - Get a single session
+#   POST /stop/:id    - Stop a session
 _handle_request() {
     local request_line
     local method path protocol
     local auth_header=""
     local content_length=0
     local body=""
+    local origin_header=""
+    local cors_origin=""
 
     # Read request line
     read -r request_line
@@ -248,6 +298,7 @@ _handle_request() {
 
     # Parse request line
     read -r method path protocol <<< "$request_line"
+    path="${path%%\?*}"
 
     # Read headers
     while IFS= read -r header_line; do
@@ -263,38 +314,50 @@ _handle_request() {
             auth_header="${BASH_REMATCH[1]}"
         fi
 
+        # Parse Origin header
+        if [[ "$header_line" =~ ^[Oo]rigin:[[:space:]]*(.+)$ ]]; then
+            origin_header="${BASH_REMATCH[1]}"
+        fi
+
         # Parse Content-Length header
         if [[ "$header_line" =~ ^[Cc]ontent-[Ll]ength:[[:space:]]*([0-9]+)$ ]]; then
             content_length="${BASH_REMATCH[1]}"
         fi
     done
 
-    # Read body if present
+    # Resolve CORS origin after headers
+    cors_origin=$(_resolve_cors_origin "$origin_header")
+
+    # Read body if present (guard against oversized payloads)
     if [[ "$content_length" -gt 0 ]]; then
+        if [[ "$content_length" -gt "$GRALPH_SERVER_MAX_BODY_BYTES" ]]; then
+            _send_error 413 "Payload Too Large" "Request body too large" "$cors_origin"
+            return
+        fi
         read -n "$content_length" body
     fi
 
     # Handle CORS preflight
     if [[ "$method" == "OPTIONS" ]]; then
-        _send_response 204 "No Content" "text/plain" ""
+        _send_response 204 "No Content" "text/plain" "" "$cors_origin"
         return
     fi
 
     # Check authentication (skip for OPTIONS)
     if ! _check_auth "$auth_header"; then
-        _send_error 401 "Unauthorized" "Invalid or missing Bearer token"
+        _send_error 401 "Unauthorized" "Invalid or missing Bearer token" "$cors_origin"
         return
     fi
 
     # Route the request
     case "$method $path" in
         "GET /")
-            _send_json '{"status":"ok","service":"gralph-server"}'
+            _send_json '{"status":"ok","service":"gralph-server"}' "$cors_origin"
             ;;
         "GET /status")
             local json
             json=$(_get_all_sessions_json)
-            _send_json "$json"
+            _send_json "$json" "$cors_origin"
             ;;
         "GET /status/"*)
             local session_name="${path#/status/}"
@@ -302,9 +365,9 @@ _handle_request() {
             session_name=$(echo "$session_name" | sed 's/%20/ /g')
             local json
             if json=$(_get_session_json "$session_name"); then
-                _send_json "$json"
+                _send_json "$json" "$cors_origin"
             else
-                _send_error 404 "Not Found" "Session not found: $session_name"
+                _send_error 404 "Not Found" "Session not found: $session_name" "$cors_origin"
             fi
             ;;
         "POST /stop/"*)
@@ -312,13 +375,13 @@ _handle_request() {
             session_name=$(echo "$session_name" | sed 's/%20/ /g')
             local json
             if json=$(_stop_session "$session_name"); then
-                _send_json "$json"
+                _send_json "$json" "$cors_origin"
             else
-                _send_error 404 "Not Found" "Session not found: $session_name"
+                _send_error 404 "Not Found" "Session not found: $session_name" "$cors_origin"
             fi
             ;;
         *)
-            _send_error 404 "Not Found" "Unknown endpoint: $method $path"
+            _send_error 404 "Not Found" "Unknown endpoint: $method $path" "$cors_origin"
             ;;
     esac
 }
@@ -392,10 +455,14 @@ _run_server_socat() {
     handler_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/server.sh"
 
     # Build environment variables to pass to handler
-    local env_vars="GRALPH_SERVER_TOKEN='$GRALPH_SERVER_TOKEN'"
+    local env_vars
+    printf -v env_vars "GRALPH_SERVER_TOKEN=%q" "$GRALPH_SERVER_TOKEN"
     if [[ -n "$GRALPH_STATE_DIR" ]]; then
-        env_vars="$env_vars GRALPH_STATE_DIR='$GRALPH_STATE_DIR'"
+        local state_dir_escaped
+        printf -v state_dir_escaped "%q" "$GRALPH_STATE_DIR"
+        env_vars="$env_vars GRALPH_STATE_DIR=$state_dir_escaped"
     fi
+    env_vars="$env_vars GRALPH_SERVER_OPEN=$GRALPH_SERVER_OPEN"
 
     # socat forks a new process for each connection
     # We use EXEC to run a bash command that sources this file and handles the request
@@ -455,6 +522,7 @@ start_server() {
     # Update globals
     GRALPH_SERVER_HOST="$host"
     GRALPH_SERVER_TOKEN="$token"
+    GRALPH_SERVER_OPEN="$open"
 
     # Validate port
     if ! [[ "$port" =~ ^[0-9]+$ ]] || [[ "$port" -lt 1 ]] || [[ "$port" -gt 65535 ]]; then
