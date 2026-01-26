@@ -72,9 +72,7 @@ test_backend_get_models() {
     result=$(backend_get_models)
 
     # Check that expected models are present
-    if [[ "$result" == *"o3"* ]] && \
-       [[ "$result" == *"o4-mini"* ]] && \
-       [[ "$result" == *"gpt-4.1"* ]]; then
+    if [[ "$result" == *"example-codex-model"* ]]; then
         pass "backend_get_models returns expected model list"
     else
         fail "backend_get_models should return codex models, got '$result'"

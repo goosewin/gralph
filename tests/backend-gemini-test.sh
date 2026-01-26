@@ -72,9 +72,7 @@ test_backend_get_models() {
     result=$(backend_get_models)
 
     # Check that expected models are present
-    if [[ "$result" == *"gemini-2.5-pro"* ]] && \
-       [[ "$result" == *"gemini-2.5-flash"* ]] && \
-       [[ "$result" == *"gemini-2.0-pro"* ]]; then
+    if [[ "$result" == *"gemini-1.5-pro"* ]]; then
         pass "backend_get_models returns expected model list"
     else
         fail "backend_get_models should return gemini models, got '$result'"

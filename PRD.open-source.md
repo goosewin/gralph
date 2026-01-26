@@ -196,7 +196,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * Tests pass with updated model names.
   * Test coverage is adequate.
 - **Dependencies** OSS-3
-- [ ] OSS-11 Update backend tests for corrected model names
+- [x] OSS-11 Update backend tests for corrected model names
 
 ---
 
