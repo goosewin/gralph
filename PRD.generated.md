@@ -174,7 +174,7 @@ Each backend must have dedicated test coverage verifying installation detection,
   * Test loads codex backend and validates required functions exist.
   * All tests pass.
 - **Dependencies** G-1, G-2
-- [ ] G-8 Add integration test for all backend modules
+- [x] G-8 Add integration test for all backend modules
 
 ---
 
