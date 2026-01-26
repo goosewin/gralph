@@ -115,3 +115,25 @@ schema errors. Keep the default behavior unchanged when strict mode is not set.
 - Always enforce strict validation and break existing flows.
 - Emit warnings only and allow the loop to proceed.
 - Require manual pre-checks without CLI support.
+
+## D-006 Stage E Self-Hosting Examples and Runner
+- Date: 2026-01-26
+- Status: Accepted
+
+### Context
+Stage E needs a canonical, minimal example set plus a repeatable way to run it
+so the self-hosting flow can be validated end-to-end.
+
+### Decision
+Add example PRDs for Stage P and Stage A, plus a release runner script that
+executes them in order with a safe, re-runnable command line.
+
+### Rationale
+- Provides a concrete schema reference for new users and reviewers.
+- Ensures the self-hosting flow can be executed consistently in CI or locally.
+- Keeps the workflow minimal while still proving the end-to-end path.
+
+### Alternatives
+- Rely on ad-hoc internal PRDs without published examples.
+- Document the steps but skip the scripted runner.
+- Bundle a single large example instead of small stage-specific PRDs.

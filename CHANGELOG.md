@@ -42,3 +42,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - E-1 Added example README for self-hosting PRDs.
 - E-2 Added Stage P example PRD.
 - E-3 Added Stage A example PRD.
+- E-4 Added release runner script for example stages.
+- E-5 Documented self-hosting workflow in README.
+- E-6 Recorded Stage E example and runner rationale in DECISIONS.
