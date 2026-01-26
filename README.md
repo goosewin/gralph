@@ -1108,6 +1108,32 @@ gralph start . --strict-prd
 - Unchecked task lines outside task blocks
 - Open Questions sections (not allowed)
 - Context Bundle paths that do not exist (use `--allow-missing-context` to bypass)
+- Context Bundle entries outside the repo root (absolute paths must stay within the project)
+- Context Bundle with no file paths
+
+**Validation rules (strict mode):**
+- Every task block must include the **ID**, **Context Bundle**, **DoD**, **Checklist**, and **Dependencies** fields
+- Each task block must contain exactly one unchecked `- [ ]` task line
+- Unchecked task lines are only allowed inside task blocks
+- Open Questions sections are rejected
+- Context Bundle entries must exist and resolve inside the repo unless `--allow-missing-context` is set
+
+### PRD Sanitization (Generated Files)
+
+`gralph prd create` sanitizes generated output before writing to disk:
+- Drops any Open Questions section (and any text before the first heading)
+- Keeps only Context Bundle entries that exist in the repo and, when provided, appear in the allowed-context list
+- Removes extra unchecked task lines beyond the first inside a block
+- Strips stray unchecked task lines that appear outside task blocks
+- Falls back to `README.md` as Context Bundle when no valid entries remain
+
+### Stack Detection
+
+`gralph prd create` infers a stack summary by scanning the project root for common
+ecosystem files and dependency hints (for example `package.json`, `go.mod`,
+`pyproject.toml`, `Cargo.toml`, `Gemfile`, `pom.xml`, `build.gradle`, `.csproj`,
+`Dockerfile`, or `terraform` files). It can report multiple stacks when the repo
+contains more than one ecosystem and records the evidence file paths.
 
 ## Shared Memory System
 

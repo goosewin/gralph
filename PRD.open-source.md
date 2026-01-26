@@ -280,7 +280,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * Stack detection is accurate.
   * Sanitization handles edge cases.
 - **Dependencies** None
-- [ ] OSS-17 Audit PRD validation module
+- [x] OSS-17 Audit PRD validation module
 
 ---
 
