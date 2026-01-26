@@ -80,7 +80,7 @@ Each backend must have dedicated test coverage verifying installation detection,
   * `backend_run_iteration` uses Codex CLI with appropriate non-interactive flags.
   * Output is captured to the specified output file.
 - **Dependencies** None
-- [ ] G-2 Implement Codex CLI backend module
+- [x] G-2 Implement Codex CLI backend module
 
 ---
 
