@@ -197,7 +197,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * Platform-specific payload formatting.
   * Unit tests verify payload structure.
 - **Dependencies** GO-1
-- [ ] GO-9 Implement notification package
+- [x] GO-9 Implement notification package
 
 ### Task GO-10
 
