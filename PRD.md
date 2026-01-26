@@ -140,7 +140,7 @@ State file: `~/.config/gralph/state.json`
       "status": "running",
       "last_task_count": 12,
       "completion_marker": "COMPLETE",
-      "log_file": "/root/projects/app1/.gralph/gralph.log"
+      "log_file": "/root/projects/app1/.gralph/app1.log"
     }
   }
 }
@@ -480,7 +480,7 @@ cd "$PROJECT_DIR"
 mkdir -p .gralph
 
 TASK_FILE="PRD.md"
-LOG_FILE=".gralph/gralph.log"
+LOG_FILE=".gralph/${SESSION_NAME:-gralph}.log"
 
 stream_text='select(.type == "assistant").message.content[]? | select(.type == "text").text // empty | gsub("\n"; "\r\n") | . + "\r\n\n"'
 final_result='select(.type == "result").result // empty'
