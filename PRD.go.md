@@ -132,7 +132,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * Backend registry loads backends by name.
   * Unit tests verify interface compliance.
 - **Dependencies** GO-1
-- [ ] GO-4 Implement backend abstraction with Claude backend
+- [x] GO-4 Implement backend abstraction with Claude backend
 
 ### Task GO-5
 
