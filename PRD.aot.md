@@ -266,7 +266,7 @@ Support webhook notifications:
   * Logs tails session log file with --follow.
   * Resume restarts stale sessions.
 - **Dependencies** AOT-8, AOT-3
-- [ ] AOT-10 Implement stop, status, logs, and resume commands
+- [x] AOT-10 Implement stop, status, logs, and resume commands
 
 ### Task AOT-11
 

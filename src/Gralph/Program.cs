@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Gralph.Backends;
 using Gralph.Config;
 using Gralph.Core;
@@ -495,7 +496,65 @@ public static class Program
             return Fail("Stop does not accept a session name when using --all.");
         }
 
-        Console.WriteLine("stop command is registered but not implemented in this build.");
+        var state = new StateStore(StatePaths.FromEnvironment());
+        state.Init();
+        var inspector = new ProcessInspector();
+
+        if (all)
+        {
+            var sessions = state.ListSessions();
+            if (sessions.Count == 0)
+            {
+                Console.WriteLine("No sessions found.");
+                return 0;
+            }
+
+            var stoppedCount = 0;
+            foreach (var session in sessions)
+            {
+                var name = GetSessionString(session, "name") ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    continue;
+                }
+
+                var status = GetSessionString(session, "status") ?? "unknown";
+                if (!string.Equals(status, "running", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                StopSession(session, name, inspector, state, quietWarnings: true);
+                stoppedCount++;
+            }
+
+            if (stoppedCount == 0)
+            {
+                Console.WriteLine("No running sessions to stop.");
+            }
+            else
+            {
+                Console.WriteLine($"Stopped {stoppedCount} session(s).");
+            }
+
+            return 0;
+        }
+
+        var sessionName = positional[0];
+        var existing = state.GetSession(sessionName);
+        if (existing is null)
+        {
+            return Fail($"Session not found: {sessionName}");
+        }
+
+        var existingStatus = GetSessionString(existing, "status") ?? "unknown";
+        if (!string.Equals(existingStatus, "running", StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine($"Warning: Session '{sessionName}' is not running (status: {existingStatus}).");
+        }
+
+        StopSession(existing, sessionName, inspector, state, quietWarnings: false);
+        Console.WriteLine($"Stopped session: {sessionName}");
         return 0;
     }
 
@@ -506,7 +565,40 @@ public static class Program
             return Fail($"Unknown option: {args[0]}");
         }
 
-        Console.WriteLine("status command is registered but not implemented in this build.");
+        var state = new StateStore(StatePaths.FromEnvironment());
+        state.Init();
+        _ = state.CleanupStale();
+
+        var sessions = state.ListSessions();
+        if (sessions.Count == 0)
+        {
+            Console.WriteLine("No sessions found.");
+            Console.WriteLine();
+            Console.WriteLine("Start a new loop with: gralph start <directory>");
+            return 0;
+        }
+
+        var rows = new List<StatusRow>();
+        foreach (var session in sessions.OrderBy(session => GetSessionString(session, "name")))
+        {
+            var name = GetSessionString(session, "name") ?? "unknown";
+            var dir = GetSessionString(session, "dir") ?? string.Empty;
+            var taskFile = GetSessionString(session, "task_file") ?? "PRD.md";
+            var status = GetSessionString(session, "status") ?? "unknown";
+            _ = TryGetSessionInt(session, "iteration", out var iteration);
+            _ = TryGetSessionInt(session, "max_iterations", out var maxIterations);
+
+            var displayDir = TruncateDirectory(dir, 40);
+            var iterDisplay = maxIterations > 0 ? $"{iteration}/{maxIterations}" : iteration.ToString();
+            var remaining = ResolveRemainingTasks(dir, taskFile, session);
+            var remainingDisplay = FormatRemaining(remaining);
+
+            rows.Add(new StatusRow(name, displayDir, iterDisplay, status, remainingDisplay));
+        }
+
+        PrintStatusTable(rows);
+        Console.WriteLine();
+        Console.WriteLine("Commands: gralph logs <name>, gralph stop <name>, gralph resume");
         return 0;
     }
 
@@ -539,9 +631,52 @@ public static class Program
             return Fail("Session name is required. Usage: gralph logs <name> [--follow]");
         }
 
-        Console.WriteLine(follow
-            ? "logs command (--follow) is registered but not implemented in this build."
-            : "logs command is registered but not implemented in this build.");
+        var sessionName = positional[0];
+        var state = new StateStore(StatePaths.FromEnvironment());
+        state.Init();
+
+        var session = state.GetSession(sessionName);
+        if (session is null)
+        {
+            return Fail($"Session not found: {sessionName}");
+        }
+
+        var logFile = GetSessionString(session, "log_file") ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(logFile))
+        {
+            var sessionDir = GetSessionString(session, "dir") ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(sessionDir))
+            {
+                logFile = Path.Combine(sessionDir, ".gralph", $"{sessionName}.log");
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(logFile))
+        {
+            return Fail($"Cannot determine log file path for session: {sessionName}");
+        }
+
+        if (!File.Exists(logFile))
+        {
+            return Fail($"Log file does not exist: {logFile}");
+        }
+
+        var status = GetSessionString(session, "status") ?? "unknown";
+        Console.WriteLine($"Session: {sessionName} (status: {status})");
+        Console.WriteLine($"Log file: {logFile}");
+        Console.WriteLine();
+
+        var lines = ReadLastLines(logFile, follow ? 10 : 100);
+        foreach (var line in lines)
+        {
+            Console.WriteLine(line);
+        }
+
+        if (follow)
+        {
+            FollowFile(logFile);
+        }
+
         return 0;
     }
 
@@ -557,7 +692,135 @@ public static class Program
             return Fail($"Unknown option: {args[0]}");
         }
 
-        Console.WriteLine("resume command is registered but not implemented in this build.");
+        var targetSession = args.Length == 1 ? args[0] : string.Empty;
+        var state = new StateStore(StatePaths.FromEnvironment());
+        state.Init();
+
+        var sessions = state.ListSessions();
+        if (sessions.Count == 0)
+        {
+            Console.WriteLine("No sessions found.");
+            return 0;
+        }
+
+        var inspector = new ProcessInspector();
+        var resumedCount = 0;
+
+        IEnumerable<JsonObject> targets;
+        if (!string.IsNullOrWhiteSpace(targetSession))
+        {
+            var session = state.GetSession(targetSession);
+            if (session is null)
+            {
+                return Fail($"Session not found: {targetSession}");
+            }
+            targets = [session];
+        }
+        else
+        {
+            targets = sessions;
+        }
+
+        foreach (var session in targets)
+        {
+            var sessionName = GetSessionString(session, "name") ?? targetSession;
+            if (string.IsNullOrWhiteSpace(sessionName))
+            {
+                continue;
+            }
+
+            var status = GetSessionString(session, "status") ?? "unknown";
+            var shouldResume = false;
+            if (string.Equals(status, "running", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!TryGetSessionInt(session, "pid", out var pid) || !inspector.IsAlive(pid))
+                {
+                    shouldResume = true;
+                }
+            }
+            else if (string.Equals(status, "stale", StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(status, "stopped", StringComparison.OrdinalIgnoreCase))
+            {
+                shouldResume = true;
+            }
+
+            if (!shouldResume)
+            {
+                if (!string.IsNullOrWhiteSpace(targetSession))
+                {
+                    Console.Error.WriteLine($"Warning: Session '{sessionName}' is already running or completed (status: {status}).");
+                }
+                continue;
+            }
+
+            var dir = GetSessionString(session, "dir") ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+            {
+                Console.Error.WriteLine($"Warning: Skipping '{sessionName}': directory no longer exists: {dir}");
+                continue;
+            }
+
+            var taskFile = GetSessionString(session, "task_file") ?? "PRD.md";
+            var taskPath = Path.Combine(dir, taskFile);
+            if (!File.Exists(taskPath))
+            {
+                Console.Error.WriteLine($"Warning: Skipping '{sessionName}': task file not found: {taskPath}");
+                continue;
+            }
+
+            var backendName = GetSessionString(session, "backend") ?? "claude";
+            IBackend backend;
+            try
+            {
+                backend = BackendLoader.Load(backendName);
+            }
+            catch (Exception ex) when (ex is ArgumentException or KeyNotFoundException)
+            {
+                if (!string.IsNullOrWhiteSpace(targetSession))
+                {
+                    return Fail(ex.Message);
+                }
+                Console.Error.WriteLine($"Warning: Skipping '{sessionName}': {ex.Message}");
+                continue;
+            }
+
+            if (!backend.IsInstalled())
+            {
+                if (!string.IsNullOrWhiteSpace(targetSession))
+                {
+                    return Fail($"Backend '{backend.Name}' is not installed. {backend.GetInstallHint()}");
+                }
+
+                Console.Error.WriteLine($"Warning: Skipping '{sessionName}': backend '{backend.Name}' not installed.");
+                continue;
+            }
+
+            var options = BuildResumeOptions(session, backend.Name);
+            var process = StartBackgroundProcess(dir, sessionName, options);
+            var remaining = CountRemainingTasks(taskPath);
+
+            state.SetSession(sessionName, new Dictionary<string, object?>
+            {
+                ["pid"] = process.Id,
+                ["tmux_session"] = string.Empty,
+                ["status"] = "running",
+                ["last_task_count"] = remaining
+            });
+
+            resumedCount++;
+            Console.WriteLine($"Resumed session '{sessionName}' in background (PID: {process.Id}).");
+        }
+
+        if (resumedCount == 0)
+        {
+            Console.WriteLine("No sessions to resume.");
+            return 0;
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"Resumed {resumedCount} session(s).");
+        Console.WriteLine();
+        Console.WriteLine("Commands: gralph status, gralph logs <name>, gralph stop <name>");
         return 0;
     }
 
@@ -1014,6 +1277,219 @@ public static class Program
         return count;
     }
 
+    private static void StopSession(JsonObject session, string sessionName, IProcessInspector inspector, StateStore state, bool quietWarnings)
+    {
+        if (TryGetSessionInt(session, "pid", out var pid))
+        {
+            if (inspector.IsAlive(pid))
+            {
+                try
+                {
+                    using var process = Process.GetProcessById(pid);
+                    process.Kill(true);
+                }
+                catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+                {
+                    if (!quietWarnings)
+                    {
+                        Console.Error.WriteLine($"Warning: Failed to kill process {pid}: {ex.Message}");
+                    }
+                }
+                catch (System.ComponentModel.Win32Exception ex)
+                {
+                    if (!quietWarnings)
+                    {
+                        Console.Error.WriteLine($"Warning: Failed to kill process {pid}: {ex.Message}");
+                    }
+                }
+            }
+            else if (!quietWarnings)
+            {
+                Console.Error.WriteLine("Warning: Process not found (may have already exited).");
+            }
+        }
+
+        state.SetSession(sessionName, new Dictionary<string, object?>
+        {
+            ["status"] = "stopped",
+            ["pid"] = string.Empty,
+            ["tmux_session"] = string.Empty
+        });
+    }
+
+    private static StartOptions BuildResumeOptions(JsonObject session, string backendName)
+    {
+        var options = new StartOptions
+        {
+            Backend = backendName,
+            BackendSet = true,
+            NoTmux = true,
+            NoTmuxSet = true
+        };
+
+        if (TryGetSessionInt(session, "max_iterations", out var maxIterations))
+        {
+            options.MaxIterations = maxIterations;
+            options.MaxIterationsSet = true;
+        }
+
+        var taskFile = GetSessionString(session, "task_file");
+        if (!string.IsNullOrWhiteSpace(taskFile))
+        {
+            options.TaskFile = taskFile;
+            options.TaskFileSet = true;
+        }
+
+        var completionMarker = GetSessionString(session, "completion_marker");
+        if (!string.IsNullOrWhiteSpace(completionMarker))
+        {
+            options.CompletionMarker = completionMarker;
+            options.CompletionMarkerSet = true;
+        }
+
+        var model = GetSessionString(session, "model");
+        if (!string.IsNullOrWhiteSpace(model))
+        {
+            options.Model = model;
+            options.ModelSet = true;
+        }
+
+        var variant = GetSessionString(session, "variant");
+        if (!string.IsNullOrWhiteSpace(variant))
+        {
+            options.Variant = variant;
+            options.VariantSet = true;
+        }
+
+        var webhook = GetSessionString(session, "webhook");
+        if (!string.IsNullOrWhiteSpace(webhook))
+        {
+            options.Webhook = webhook;
+            options.WebhookSet = true;
+        }
+
+        return options;
+    }
+
+    private static int ResolveRemainingTasks(string dir, string taskFile, JsonObject session)
+    {
+        if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+        {
+            var path = Path.Combine(dir, taskFile);
+            if (File.Exists(path))
+            {
+                return CountRemainingTasks(path);
+            }
+        }
+
+        if (TryGetSessionInt(session, "last_task_count", out var lastCount))
+        {
+            return lastCount;
+        }
+
+        var lastCountString = GetSessionString(session, "last_task_count");
+        if (!string.IsNullOrWhiteSpace(lastCountString)
+            && int.TryParse(lastCountString, out var parsed))
+        {
+            return parsed;
+        }
+
+        return -1;
+    }
+
+    private static string FormatRemaining(int remaining)
+    {
+        return remaining switch
+        {
+            0 => "0 tasks",
+            1 => "1 task",
+            > 1 => $"{remaining} tasks",
+            _ => "?"
+        };
+    }
+
+    private static string TruncateDirectory(string dir, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(dir) || dir.Length <= maxLength)
+        {
+            return dir;
+        }
+
+        if (maxLength <= 3)
+        {
+            return dir[..maxLength];
+        }
+
+        var tailLength = maxLength - 3;
+        return $"...{dir[^tailLength..]}";
+    }
+
+    private static void PrintStatusTable(IReadOnlyList<StatusRow> rows)
+    {
+        var nameWidth = Math.Max("NAME".Length, rows.Max(row => row.Name.Length));
+        var dirWidth = Math.Max("DIR".Length, rows.Max(row => row.Dir.Length));
+        var iterWidth = Math.Max("ITERATION".Length, rows.Max(row => row.Iteration.Length));
+        var statusWidth = Math.Max("STATUS".Length, rows.Max(row => row.Status.Length));
+        var remainingWidth = Math.Max("REMAINING".Length, rows.Max(row => row.Remaining.Length));
+
+        Console.WriteLine($"{Pad("NAME", nameWidth)}  {Pad("DIR", dirWidth)}  {Pad("ITERATION", iterWidth)}  {Pad("STATUS", statusWidth)}  {Pad("REMAINING", remainingWidth)}");
+        Console.WriteLine($"{new string('-', nameWidth)}  {new string('-', dirWidth)}  {new string('-', iterWidth)}  {new string('-', statusWidth)}  {new string('-', remainingWidth)}");
+
+        foreach (var row in rows)
+        {
+            Console.WriteLine($"{Pad(row.Name, nameWidth)}  {Pad(row.Dir, dirWidth)}  {Pad(row.Iteration, iterWidth)}  {Pad(row.Status, statusWidth)}  {Pad(row.Remaining, remainingWidth)}");
+        }
+    }
+
+    private static string Pad(string value, int width)
+    {
+        value ??= string.Empty;
+        return value.Length >= width ? value : value.PadRight(width);
+    }
+
+    private static IReadOnlyList<string> ReadLastLines(string path, int count)
+    {
+        if (count <= 0)
+        {
+            return Array.Empty<string>();
+        }
+
+        var queue = new Queue<string>();
+        foreach (var line in File.ReadLines(path))
+        {
+            if (queue.Count == count)
+            {
+                queue.Dequeue();
+            }
+            queue.Enqueue(line);
+        }
+
+        return queue.ToList();
+    }
+
+    private static void FollowFile(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        stream.Seek(0, SeekOrigin.End);
+        using var reader = new StreamReader(stream);
+
+        while (true)
+        {
+            var line = reader.ReadLine();
+            if (line is not null)
+            {
+                Console.WriteLine(line);
+                continue;
+            }
+
+            Thread.Sleep(250);
+            if (stream.Length < stream.Position)
+            {
+                stream.Seek(0, SeekOrigin.End);
+            }
+        }
+    }
+
     private static Process StartBackgroundProcess(string targetDir, string sessionName, StartOptions options)
     {
         var exePath = Environment.ProcessPath
@@ -1140,6 +1616,8 @@ public static class Program
     {
         Console.WriteLine($"gralph {Version}");
     }
+
+    private readonly record struct StatusRow(string Name, string Dir, string Iteration, string Status, string Remaining);
 
     private sealed class StartOptions
     {

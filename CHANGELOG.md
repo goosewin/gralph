@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - AOT-7 Added .NET core execution loop with prompt rendering, iteration control, and completion checks.
 - AOT-8 Implemented .NET CLI entry point with command routing and option parsing.
 - AOT-9 Implemented start command with foreground/background session management.
+- AOT-10 Implemented stop, status, logs, and resume commands.
 - Initial public release notes for the gralph CLI.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.
