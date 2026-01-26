@@ -175,7 +175,7 @@ Support webhook notifications:
   * CRUD operations for sessions work correctly.
   * Stale session cleanup implemented.
 - **Dependencies** AOT-1
-- [ ] AOT-3 Implement state persistence with file locking
+- [x] AOT-3 Implement state persistence with file locking
 
 ### Task AOT-4
 
