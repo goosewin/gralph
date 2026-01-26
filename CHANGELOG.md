@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - Initial public release notes for the gralph CLI.
+- C-1 Added worktree commands to help output and examples.
+- C-2 Added worktree command routing and validation.
 - C-3 Added worktree create command to scaffold task branches and worktrees.
 - C-4 Added worktree finish command to merge task branches and remove worktrees.
 - C-5 Added safety checks for dirty git state and missing worktree paths.
@@ -31,3 +33,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - B-4 Injected context files section into the prompt template.
 - B-5 Documented defaults.context_files and env override in README.
 - B-6 Recorded Stage B context file injection notes and decision.
+- D-3 Added strict PRD validation gate for gralph start.

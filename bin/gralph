@@ -74,6 +74,7 @@ START OPTIONS:
   --prompt-template   Path to custom prompt template file
   --webhook           Notification webhook URL
   --no-tmux           Run in foreground (blocks)
+  --strict-prd        Validate PRD before starting the loop
 
 SERVER OPTIONS:
   --host, -H            Host/IP to bind to (default: 127.0.0.1)
@@ -151,6 +152,7 @@ parse_args() {
     OPT_PROMPT_TEMPLATE_FILE=""
     OPT_WEBHOOK=""
     OPT_NO_TMUX=false
+    OPT_STRICT_PRD=false
 
     OPT_NAME_SET=false
     OPT_MAX_ITERATIONS_SET=false
@@ -350,6 +352,12 @@ parse_args() {
                 shift
                 ;;
 
+            # Strict PRD validation flag (start command)
+            --strict-prd)
+                OPT_STRICT_PRD=true
+                shift
+                ;;
+
             # All flag (stop command)
             --all|-a)
                 OPT_ALL=true
@@ -505,6 +513,18 @@ cmd_start() {
     local task_file_path="$target_dir/$OPT_TASK_FILE"
     if [[ ! -f "$task_file_path" ]]; then
         die "Task file does not exist: $task_file_path"
+    fi
+
+    if [[ "$OPT_STRICT_PRD" == "true" ]]; then
+        if [[ -f "$LIB_DIR/prd.sh" ]]; then
+            source "$LIB_DIR/prd.sh"
+        else
+            die "Library not found: $LIB_DIR/prd.sh"
+        fi
+
+        if ! prd_validate_file "$task_file_path"; then
+            die "PRD validation failed: $task_file_path"
+        fi
     fi
 
     # Determine session name (default to directory basename)
