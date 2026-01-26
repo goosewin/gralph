@@ -54,6 +54,7 @@ COMMANDS:
   status              Show status of all loops
   logs <name>         View logs for a loop
   resume [name]       Resume crashed/stopped loops
+  prd check <file>    Validate PRD task blocks
   worktree create <ID> Create task worktree
   worktree finish <ID> Finish task worktree
   backends            List available AI backends
@@ -1323,6 +1324,37 @@ cmd_config() {
     esac
 }
 
+cmd_prd() {
+    local subcommand="${POSITIONAL_ARGS[0]}"
+
+    case "$subcommand" in
+        check)
+            local task_file="${POSITIONAL_ARGS[1]}"
+            if [[ -z "$task_file" ]]; then
+                die "Usage: gralph prd check <file>"
+            fi
+
+            if [[ -f "$LIB_DIR/prd.sh" ]]; then
+                source "$LIB_DIR/prd.sh"
+            else
+                die "Library not found: $LIB_DIR/prd.sh"
+            fi
+
+            if ! prd_validate_file "$task_file"; then
+                return 1
+            fi
+
+            success "PRD validation passed: $task_file"
+            ;;
+        "")
+            die "Usage: gralph prd check <file>"
+            ;;
+        *)
+            die "Unknown prd command: $subcommand. Use 'gralph prd check <file>'"
+            ;;
+    esac
+}
+
 cmd_worktree_create() {
     local task_id="${POSITIONAL_ARGS[1]}"
 
@@ -1479,6 +1511,9 @@ main() {
             ;;
         worktree)
             cmd_worktree
+            ;;
+        prd)
+            cmd_prd
             ;;
         server)
             cmd_server
