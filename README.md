@@ -965,6 +965,26 @@ prompt. If no task blocks are present, gralph falls back to the first unchecked 
 - [ ] P-1 Implement parser
 ```
 
+### PRD Validation
+
+Validate PRD task blocks for required fields and consistent checklists.
+
+```bash
+# Check a PRD file for schema errors
+gralph prd check PRD.md
+```
+
+Use strict mode to block loop start on invalid PRDs:
+
+```bash
+gralph start . --strict-prd
+```
+
+**Common validation failures:**
+- Missing required fields in a task block: **ID**, **Context Bundle**, **DoD**, **Checklist**, or **Dependencies**
+- Multiple unchecked task lines within a single task block
+- No unchecked task line in a block that should be actionable
+
 ## Shared Memory System
 
 Gralph runs stateless iterations, so shared documents provide durable context between runs and keep execution aligned with the protocol.
