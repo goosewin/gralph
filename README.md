@@ -1103,6 +1103,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and PR guidelines.
 
 Please read and follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
 ## License
 
 MIT
