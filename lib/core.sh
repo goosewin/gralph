@@ -229,6 +229,38 @@ render_prompt_template() {
     echo "$rendered"
 }
 
+# normalize_context_files() - Normalize a comma-separated context file list
+#
+# Arguments:
+#   $1 - Raw context files string (optional)
+#
+# Returns:
+#   Prints a newline-separated list of trimmed entries
+#
+normalize_context_files() {
+    local raw="${1:-}"
+    local entry
+    local normalized=""
+
+    if [[ -z "$raw" ]]; then
+        return 0
+    fi
+
+    IFS=',' read -r -a context_entries <<< "$raw"
+    for entry in "${context_entries[@]}"; do
+        entry="${entry#"${entry%%[![:space:]]*}"}"
+        entry="${entry%"${entry##*[![:space:]]}"}"
+        if [[ -n "$entry" ]]; then
+            if [[ -n "$normalized" ]]; then
+                normalized+=$'\n'
+            fi
+            normalized+="$entry"
+        fi
+    done
+
+    printf '%s' "$normalized"
+}
+
 # run_iteration() - Execute a single AI coding iteration
 #
 # Arguments:
@@ -332,9 +364,12 @@ run_iteration() {
     local context_files
     context_files=$(get_config "defaults.context_files" "")
 
+    local normalized_context_files
+    normalized_context_files=$(normalize_context_files "$context_files")
+
     # Build the prompt using template
     local prompt
-    prompt=$(render_prompt_template "$prompt_template" "$task_file" "$completion_marker" "$iteration" "$max_iterations" "$task_block" "$context_files")
+    prompt=$(render_prompt_template "$prompt_template" "$task_file" "$completion_marker" "$iteration" "$max_iterations" "$task_block" "$normalized_context_files")
 
     # Change to project directory and run backend
     pushd "$project_dir" > /dev/null || return 1
