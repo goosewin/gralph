@@ -11,6 +11,7 @@ using Gralph.Backends;
 using Gralph.Config;
 using Gralph.Core;
 using Gralph.Prd;
+using Gralph.Server;
 using Gralph.State;
 
 namespace Gralph;
@@ -1428,9 +1429,55 @@ public static class Program
             }
         }
 
-        _ = options;
-        Console.WriteLine("server command is registered but not implemented in this build.");
-        return 0;
+        if (options.Port > 65535)
+        {
+            return Fail($"Port must be between 1 and 65535 (got {options.Port}).");
+        }
+
+        var host = string.IsNullOrWhiteSpace(options.Host) ? "127.0.0.1" : options.Host;
+        if (!IsLocalhost(host) && string.IsNullOrWhiteSpace(options.Token) && !options.Open)
+        {
+            Console.Error.WriteLine($"Error: Token required when binding to non-localhost address ({host}).");
+            Console.Error.WriteLine();
+            Console.Error.WriteLine("For security, a token is required when exposing the server to the network.");
+            Console.Error.WriteLine("Either:");
+            Console.Error.WriteLine("  1. Provide a token: --token <your-secret-token>");
+            Console.Error.WriteLine("  2. Explicitly disable security: --open (not recommended)");
+            Console.Error.WriteLine("  3. Bind to localhost only: --host 127.0.0.1");
+            return 1;
+        }
+
+        if (!IsLocalhost(host) && options.Open && string.IsNullOrWhiteSpace(options.Token))
+        {
+            Console.Error.WriteLine("Warning: Server exposed without authentication (--open flag used)");
+            Console.Error.WriteLine("Anyone with network access can view and control your sessions!");
+            Console.Error.WriteLine();
+        }
+
+        var state = new StateStore(StatePaths.FromEnvironment());
+        state.Init();
+
+        var serverOptions = new StatusServerOptions
+        {
+            Host = host,
+            Port = options.Port,
+            Token = options.Token ?? string.Empty,
+            Open = options.Open
+        };
+
+        var server = new StatusServer(serverOptions, state);
+        Console.WriteLine($"Starting gralph status server on {host}:{options.Port}...");
+        Console.WriteLine("Endpoints:");
+        Console.WriteLine("  GET  /status        - Get all sessions");
+        Console.WriteLine("  GET  /status/:name  - Get specific session");
+        Console.WriteLine("  POST /stop/:name    - Stop a session");
+        Console.WriteLine(string.IsNullOrWhiteSpace(options.Token)
+            ? "Authentication: None (use --token to enable)"
+            : "Authentication: Bearer token required");
+        Console.WriteLine();
+        Console.WriteLine("Press Ctrl+C to stop");
+        Console.WriteLine();
+        return server.Run();
     }
 
     private static int HandleUnknownCommand(string command)
@@ -1525,6 +1572,22 @@ public static class Program
         }
 
         return result;
+    }
+
+    private static bool IsLocalhost(string host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return true;
+        }
+
+        return host switch
+        {
+            "127.0.0.1" => true,
+            "localhost" => true,
+            "::1" => true,
+            _ => false
+        };
     }
 
     private static string PromptRequired(string label, string currentValue, bool multiline)

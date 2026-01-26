@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - AOT-10 Implemented stop, status, logs, and resume commands.
 - AOT-11 Implemented prd check/create commands with stack detection and sanitization.
 - AOT-12 Implemented worktree create/finish commands with git safety checks.
+- AOT-13 Implemented HTTP status server with bearer authentication.
 - Initial public release notes for the gralph CLI.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.

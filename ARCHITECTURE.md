@@ -17,6 +17,7 @@ This document captures the high-level structure of gralph. It is a living summar
 `src/Gralph/State` mirrors state persistence in .NET, including JSON state storage, file locking, CRUD operations, and stale session cleanup.
 
 `lib/server.sh` implements the lightweight status API. It exposes endpoints for session status and stop commands, handles auth, and supports running via netcat or socat.
+`src/Gralph/Server` implements the .NET status API server for session status and stop commands with bearer auth.
 
 `lib/config.sh` handles configuration loading and overrides. It merges default, global, and project YAML into a cache and exposes getters and setters used by the CLI and core loop.
 `src/Gralph/Config` mirrors the configuration system in .NET, including YAML parsing, precedence merges, and environment overrides.

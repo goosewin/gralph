@@ -305,7 +305,7 @@ Support webhook notifications:
   * POST /stop/:name stops session.
   * Bearer token authentication works.
 - **Dependencies** AOT-3, AOT-8
-- [ ] AOT-13 Implement HTTP status server with authentication
+- [x] AOT-13 Implement HTTP status server with authentication
 
 ### Task AOT-14
 
