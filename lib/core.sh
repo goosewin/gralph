@@ -156,6 +156,36 @@ get_task_blocks() {
     return 0
 }
 
+# get_next_unchecked_task_block() - Select first task block with unchecked task line
+#
+# Arguments:
+#   $1 - Task file path (required)
+#
+# Output:
+#   Prints the first task block containing an unchecked task line
+#   Prints nothing if no unchecked task lines exist in any block
+#
+# Returns:
+#   0 on success
+#
+get_next_unchecked_task_block() {
+    local task_file="$1"
+
+    if [[ -z "$task_file" ]] || [[ ! -f "$task_file" ]]; then
+        return 0
+    fi
+
+    local block
+    while IFS= read -r -d '' block; do
+        if echo "$block" | grep -qE '^\s*- \[ \]'; then
+            printf '%s' "$block"
+            return 0
+        fi
+    done < <(get_task_blocks "$task_file")
+
+    return 0
+}
+
 # render_prompt_template() - Substitute variables in a prompt template
 #
 # Arguments:
@@ -325,8 +355,10 @@ count_remaining_tasks() {
     fi
 
     # Count lines matching '- [ ]' pattern (unchecked checkbox)
-    # Using grep -c with || echo "0" to handle no matches case
-    grep -cE '^\s*- \[ \]' "$task_file" 2>/dev/null || echo "0"
+    # Ensure a single numeric output even when grep returns non-zero
+    local count
+    count=$(grep -cE '^\s*- \[ \]' "$task_file" 2>/dev/null || true)
+    echo "$count"
 }
 
 # check_completion() - Check if loop should be considered complete
