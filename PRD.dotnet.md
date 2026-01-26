@@ -120,7 +120,7 @@ The codebase must be structured for unit testing with dependency injection and i
   * Atomic write with temp file and rename working.
   * Stale session cleanup logic ported.
 - **Dependencies** DOTNET-1
-- [ ] DOTNET-4 Implement session state persistence with JSON
+- [x] DOTNET-4 Implement session state persistence with JSON
 
 ### Task DOTNET-5
 

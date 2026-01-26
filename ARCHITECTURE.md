@@ -6,6 +6,8 @@ This document captures the high-level structure of gralph. It is a living summar
 
 `src/Gralph` is the .NET console application scaffold for the upcoming port. It will host the CLI entrypoint, command wiring, and runtime services.
 
+`src/Gralph/State` manages session state persistence in JSON, including locking, CRUD operations, and stale session cleanup.
+
 `src/Gralph/Configuration` loads YAML configuration, applies hierarchical merges, and resolves environment variable overrides for shared config access.
 
 `bin/gralph` is the CLI entrypoint. It parses commands, loads configuration defaults, wires in the shared libraries, and dispatches to subcommands like start/stop/status/server while managing session setup and logging paths.

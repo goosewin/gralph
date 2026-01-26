@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - DOTNET-1 Scaffolded .NET 10 solution with console project and package references.
 - DOTNET-2 Added System.CommandLine CLI skeleton with root help and subcommands.
 - DOTNET-3 Ported configuration loading and YAML merging with env overrides.
+- DOTNET-4 Ported session state persistence with JSON, locking, and cleanup helpers.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.
 - C-2 Added worktree command routing and validation.
