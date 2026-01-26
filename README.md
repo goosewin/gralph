@@ -292,6 +292,21 @@ gralph resume
 gralph resume myapp
 ```
 
+### Worktree Workflow
+
+Use worktrees to isolate task branches under `.worktrees/task-<ID>`.
+
+```bash
+# Create a task worktree (IDs look like C-6)
+gralph worktree create C-6
+
+# Work inside the new worktree directory
+cd .worktrees/task-C-6
+
+# Finish the task (merge and remove worktree)
+gralph worktree finish C-6
+```
+
 ## Configuration
 
 ### Global Configuration

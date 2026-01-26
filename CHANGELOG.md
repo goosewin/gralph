@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - C-3 Added worktree create command to scaffold task branches and worktrees.
 - C-4 Added worktree finish command to merge task branches and remove worktrees.
 - C-5 Added safety checks for dirty git state and missing worktree paths.
+- C-6 Documented worktree workflow in README.
 - A-1 Added PROCESS.md with protocol steps and guardrails.
 - A-2 Added ARCHITECTURE.md skeleton with required sections.
 - A-3 Documented module map in ARCHITECTURE.md.
