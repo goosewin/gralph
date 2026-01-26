@@ -82,9 +82,7 @@ gralph start . --backend claude
 ```
 
 **Models:**
-- `claude-sonnet-4-20250514` (default)
-- `claude-opus-4-20250514`
-- `claude-haiku-3-5-20241022`
+- `claude-opus-4.5`
 
 ### OpenCode
 
@@ -97,16 +95,14 @@ gralph start . --backend claude
 gralph start . --backend opencode
 
 # OpenCode models use provider/model format
-gralph start . --backend opencode --model anthropic/claude-sonnet-4-20250514
-gralph start . --backend opencode --model openai/gpt-4o
+gralph start . --backend opencode --model opencode/gpt-5.2-codex
+gralph start . --backend opencode --model google/gemini-3-pro
 ```
 
 **Models (format: provider/model):**
-- `anthropic/claude-sonnet-4-20250514` (default for opencode)
-- `anthropic/claude-opus-4-20250514`
-- `openai/gpt-4o`
-- `google/gemini-2.0-flash`
-- `deepseek/deepseek-chat`
+- `opencode/gpt-5.2-codex` (default for opencode)
+- `anthropic/claude-opus-4.5`
+- `google/gemini-3-pro`
 
 ### Setting Default Backend
 
@@ -116,7 +112,7 @@ Set the default backend in your config file:
 # ~/.config/gralph/config.yaml
 defaults:
   backend: opencode
-  model: openai/gpt-4o
+  model: opencode/gpt-5.2-codex
 ```
 
 Or via environment variable:
@@ -208,7 +204,8 @@ defaults:
   max_iterations: 30
   task_file: PRD.md
   completion_marker: COMPLETE
-  model: claude-sonnet-4-20250514
+  backend: opencode
+  model: opencode/gpt-5.2-codex
 
 claude:
   flags:
@@ -248,8 +245,8 @@ Default values for loop behavior.
 | `defaults.max_iterations` | integer | `30` | Maximum number of loop iterations before giving up. Prevents infinite loops. |
 | `defaults.task_file` | string | `PRD.md` | Path to the task file relative to project directory. |
 | `defaults.completion_marker` | string | `COMPLETE` | The text used in `<promise>MARKER</promise>` to signal completion. |
-| `defaults.backend` | string | `claude` | AI backend to use: `claude` or `opencode`. |
-| `defaults.model` | string | `claude-sonnet-4-20250514` | Model to use. Format depends on backend (see Backends section). |
+| `defaults.backend` | string | `opencode` | AI backend to use: `claude` or `opencode`. |
+| `defaults.model` | string | `opencode/gpt-5.2-codex` | Model to use. Format depends on backend (see Backends section). |
 
 ### Section: `claude`
 
@@ -278,13 +275,13 @@ Settings for the OpenCode backend.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `opencode.default_model` | string | `anthropic/claude-sonnet-4-20250514` | Default model in provider/model format. |
+| `opencode.default_model` | string | `opencode/gpt-5.2-codex` | Default model in provider/model format. |
 
 **Example:**
 
 ```yaml
 opencode:
-  default_model: openai/gpt-4o
+  default_model: opencode/gpt-5.2-codex
 ```
 
 ### Section: `notifications`
@@ -368,8 +365,8 @@ defaults:
   max_iterations: 50          # Allow more iterations
   task_file: PRD.md           # Default task file
   completion_marker: COMPLETE # Completion signal
-  backend: claude             # AI backend (claude or opencode)
-  model: claude-sonnet-4-20250514
+  backend: opencode           # AI backend (claude or opencode)
+  model: opencode/gpt-5.2-codex
 
 claude:
   flags:
@@ -378,7 +375,7 @@ claude:
     IS_SANDBOX: "1"
 
 opencode:
-  default_model: anthropic/claude-sonnet-4-20250514
+  default_model: opencode/gpt-5.2-codex
 
 notifications:
   on_complete: true
@@ -396,7 +393,7 @@ defaults:
   max_iterations: 100         # This project needs more iterations
   task_file: TASKS.md         # Use different task file
   backend: opencode           # Use OpenCode for this project
-  model: openai/gpt-4o        # Use GPT-4o via OpenCode
+  model: google/gemini-3-pro  # Use Gemini 3 Pro via OpenCode
 
 notifications:
   webhook: https://hooks.slack.com/services/T00/B00/xxx  # Different webhook
@@ -441,14 +438,14 @@ gralph start <directory> [options]
 | `--max-iterations` | | Maximum loop iterations | 30 |
 | `--task-file` | `-f` | Path to task file relative to project | PRD.md |
 | `--completion-marker` | | Completion promise text | COMPLETE |
-| `--backend` | `-b` | AI backend to use (claude or opencode) | claude |
+| `--backend` | `-b` | AI backend to use (claude or opencode) | opencode |
 | `--model` | `-m` | Model to use (format depends on backend) | (from config) |
 | `--webhook` | | Notification webhook URL | (none) |
 | `--no-tmux` | | Run in foreground (blocking) | false |
 
 **Examples:**
 ```bash
-# Start with defaults (uses Claude Code)
+# Start with defaults (uses OpenCode)
 gralph start .
 
 # Start with custom name and iterations
@@ -461,7 +458,7 @@ gralph start . --task-file TODO.md
 gralph start . --backend opencode
 
 # Use OpenCode with specific model
-gralph start . --backend opencode --model openai/gpt-4o
+gralph start . --backend opencode --model opencode/gpt-5.2-codex
 
 # Run in foreground (for debugging)
 gralph start . --no-tmux
@@ -613,7 +610,7 @@ gralph backends
 Available AI backends:
 
   claude (installed)
-      Models: claude-sonnet-4-20250514 claude-opus-4-20250514 claude-haiku-3-5-20241022
+      Models: claude-opus-4.5
 
   opencode (not installed)
       Install: See https://opencode.ai/docs/cli/ for installation
@@ -803,10 +800,10 @@ Use a different Claude model:
 
 ```bash
 # Use Claude Opus for more complex tasks
-gralph start . --model claude-opus-4-20250514
+gralph start . --model claude-opus-4.5
 
 # Or set as default in config
-gralph config set defaults.model claude-opus-4-20250514
+gralph config set defaults.model claude-opus-4.5
 ```
 
 ### Example 9: Using OpenCode Backend
@@ -817,18 +814,15 @@ Use OpenCode instead of Claude Code:
 # Use OpenCode with default model
 gralph start . --backend opencode
 
-# Use OpenCode with GPT-4o
-gralph start . --backend opencode --model openai/gpt-4o
+# Use OpenCode with GPT-5.2 Codex
+gralph start . --backend opencode --model opencode/gpt-5.2-codex
 
-# Use OpenCode with Gemini
-gralph start . --backend opencode --model google/gemini-2.0-flash
-
-# Use OpenCode with DeepSeek
-gralph start . --backend opencode --model deepseek/deepseek-chat
+# Use OpenCode with Gemini 3 Pro
+gralph start . --backend opencode --model google/gemini-3-pro
 
 # Set OpenCode as default in config
 gralph config set defaults.backend opencode
-gralph config set defaults.model openai/gpt-4o
+gralph config set defaults.model opencode/gpt-5.2-codex
 ```
 
 ## Troubleshooting
@@ -1104,6 +1098,10 @@ Please report vulnerabilities via the private advisory workflow in
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and PR guidelines.
+
+## Code of Conduct
+
+Please read and follow [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## License
 
