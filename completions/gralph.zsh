@@ -17,6 +17,7 @@ _gralph() {
         'status:Show status of all loops'
         'logs:View logs for a loop'
         'resume:Resume crashed/stopped loops'
+        'prd:Generate or validate PRDs'
         'backends:List available AI backends'
         'config:Manage configuration'
         'server:Start status API server'
@@ -92,6 +93,14 @@ _gralph() {
                         'list:List all configuration'
                     )
                     _describe -t config_cmds 'config subcommands' config_cmds
+                    ;;
+                prd)
+                    local -a prd_cmds
+                    prd_cmds=(
+                        'check:Validate a PRD file'
+                        'create:Generate a spec-compliant PRD'
+                    )
+                    _describe -t prd_cmds 'prd subcommands' prd_cmds
                     ;;
                 backends|status|version|help)
                     # No further arguments

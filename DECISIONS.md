@@ -137,3 +137,27 @@ executes them in order with a safe, re-runnable command line.
 - Rely on ad-hoc internal PRDs without published examples.
 - Document the steps but skip the scripted runner.
 - Bundle a single large example instead of small stage-specific PRDs.
+
+## D-007 Interactive PRD Generator
+- Date: 2026-01-26
+- Status: Accepted
+
+### Context
+Creating spec-compliant PRDs manually is slow and error-prone. We want a
+first-class way to capture user intent, inspect the repo if needed, and
+generate a valid PRD that can immediately drive a gralph loop.
+
+### Decision
+Add a `gralph prd create` command that prompts for goals and constraints,
+uses the configured backend to generate a PRD from the template, validates
+the result, and prints the exact loop command to run next.
+
+### Rationale
+- Reduces friction and errors when starting a new build.
+- Produces consistent task blocks that meet the schema.
+- Encourages context-first execution by surfacing key docs.
+
+### Alternatives
+- Maintain only a static PRD template and manual editing.
+- Build an external generator script outside the CLI.
+- Skip validation and rely on runtime failures.

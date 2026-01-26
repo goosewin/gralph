@@ -16,7 +16,7 @@ _gralph_completions() {
     }
 
     # Main commands
-    local commands="start stop status logs resume backends config server version help"
+    local commands="start stop status logs resume prd backends config server version help"
 
     # Options for start command
     local start_opts="--name -n --max-iterations --task-file -f --completion-marker --backend -b --model -m --variant --webhook --no-tmux --help -h"
@@ -38,7 +38,7 @@ _gralph_completions() {
             -*)
                 continue
                 ;;
-            start|stop|status|logs|resume|config|server|version|help)
+            start|stop|status|logs|resume|prd|config|server|version|help)
                 cmd="${words[i]}"
                 break
                 ;;
@@ -149,6 +149,26 @@ _gralph_completions() {
                 sessions=$(_gralph_get_sessions)
             fi
             COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
+            return 0
+            ;;
+
+        prd)
+            case "$prev" in
+                prd)
+                    COMPREPLY=($(compgen -W "check create" -- "$cur"))
+                    return 0
+                    ;;
+                check)
+                    COMPREPLY=($(compgen -f -X '!*.md' -- "$cur"))
+                    return 0
+                    ;;
+            esac
+
+            if [[ "$cur" == -* ]]; then
+                COMPREPLY=($(compgen -W "--dir --output -o --goal --constraints --context --no-interactive --force" -- "$cur"))
+                return 0
+            fi
+
             return 0
             ;;
 

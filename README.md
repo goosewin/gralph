@@ -1015,6 +1015,24 @@ Run the example release flow from the repo root:
 
 ## Usage Examples
 
+### Example 0: Generate a PRD
+
+Generate a spec-compliant PRD interactively:
+
+```bash
+gralph prd create --dir . --output PRD.generated.md --goal "Add a billing dashboard"
+```
+
+Non-interactive with explicit inputs:
+
+```bash
+gralph prd create --dir . --output PRD.generated.md \
+  --goal "Add a billing dashboard" \
+  --constraints "Use existing auth and billing tables" \
+  --context "README.md,ARCHITECTURE.md" \
+  --no-interactive
+```
+
 ### Example 1: Basic Single Project Loop
 
 Start a loop on a project with a PRD file:

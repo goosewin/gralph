@@ -55,6 +55,7 @@ COMMANDS:
   logs <name>         View logs for a loop
   resume [name]       Resume crashed/stopped loops
   prd check <file>    Validate PRD task blocks
+  prd create          Generate a spec-compliant PRD
   worktree create <ID> Create task worktree
   worktree finish <ID> Finish task worktree
   backends            List available AI backends
@@ -76,6 +77,15 @@ START OPTIONS:
   --no-tmux           Run in foreground (blocks)
   --strict-prd        Validate PRD before starting the loop
 
+PRD OPTIONS:
+  --dir               Project directory (default: current)
+  --output, -o        Output PRD file path (default: PRD.generated.md)
+  --goal              Short description of what to build
+  --constraints       Constraints or non-functional requirements
+  --context           Extra context files (comma-separated)
+  --no-interactive    Disable interactive prompts
+  --force             Overwrite existing output file
+
 SERVER OPTIONS:
   --host, -H            Host/IP to bind to (default: 127.0.0.1)
   --port, -p            Port number (default: 8080)
@@ -88,6 +98,7 @@ EXAMPLES:
   gralph status
   gralph logs myapp --follow
   gralph stop myapp
+  gralph prd create --dir . --output PRD.new.md --goal "Add a billing dashboard"
   gralph worktree create C-1
   gralph worktree finish C-1
   gralph server --host 0.0.0.0 --port 8080
@@ -134,6 +145,197 @@ escape_single_quote() {
     printf '%s' "${str//\'/\'\\\'\'}"
 }
 
+prompt_input() {
+    local prompt="$1"
+    local default_value="$2"
+    local input=""
+
+    if [[ -n "$default_value" ]]; then
+        printf "%s [%s]: " "$prompt" "$default_value"
+    else
+        printf "%s: " "$prompt"
+    fi
+
+    if ! IFS= read -r input; then
+        input=""
+    fi
+
+    if [[ -z "$input" ]]; then
+        input="$default_value"
+    fi
+
+    printf '%s' "$input"
+}
+
+prompt_multiline() {
+    local prompt="$1"
+    local line=""
+    local lines=()
+
+    printf "%s (finish with empty line):\n" "$prompt"
+    while true; do
+        if ! IFS= read -r line; then
+            break
+        fi
+        if [[ -z "$line" ]]; then
+            break
+        fi
+        lines+=("$line")
+    done
+
+    if [[ ${#lines[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    printf '%s\n' "${lines[@]}"
+}
+
+build_context_file_list() {
+    local target_dir="$1"
+    local user_list="$2"
+    local config_list="$3"
+    local entry=""
+    local normalized=()
+    local -A seen
+
+    add_context_entry() {
+        local item="$1"
+        local resolved="$item"
+
+        if [[ -z "$item" ]]; then
+            return 0
+        fi
+
+        if [[ "$item" != /* ]]; then
+            if [[ ! -f "$target_dir/$item" ]]; then
+                return 0
+            fi
+        else
+            if [[ ! -f "$item" ]]; then
+                return 0
+            fi
+        fi
+
+        if [[ -z "${seen[$resolved]:-}" ]]; then
+            seen[$resolved]=1
+            normalized+=("$resolved")
+        fi
+    }
+
+    if [[ -n "$config_list" ]]; then
+        IFS=',' read -r -a _config_entries <<< "$config_list"
+        for entry in "${_config_entries[@]}"; do
+            entry="${entry#"${entry%%[![:space:]]*}"}"
+            entry="${entry%"${entry##*[![:space:]]}"}"
+            add_context_entry "$entry"
+        done
+    fi
+
+    if [[ -n "$user_list" ]]; then
+        IFS=',' read -r -a _user_entries <<< "$user_list"
+        for entry in "${_user_entries[@]}"; do
+            entry="${entry#"${entry%%[![:space:]]*}"}"
+            entry="${entry%"${entry##*[![:space:]]}"}"
+            add_context_entry "$entry"
+        done
+    fi
+
+    add_context_entry "README.md"
+    add_context_entry "ARCHITECTURE.md"
+    add_context_entry "DECISIONS.md"
+    add_context_entry "CHANGELOG.md"
+    add_context_entry "RISK_REGISTER.md"
+    add_context_entry "PROCESS.md"
+    add_context_entry "PRD.template.md"
+
+    if [[ ${#normalized[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    printf '%s\n' "${normalized[@]}"
+}
+
+get_prd_template_text() {
+    local target_dir="$1"
+    local candidate
+
+    for candidate in "$target_dir/PRD.template.md" "$SCRIPT_DIR/../PRD.template.md"; do
+        if [[ -f "$candidate" ]]; then
+            cat "$candidate"
+            return 0
+        fi
+    done
+
+    cat << 'EOF'
+## Overview
+
+Briefly describe the project, goals, and intended users.
+
+## Problem Statement
+
+- What problem does this solve?
+- What pain points exist today?
+
+## Solution
+
+High-level solution summary.
+
+---
+
+## Functional Requirements
+
+### FR-1: Core Feature
+
+Describe the primary user-facing behavior.
+
+### FR-2: Secondary Feature
+
+Describe supporting behavior.
+
+---
+
+## Non-Functional Requirements
+
+### NFR-1: Performance
+
+- Example: Response times under 200ms for key operations.
+
+### NFR-2: Reliability
+
+- Example: Crash recovery or retries where appropriate.
+
+---
+
+## Implementation Tasks
+
+Each task must use a `### Task <ID>` block header and include the required fields.
+Each task block must contain exactly one unchecked task line.
+
+### Task EX-1
+
+- **ID** EX-1
+- **Context Bundle** `path/to/file`, `path/to/other`
+- **DoD** Define the done criteria for this task.
+- **Checklist**
+  * First verification item.
+  * Second verification item.
+- **Dependencies** None
+- [ ] EX-1 Short task summary
+
+---
+
+## Success Criteria
+
+- Define measurable outcomes that indicate completion.
+
+---
+
+## Open Questions
+
+- [ ] Any unresolved product or technical questions
+EOF
+}
+
 # Parse command line arguments
 # Sets global variables based on parsed arguments
 parse_args() {
@@ -153,6 +355,14 @@ parse_args() {
     OPT_WEBHOOK=""
     OPT_NO_TMUX=false
     OPT_STRICT_PRD=false
+    OPT_PRD_OUTPUT=""
+    OPT_PRD_DIR=""
+    OPT_PRD_GOAL=""
+    OPT_PRD_CONSTRAINTS=""
+    OPT_PRD_CONTEXT=""
+    OPT_PRD_FORCE=false
+    OPT_PRD_INTERACTIVE=true
+    OPT_PRD_INTERACTIVE_SET=false
 
     OPT_NAME_SET=false
     OPT_MAX_ITERATIONS_SET=false
@@ -355,6 +565,77 @@ parse_args() {
             # Strict PRD validation flag (start command)
             --strict-prd)
                 OPT_STRICT_PRD=true
+                shift
+                ;;
+
+            # PRD generator options
+            --dir)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --dir requires a value"
+                fi
+                OPT_PRD_DIR="$2"
+                shift 2
+                ;;
+            --dir=*)
+                OPT_PRD_DIR="${1#*=}"
+                shift
+                ;;
+            --output|-o)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --output requires a value"
+                fi
+                OPT_PRD_OUTPUT="$2"
+                shift 2
+                ;;
+            --output=*)
+                OPT_PRD_OUTPUT="${1#*=}"
+                shift
+                ;;
+            --goal)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --goal requires a value"
+                fi
+                OPT_PRD_GOAL="$2"
+                shift 2
+                ;;
+            --goal=*)
+                OPT_PRD_GOAL="${1#*=}"
+                shift
+                ;;
+            --constraints)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --constraints requires a value"
+                fi
+                OPT_PRD_CONSTRAINTS="$2"
+                shift 2
+                ;;
+            --constraints=*)
+                OPT_PRD_CONSTRAINTS="${1#*=}"
+                shift
+                ;;
+            --context)
+                if [[ -z "$2" ]] || [[ "$2" == -* ]]; then
+                    die "Option --context requires a value"
+                fi
+                OPT_PRD_CONTEXT="$2"
+                shift 2
+                ;;
+            --context=*)
+                OPT_PRD_CONTEXT="${1#*=}"
+                shift
+                ;;
+            --no-interactive|--non-interactive)
+                OPT_PRD_INTERACTIVE=false
+                OPT_PRD_INTERACTIVE_SET=true
+                shift
+                ;;
+            --interactive)
+                OPT_PRD_INTERACTIVE=true
+                OPT_PRD_INTERACTIVE_SET=true
+                shift
+                ;;
+            --force)
+                OPT_PRD_FORCE=true
                 shift
                 ;;
 
@@ -1344,6 +1625,218 @@ cmd_config() {
     esac
 }
 
+cmd_prd_create() {
+    local target_dir="${OPT_PRD_DIR:-${POSITIONAL_ARGS[1]:-$(pwd)}}"
+
+    source_libs
+
+    if [[ -z "$target_dir" ]]; then
+        target_dir="$(pwd)"
+    fi
+
+    if [[ ! -d "$target_dir" ]]; then
+        die "Directory does not exist: $target_dir"
+    fi
+
+    target_dir=$(cd "$target_dir" && pwd)
+
+    local interactive="$OPT_PRD_INTERACTIVE"
+    if [[ "$OPT_PRD_INTERACTIVE_SET" != "true" ]]; then
+        if [[ ! -t 0 || ! -t 1 ]]; then
+            interactive=false
+        fi
+    fi
+
+    local goal="$OPT_PRD_GOAL"
+    if [[ -z "$goal" && "$interactive" == "true" ]]; then
+        goal=$(prompt_multiline "Describe what you want to build")
+    fi
+
+    if [[ -z "$goal" ]]; then
+        die "Goal is required. Use --goal or run interactively."
+    fi
+
+    local constraints="$OPT_PRD_CONSTRAINTS"
+    if [[ -z "$constraints" && "$interactive" == "true" ]]; then
+        constraints=$(prompt_multiline "Constraints or requirements (optional)")
+    fi
+    if [[ -z "$constraints" ]]; then
+        constraints="None."
+    fi
+
+    local output_path="$OPT_PRD_OUTPUT"
+    if [[ -z "$output_path" && "$interactive" == "true" ]]; then
+        output_path=$(prompt_input "PRD output file" "PRD.generated.md")
+    fi
+    if [[ -z "$output_path" ]]; then
+        output_path="PRD.generated.md"
+    fi
+    if [[ "$output_path" != /* ]]; then
+        output_path="$target_dir/$output_path"
+    fi
+
+    if [[ -e "$output_path" && "$OPT_PRD_FORCE" != "true" ]]; then
+        if [[ "$interactive" == "true" ]]; then
+            local overwrite
+            overwrite=$(prompt_input "File exists. Overwrite? (y/N)" "N")
+            if ! [[ "$overwrite" =~ ^[Yy]$ ]]; then
+                die "Output file exists: $output_path (use --force to overwrite)"
+            fi
+        else
+            die "Output file exists: $output_path (use --force to overwrite)"
+        fi
+    fi
+
+    # Load configuration and backend support
+    if [[ -f "$LIB_DIR/config.sh" ]]; then
+        source "$LIB_DIR/config.sh"
+        load_config "$target_dir"
+    else
+        die "Library not found: $LIB_DIR/config.sh"
+    fi
+
+    if [[ -f "$LIB_DIR/prd.sh" ]]; then
+        source "$LIB_DIR/prd.sh"
+    else
+        warn "PRD validation library not found: $LIB_DIR/prd.sh"
+    fi
+
+    local backend="$OPT_BACKEND"
+    if [[ -z "$backend" ]]; then
+        backend=$(get_config "defaults.backend" "claude")
+    fi
+
+    local model="$OPT_MODEL"
+    if [[ -z "$model" ]]; then
+        model=$(get_config "defaults.model" "")
+    fi
+    if [[ -z "$model" && "$backend" == "opencode" ]]; then
+        model=$(get_config "opencode.default_model" "")
+    fi
+
+    if [[ -z "$backend" ]]; then
+        backend="claude"
+    fi
+
+    if ! init_backend "$backend"; then
+        die "Failed to initialize backend: $backend"
+    fi
+
+    local config_context_files=""
+    if [[ -f "$LIB_DIR/config.sh" ]]; then
+        config_context_files=$(get_config "defaults.context_files" "")
+    fi
+
+    local context_files
+    context_files=$(build_context_file_list "$target_dir" "$OPT_PRD_CONTEXT" "$config_context_files")
+
+    local context_section="None."
+    if [[ -n "$context_files" ]]; then
+        context_section="$context_files"
+    fi
+
+    local template_text
+    template_text=$(get_prd_template_text "$target_dir")
+
+    local prompt
+    prompt=$(cat <<EOF
+You are generating a gralph PRD in markdown. The output must be spec-compliant.
+
+Project directory: $target_dir
+
+Goal:
+$goal
+
+Constraints:
+$constraints
+
+Context files (read these first if present):
+$context_section
+
+Requirements:
+- Output only the PRD markdown with no commentary or code fences.
+- Use atomic, granular tasks.
+- Each task block must use a '### Task <ID>' header and include **ID**, **Context Bundle**, **DoD**, **Checklist**, **Dependencies**.
+- Each task block must contain exactly one unchecked task line like '- [ ] <ID> <summary>'.
+- Use ASCII only.
+
+Template:
+$template_text
+EOF
+)
+
+    local tmpfile
+    local tmp_prd
+    local tmp_err
+    local raw_output
+    tmpfile=$(mktemp)
+    tmp_prd=$(mktemp)
+    tmp_err=$(mktemp)
+    raw_output=$(mktemp)
+
+    local backend_exit_code=0
+    if GRALPH_RAW_OUTPUT_FILE="$raw_output" backend_run_iteration "$prompt" "$model" "$tmpfile"; then
+        backend_exit_code=0
+    else
+        backend_exit_code=$?
+    fi
+
+    if [[ $backend_exit_code -ne 0 ]]; then
+        warn "PRD generation failed (backend exit code $backend_exit_code)."
+        if [[ -s "$raw_output" ]]; then
+            warn "Raw backend output saved to: $raw_output"
+        fi
+        rm -f "$tmp_prd" "$tmp_err" "$tmpfile"
+        return 1
+    fi
+
+    local result
+    result=$(backend_parse_text "$tmpfile" || true)
+    if [[ -z "$result" ]]; then
+        warn "PRD generation returned empty output."
+        if [[ -s "$raw_output" ]]; then
+            warn "Raw backend output saved to: $raw_output"
+        fi
+        rm -f "$tmp_prd" "$tmp_err" "$tmpfile"
+        return 1
+    fi
+
+    printf '%s\n' "$result" > "$tmp_prd"
+
+    local invalid_path=""
+    if declare -f prd_validate_file > /dev/null; then
+        if ! prd_validate_file "$tmp_prd" 2> "$tmp_err"; then
+            warn "Generated PRD failed validation."
+            cat "$tmp_err" >&2
+            if [[ "$OPT_PRD_FORCE" == "true" ]]; then
+                invalid_path="$output_path"
+            else
+                if [[ "$output_path" == *.md ]]; then
+                    invalid_path="${output_path%.md}.invalid.md"
+                else
+                    invalid_path="${output_path}.invalid"
+                fi
+            fi
+            mv "$tmp_prd" "$invalid_path"
+            warn "Saved invalid PRD to: $invalid_path"
+            rm -f "$tmp_err" "$tmpfile"
+            return 1
+        fi
+    fi
+
+    mv "$tmp_prd" "$output_path"
+    rm -f "$tmp_err" "$tmpfile" "$raw_output"
+
+    success "PRD created: $output_path"
+    local relative_output="$output_path"
+    if [[ "$output_path" == "$target_dir"/* ]]; then
+        relative_output="${output_path#"$target_dir/"}"
+    fi
+
+    echo "Next step:"
+    echo "  gralph start $target_dir --task-file $relative_output --no-tmux --backend $backend --model $model --strict-prd"
+}
+
 cmd_prd() {
     local subcommand="${POSITIONAL_ARGS[0]}"
 
@@ -1366,11 +1859,14 @@ cmd_prd() {
 
             success "PRD validation passed: $task_file"
             ;;
+        create|init|new)
+            cmd_prd_create
+            ;;
         "")
-            die "Usage: gralph prd check <file>"
+            die "Usage: gralph prd check <file> | gralph prd create"
             ;;
         *)
-            die "Unknown prd command: $subcommand. Use 'gralph prd check <file>'"
+            die "Unknown prd command: $subcommand. Use 'gralph prd check <file>' or 'gralph prd create'"
             ;;
     esac
 }
