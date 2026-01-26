@@ -64,6 +64,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - E-6 Recorded Stage E example and runner rationale in DECISIONS.
 - P-EX-2 Updated README task block example to include all required fields.
 
+### Changed
+- Updated shared docs to reflect the .NET CLI runtime, background execution, and config paths.
+
+### Removed
+- Removed the legacy bash implementation, installer/uninstaller, shell completions, and shell-based tests.
+
 ### Fixed
 - OSS-1 Removed duplicate introductory text from README.
 - OSS-2 Corrected Gemini CLI install hints and README instructions.

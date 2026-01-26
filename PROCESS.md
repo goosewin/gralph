@@ -10,6 +10,8 @@
    - RISK_REGISTER.md (if new risk found)
    - ARCHITECTURE.md (delta update)
 5) Run checklist + verification.
+   - dotnet build src/Gralph/Gralph.csproj
+   - dotnet test tests/Gralph.Tests
 6) Merge worktree back and remove it.
 
 ## Guardrails

@@ -10,4 +10,5 @@ Please report security issues privately using GitHub Security Advisories:
 
 https://github.com/goosewin/gralph/security/advisories/new
 
-Please avoid opening public issues for security reports.
+Please include the output of `gralph version` and your OS. Avoid opening public
+issues for security reports.
