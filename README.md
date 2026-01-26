@@ -652,13 +652,18 @@ gralph version
 
 ### Command: `help`
 
-Show help message with usage information.
+Show top-level help message with usage information.
 
 ```bash
 gralph help
+gralph --help
+gralph -h
+gralph
 ```
 
-**Aliases:** `--help`, `-h`
+**Notes:**
+- `--help` and `-h` are global flags; they always print the top-level usage.
+- Running `gralph` with no arguments prints the same usage.
 
 ## How It Works
 
