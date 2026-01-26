@@ -54,6 +54,8 @@ COMMANDS:
   status              Show status of all loops
   logs <name>         View logs for a loop
   resume [name]       Resume crashed/stopped loops
+  worktree create <ID> Create task worktree
+  worktree finish <ID> Finish task worktree
   backends            List available AI backends
   config              Manage configuration
   server              Start status API server
@@ -84,6 +86,8 @@ EXAMPLES:
   gralph status
   gralph logs myapp --follow
   gralph stop myapp
+  gralph worktree create C-1
+  gralph worktree finish C-1
   gralph server --host 0.0.0.0 --port 8080
 EOF
 }
