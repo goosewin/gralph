@@ -3,12 +3,14 @@ defaults:
   max_iterations: 30
   task_file: PRD.md
   completion_marker: COMPLETE
-  context_files: ARCHITECTURE.md, DECISIONS.md, CHANGELOG.md, RISK_REGISTER.md, PROCESS.md
-  # Backend: claude or opencode
+  context_files: ARCHITECTURE.md, STACK.md, DECISIONS.md, CHANGELOG.md, RISK_REGISTER.md, PROCESS.md
+  # Backend: claude, opencode, gemini, or codex
   backend: claude
   # Model depends on backend:
   #   claude: claude-opus-4-5
   #   opencode: opencode/gpt-5.2-codex, anthropic/claude-opus-4-5, google/gemini-3-pro
+  #   gemini: gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-pro
+  #   codex: o3, o4-mini, gpt-4.1
   # model:
 
 # Claude Code backend settings
@@ -23,6 +25,21 @@ opencode:
   # Model format: provider/model (e.g., opencode/gpt-5.2-codex)
   # Leave empty to use opencode's default
   default_model: opencode/gpt-5.2-codex
+
+# Gemini CLI backend settings
+gemini:
+  # Available models: gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-pro
+  default_model: gemini-2.5-pro
+  flags:
+    - --headless
+
+# Codex CLI backend settings
+codex:
+  # Available models: o3, o4-mini, gpt-4.1
+  default_model: o3
+  flags:
+    - --quiet
+    - --auto-approve
 
 notifications:
   on_complete: true

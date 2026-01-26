@@ -94,7 +94,7 @@ Each backend must have dedicated test coverage verifying installation detection,
   * `codex:` section exists with `default_model` key.
   * Configuration follows existing patterns from claude and opencode sections.
 - **Dependencies** G-1, G-2
-- [ ] G-3 Add backend configuration sections for gemini and codex
+- [x] G-3 Add backend configuration sections for gemini and codex
 
 ---
 
