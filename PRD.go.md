@@ -249,7 +249,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * Merges branch and removes worktree on finish.
   * Validates clean git state before operations.
 - **Dependencies** GO-1
-- [ ] GO-13 Implement worktree commands
+- [x] GO-13 Implement worktree commands
 
 ### Task GO-14
 
