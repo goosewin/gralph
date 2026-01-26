@@ -42,6 +42,8 @@ See `tests/macos-compatibility.md` for detailed platform notes.
 
 ## Installation
 
+Gralph uses a dual-mode installer that automatically detects whether it's being piped from curl or run from a local clone. Both methods use the same `install.sh` script.
+
 ### Quick Install (curl)
 
 The recommended installation method uses the latest GitHub release tarball:
@@ -50,7 +52,11 @@ The recommended installation method uses the latest GitHub release tarball:
 curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
 ```
 
-This downloads and runs the installer from the latest tagged release, ensuring you get a stable, tested version.
+This downloads the installer and runs it in **bootstrap mode**, which:
+1. Fetches the latest release tarball from GitHub
+2. Extracts it to a temporary directory
+3. Installs the binary, libraries, and completions
+4. Cleans up the temporary files
 
 #### Bootstrap Environment Overrides
 
@@ -66,16 +72,16 @@ When installing via `curl|bash`, you can customize the download source using env
 
 ```bash
 # Install from a fork
-GRALPH_REPO=myuser/gralph-fork curl -fsSL ... | bash
+GRALPH_REPO=myuser/gralph-fork curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
 
 # Install a specific version
 GRALPH_REF=v1.2.0 curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
 
 # Install from a custom URL
-GRALPH_ASSET_URL=https://example.com/gralph.tar.gz curl -fsSL ... | bash
+GRALPH_ASSET_URL=https://example.com/gralph.tar.gz curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
 ```
 
-### From Source
+### From Source (git clone)
 
 ```bash
 git clone git@github.com:goosewin/gralph.git
@@ -83,12 +89,27 @@ cd gralph
 ./install.sh
 ```
 
+When run from a cloned repository, the installer operates in **local mode**, which:
+1. Detects `bin/gralph` in the current directory
+2. Installs directly from the local files (no download)
+3. Copies binary, libraries, config, and completions to their destinations
+
+Both modes perform the same installation steps:
+- Check and optionally install dependencies (`jq`, `tmux`, backend CLI)
+- Copy `gralph` binary to `~/.local/bin` (or `/usr/local/bin`)
+- Copy library files to `~/.config/gralph/lib/`
+- Create default config at `~/.config/gralph/config.yaml`
+- Install shell completions for bash/zsh
+
 ### Manual Installation
+
+If you prefer not to use the installer:
 
 1. Clone this repository
 2. Copy `bin/gralph` to a directory in your PATH (e.g., `~/.local/bin/` or `/usr/local/bin/`)
 3. Copy `lib/` to `~/.config/gralph/lib/`
-4. Create config directory: `mkdir -p ~/.config/gralph`
+4. Copy `config/default.yaml` to `~/.config/gralph/config.yaml`
+5. (Optional) Copy `completions/` to `~/.config/gralph/completions/`
 
 ## Backends
 
