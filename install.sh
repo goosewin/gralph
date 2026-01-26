@@ -523,13 +523,137 @@ print_path_instructions() {
 }
 
 # =============================================================================
-# Main Installation (to be implemented in subsequent tasks)
+# Bootstrap Download (INS-2)
+# =============================================================================
+
+# Default bootstrap settings
+GRALPH_REPO="${GRALPH_REPO:-goosewin/gralph}"
+GRALPH_REF="${GRALPH_REF:-}"  # Empty means latest release
+GRALPH_ASSET_URL="${GRALPH_ASSET_URL:-}"  # Direct URL override
+
+# Cleanup function for bootstrap mode
+bootstrap_cleanup() {
+    if [ -n "${BOOTSTRAP_TEMP_DIR:-}" ] && [ -d "$BOOTSTRAP_TEMP_DIR" ]; then
+        rm -rf "$BOOTSTRAP_TEMP_DIR"
+    fi
+}
+
+# Download and extract release tarball for bootstrap mode
+# Sets SCRIPT_DIR to the extracted directory on success
+bootstrap_download() {
+    echo_info "Downloading gralph..."
+
+    # Verify curl is available
+    if ! check_command curl; then
+        echo_error "curl is required for bootstrap installation."
+        echo "      Please install curl and try again."
+        return 1
+    fi
+
+    # Create temp directory
+    BOOTSTRAP_TEMP_DIR=$(mktemp -d 2>/dev/null || mktemp -d -t 'gralph-install')
+    if [ ! -d "$BOOTSTRAP_TEMP_DIR" ]; then
+        echo_error "Failed to create temporary directory."
+        return 1
+    fi
+
+    # Set trap to clean up on exit
+    trap bootstrap_cleanup EXIT
+
+    local tarball_url=""
+
+    if [ -n "$GRALPH_ASSET_URL" ]; then
+        # Direct URL override
+        tarball_url="$GRALPH_ASSET_URL"
+        echo_info "  Using custom asset URL"
+    elif [ -n "$GRALPH_REF" ]; then
+        # Specific ref (tag or branch)
+        tarball_url="https://github.com/${GRALPH_REPO}/archive/refs/tags/${GRALPH_REF}.tar.gz"
+        echo_info "  Downloading ref: $GRALPH_REF"
+    else
+        # Latest release - get the tarball URL from GitHub API
+        echo_info "  Fetching latest release..."
+        local release_url="https://api.github.com/repos/${GRALPH_REPO}/releases/latest"
+        local tarball_url_raw
+
+        tarball_url_raw=$(curl -fsSL "$release_url" 2>/dev/null | grep '"tarball_url"' | head -1 | cut -d'"' -f4)
+
+        if [ -z "$tarball_url_raw" ]; then
+            # Fallback to main branch if no releases
+            echo_warn "  No releases found, falling back to main branch"
+            tarball_url="https://github.com/${GRALPH_REPO}/archive/refs/heads/main.tar.gz"
+        else
+            tarball_url="$tarball_url_raw"
+            echo_info "  Found latest release"
+        fi
+    fi
+
+    # Download tarball
+    local tarball_path="$BOOTSTRAP_TEMP_DIR/gralph.tar.gz"
+    echo_info "  Downloading from: $tarball_url"
+
+    if ! curl -fsSL -o "$tarball_path" "$tarball_url"; then
+        echo_error "Failed to download gralph."
+        echo "      URL: $tarball_url"
+        return 1
+    fi
+
+    # Verify download
+    if [ ! -f "$tarball_path" ] || [ ! -s "$tarball_path" ]; then
+        echo_error "Downloaded file is empty or missing."
+        return 1
+    fi
+
+    echo_info "  Downloaded successfully"
+
+    # Extract tarball
+    echo_info "  Extracting..."
+    local extract_dir="$BOOTSTRAP_TEMP_DIR/extract"
+    mkdir -p "$extract_dir"
+
+    if ! tar -xzf "$tarball_path" -C "$extract_dir" 2>/dev/null; then
+        echo_error "Failed to extract tarball."
+        return 1
+    fi
+
+    # Find the extracted directory (GitHub archives have a prefix like repo-ref/)
+    local extracted_root
+    extracted_root=$(find "$extract_dir" -mindepth 1 -maxdepth 1 -type d | head -1)
+
+    if [ -z "$extracted_root" ] || [ ! -d "$extracted_root" ]; then
+        echo_error "Could not find extracted directory."
+        return 1
+    fi
+
+    # Verify expected layout
+    if [ ! -f "$extracted_root/bin/gralph" ]; then
+        echo_error "Invalid archive layout: bin/gralph not found."
+        echo "      Expected: bin/gralph"
+        echo "      Archive may be corrupt or from wrong source."
+        return 1
+    fi
+
+    if [ ! -d "$extracted_root/lib" ]; then
+        echo_error "Invalid archive layout: lib/ directory not found."
+        return 1
+    fi
+
+    # Set SCRIPT_DIR to extracted location
+    SCRIPT_DIR="$extracted_root"
+    echo_info "  Extracted to: $SCRIPT_DIR"
+
+    return 0
+}
+
+# =============================================================================
+# Main Installation
 # =============================================================================
 
 # Global variables set by determine_install_path
 INSTALL_PATH=""
 NEEDS_PATH_UPDATE=false
 USE_SUDO=false
+BOOTSTRAP_TEMP_DIR=""
 
 echo "gralph installer"
 echo "==============="
@@ -541,12 +665,12 @@ if [ "$INSTALL_MODE" = "local" ]; then
     echo_info "Source directory: $SCRIPT_DIR"
 elif [ "$INSTALL_MODE" = "bootstrap" ]; then
     echo_info "Install mode: bootstrap (curl|bash)"
-    echo_warn "Bootstrap download not yet implemented (see INS-2)"
-    echo "      For now, please clone the repo and run ./install.sh"
-    echo ""
-    echo "      git clone https://github.com/goosewin/gralph.git"
-    echo "      cd gralph && ./install.sh"
-    exit 1
+
+    # Download and extract in bootstrap mode
+    if ! bootstrap_download; then
+        echo_error "Bootstrap download failed."
+        exit 1
+    fi
 fi
 echo ""
 
