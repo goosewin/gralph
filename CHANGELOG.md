@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - AOT-3 Added .NET state persistence with JSON storage, file locking, and stale cleanup.
 - AOT-4 Added backend abstraction layer and Claude backend with JSON stream parsing.
 - AOT-5 Added OpenCode, Gemini, and Codex backends.
+- AOT-6 Added .NET PRD task block parsing and validation helpers.
 - Initial public release notes for the gralph CLI.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.

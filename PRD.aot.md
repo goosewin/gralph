@@ -214,7 +214,7 @@ Support webhook notifications:
   * Stray unchecked tasks detected.
   * Context Bundle paths validated against repo.
 - **Dependencies** AOT-1
-- [ ] AOT-6 Implement task block parsing and PRD validation
+- [x] AOT-6 Implement task block parsing and PRD validation
 
 ### Task AOT-7
 

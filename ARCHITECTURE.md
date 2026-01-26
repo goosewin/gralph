@@ -19,6 +19,9 @@ This document captures the high-level structure of gralph. It is a living summar
 `lib/config.sh` handles configuration loading and overrides. It merges default, global, and project YAML into a cache and exposes getters and setters used by the CLI and core loop.
 `src/Gralph/Config` mirrors the configuration system in .NET, including YAML parsing, precedence merges, and environment overrides.
 
+`lib/prd.sh` provides PRD task block parsing, validation, sanitization, and stack detection for bash flows.
+`src/Gralph/Prd` mirrors PRD task block parsing and validation in .NET.
+
 `src/Gralph/Backends` defines the backend abstraction layer and implementations for invoking model CLIs. It includes backend discovery, model metadata, and JSON stream parsing utilities.
 
 `lib/notify.sh` formats and sends webhook notifications. It detects webhook targets, builds payloads for Slack/Discord/generic endpoints, and posts completion or failure events.
