@@ -157,19 +157,60 @@ start.SetAction(parseResult =>
 });
 
 var stop = new Command("stop", "Stop a running loop");
-stop.Add(new Argument<string>("name") { Arity = ArgumentArity.ZeroOrOne });
-stop.SetAction(_ => Console.WriteLine("stop is not implemented yet."));
+var stopNameArgument = new Argument<string>("name") { Arity = ArgumentArity.ZeroOrOne };
+var stopAllOption = new Option<bool>("--all", "Stop all loops");
+stop.Add(stopNameArgument);
+stop.Add(stopAllOption);
+stop.SetAction(parseResult =>
+{
+    var handler = new StopCommandHandler(new StateStore());
+    var exitCode = handler.Execute(new StopCommandSettings
+    {
+        Name = parseResult.GetValue(stopNameArgument),
+        All = parseResult.GetValue(stopAllOption)
+    });
+
+    Environment.ExitCode = exitCode;
+});
 
 var status = new Command("status", "Show status of all loops");
-status.SetAction(_ => Console.WriteLine("status is not implemented yet."));
+status.SetAction(_ =>
+{
+    var handler = new StatusCommandHandler(new StateStore());
+    var exitCode = handler.Execute();
+    Environment.ExitCode = exitCode;
+});
 
 var logs = new Command("logs", "View logs for a loop");
-logs.Add(new Argument<string>("name") { Arity = ArgumentArity.ExactlyOne });
-logs.SetAction(_ => Console.WriteLine("logs is not implemented yet."));
+var logsNameArgument = new Argument<string>("name") { Arity = ArgumentArity.ExactlyOne };
+var logsFollowOption = new Option<bool>("--follow", "Follow log output");
+logs.Add(logsNameArgument);
+logs.Add(logsFollowOption);
+logs.SetAction(parseResult =>
+{
+    var handler = new LogsCommandHandler(new StateStore());
+    var exitCode = handler.Execute(new LogsCommandSettings
+    {
+        Name = parseResult.GetValue(logsNameArgument),
+        Follow = parseResult.GetValue(logsFollowOption)
+    });
+
+    Environment.ExitCode = exitCode;
+});
 
 var resume = new Command("resume", "Resume crashed/stopped loops");
-resume.Add(new Argument<string>("name") { Arity = ArgumentArity.ZeroOrOne });
-resume.SetAction(_ => Console.WriteLine("resume is not implemented yet."));
+var resumeNameArgument = new Argument<string>("name") { Arity = ArgumentArity.ZeroOrOne };
+resume.Add(resumeNameArgument);
+resume.SetAction(parseResult =>
+{
+    var handler = new ResumeCommandHandler(BackendRegistry.CreateDefault(), new StateStore());
+    var exitCode = handler.Execute(new ResumeCommandSettings
+    {
+        Name = parseResult.GetValue(resumeNameArgument)
+    });
+
+    Environment.ExitCode = exitCode;
+});
 
 var prd = new Command("prd", "Validate or generate PRDs");
 var prdCheck = new Command("check", "Validate PRD task blocks");

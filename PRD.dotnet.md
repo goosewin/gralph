@@ -172,7 +172,7 @@ The codebase must be structured for unit testing with dependency injection and i
   * Logs command reads and optionally follows log files.
   * Resume command restarts stale or stopped sessions.
 - **Dependencies** DOTNET-2, DOTNET-4
-- [ ] DOTNET-8 Implement status, stop, logs, and resume commands
+- [x] DOTNET-8 Implement status, stop, logs, and resume commands
 
 ### Task DOTNET-9
 
