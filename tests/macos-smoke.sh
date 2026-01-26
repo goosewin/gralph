@@ -13,6 +13,18 @@ require_command() {
     fi
 }
 
+check_output() {
+    local pattern="$1"
+    shift
+    local output
+    output=$("$@" 2>&1) || true
+    if ! echo "$output" | grep -q "$pattern"; then
+        echo "Pattern '$pattern' not found in output of: $*" >&2
+        echo "Output was: $output" >&2
+        return 1
+    fi
+}
+
 require_command bash
 require_command jq
 require_command tmux
@@ -23,8 +35,34 @@ if [[ "$bash_major_version" -lt 4 ]]; then
     exit 1
 fi
 
-./bin/gralph version | grep -q '^gralph v'
+# Basic commands
+check_output '^gralph v' ./bin/gralph version
 ./bin/gralph help >/dev/null
 ./bin/gralph status >/dev/null
+
+# Backends command
+check_output 'claude' ./bin/gralph backends
+
+# Config command
+./bin/gralph config list >/dev/null
+
+# Help flags work on subcommands
+./bin/gralph start --help >/dev/null
+
+# Parse checks for new flags (validation only, no execution)
+help_output=$(./bin/gralph help 2>&1)
+
+# --no-tmux flag recognized
+echo "$help_output" | grep -q '\-\-no-tmux'
+# --backend flag recognized
+echo "$help_output" | grep -q '\-\-backend'
+# --webhook flag recognized
+echo "$help_output" | grep -q '\-\-webhook'
+# --variant flag recognized
+echo "$help_output" | grep -q '\-\-variant'
+# --prompt-template flag recognized
+echo "$help_output" | grep -q '\-\-prompt-template'
+# Server command available
+echo "$help_output" | grep -q 'server'
 
 echo "macOS smoke test passed."
