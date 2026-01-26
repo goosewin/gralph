@@ -4,11 +4,6 @@
 # Get the directory where this script is located
 NOTIFY_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Source utils if available
-if [[ -f "$NOTIFY_SCRIPT_DIR/utils.sh" ]]; then
-  source "$NOTIFY_SCRIPT_DIR/utils.sh"
-fi
-
 # detect_webhook_type - Detect webhook platform from URL
 # Arguments:
 #   $1 - webhook URL
