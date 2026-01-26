@@ -925,14 +925,30 @@ The loop only terminates when:
 
 This prevents premature termination when Claude mentions the promise without actually completing.
 
+### Task Block Format
+
+Task files can group related context using task blocks. A task block starts with a header like
+`### Task P-1` and includes the task metadata plus checklist items. When blocks exist, gralph
+selects the first block that contains an unchecked line and injects the full block into the
+prompt. If no task blocks are present, gralph falls back to the first unchecked `- [ ]` line.
+
+**Example:**
+```markdown
+### Task P-1
+- **ID** P-1
+- **Context Bundle** `gralph/lib/core.sh`
+- **DoD** Add task block parsing
+- [ ] P-1 Implement parser
+```
+
 ## Shared Memory System
 
 Gralph runs stateless iterations, so shared documents provide durable context between runs and keep execution aligned with the protocol.
 
-- [PROCESS.md](gralph/PROCESS.md) - Worktree protocol steps and guardrails.
+- [PROCESS.md](PROCESS.md) - Worktree protocol steps and guardrails.
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System modules, runtime flow, and storage map.
 - [DECISIONS.md](DECISIONS.md) - Recorded architectural choices with rationale.
-- [RISK_REGISTER.md](gralph/RISK_REGISTER.md) - Risks and mitigations for context loss and process drift.
+- [RISK_REGISTER.md](RISK_REGISTER.md) - Risks and mitigations for context loss and process drift.
 
 ## Usage Examples
 
