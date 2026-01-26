@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - RS-3 Added Rust state module with file locking and atomic JSON writes.
 - RS-4 Added backend trait with Claude CLI implementation and tests.
 - RS-5 Added OpenCode, Gemini, and Codex Rust backends with integration test stubs.
+- RS-6 Added Rust core loop module with iteration execution and completion checks.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.
 - C-2 Added worktree command routing and validation.

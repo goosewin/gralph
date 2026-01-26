@@ -151,7 +151,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
   * Completion detection matches Bash logic.
   * Loop respects max iterations and state callbacks.
 - **Dependencies** RS-3, RS-4
-- [ ] RS-6 Port core loop logic to Rust
+- [x] RS-6 Port core loop logic to Rust
 
 ---
 
