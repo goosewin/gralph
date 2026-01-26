@@ -142,7 +142,7 @@ Each backend must have dedicated test coverage verifying installation detection,
   * Configuration examples include gemini and codex sections.
   * Usage examples show `--backend gemini` and `--backend codex` flags.
 - **Dependencies** G-1, G-2, G-3
-- [ ] G-6 Update README with gemini and codex backend documentation
+- [x] G-6 Update README with gemini and codex backend documentation
 
 ---
 

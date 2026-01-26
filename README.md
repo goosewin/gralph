@@ -18,6 +18,8 @@ Autonomous AI coding loops using Claude Code or OpenCode.
 - At least one AI backend:
   - `claude` CLI (Claude Code) - `npm install -g @anthropic-ai/claude-code`
   - `opencode` CLI (OpenCode) - See https://opencode.ai/docs/cli/
+  - `gemini` CLI (Gemini CLI) - `npm install -g @anthropic-ai/gemini-cli` (optional)
+  - `codex` CLI (Codex CLI) - `npm install -g @openai/codex` (optional)
 - `jq` for JSON parsing
 - `tmux` for session management
 - `bash` 4.0+
@@ -201,6 +203,46 @@ gralph start . --backend opencode --model google/gemini-3-pro
 - `anthropic/claude-opus-4-5`
 - `google/gemini-3-pro`
 
+### Gemini CLI
+
+[Gemini CLI](https://geminicli.com/docs/) is Google's AI coding CLI that runs in headless mode.
+
+```bash
+# Install Gemini CLI
+npm install -g @anthropic-ai/gemini-cli
+
+# Use Gemini CLI
+gralph start . --backend gemini
+
+# Gemini CLI with specific model
+gralph start . --backend gemini --model gemini-2.5-flash
+```
+
+**Models:**
+- `gemini-2.5-pro` (default)
+- `gemini-2.5-flash`
+- `gemini-2.0-pro`
+
+### Codex CLI
+
+[Codex CLI](https://developers.openai.com/codex/cli/) is OpenAI's AI coding CLI.
+
+```bash
+# Install Codex CLI
+npm install -g @openai/codex
+
+# Use Codex CLI
+gralph start . --backend codex
+
+# Codex CLI with specific model
+gralph start . --backend codex --model o4-mini
+```
+
+**Models:**
+- `o3` (default)
+- `o4-mini`
+- `gpt-4.1`
+
 ### Setting Default Backend
 
 Set the default backend in your config file:
@@ -365,8 +407,8 @@ Default values for loop behavior.
 | `defaults.max_iterations` | integer | `30` | Maximum number of loop iterations before giving up. Prevents infinite loops. |
 | `defaults.task_file` | string | `PRD.md` | Path to the task file relative to project directory. |
 | `defaults.completion_marker` | string | `COMPLETE` | The text used in `<promise>MARKER</promise>` to signal completion. |
-| `defaults.context_files` | string | (none) | Comma-separated list of shared context files to inject into the prompt. |
-| `defaults.backend` | string | `claude` | AI backend to use: `claude` or `opencode`. |
+| `defaults.context_files` | string | `ARCHITECTURE.md, STACK.md, DECISIONS.md, CHANGELOG.md, RISK_REGISTER.md, PROCESS.md` | Comma-separated list of shared context files to inject into the prompt. |
+| `defaults.backend` | string | `claude` | AI backend to use: `claude`, `opencode`, `gemini`, or `codex`. |
 | `defaults.model` | string | (none) | Model to use. Format depends on backend (see Backends section). |
 
 ### Section: `claude`
@@ -403,6 +445,43 @@ Settings for the OpenCode backend.
 ```yaml
 opencode:
   default_model: opencode/gpt-5.2-codex
+```
+
+### Section: `gemini`
+
+Settings for the Gemini CLI backend.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `gemini.default_model` | string | `gemini-2.5-pro` | Default model (gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-pro). |
+| `gemini.flags` | array | `["--headless"]` | CLI flags passed to `gemini` command. |
+
+**Example:**
+
+```yaml
+gemini:
+  default_model: gemini-2.5-pro
+  flags:
+    - --headless
+```
+
+### Section: `codex`
+
+Settings for the Codex CLI backend.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `codex.default_model` | string | `o3` | Default model (o3, o4-mini, gpt-4.1). |
+| `codex.flags` | array | `["--quiet", "--auto-approve"]` | CLI flags passed to `codex` command. |
+
+**Example:**
+
+```yaml
+codex:
+  default_model: o3
+  flags:
+    - --quiet
+    - --auto-approve
 ```
 
 ### Section: `notifications`
@@ -632,7 +711,7 @@ defaults:
   max_iterations: 50          # Allow more iterations
   task_file: PRD.md           # Default task file
   completion_marker: COMPLETE # Completion signal
-  context_files: ARCHITECTURE.md,DECISIONS.md,CHANGELOG.md,RISK_REGISTER.md,PROCESS.md
+  context_files: ARCHITECTURE.md,STACK.md,DECISIONS.md,CHANGELOG.md,RISK_REGISTER.md,PROCESS.md
   backend: claude             # AI backend (claude or opencode)
   model: claude-opus-4-5      # Model override (optional)
 
@@ -644,6 +723,17 @@ claude:
 
 opencode:
   default_model: opencode/gpt-5.2-codex
+
+gemini:
+  default_model: gemini-2.5-pro
+  flags:
+    - --headless
+
+codex:
+  default_model: o3
+  flags:
+    - --quiet
+    - --auto-approve
 
 notifications:
   on_complete: true
@@ -682,6 +772,9 @@ COMMANDS:
   status              Show status of all loops
   logs <name>         View logs for a loop
   resume [name]       Resume crashed/stopped loops
+  prd check <file>    Validate PRD task blocks
+  prd create          Generate a spec-compliant PRD
+  backends            List available AI backends
   config              Manage configuration
   server              Start status API server
   version             Show version
@@ -706,7 +799,7 @@ gralph start <directory> [options]
 | `--max-iterations` | | Maximum loop iterations | 30 |
 | `--task-file` | `-f` | Path to task file relative to project | PRD.md |
 | `--completion-marker` | | Completion promise text | COMPLETE |
-| `--backend` | `-b` | AI backend to use (claude or opencode) | claude |
+| `--backend` | `-b` | AI backend to use (claude, opencode, gemini, codex) | claude |
 | `--model` | `-m` | Model to use (format depends on backend) | (from config) |
 | `--webhook` | | Notification webhook URL | (none) |
 | `--no-tmux` | | Run in foreground (blocking) | false |
@@ -832,6 +925,41 @@ gralph resume
 gralph resume myapp
 ```
 
+### Command: `prd`
+
+Generate or validate PRDs.
+
+```bash
+gralph prd create [options]
+gralph prd check <file> [options]
+```
+
+**Options (create):**
+| Option | Short | Description | Default |
+|--------|-------|-------------|---------|
+| `--dir` | | Project directory | current |
+| `--output` | `-o` | Output PRD file path | PRD.generated.md |
+| `--goal` | | Short description of what to build | (required) |
+| `--constraints` | | Constraints or non-functional requirements | (optional) |
+| `--context` | | Extra context files (comma-separated) | (none) |
+| `--sources` | | External URLs or references (comma-separated) | (none) |
+| `--stack-doc` | | Stack summary destination (`stack` or `architecture`) | stack |
+| `--allow-missing-context` | | Allow missing Context Bundle paths | false |
+| `--multiline` | | Enable multiline prompts (interactive) | false |
+| `--interactive` | | Force interactive prompts | auto |
+| `--no-interactive` | | Disable interactive prompts | auto |
+| `--force` | | Overwrite existing output file | false |
+
+**Options (check):**
+| Option | Description |
+|--------|-------------|
+| `--allow-missing-context` | Allow missing Context Bundle paths |
+
+**Notes:**
+- `prd create` writes a stack summary to `STACK.md` or to an `ARCHITECTURE.md` "Stack Summary" section.
+- If no external sources are provided, `prd create` attempts official docs, then web search; otherwise it emits a Warnings section.
+
+
 ### Command: `server`
 
 Start an HTTP status server for remote monitoring.
@@ -935,7 +1063,7 @@ gralph
 ## How It Works
 
 1. Reads the task file (PRD.md by default)
-2. Counts unchecked tasks (`- [ ]` pattern)
+2. Counts unchecked tasks inside task blocks (or `- [ ]` lines when no blocks exist)
 3. If tasks remain, spawns Claude Code with the task prompt
 4. Waits for Claude to complete one task and exit
 5. Re-counts unchecked tasks
@@ -944,7 +1072,7 @@ gralph
 ### Completion Detection
 
 The loop only terminates when:
-1. Zero `- [ ]` patterns remain in the task file, AND
+1. Zero unchecked task lines remain in task blocks (or the whole file when no blocks exist), AND
 2. The completion promise appears as the final output (not just mentioned mid-text)
 
 This prevents premature termination when Claude mentions the promise without actually completing.
@@ -954,7 +1082,9 @@ This prevents premature termination when Claude mentions the promise without act
 Task files can group related context using task blocks. A task block starts with a header like
 `### Task P-1` and includes the task metadata plus checklist items. When blocks exist, gralph
 selects the first block that contains an unchecked line and injects the full block into the
-prompt. If no task blocks are present, gralph falls back to the first unchecked `- [ ]` line.
+prompt. Task blocks end at the next `### Task` header or at a section divider like `---` or a
+new `##` section heading. If no task blocks are present, gralph falls back to the first
+unchecked `- [ ]` line.
 
 **Example:**
 ```markdown
@@ -989,6 +1119,9 @@ gralph start . --strict-prd
 - Missing required fields in a task block: **ID**, **Context Bundle**, **DoD**, **Checklist**, or **Dependencies**
 - Multiple unchecked task lines within a single task block
 - No unchecked task line in a block that should be actionable
+- Unchecked task lines outside task blocks
+- Open Questions sections (not allowed)
+- Context Bundle paths that do not exist (use `--allow-missing-context` to bypass)
 
 ## Shared Memory System
 
@@ -996,6 +1129,7 @@ Gralph runs stateless iterations, so shared documents provide durable context be
 
 - [PROCESS.md](PROCESS.md) - Worktree protocol steps and guardrails.
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System modules, runtime flow, and storage map.
+- [STACK.md](STACK.md) - Stack summary (language, framework, tooling evidence).
 - [DECISIONS.md](DECISIONS.md) - Recorded architectural choices with rationale.
 - [RISK_REGISTER.md](RISK_REGISTER.md) - Risks and mitigations for context loss and process drift.
 
@@ -1017,7 +1151,7 @@ Run the example release flow from the repo root:
 
 ### Example 0: Generate a PRD
 
-Generate a spec-compliant PRD interactively:
+Generate a spec-compliant PRD interactively (step-by-step prompts, stack summary, and confirmation):
 
 ```bash
 gralph prd create --dir . --output PRD.generated.md --goal "Add a billing dashboard"
@@ -1030,6 +1164,8 @@ gralph prd create --dir . --output PRD.generated.md \
   --goal "Add a billing dashboard" \
   --constraints "Use existing auth and billing tables" \
   --context "README.md,ARCHITECTURE.md" \
+  --sources "https://stripe.com/docs,https://nextjs.org/docs" \
+  --stack-doc stack \
   --no-interactive
 ```
 
@@ -1186,6 +1322,38 @@ gralph start . --backend opencode --model google/gemini-3-pro
 # Set OpenCode as default in config
 gralph config set defaults.backend opencode
 gralph config set defaults.model opencode/gpt-5.2-codex
+```
+
+### Example 10: Using Gemini CLI Backend
+
+Use Gemini CLI for Google's AI models:
+
+```bash
+# Use Gemini CLI with default model (gemini-2.5-pro)
+gralph start . --backend gemini
+
+# Use Gemini CLI with flash model for faster responses
+gralph start . --backend gemini --model gemini-2.5-flash
+
+# Set Gemini as default in config
+gralph config set defaults.backend gemini
+gralph config set defaults.model gemini-2.5-pro
+```
+
+### Example 11: Using Codex CLI Backend
+
+Use Codex CLI for OpenAI's coding models:
+
+```bash
+# Use Codex CLI with default model (o3)
+gralph start . --backend codex
+
+# Use Codex CLI with o4-mini for faster/cheaper responses
+gralph start . --backend codex --model o4-mini
+
+# Set Codex as default in config
+gralph config set defaults.backend codex
+gralph config set defaults.model o3
 ```
 
 ## Troubleshooting
