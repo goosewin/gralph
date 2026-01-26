@@ -925,6 +925,15 @@ The loop only terminates when:
 
 This prevents premature termination when Claude mentions the promise without actually completing.
 
+## Shared Memory System
+
+Gralph runs stateless iterations, so shared documents provide durable context between runs and keep execution aligned with the protocol.
+
+- [PROCESS.md](gralph/PROCESS.md) - Worktree protocol steps and guardrails.
+- [ARCHITECTURE.md](ARCHITECTURE.md) - System modules, runtime flow, and storage map.
+- [DECISIONS.md](DECISIONS.md) - Recorded architectural choices with rationale.
+- [RISK_REGISTER.md](gralph/RISK_REGISTER.md) - Risks and mitigations for context loss and process drift.
+
 ## Usage Examples
 
 ### Example 1: Basic Single Project Loop
