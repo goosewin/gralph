@@ -95,7 +95,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
   * Environment variable overrides work.
   * Unit tests cover merge precedence.
 - **Dependencies** RS-1
-- [ ] RS-2 Implement configuration loading with serde_yaml
+- [x] RS-2 Implement configuration loading with serde_yaml
 
 ---
 
