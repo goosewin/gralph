@@ -661,7 +661,14 @@ func buildContextFileList(targetDir, userList, configList string) []string {
 		"RISK_REGISTER.md",
 		"PROCESS.md",
 		"PRD.template.md",
-		"bin/gralph",
+		"main.go",
+		"cmd/root.go",
+		"cmd/start.go",
+		"internal/backend/backend.go",
+		"internal/config/config.go",
+		"internal/core/core.go",
+		"internal/prd/prd.go",
+		"internal/state/state.go",
 		"config/default.yaml",
 		"opencode.json",
 		"completions/gralph.bash",
@@ -669,21 +676,6 @@ func buildContextFileList(targetDir, userList, configList string) []string {
 	} {
 		addEntry(item)
 	}
-
-	addGlobEntries := func(pattern string) {
-		matches, _ := filepath.Glob(filepath.Join(targetDir, pattern))
-		for _, match := range matches {
-			if rel, err := filepath.Rel(targetDir, match); err == nil {
-				addEntry(rel)
-			} else {
-				addEntry(match)
-			}
-		}
-	}
-
-	addGlobEntries(filepath.Join("lib", "*.sh"))
-	addGlobEntries(filepath.Join("lib", "backends", "*.sh"))
-	addGlobEntries(filepath.Join("tests", "*.sh"))
 
 	return entries
 }

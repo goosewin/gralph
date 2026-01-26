@@ -5,12 +5,14 @@ Environment: Ubuntu 24.04.3 LTS
 
 ## Checks
 
-- Dependencies present: `jq`, `tmux`, `bash`
-- `./bin/gralph version` returns current version
-- `./bin/gralph help` prints CLI usage
-- `./bin/gralph status` runs with empty state
-- `./bin/gralph backends` lists available backends
-- `./bin/gralph config list` shows configuration
+- Go toolchain available (`go version`)
+- `go test ./...` passes
+- `go build -o gralph` produces a binary
+- `./gralph version` returns current version
+- `./gralph help` prints CLI usage
+- `./gralph status` runs with empty state
+- `./gralph backends` lists available backends
+- `./gralph config list` shows configuration
 - Help output includes new flags: `--no-tmux`, `--backend`, `--webhook`, `--variant`, `--prompt-template`
 - Server command available in help
 
@@ -18,25 +20,30 @@ Environment: Ubuntu 24.04.3 LTS
 
 ```bash
 # Verify dependencies
-command -v jq && command -v tmux && command -v bash
+go version
+
+# Tests and build
+go test ./...
+go build -o gralph
 
 # Basic commands
-./bin/gralph version
-./bin/gralph help
-./bin/gralph status
+./gralph version
+./gralph help
+./gralph status
 
 # New commands
-./bin/gralph backends
-./bin/gralph config list
+./gralph backends
+./gralph config list
 
 # Verify new flags in help
-./bin/gralph help | grep -E '\-\-(no-tmux|backend|webhook|variant|prompt-template)'
-./bin/gralph help | grep 'server'
+./gralph help | grep -E '\-\-(no-tmux|backend|webhook|variant|prompt-template)'
+./gralph help | grep 'server'
 ```
 
 Expected results:
-- All dependency commands resolve in PATH
-- Version prints `gralph v1.1.0`
+- Go is installed and tests pass
+- Binary builds successfully
+- Version prints `gralph v<version>`
 - Help output lists commands and options including new flags
 - Status reports no sessions found
 - Backends lists `claude` as available

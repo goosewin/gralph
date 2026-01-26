@@ -90,6 +90,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Updated macOS CI to run Go tests on macOS.
 - Switched tagged releases to Goreleaser and bundled config/completions in archives.
 - Refreshed core docs for the Go implementation.
+- Updated PRD context defaults and supporting docs for the Go CLI.
 
 ### Removed
 - Removed legacy shell implementation, installer scripts, and shell test harnesses.

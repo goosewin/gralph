@@ -9,26 +9,20 @@ Thanks for taking the time to contribute to gralph.
 
 ## Development setup
 
-- Install dependencies: `bash` 4+, `jq`, and `tmux`.
-- From a local clone, you can run `./install.sh` to install the CLI.
+- Install Go 1.24+.
+- Install `tmux` if you want to test background sessions (optional).
+- Install at least one backend CLI (claude/opencode/gemini/codex) for live runs.
 
 ## Running tests
 
 Run the test suite locally before submitting a PR:
 
 ```bash
-# Run all tests
-./tests/config-test.sh
-./tests/state-test.sh
-./tests/loop-test.sh
-./tests/macos-smoke.sh
+# Run all Go tests
+go test ./...
 ```
 
-Test files:
-- `tests/config-test.sh` - Tests for config get/set functionality
-- `tests/state-test.sh` - Tests for state management (sessions)
-- `tests/loop-test.sh` - Tests for core loop functions (prompt rendering, task counting, completion detection)
-- `tests/macos-smoke.sh` - Basic smoke tests for CLI commands
+Tests live alongside packages under `internal/` and `cmd/`.
 
 ## Workflow
 
@@ -44,5 +38,5 @@ Test files:
 
 ## Style
 
-- Prefer clear, defensive Bash with explicit error handling.
-- Keep scripts portable across macOS and Linux.
+- Prefer idiomatic Go, keep functions small, and run `gofmt` on changed files.
+- Keep CLI output stable and update docs when flags or behavior change.

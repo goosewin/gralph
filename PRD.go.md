@@ -22,7 +22,7 @@ Rewrite gralph in Go using Cobra for CLI scaffolding, Viper for configuration, a
 
 ### FR-1: Core Loop Engine
 
-Port lib/core.sh loop logic to Go including task counting, iteration execution, completion detection, and prompt rendering with template substitution.
+Port the legacy loop logic to Go including task counting, iteration execution, completion detection, and prompt rendering with template substitution.
 
 ### FR-2: CLI Command Parity
 
@@ -30,27 +30,27 @@ Implement all existing commands: start, stop, status, logs, resume, prd (check/c
 
 ### FR-3: State Management
 
-Port lib/state.sh session persistence using JSON state file with file locking, atomic writes, and stale session cleanup.
+Port legacy session persistence using JSON state file with file locking, atomic writes, and stale session cleanup.
 
 ### FR-4: Configuration System
 
-Port lib/config.sh YAML configuration loading with default, global, and project-level config merging plus environment variable overrides.
+Port legacy YAML configuration loading with default, global, and project-level config merging plus environment variable overrides.
 
 ### FR-5: Backend Abstraction
 
-Port lib/backends/*.sh backend interface supporting Claude, OpenCode, Gemini, and Codex CLIs with pluggable architecture.
+Port the legacy backend interface supporting Claude, OpenCode, Gemini, and Codex CLIs with pluggable architecture.
 
 ### FR-6: Notification System
 
-Port lib/notify.sh webhook notifications for Discord, Slack, and generic JSON endpoints.
+Port legacy webhook notifications for Discord, Slack, and generic JSON endpoints.
 
 ### FR-7: HTTP Status Server
 
-Port lib/server.sh REST API for remote monitoring with bearer token authentication.
+Port legacy REST API for remote monitoring with bearer token authentication.
 
 ### FR-8: PRD Utilities
 
-Port lib/prd.sh stack detection, task block parsing, validation, and sanitization logic.
+Port legacy stack detection, task block parsing, validation, and sanitization logic.
 
 ---
 
@@ -85,7 +85,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
 ### Task GO-1
 
 - **ID** GO-1
-- **Context Bundle** `bin/gralph`, `README.md`, `ARCHITECTURE.md`
+- **Context Bundle** `main.go`, `cmd/root.go`, `README.md`, `ARCHITECTURE.md`
 - **DoD** Go module initialized with Cobra CLI scaffold and basic main entrypoint compiling successfully.
 - **Checklist**
   * go.mod and go.sum exist with module path.
@@ -98,7 +98,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
 ### Task GO-2
 
 - **ID** GO-2
-- **Context Bundle** `lib/config.sh`, `config/default.yaml`
+- **Context Bundle** `internal/config/config.go`, `config/default.yaml`
 - **DoD** Configuration package loads and merges YAML files with Viper supporting environment overrides.
 - **Checklist**
   * internal/config package implements LoadConfig, GetConfig, SetConfig.
@@ -111,7 +111,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
 ### Task GO-3
 
 - **ID** GO-3
-- **Context Bundle** `lib/state.sh`
+- **Context Bundle** `internal/state/state.go`
 - **DoD** State management package handles session CRUD with file locking and atomic writes.
 - **Checklist**
   * internal/state package implements InitState, GetSession, SetSession, DeleteSession, ListSessions, CleanupStale.
@@ -124,7 +124,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
 ### Task GO-4
 
 - **ID** GO-4
-- **Context Bundle** `lib/backends/common.sh`, `lib/backends/claude.sh`
+- **Context Bundle** `internal/backend/backend.go`, `internal/backend/claude/claude.go`
 - **DoD** Backend abstraction interface defined with Claude backend implementation.
 - **Checklist**
   * internal/backend package defines Backend interface with CheckInstalled, GetModels, RunIteration, ParseText.
@@ -137,7 +137,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
 ### Task GO-5
 
 - **ID** GO-5
-- **Context Bundle** `lib/backends/opencode.sh`, `lib/backends/gemini.sh`, `lib/backends/codex.sh`
+- **Context Bundle** `internal/backend/opencode/opencode.go`, `internal/backend/gemini/gemini.go`, `internal/backend/codex/codex.go`
 - **DoD** OpenCode, Gemini, and Codex backends implemented and registered.
 - **Checklist**
   * internal/backend/opencode implements OpenCode backend.
@@ -150,7 +150,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
 ### Task GO-6
 
 - **ID** GO-6
-- **Context Bundle** `lib/core.sh`
+- **Context Bundle** `internal/core/core.go`
 - **DoD** Core loop engine ported to Go with task counting, iteration execution, and completion detection.
 - **Checklist**
   * internal/core package implements RunLoop, RunIteration, CountRemainingTasks, CheckCompletion.
@@ -163,7 +163,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
 ### Task GO-7
 
 - **ID** GO-7
-- **Context Bundle** `bin/gralph`
+- **Context Bundle** `cmd/start.go`
 - **DoD** Start command implemented launching loops in foreground or tmux session.
 - **Checklist**
   * cmd/start.go implements start command with all flags.
@@ -176,7 +176,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
 ### Task GO-8
 
 - **ID** GO-8
-- **Context Bundle** `bin/gralph`
+- **Context Bundle** `cmd/stop.go`, `cmd/status.go`, `cmd/logs.go`, `cmd/resume.go`
 - **DoD** Stop, status, logs, and resume commands implemented.
 - **Checklist**
   * cmd/stop.go stops sessions by name or all.
@@ -189,7 +189,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
 ### Task GO-9
 
 - **ID** GO-9
-- **Context Bundle** `lib/notify.sh`
+- **Context Bundle** `internal/notify/notify.go`
 - **DoD** Notification package sends webhooks for Discord, Slack, and generic endpoints.
 - **Checklist**
   * internal/notify package implements NotifyComplete, NotifyFailed.
@@ -202,7 +202,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
 ### Task GO-10
 
 - **ID** GO-10
-- **Context Bundle** `lib/server.sh`
+- **Context Bundle** `internal/server/server.go`, `cmd/server.go`
 - **DoD** HTTP status server implemented with REST endpoints and bearer auth.
 - **Checklist**
   * internal/server package implements StartServer with /status, /status/:name, /stop/:name endpoints.
@@ -215,7 +215,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
 ### Task GO-11
 
 - **ID** GO-11
-- **Context Bundle** `lib/prd.sh`
+- **Context Bundle** `internal/prd/prd.go`
 - **DoD** PRD utilities ported including stack detection, validation, and sanitization.
 - **Checklist**
   * internal/prd package implements DetectStack, ValidateFile, SanitizeGeneratedFile.
@@ -228,7 +228,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
 ### Task GO-12
 
 - **ID** GO-12
-- **Context Bundle** `bin/gralph`
+- **Context Bundle** `cmd/prd.go`
 - **DoD** PRD check and create commands implemented.
 - **Checklist**
   * cmd/prd.go implements prd check and prd create subcommands.
@@ -241,7 +241,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
 ### Task GO-13
 
 - **ID** GO-13
-- **Context Bundle** `bin/gralph`
+- **Context Bundle** `cmd/worktree.go`
 - **DoD** Worktree create and finish commands implemented.
 - **Checklist**
   * cmd/worktree.go implements worktree create and worktree finish subcommands.
@@ -254,7 +254,7 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
 ### Task GO-14
 
 - **ID** GO-14
-- **Context Bundle** `bin/gralph`
+- **Context Bundle** `cmd/backends.go`, `cmd/config.go`
 - **DoD** Backends and config commands implemented.
 - **Checklist**
   * cmd/backends.go lists available backends with install status.
@@ -311,7 +311,6 @@ Port lib/prd.sh stack detection, task block parsing, validation, and sanitizatio
   * DECISIONS records Go port rationale.
   * Module diagram shows package dependencies.
 - **Dependencies** GO-17
-- [x] GO-18 Update architecture documentation
 - [x] GO-18 Update architecture documentation
 
 ---
