@@ -146,7 +146,7 @@ The codebase must be structured for unit testing with dependency injection and i
   * Completion detection logic ported (zero tasks + valid promise).
   * Iteration execution with backend invocation working.
 - **Dependencies** DOTNET-3, DOTNET-4, DOTNET-5
-- [ ] DOTNET-6 Implement core loop execution logic
+- [x] DOTNET-6 Implement core loop execution logic
 
 ### Task DOTNET-7
 
