@@ -10,7 +10,7 @@ This document captures the high-level structure of gralph. It is a living summar
 
 `src/Gralph/Configuration` loads YAML configuration, applies hierarchical merges, and resolves environment variable overrides for shared config access.
 
-`src/Gralph/Backends` defines the backend abstraction (IBackend) plus adapter implementations and discovery/registry helpers for selecting AI backends.
+`src/Gralph/Backends` defines the backend abstraction (IBackend) plus adapter implementations (Claude, OpenCode, Gemini, Codex) and discovery/registry helpers for selecting AI backends.
 
 `src/Gralph/Core` ports the core loop logic (task parsing, prompt rendering, completion detection, iteration execution, and log handling).
 

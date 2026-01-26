@@ -331,7 +331,12 @@ worktree.Add(worktreeCreate);
 worktree.Add(worktreeFinish);
 
 var backends = new Command("backends", "List available AI backends");
-backends.SetAction(_ => Console.WriteLine("backends is not implemented yet."));
+backends.SetAction(_ =>
+{
+    var handler = new BackendsCommandHandler(BackendRegistry.CreateDefault());
+    var exitCode = handler.Execute();
+    Environment.ExitCode = exitCode;
+});
 
 var config = new Command("config", "Manage configuration");
 config.SetAction(_ => Console.WriteLine("config is not implemented yet."));

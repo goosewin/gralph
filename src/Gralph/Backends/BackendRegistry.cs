@@ -30,7 +30,10 @@ public sealed class BackendRegistry
     {
         return new BackendRegistry(new IBackend[]
         {
-            new ClaudeBackend()
+            new ClaudeBackend(),
+            new OpenCodeBackend(),
+            new GeminiBackend(),
+            new CodexBackend()
         });
     }
 

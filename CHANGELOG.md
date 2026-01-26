@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - DOTNET-10 Implemented HTTP status server with minimal APIs, auth, and CORS.
 - DOTNET-11 Implemented webhook notifications for Discord, Slack, and generic endpoints.
 - DOTNET-12 Implemented worktree create/finish commands with git safety checks.
+- DOTNET-13 Implemented OpenCode, Gemini, and Codex backend adapters with backend listing.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.
 - C-2 Added worktree command routing and validation.

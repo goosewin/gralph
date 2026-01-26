@@ -237,7 +237,7 @@ The codebase must be structured for unit testing with dependency injection and i
   * Codex backend adapter implemented.
   * Backend listing command shows all adapters with install status.
 - **Dependencies** DOTNET-5
-- [ ] DOTNET-13 Implement opencode, gemini, and codex backend adapters
+- [x] DOTNET-13 Implement opencode, gemini, and codex backend adapters
 
 ### Task DOTNET-14
 
