@@ -2,8 +2,6 @@
 
 Autonomous AI coding loops using Claude Code or OpenCode. Spawns fresh AI coding sessions iteratively until all tasks in a PRD are complete.
 
-Autonomous AI coding loops using Claude Code or OpenCode.
-
 ## Features
 
 - **Multi-backend support** - Use Claude Code or OpenCode as your AI coding assistant
@@ -213,15 +211,10 @@ npm install -g @anthropic-ai/gemini-cli
 
 # Use Gemini CLI
 gralph start . --backend gemini
-
-# Gemini CLI with specific model
-gralph start . --backend gemini --model gemini-2.5-flash
 ```
 
 **Models:**
-- `gemini-2.5-pro` (default)
-- `gemini-2.5-flash`
-- `gemini-2.0-pro`
+- `gemini-3-pro` (default)
 
 ### Codex CLI
 
@@ -233,15 +226,10 @@ npm install -g @openai/codex
 
 # Use Codex CLI
 gralph start . --backend codex
-
-# Codex CLI with specific model
-gralph start . --backend codex --model o4-mini
 ```
 
 **Models:**
-- `o3` (default)
-- `o4-mini`
-- `gpt-4.1`
+- `gpt-5.2-codex` (default)
 
 ### Setting Default Backend
 
@@ -407,7 +395,7 @@ Default values for loop behavior.
 | `defaults.max_iterations` | integer | `30` | Maximum number of loop iterations before giving up. Prevents infinite loops. |
 | `defaults.task_file` | string | `PRD.md` | Path to the task file relative to project directory. |
 | `defaults.completion_marker` | string | `COMPLETE` | The text used in `<promise>MARKER</promise>` to signal completion. |
-| `defaults.context_files` | string | `ARCHITECTURE.md, STACK.md, DECISIONS.md, CHANGELOG.md, RISK_REGISTER.md, PROCESS.md` | Comma-separated list of shared context files to inject into the prompt. |
+| `defaults.context_files` | string | `ARCHITECTURE.md, DECISIONS.md, CHANGELOG.md, RISK_REGISTER.md, PROCESS.md` | Comma-separated list of shared context files to inject into the prompt. |
 | `defaults.backend` | string | `claude` | AI backend to use: `claude`, `opencode`, `gemini`, or `codex`. |
 | `defaults.model` | string | (none) | Model to use. Format depends on backend (see Backends section). |
 
@@ -453,14 +441,14 @@ Settings for the Gemini CLI backend.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `gemini.default_model` | string | `gemini-2.5-pro` | Default model (gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-pro). |
+| `gemini.default_model` | string | `gemini-3-pro` | Default model (gemini-3-pro). |
 | `gemini.flags` | array | `["--headless"]` | CLI flags passed to `gemini` command. |
 
 **Example:**
 
 ```yaml
 gemini:
-  default_model: gemini-2.5-pro
+  default_model: gemini-3-pro
   flags:
     - --headless
 ```
@@ -471,14 +459,14 @@ Settings for the Codex CLI backend.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `codex.default_model` | string | `o3` | Default model (o3, o4-mini, gpt-4.1). |
+| `codex.default_model` | string | `gpt-5.2-codex` | Default model (gpt-5.2-codex). |
 | `codex.flags` | array | `["--quiet", "--auto-approve"]` | CLI flags passed to `codex` command. |
 
 **Example:**
 
 ```yaml
 codex:
-  default_model: o3
+  default_model: gpt-5.2-codex
   flags:
     - --quiet
     - --auto-approve
@@ -711,7 +699,7 @@ defaults:
   max_iterations: 50          # Allow more iterations
   task_file: PRD.md           # Default task file
   completion_marker: COMPLETE # Completion signal
-  context_files: ARCHITECTURE.md,STACK.md,DECISIONS.md,CHANGELOG.md,RISK_REGISTER.md,PROCESS.md
+  context_files: ARCHITECTURE.md,DECISIONS.md,CHANGELOG.md,RISK_REGISTER.md,PROCESS.md
   backend: claude             # AI backend (claude or opencode)
   model: claude-opus-4-5      # Model override (optional)
 
@@ -725,12 +713,12 @@ opencode:
   default_model: opencode/gpt-5.2-codex
 
 gemini:
-  default_model: gemini-2.5-pro
+  default_model: gemini-3-pro
   flags:
     - --headless
 
 codex:
-  default_model: o3
+  default_model: gpt-5.2-codex
   flags:
     - --quiet
     - --auto-approve
@@ -943,7 +931,6 @@ gralph prd check <file> [options]
 | `--constraints` | | Constraints or non-functional requirements | (optional) |
 | `--context` | | Extra context files (comma-separated) | (none) |
 | `--sources` | | External URLs or references (comma-separated) | (none) |
-| `--stack-doc` | | Stack summary destination (`stack` or `architecture`) | stack |
 | `--allow-missing-context` | | Allow missing Context Bundle paths | false |
 | `--multiline` | | Enable multiline prompts (interactive) | false |
 | `--interactive` | | Force interactive prompts | auto |
@@ -956,7 +943,6 @@ gralph prd check <file> [options]
 | `--allow-missing-context` | Allow missing Context Bundle paths |
 
 **Notes:**
-- `prd create` writes a stack summary to `STACK.md` or to an `ARCHITECTURE.md` "Stack Summary" section.
 - If no external sources are provided, `prd create` attempts official docs, then web search; otherwise it emits a Warnings section.
 
 
@@ -1129,7 +1115,6 @@ Gralph runs stateless iterations, so shared documents provide durable context be
 
 - [PROCESS.md](PROCESS.md) - Worktree protocol steps and guardrails.
 - [ARCHITECTURE.md](ARCHITECTURE.md) - System modules, runtime flow, and storage map.
-- [STACK.md](STACK.md) - Stack summary (language, framework, tooling evidence).
 - [DECISIONS.md](DECISIONS.md) - Recorded architectural choices with rationale.
 - [RISK_REGISTER.md](RISK_REGISTER.md) - Risks and mitigations for context loss and process drift.
 
@@ -1151,7 +1136,7 @@ Run the example release flow from the repo root:
 
 ### Example 0: Generate a PRD
 
-Generate a spec-compliant PRD interactively (step-by-step prompts, stack summary, and confirmation):
+Generate a spec-compliant PRD interactively (step-by-step prompts and confirmation):
 
 ```bash
 gralph prd create --dir . --output PRD.generated.md --goal "Add a billing dashboard"
@@ -1165,7 +1150,6 @@ gralph prd create --dir . --output PRD.generated.md \
   --constraints "Use existing auth and billing tables" \
   --context "README.md,ARCHITECTURE.md" \
   --sources "https://stripe.com/docs,https://nextjs.org/docs" \
-  --stack-doc stack \
   --no-interactive
 ```
 
@@ -1329,15 +1313,12 @@ gralph config set defaults.model opencode/gpt-5.2-codex
 Use Gemini CLI for Google's AI models:
 
 ```bash
-# Use Gemini CLI with default model (gemini-2.5-pro)
+# Use Gemini CLI with default model (gemini-3-pro)
 gralph start . --backend gemini
-
-# Use Gemini CLI with flash model for faster responses
-gralph start . --backend gemini --model gemini-2.5-flash
 
 # Set Gemini as default in config
 gralph config set defaults.backend gemini
-gralph config set defaults.model gemini-2.5-pro
+gralph config set defaults.model gemini-3-pro
 ```
 
 ### Example 11: Using Codex CLI Backend
@@ -1345,15 +1326,12 @@ gralph config set defaults.model gemini-2.5-pro
 Use Codex CLI for OpenAI's coding models:
 
 ```bash
-# Use Codex CLI with default model (o3)
+# Use Codex CLI with default model (gpt-5.2-codex)
 gralph start . --backend codex
-
-# Use Codex CLI with o4-mini for faster/cheaper responses
-gralph start . --backend codex --model o4-mini
 
 # Set Codex as default in config
 gralph config set defaults.backend codex
-gralph config set defaults.model o3
+gralph config set defaults.model gpt-5.2-codex
 ```
 
 ## Troubleshooting
