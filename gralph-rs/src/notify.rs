@@ -16,6 +16,7 @@ pub enum NotifyError {
     InvalidInput(String),
     Http(reqwest::Error),
     HttpStatus(u16),
+    Json(serde_json::Error),
 }
 
 impl fmt::Display for NotifyError {
@@ -24,6 +25,7 @@ impl fmt::Display for NotifyError {
             NotifyError::InvalidInput(message) => write!(f, "invalid input: {}", message),
             NotifyError::Http(err) => write!(f, "http error: {}", err),
             NotifyError::HttpStatus(code) => write!(f, "webhook returned HTTP {}", code),
+            NotifyError::Json(err) => write!(f, "json error: {}", err),
         }
     }
 }
@@ -32,6 +34,7 @@ impl Error for NotifyError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             NotifyError::Http(err) => Some(err),
+            NotifyError::Json(err) => Some(err),
             _ => None,
         }
     }
@@ -40,6 +43,12 @@ impl Error for NotifyError {
 impl From<reqwest::Error> for NotifyError {
     fn from(error: reqwest::Error) -> Self {
         NotifyError::Http(error)
+    }
+}
+
+impl From<serde_json::Error> for NotifyError {
+    fn from(error: serde_json::Error) -> Self {
+        NotifyError::Json(error)
     }
 }
 

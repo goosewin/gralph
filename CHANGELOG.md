@@ -56,6 +56,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - E-5 Documented self-hosting workflow in README.
 - E-6 Recorded Stage E example and runner rationale in DECISIONS.
 - P-EX-2 Updated README task block example to include all required fields.
+- RS-10 Wired Rust CLI subcommands with build-time shell completions.
 
 ### Fixed
 - OSS-1 Removed duplicate introductory text from README.

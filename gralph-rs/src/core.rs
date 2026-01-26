@@ -2,7 +2,7 @@ use crate::backend::{Backend, BackendError};
 use crate::config::Config;
 use std::error::Error;
 use std::fmt;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -77,7 +77,7 @@ pub struct LoopOutcome {
     pub duration_secs: u64,
 }
 
-pub fn run_iteration<B: Backend>(
+pub fn run_iteration<B: Backend + ?Sized>(
     backend: &B,
     project_dir: &Path,
     task_file: &str,
@@ -290,7 +290,7 @@ pub fn check_completion(
     Ok(true)
 }
 
-pub fn run_loop<B: Backend>(
+pub fn run_loop<B: Backend + ?Sized>(
     backend: &B,
     project_dir: &Path,
     task_file: Option<&str>,

@@ -207,7 +207,7 @@ Expose /status and /stop endpoints with optional bearer token authentication and
   * Bash and Zsh completions generated at build time.
   * End-to-end smoke test passes.
 - **Dependencies** RS-6, RS-7, RS-8, RS-9
-- [ ] RS-10 Wire CLI subcommands and generate shell completions
+- [x] RS-10 Wire CLI subcommands and generate shell completions
 
 ---
 

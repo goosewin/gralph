@@ -5,6 +5,8 @@ This document captures the high-level structure of gralph. It is a living summar
 ## Modules
 
 `bin/gralph` is the CLI entrypoint. It parses commands, loads configuration defaults, wires in the shared libraries, and dispatches to subcommands like start/stop/status/server while managing session setup and logging paths.
+`gralph-rs/src/main.rs` is the Rust CLI entrypoint. It wires clap subcommands to Rust modules, manages session state updates, and coordinates backend execution.
+`gralph-rs/src/cli.rs` defines the clap command tree and options; `gralph-rs/build.rs` generates bash/zsh completions during build.
 
 `lib/core.sh` owns the execution loop. It loads backend adapters, renders prompt templates, runs iterations, counts remaining tasks, checks completion conditions, and handles loop lifecycle including logs, duration, and notifications.
 `gralph-rs/src/core.rs` mirrors core loop logic in Rust for iteration execution, task counting, completion checks, and loop orchestration.
