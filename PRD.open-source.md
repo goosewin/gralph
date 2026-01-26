@@ -238,7 +238,7 @@ Backend modules must have accurate installation hints, model names, and CLI flag
   * State file corruption is handled.
   * All functions are documented.
 - **Dependencies** None
-- [ ] OSS-14 Audit state management module
+- [x] OSS-14 Audit state management module
 
 ---
 

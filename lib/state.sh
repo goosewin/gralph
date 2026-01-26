@@ -34,11 +34,17 @@ _acquire_lock() {
         GRALPH_LOCK_METHOD="flock"
 
         # Open lock file on designated FD
-        eval "exec $GRALPH_LOCK_FD>\"$GRALPH_LOCK_FILE\""
+        if ! eval "exec $GRALPH_LOCK_FD>\"$GRALPH_LOCK_FILE\""; then
+            echo "Error: Failed to open lock file: $GRALPH_LOCK_FILE" >&2
+            GRALPH_LOCK_METHOD=""
+            return 1
+        fi
 
         # Try to acquire exclusive lock with timeout
         if ! flock -x -w "$timeout" "$GRALPH_LOCK_FD" 2>/dev/null; then
             echo "Error: Failed to acquire state lock within ${timeout}s" >&2
+            eval "exec $GRALPH_LOCK_FD>&-" 2>/dev/null
+            GRALPH_LOCK_METHOD=""
             return 1
         fi
 
@@ -52,6 +58,17 @@ _acquire_lock() {
         if mkdir "$GRALPH_LOCK_DIR" 2>/dev/null; then
             echo "$$" > "$GRALPH_LOCK_DIR/pid" 2>/dev/null || true
             return 0
+        fi
+
+        if [[ -d "$GRALPH_LOCK_DIR" ]]; then
+            local lock_pid=""
+            if [[ -f "$GRALPH_LOCK_DIR/pid" ]]; then
+                lock_pid=$(cat "$GRALPH_LOCK_DIR/pid" 2>/dev/null || true)
+            fi
+
+            if [[ -z "$lock_pid" ]] || ! kill -0 "$lock_pid" 2>/dev/null; then
+                rm -rf "$GRALPH_LOCK_DIR" 2>/dev/null || true
+            fi
         fi
 
         if (( SECONDS >= deadline )); then
@@ -102,6 +119,43 @@ _with_lock() {
     return $result
 }
 
+# _write_state_file() - Atomically write JSON state to disk
+# Arguments:
+#   $1 - JSON content to write
+# Returns:
+#   0 on success, 1 on failure
+_write_state_file() {
+    local content="$1"
+    local tmp_file
+
+    if [[ -z "$content" ]]; then
+        echo "Error: Refusing to write empty state content" >&2
+        return 1
+    fi
+
+    if [[ ! -d "$GRALPH_STATE_DIR" ]]; then
+        if ! mkdir -p "$GRALPH_STATE_DIR"; then
+            echo "Error: Failed to create state directory: $GRALPH_STATE_DIR" >&2
+            return 1
+        fi
+    fi
+
+    tmp_file="${GRALPH_STATE_FILE}.tmp.$$"
+    if ! printf '%s\n' "$content" > "$tmp_file"; then
+        echo "Error: Failed to write temp state file" >&2
+        rm -f "$tmp_file" 2>/dev/null || true
+        return 1
+    fi
+
+    if ! mv "$tmp_file" "$GRALPH_STATE_FILE"; then
+        echo "Error: Failed to replace state file" >&2
+        rm -f "$tmp_file" 2>/dev/null || true
+        return 1
+    fi
+
+    return 0
+}
+
 # init_state() - Create state file and directory if missing
 # Creates ~/.config/gralph/ directory and initializes empty state.json
 # Returns 0 on success, 1 on failure
@@ -116,7 +170,7 @@ init_state() {
 
     # Create state file with empty sessions object if it doesn't exist
     if [[ ! -f "$GRALPH_STATE_FILE" ]]; then
-        if ! echo '{"sessions":{}}' > "$GRALPH_STATE_FILE"; then
+        if ! _write_state_file '{"sessions":{}}'; then
             echo "Error: Failed to create state file: $GRALPH_STATE_FILE" >&2
             return 1
         fi
@@ -125,7 +179,7 @@ init_state() {
     # Validate state file is valid JSON
     if ! jq empty "$GRALPH_STATE_FILE" 2>/dev/null; then
         echo "Warning: State file is invalid JSON, reinitializing..." >&2
-        if ! echo '{"sessions":{}}' > "$GRALPH_STATE_FILE"; then
+        if ! _write_state_file '{"sessions":{}}'; then
             echo "Error: Failed to reinitialize state file" >&2
             return 1
         fi
@@ -134,14 +188,14 @@ init_state() {
     return 0
 }
 
-# get_session() - Read session by name from state file
+# _get_session_unlocked() - Internal: Read session without locking
 # Arguments:
 #   $1 - Session name to retrieve
 # Outputs:
 #   Prints JSON object of session to stdout if found
 # Returns:
 #   0 if session found, 1 if not found or error
-get_session() {
+_get_session_unlocked() {
     local name="$1"
 
     if [[ -z "$name" ]]; then
@@ -167,8 +221,24 @@ get_session() {
     return 0
 }
 
+# get_session() - Read session by name from state file
+# Uses file locking to avoid concurrent write races
+# Arguments:
+#   $1 - Session name to retrieve
+# Outputs:
+#   Prints JSON object of session to stdout if found
+# Returns:
+#   0 if session found, 1 if not found or error
+get_session() {
+    _with_lock _get_session_unlocked "$@"
+}
+
 # _set_session_unlocked() - Internal: Upsert session without locking
-# Called by set_session() which handles locking
+# Arguments:
+#   $1 - Session name (required)
+#   Remaining args are key=value pairs for session properties
+# Returns:
+#   0 on success, 1 on failure
 _set_session_unlocked() {
     local name="$1"
     shift
@@ -229,7 +299,7 @@ _set_session_unlocked() {
     fi
 
     # Write the updated state back to the file
-    if ! echo "$new_state" > "$GRALPH_STATE_FILE"; then
+    if ! _write_state_file "$new_state"; then
         echo "Error: Failed to write state file" >&2
         return 1
     fi
@@ -252,7 +322,7 @@ set_session() {
     _with_lock _set_session_unlocked "$@"
 }
 
-# list_sessions() - Get all sessions from state file
+# _list_sessions_unlocked() - Internal: Get all sessions without locking
 # Arguments:
 #   None
 # Outputs:
@@ -260,7 +330,7 @@ set_session() {
 #   Each session object includes its name as a field
 # Returns:
 #   0 on success (even if no sessions), 1 on error
-list_sessions() {
+_list_sessions_unlocked() {
     # Ensure state is initialized
     if ! init_state; then
         return 1
@@ -286,8 +356,24 @@ list_sessions() {
     return 0
 }
 
+# list_sessions() - Get all sessions from state file
+# Uses file locking to avoid concurrent write races
+# Arguments:
+#   None
+# Outputs:
+#   Prints JSON array of all sessions to stdout
+#   Each session object includes its name as a field
+# Returns:
+#   0 on success (even if no sessions), 1 on error
+list_sessions() {
+    _with_lock _list_sessions_unlocked "$@"
+}
+
 # _delete_session_unlocked() - Internal: Remove session without locking
-# Called by delete_session() which handles locking
+# Arguments:
+#   $1 - Session name to delete
+# Returns:
+#   0 on success, 1 if session not found or error
 _delete_session_unlocked() {
     local name="$1"
 
@@ -317,7 +403,7 @@ _delete_session_unlocked() {
     fi
 
     # Write the updated state back to the file
-    if ! echo "$new_state" > "$GRALPH_STATE_FILE"; then
+    if ! _write_state_file "$new_state"; then
         echo "Error: Failed to write state file" >&2
         return 1
     fi
@@ -336,7 +422,12 @@ delete_session() {
 }
 
 # _cleanup_stale_unlocked() - Internal: Cleanup stale sessions without locking
-# Called by cleanup_stale() which handles locking
+# Arguments:
+#   $1 - (optional) "mark" (default) or "remove"
+# Outputs:
+#   Prints names of cleaned up sessions to stdout (one per line)
+# Returns:
+#   0 on success (even if no stale sessions found), 1 on error
 _cleanup_stale_unlocked() {
     local mode="${1:-mark}"  # "mark" (default) or "remove"
 
@@ -345,7 +436,7 @@ _cleanup_stale_unlocked() {
         return 1
     fi
 
-    # Get all sessions (read-only, no lock needed for list_sessions)
+    # Get all sessions (read-only, already holding lock)
     local sessions
     sessions=$(jq -r '[.sessions | to_entries[] | .value]' "$GRALPH_STATE_FILE" 2>/dev/null)
     if [[ $? -ne 0 ]]; then
