@@ -482,7 +482,8 @@ mod tests {
 
         let resp = client.get(format!("{}/status", base)).send().await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-        let body: Value = resp.json().await.unwrap();
+        let body_text = resp.text().await.unwrap();
+        let body: Value = serde_json::from_str(&body_text).unwrap();
         assert_eq!(body["error"], "Invalid or missing Bearer token");
 
         let resp = client
