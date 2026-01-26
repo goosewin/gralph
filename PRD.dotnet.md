@@ -262,7 +262,7 @@ The codebase must be structured for unit testing with dependency injection and i
   * Configuration loading tests ported.
   * PRD validation tests ported.
 - **Dependencies** DOTNET-3, DOTNET-4, DOTNET-9
-- [ ] DOTNET-15 Create unit test project with core component tests
+- [x] DOTNET-15 Create unit test project with core component tests
 
 ### Task DOTNET-16
 
