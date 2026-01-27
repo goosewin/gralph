@@ -424,10 +424,14 @@ mod tests {
         let bin_path = temp.path().join("gralph");
         fs::write(&bin_path, "binary").expect("write");
         let original_path = env::var_os("PATH");
-        env::set_var("PATH", temp.path());
+        unsafe {
+            env::set_var("PATH", temp.path());
+        }
         let resolved = resolve_in_path("gralph");
         if let Some(value) = original_path {
-            env::set_var("PATH", value);
+            unsafe {
+                env::set_var("PATH", value);
+            }
         }
         assert_eq!(resolved.as_deref(), Some(bin_path.as_path()));
     }
