@@ -567,7 +567,7 @@ mod tests {
         };
 
         let header_end = header_end.unwrap_or(buffer.len());
-        let (header_bytes, mut body_bytes) = buffer.split_at(header_end);
+        let (header_bytes, body_bytes) = buffer.split_at(header_end);
         let header_text = String::from_utf8_lossy(header_bytes);
         let mut lines = header_text.lines();
         let request_line = lines.next().unwrap_or_default();

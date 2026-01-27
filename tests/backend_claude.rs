@@ -35,13 +35,20 @@ fn claude_run_iteration_reports_failure_exit() {
     let backend = ClaudeBackend::with_command(fake.command());
     let result = backend.run_iteration("prompt", None, &output_path);
 
-    assert!(matches!(result, Err(BackendError::Command(message)) if message.contains("claude exited with")));
+    assert!(
+        matches!(result, Err(BackendError::Command(message)) if message.contains("claude exited with"))
+    );
 }
 
 fn render_claude_script() -> String {
     if cfg!(windows) {
         "@echo off\r\necho {\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"args:%* env:%IS_SANDBOX%\"}]}}\r\necho {\"type\":\"result\",\"result\":\"done\"}\r\nexit /b 0\r\n".to_string()
     } else {
-        "#!/bin/sh\nprintf '{\\"type\\":\\"assistant\\",\\"message\\":{\\"content\\":[{\\"type\\":\\"text\\",\\"text\\":\\"args:%s env:%s\\"}]}}\\n' \"$*\" \"$IS_SANDBOX\"\nprintf '{\\"type\\":\\"result\\",\\"result\\":\\"done\\"}\\n'\nexit 0\n".to_string()
+        r#"#!/bin/sh
+echo "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"args:$* env:$IS_SANDBOX\"}]}}"
+echo "{\"type\":\"result\",\"result\":\"done\"}"
+exit 0
+"#
+            .to_string()
     }
 }

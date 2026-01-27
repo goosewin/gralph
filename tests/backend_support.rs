@@ -4,7 +4,7 @@ use std::process::Command;
 
 #[test]
 fn fake_cli_emits_stdout_stderr_and_exit_code() {
-    let fake = support::FakeCli::new("fake-cli", "hello out\n", "hello err\n", 7).unwrap();
+    let fake = support::FakeCli::new("fake-cli", "hello out", "hello err", 7).unwrap();
     let _guard = fake.prepend_to_path().unwrap();
 
     let output = Command::new(fake.command()).output().unwrap();

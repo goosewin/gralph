@@ -440,7 +440,7 @@ mod tests {
     use super::*;
     use axum::body::{to_bytes, Body};
     use axum::http::Request;
-    use axum::ServiceExt;
+    use tower::util::ServiceExt;
 
     fn store_for_test(dir: &std::path::Path) -> StateStore {
         let state_dir = dir.join("state");

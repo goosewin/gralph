@@ -3,7 +3,10 @@ use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use tempfile::TempDir;
+
+static PATH_LOCK: Mutex<()> = Mutex::new(());
 
 pub struct FakeCli {
     temp_dir: TempDir,
@@ -70,18 +73,22 @@ impl FakeCli {
 
 pub struct PathGuard {
     original: Option<OsString>,
+    _lock: std::sync::MutexGuard<'static, ()>,
 }
 
 impl Drop for PathGuard {
     fn drop(&mut self) {
         match &self.original {
-            Some(value) => env::set_var("PATH", value),
-            None => env::remove_var("PATH"),
+            Some(value) => unsafe { env::set_var("PATH", value) },
+            None => unsafe { env::remove_var("PATH") },
         }
     }
 }
 
 fn prepend_to_path(dir: &Path) -> io::Result<PathGuard> {
+    let lock = PATH_LOCK
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
     let original = env::var_os("PATH");
     let mut paths = Vec::new();
     paths.push(dir.to_path_buf());
@@ -90,8 +97,13 @@ fn prepend_to_path(dir: &Path) -> io::Result<PathGuard> {
     }
     let joined =
         env::join_paths(paths).map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
-    env::set_var("PATH", joined);
-    Ok(PathGuard { original })
+    unsafe {
+        env::set_var("PATH", joined);
+    }
+    Ok(PathGuard {
+        original,
+        _lock: lock,
+    })
 }
 
 fn script_name(name: &str) -> String {

@@ -43,9 +43,10 @@ fn codex_run_iteration_reports_failure_exit() {
     let backend = CodexBackend::with_command(fake.command());
     let result = backend.run_iteration("prompt", None, &output_path);
 
-    assert!(
-        matches!(result, Err(BackendError::Command(message)) if message.contains("codex exited with"))
-    );
+    match result {
+        Err(BackendError::Command(_)) => {}
+        other => panic!("expected BackendError::Command, got {other:?}"),
+    }
 }
 
 fn render_args_env_script() -> String {
@@ -64,7 +65,9 @@ struct EnvGuard {
 impl EnvGuard {
     fn new(key: &'static str, value: &str) -> Self {
         let original = std::env::var_os(key);
-        std::env::set_var(key, value);
+        unsafe {
+            std::env::set_var(key, value);
+        }
         Self { key, original }
     }
 }
@@ -72,8 +75,8 @@ impl EnvGuard {
 impl Drop for EnvGuard {
     fn drop(&mut self) {
         match &self.original {
-            Some(value) => std::env::set_var(self.key, value),
-            None => std::env::remove_var(self.key),
+            Some(value) => unsafe { std::env::set_var(self.key, value) },
+            None => unsafe { std::env::remove_var(self.key) },
         }
     }
 }

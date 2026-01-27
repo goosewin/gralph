@@ -277,6 +277,34 @@ mod tests {
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
+    fn env_guard() -> std::sync::MutexGuard<'static, ()> {
+        let guard = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+        clear_env_overrides();
+        guard
+    }
+
+    fn clear_env_overrides() {
+        for key in [
+            "GRALPH_DEFAULT_CONFIG",
+            "GRALPH_GLOBAL_CONFIG",
+            "GRALPH_CONFIG_DIR",
+            "GRALPH_PROJECT_CONFIG_NAME",
+            "GRALPH_DEFAULTS_MAX_ITERATIONS",
+            "GRALPH_DEFAULTS_TASK_FILE",
+            "GRALPH_DEFAULTS_COMPLETION_MARKER",
+            "GRALPH_DEFAULTS_BACKEND",
+            "GRALPH_DEFAULTS_MODEL",
+            "GRALPH_MAX_ITERATIONS",
+            "GRALPH_TASK_FILE",
+            "GRALPH_COMPLETION_MARKER",
+            "GRALPH_BACKEND",
+            "GRALPH_MODEL",
+            "GRALPH_TEST_FLAGS",
+        ] {
+            remove_env(key);
+        }
+    }
+
     fn write_file(path: &Path, contents: &str) {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).unwrap();
@@ -298,7 +326,7 @@ mod tests {
 
     #[test]
     fn merge_precedence_default_global_project() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
 
@@ -333,7 +361,7 @@ mod tests {
 
     #[test]
     fn env_override_wins() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         let default_path = temp.path().join("default.yaml");
 
@@ -350,7 +378,7 @@ mod tests {
 
     #[test]
     fn legacy_env_override_wins() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         let default_path = temp.path().join("default.yaml");
 
@@ -367,22 +395,25 @@ mod tests {
 
     #[test]
     fn default_config_env_override_used() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         let default_path = temp.path().join("override.yaml");
+        let global_path = temp.path().join("missing-global.yaml");
 
         write_file(&default_path, "defaults:\n  backend: gemini\n");
         set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
 
         let config = Config::load(None).unwrap();
         assert_eq!(config.get("defaults.backend").as_deref(), Some("gemini"));
 
         remove_env("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_GLOBAL_CONFIG");
     }
 
     #[test]
     fn config_dir_env_sets_global_path() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         let config_dir = temp.path().join("config-root");
         let global_path = config_dir.join("config.yaml");
@@ -398,7 +429,7 @@ mod tests {
 
     #[test]
     fn missing_files_fall_back_to_bundled_default() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         let config_dir = temp.path().join("empty-config");
 
@@ -414,7 +445,7 @@ mod tests {
 
     #[test]
     fn list_includes_nested_entries() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         let default_path = temp.path().join("default.yaml");
         let global_path = temp.path().join("global.yaml");
@@ -441,7 +472,7 @@ mod tests {
 
     #[test]
     fn arrays_flatten_to_csv() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         let default_path = temp.path().join("default.yaml");
 
@@ -462,7 +493,7 @@ mod tests {
 
     #[test]
     fn exists_returns_true_for_env_override() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         let default_path = temp.path().join("default.yaml");
 
