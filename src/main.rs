@@ -2153,15 +2153,14 @@ mod tests {
 
     #[test]
     fn session_name_uses_canonical_basename_for_dot() {
-        let expected = env::current_dir()
-            .unwrap()
-            .canonicalize()
-            .unwrap()
+        let expected_path = env::current_dir().unwrap().canonicalize().unwrap();
+        let expected = expected_path
             .file_name()
             .and_then(|name| name.to_str())
-            .unwrap();
+            .unwrap()
+            .to_string();
         let resolved = session_name(&None, Path::new(".")).unwrap();
-        assert_eq!(resolved, sanitize_session_name(expected));
+        assert_eq!(resolved, sanitize_session_name(&expected));
     }
 
     #[test]
