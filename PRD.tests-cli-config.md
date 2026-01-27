@@ -51,4 +51,4 @@ Increase confidence in CLI argument handling and configuration resolution by add
   * Temp dir with `PRD.template.md` is selected.
   * Missing file uses embedded default content.
 - **Dependencies** T-CLI-1
-- [ ] T-CLI-2 Add PRD template lookup tests
+- [x] T-CLI-2 Add PRD template lookup tests

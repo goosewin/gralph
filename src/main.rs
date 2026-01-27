@@ -1274,9 +1274,13 @@ fn invalid_prd_path(output: &Path, force: bool) -> PathBuf {
 }
 
 fn read_prd_template(dir: &Path) -> Result<String, CliError> {
+    read_prd_template_with_manifest(dir, Path::new(env!("CARGO_MANIFEST_DIR")))
+}
+
+fn read_prd_template_with_manifest(dir: &Path, manifest_dir: &Path) -> Result<String, CliError> {
     let candidates = [
         dir.join("PRD.template.md"),
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("PRD.template.md"),
+        manifest_dir.join("PRD.template.md"),
     ];
     for path in candidates {
         if path.is_file() {
@@ -1465,6 +1469,28 @@ mod tests {
         assert!(Cli::try_parse_from(["gralph", "logs"]).is_err());
         assert!(Cli::try_parse_from(["gralph", "worktree", "create"]).is_err());
         assert!(Cli::try_parse_from(["gralph", "prd", "check"]).is_err());
+    }
+
+    #[test]
+    fn read_prd_template_prefers_project_template() {
+        let project = tempfile::tempdir().unwrap();
+        let manifest = tempfile::tempdir().unwrap();
+        fs::write(project.path().join("PRD.template.md"), "project template").unwrap();
+        fs::write(manifest.path().join("PRD.template.md"), "fallback template").unwrap();
+
+        let template = read_prd_template_with_manifest(project.path(), manifest.path()).unwrap();
+
+        assert_eq!(template, "project template");
+    }
+
+    #[test]
+    fn read_prd_template_falls_back_to_default_content() {
+        let project = tempfile::tempdir().unwrap();
+        let manifest = tempfile::tempdir().unwrap();
+
+        let template = read_prd_template_with_manifest(project.path(), manifest.path()).unwrap();
+
+        assert_eq!(template, DEFAULT_PRD_TEMPLATE);
     }
 }
 
