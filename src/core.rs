@@ -360,7 +360,7 @@ pub fn run_loop<B: Backend + ?Sized>(
     }
     log_message(
         Some(&log_file),
-        &format!("Started at: {}", timestamp_seconds()),
+        &format!("Started at: {}", format_timestamp(loop_start)),
     )?;
 
     let initial_remaining = count_remaining_tasks(&full_task_path);
@@ -437,10 +437,13 @@ pub fn run_loop<B: Backend + ?Sized>(
                 Some(&log_file),
                 &format!("Gralph complete after {} iterations.", iteration),
             )?;
-            log_message(Some(&log_file), &format!("Duration: {}s", duration_secs))?;
             log_message(
                 Some(&log_file),
-                &format!("FINISHED: {}", timestamp_seconds()),
+                &format!("Duration: {}", format_duration(duration_secs)),
+            )?;
+            log_message(
+                Some(&log_file),
+                &format!("FINISHED: {}", format_timestamp(SystemTime::now())),
             )?;
 
             if let Some(callback) = state_callback.as_deref_mut() {
@@ -491,10 +494,13 @@ pub fn run_loop<B: Backend + ?Sized>(
         Some(&log_file),
         &format!("Remaining tasks: {}", final_remaining),
     )?;
-    log_message(Some(&log_file), &format!("Duration: {}s", duration_secs))?;
     log_message(
         Some(&log_file),
-        &format!("FINISHED: {}", timestamp_seconds()),
+        &format!("Duration: {}", format_duration(duration_secs)),
+    )?;
+    log_message(
+        Some(&log_file),
+        &format!("FINISHED: {}", format_timestamp(SystemTime::now())),
     )?;
 
     if let Some(callback) = state_callback.as_deref_mut() {
@@ -763,6 +769,27 @@ fn timestamp_seconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_else(|_| Duration::from_secs(0))
         .as_secs()
+}
+
+fn format_timestamp(timestamp: SystemTime) -> String {
+    let datetime: chrono::DateTime<chrono::Local> = timestamp.into();
+    datetime.format("%Y-%m-%d %H:%M:%S %Z").to_string()
+}
+
+fn format_duration(duration_secs: u64) -> String {
+    let hours = duration_secs / 3600;
+    let minutes = (duration_secs % 3600) / 60;
+    let seconds = duration_secs % 60;
+    let mut parts = Vec::new();
+
+    if hours > 0 {
+        parts.push(format!("{}h", hours));
+    }
+    if minutes > 0 || hours > 0 {
+        parts.push(format!("{}m", minutes));
+    }
+    parts.push(format!("{}s", seconds));
+    format!("{} ({}s)", parts.join(" "), duration_secs)
 }
 
 fn cleanup_old_logs(log_dir: &Path, config: Option<&Config>) -> Result<(), CoreError> {
