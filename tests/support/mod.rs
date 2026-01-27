@@ -50,8 +50,8 @@ impl FakeCli {
         Ok(Self { temp_dir, bin_name })
     }
 
-    pub fn command(&self) -> &str {
-        &self.bin_name
+    pub fn command(&self) -> String {
+        script_name(&self.bin_name)
     }
 
     pub fn prepend_to_path(&self) -> io::Result<PathGuard> {
