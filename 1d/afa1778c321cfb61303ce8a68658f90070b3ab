@@ -1,0 +1,23 @@
+README.md
+  d97571f73df8c3a3 53,55,59-63,65-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "1dafa1778c321cfb61303ce8a68658f90070b3ab",
+  "prompts": {
+    "d97571f73df8c3a3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_402f9ec36ffe73QmQJC59kzYcB",
+        "model": "anthropic/claude-opus-4-5"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 16,
+      "total_deletions": 16,
+      "accepted_lines": 15,
+      "overriden_lines": 0
+    }
+  }
+}
