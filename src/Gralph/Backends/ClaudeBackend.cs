@@ -125,7 +125,7 @@ public sealed class ClaudeBackend : IBackend
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var line = await reader.ReadLineAsync();
+            var line = await reader.ReadLineAsync(cancellationToken);
             if (line is null)
             {
                 break;
