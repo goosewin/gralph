@@ -438,29 +438,15 @@ fn is_process_alive(pid: i64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use reqwest::Client;
-    use tokio::sync::oneshot;
+    use axum::body::{to_bytes, Body};
+    use axum::http::Request;
+    use axum::ServiceExt;
 
     fn store_for_test(dir: &std::path::Path) -> StateStore {
         let state_dir = dir.join("state");
         let state_file = state_dir.join("state.json");
         let lock_file = state_dir.join("state.lock");
         StateStore::with_paths(state_dir, state_file, lock_file, std::time::Duration::from_secs(1))
-    }
-
-    async fn spawn_app(state: Arc<AppState>) -> (String, oneshot::Sender<()>) {
-        let app = build_router(state);
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let (shutdown_tx, shutdown_rx) = oneshot::channel();
-        tokio::spawn(async move {
-            let _ = axum::serve(listener, app)
-                .with_graceful_shutdown(async {
-                    let _ = shutdown_rx.await;
-                })
-                .await;
-        });
-        (format!("http://{}", addr), shutdown_tx)
     }
 
     #[tokio::test]
@@ -477,23 +463,99 @@ mod tests {
             max_body_bytes: 4096,
         };
         let state = Arc::new(AppState { config, store });
-        let (base, shutdown) = spawn_app(state).await;
-        let client = Client::new();
+        let app = build_router(state);
 
-        let resp = client.get(format!("{}/status", base)).send().await.unwrap();
-        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-        let body_text = resp.text().await.unwrap();
-        let body: Value = serde_json::from_str(&body_text).unwrap();
-        assert_eq!(body["error"], "Invalid or missing Bearer token");
-
-        let resp = client
-            .get(format!("{}/status", base))
-            .bearer_auth("secret")
-            .send()
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/status")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
-        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["error"], "Invalid or missing Bearer token");
+    }
 
-        let _ = shutdown.send(());
+    #[tokio::test]
+    async fn status_endpoint_returns_sessions_with_valid_token() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+        store
+            .set_session("alpha", &[("status", "running"), ("pid", "0")])
+            .unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/status")
+                    .method("GET")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        let sessions = body
+            .get("sessions")
+            .and_then(|value| value.as_array())
+            .unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(
+            sessions[0].get("name").and_then(|value| value.as_str()),
+            Some("alpha")
+        );
+    }
+
+    #[tokio::test]
+    async fn status_name_unknown_returns_not_found() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/status/missing")
+                    .method("GET")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["error"], "Session not found: missing");
     }
 }
