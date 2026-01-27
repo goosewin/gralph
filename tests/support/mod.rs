@@ -34,6 +34,27 @@ impl FakeCli {
         })
     }
 
+    pub fn new_script(name: &str, script: &str) -> io::Result<Self> {
+        let temp_dir = tempfile::tempdir()?;
+        let bin_name = name.to_string();
+        let bin_path = temp_dir.path().join(script_name(name));
+        fs::write(&bin_path, script)?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = fs::metadata(&bin_path)?.permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&bin_path, perms)?;
+        }
+
+        Ok(Self {
+            temp_dir,
+            bin_name,
+            bin_path,
+        })
+    }
+
     pub fn command(&self) -> &str {
         &self.bin_name
     }

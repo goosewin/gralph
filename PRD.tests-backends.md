@@ -38,7 +38,7 @@ Validate backend CLI adapters for command construction, env usage, output parsin
   * Verify parse_text behavior on expected output.
   * Verify error mapping on non-zero exit.
 - **Dependencies** T-BACKEND-1
-- [ ] T-BACKEND-2 Add backend run_iteration success/failure tests
+- [x] T-BACKEND-2 Add backend run_iteration success/failure tests
 
 ### Task T-BACKEND-3
 
