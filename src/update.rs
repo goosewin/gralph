@@ -401,6 +401,11 @@ mod tests {
 
     #[test]
     fn detect_platform_reports_current_target() {
+        if env::consts::OS == "windows" {
+            let result = detect_platform();
+            assert!(matches!(result, Err(UpdateError::UnsupportedPlatform(_))));
+            return;
+        }
         let os = match env::consts::OS {
             "linux" => "linux",
             "macos" => "macos",
