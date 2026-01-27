@@ -1,5 +1,5 @@
-# GitHub Actions workflow for Rust release
-# Triggers on version tags (v*) and creates a GitHub release with binaries
+# GitHub Actions workflow for auto-release
+# Triggers on version tags (v*) and creates a GitHub release with assets
 
 name: Release
 
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   prepare:
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
@@ -48,35 +48,46 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: blacksmith-2vcpu-ubuntu-2404
-            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
             asset: linux-x86_64
-          - os: blacksmith-2vcpu-ubuntu-2404-arm
-            target: aarch64-unknown-linux-gnu
+            binary_path: target/release/gralph
+            build: cargo
+          - os: ubuntu-latest
             asset: linux-aarch64
+            binary_path: target/aarch64-unknown-linux-gnu/release/gralph
+            build: cross
+            target: aarch64-unknown-linux-gnu
           - os: macos-13
-            target: x86_64-apple-darwin
             asset: macos-x86_64
+            binary_path: target/release/gralph
+            build: cargo
           - os: macos-14
-            target: aarch64-apple-darwin
             asset: macos-arm64
+            binary_path: target/release/gralph
+            build: cargo
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cross
+        if: matrix.build == 'cross'
+        run: cargo install cross --locked
 
       - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }}
+        run: |
+          if [ "${{ matrix.build }}" = "cross" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release
+          fi
 
       - name: Create release tarball
         run: |
           VERSION=${{ needs.prepare.outputs.version }}
           mkdir -p dist/gralph-${VERSION}
-          cp target/${{ matrix.target }}/release/gralph dist/gralph-${VERSION}/gralph
+          cp ${{ matrix.binary_path }} dist/gralph-${VERSION}/gralph
           cp -R completions dist/gralph-${VERSION}/
           cp -R config dist/gralph-${VERSION}/
           cp README.md LICENSE dist/gralph-${VERSION}/
@@ -92,7 +103,7 @@ jobs:
 
   release:
     needs: [prepare, build]
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -112,51 +123,38 @@ jobs:
           ## What's New in ${{ needs.prepare.outputs.tag }}
 
           ### Assets
-          | Platform | Architecture | Download |
-          |----------|--------------|----------|
-          | Linux | x86_64 | gralph-${{ needs.prepare.outputs.version }}-linux-x86_64.tar.gz |
-          | Linux | aarch64 | gralph-${{ needs.prepare.outputs.version }}-linux-aarch64.tar.gz |
-          | macOS | x86_64 | gralph-${{ needs.prepare.outputs.version }}-macos-x86_64.tar.gz |
-          | macOS | arm64 | gralph-${{ needs.prepare.outputs.version }}-macos-arm64.tar.gz |
+          - Linux x86_64: gralph-${{ needs.prepare.outputs.version }}-linux-x86_64.tar.gz
+          - Linux aarch64: gralph-${{ needs.prepare.outputs.version }}-linux-aarch64.tar.gz
+          - macOS x86_64: gralph-${{ needs.prepare.outputs.version }}-macos-x86_64.tar.gz
+          - macOS arm64: gralph-${{ needs.prepare.outputs.version }}-macos-arm64.tar.gz
 
           ### Installation
-
-          \`\`\`bash
-          # Set your platform (linux-x86_64, linux-aarch64, macos-x86_64, macos-arm64)
-          ASSET="macos-arm64"
+          ```bash
           VERSION="${{ needs.prepare.outputs.version }}"
-
-          # Download and extract
-          curl -fsSL -o gralph.tar.gz \\
-            "https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/gralph-\${VERSION}-\${ASSET}.tar.gz"
+          ASSET="linux-x86_64" # linux-aarch64, macos-x86_64, or macos-arm64
+          curl -L -o gralph.tar.gz https://github.com/${{ github.repository }}/releases/download/${{ needs.prepare.outputs.tag }}/gralph-\${VERSION}-\${ASSET}.tar.gz
           tar -xzf gralph.tar.gz
           cd gralph-\${VERSION}
-
-          # Install to PATH
           chmod +x gralph
-          sudo mv gralph /usr/local/bin/
-          \`\`\`
+          sudo mv gralph /usr/local/bin/gralph
+          ```
 
-          ### Checksums (SHA-256)
-          \`\`\`
+          ### Checksums
+          ```
           EOF
           cat dist/checksums.txt >> release_notes.md
           cat <<'EOF' >> release_notes.md
           ```
 
           ### Requirements
-          - One of the supported AI backend CLIs:
-            - `claude` (Claude Code)
-            - `opencode` (OpenCode)
-            - `gemini` (Gemini CLI)
-            - `codex` (Codex CLI)
-          - `tmux` for background session management (optional with `--no-tmux`)
+          - AI backend CLI (claude, opencode, gemini, or codex)
+          - `tmux` for background session management (optional with --no-tmux)
           EOF
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: Gralph ${{ needs.prepare.outputs.tag }}
+          name: Gralph CLI ${{ needs.prepare.outputs.tag }}
           body_path: release_notes.md
           draft: false
           prerelease: ${{ contains(needs.prepare.outputs.tag, '-') }}
