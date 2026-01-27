@@ -105,5 +105,5 @@ gralph config set <key> <value>  # Set value
 gralph update
 ```
 
-Installs the latest release. Override install behavior with `GRALPH_INSTALL_DIR`
-or pin a specific version with `GRALPH_VERSION`.
+Installs the latest release to `~/.local/bin` (no sudo required). Override with
+`GRALPH_INSTALL_DIR` or pin a version with `GRALPH_VERSION`.
