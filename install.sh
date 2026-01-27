@@ -40,10 +40,11 @@ ensure_path() {
         echo "" >> "$rc_file"
         echo "# Added by Gralph installer" >> "$rc_file"
         echo "export PATH=\"$target_dir:\$PATH\"" >> "$rc_file"
+        info "Added PATH entry to $rc_file"
+        info "Run 'source $rc_file' or open a new terminal"
+    else
+        info "PATH entry already present in $rc_file"
     fi
-
-    info "Updated PATH in $rc_file"
-    info "Run 'source $rc_file' or open a new terminal"
 }
 
 # Detect OS and architecture
