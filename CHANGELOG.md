@@ -20,8 +20,13 @@ CI=<status/link>; PR=<link if final PRD task>
 - UPD-2 Added update subcommand to install release binaries.
 - DOC-1 Documented update command, update notice, and regenerated completions.
 
+### Fixed
+- START-1 Added session name fallback for dot and root paths.
+- INST-1 Hardened installer cleanup and PATH-aware verification.
+- LOG-1 Format loop start/finish timestamps and human-readable durations.
+
 ### Verification
-- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened (required)
+- Verification: Tests=CI; Coverage=CI (>= 90%); CI=green; PR=not-required
 
 ## [0.1.0]
 
@@ -92,14 +97,11 @@ CI=<status/link>; PR=<link if final PRD task>
 - RS-11 Added Rust tests coverage and CI workflow with coverage threshold.
 - RS-12 Documented Rust build/install steps and migration notes.
 - RS-13 Updated release workflow to package Rust binaries and completions.
-- DOC-1 Documented update command, update notice, and regenerated completions.
 - T-CLI-1 Added CLI unit tests for PRD output resolution and parse validation.
 - T-CLI-2 Added tests for PRD template selection and fallback behavior.
 - T-CONFIG-1 Added config path precedence tests.
 
 ### Fixed
-- START-1 Added session name fallback for dot and root paths.
-- INST-1 Hardened installer cleanup and PATH-aware verification.
 - AW-1 Resolve auto worktree repo roots from target dirs and preserve subdir runs.
 - Aligned the Cargo-installed binary name with release assets (`gralph`).
 - OSS-1 Removed duplicate introductory text from README.
