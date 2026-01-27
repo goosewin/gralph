@@ -51,6 +51,7 @@ impl Backend for ClaudeBackend {
         prompt: &str,
         model: Option<&str>,
         output_file: &Path,
+        working_dir: &Path,
     ) -> Result<(), BackendError> {
         if prompt.trim().is_empty() {
             return Err(BackendError::InvalidInput("prompt is required".to_string()));
@@ -63,6 +64,7 @@ impl Backend for ClaudeBackend {
         let mut output = BufWriter::new(file);
 
         let mut cmd = Command::new(&self.command);
+        cmd.current_dir(working_dir);
         cmd.arg("--dangerously-skip-permissions")
             .arg("--verbose")
             .arg("--print")
@@ -261,7 +263,7 @@ mod tests {
 
         let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
         backend
-            .run_iteration("prompt", None, &output_path)
+            .run_iteration("prompt", None, &output_path, temp.path())
             .expect("run_iteration should succeed");
 
         let output = fs::read_to_string(&output_path).unwrap();

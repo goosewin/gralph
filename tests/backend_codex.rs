@@ -22,7 +22,7 @@ fn codex_run_iteration_writes_output_and_args() {
 
     let backend = CodexBackend::with_command(fake.command());
     backend
-        .run_iteration("prompt", Some("test-model"), &output_path)
+        .run_iteration("prompt", Some("test-model"), &output_path, temp.path())
         .unwrap();
 
     let output = fs::read_to_string(&output_path).unwrap();
@@ -41,7 +41,7 @@ fn codex_run_iteration_reports_failure_exit() {
     let _guard = fake.prepend_to_path().unwrap();
 
     let backend = CodexBackend::with_command(fake.command());
-    let result = backend.run_iteration("prompt", None, &output_path);
+    let result = backend.run_iteration("prompt", None, &output_path, temp.path());
 
     match result {
         Err(BackendError::Command(_)) => {}

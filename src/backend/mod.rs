@@ -19,6 +19,7 @@ pub trait Backend {
         prompt: &str,
         model: Option<&str>,
         output_file: &Path,
+        working_dir: &Path,
     ) -> Result<(), BackendError>;
     fn parse_text(&self, response_file: &Path) -> Result<String, BackendError>;
     fn get_models(&self) -> Vec<String>;

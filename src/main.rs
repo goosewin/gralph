@@ -483,7 +483,7 @@ fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
     let tmp_dir = env::temp_dir();
     let output_file = tmp_dir.join(format!("gralph-prd-{}.tmp", std::process::id()));
     backend
-        .run_iteration(&prompt, model.as_deref(), &output_file)
+        .run_iteration(&prompt, model.as_deref(), &output_file, &target_dir)
         .map_err(|err| CliError::Message(err.to_string()))?;
     let result = backend
         .parse_text(&output_file)

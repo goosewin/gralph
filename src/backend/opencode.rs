@@ -46,6 +46,7 @@ impl Backend for OpenCodeBackend {
         prompt: &str,
         model: Option<&str>,
         output_file: &Path,
+        working_dir: &Path,
     ) -> Result<(), BackendError> {
         if prompt.trim().is_empty() {
             return Err(BackendError::InvalidInput("prompt is required".to_string()));
@@ -58,6 +59,7 @@ impl Backend for OpenCodeBackend {
         let mut output = BufWriter::new(file);
 
         let mut cmd = Command::new(&self.command);
+        cmd.current_dir(working_dir);
         cmd.arg("run");
         if let Some(model) = model {
             if !model.trim().is_empty() {

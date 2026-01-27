@@ -158,21 +158,7 @@ pub fn run_iteration<B: Backend + ?Sized>(
         },
     );
 
-    let previous_dir = std::env::current_dir().map_err(|source| CoreError::Io {
-        path: PathBuf::from("."),
-        source,
-    })?;
-    std::env::set_current_dir(project_dir).map_err(|source| CoreError::Io {
-        path: project_dir.to_path_buf(),
-        source,
-    })?;
-
-    let backend_result = backend.run_iteration(&prompt, model, &tmpfile);
-
-    std::env::set_current_dir(&previous_dir).map_err(|source| CoreError::Io {
-        path: previous_dir.clone(),
-        source,
-    })?;
+    let backend_result = backend.run_iteration(&prompt, model, &tmpfile, project_dir);
 
     if let Some(raw_path) = raw_output_file.as_ref() {
         if let Err(err) = copy_if_exists(&tmpfile, raw_path) {
@@ -859,6 +845,7 @@ mod tests {
             prompt: &str,
             _model: Option<&str>,
             output_file: &Path,
+            _working_dir: &Path,
         ) -> Result<(), BackendError> {
             *self.prompt.borrow_mut() = Some(prompt.to_string());
             fs::write(output_file, "ok").map_err(|source| BackendError::Io {
@@ -910,6 +897,7 @@ mod tests {
             _prompt: &str,
             _model: Option<&str>,
             output_file: &Path,
+            _working_dir: &Path,
         ) -> Result<(), BackendError> {
             if self.fail_run {
                 return Err(BackendError::Command("backend error".to_string()));
