@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   prepare:
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
@@ -48,10 +48,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: blacksmith-2vcpu-ubuntu-2404
+          - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             asset: linux-x86_64
-          - os: blacksmith-2vcpu-ubuntu-2404-arm
+          - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             asset: linux-aarch64
           - os: macos-13
@@ -92,7 +92,7 @@ jobs:
 
   release:
     needs: [prepare, build]
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
