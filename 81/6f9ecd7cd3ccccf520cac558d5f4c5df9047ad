@@ -1,0 +1,25 @@
+install.sh
+  4a6867ca1feb8075 7
+uninstall.sh
+  4a6867ca1feb8075 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "816f9ecd7cd3ccccf520cac558d5f4c5df9047ad",
+  "prompts": {
+    "4a6867ca1feb8075": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_402349e7fffeNUoLV36hfRnBT8",
+        "model": "opencode/kimi-k2.5"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 2,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    }
+  }
+}
