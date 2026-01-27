@@ -1878,6 +1878,51 @@ mod tests {
         }
     }
 
+    fn run_loop_args(dir: PathBuf) -> RunLoopArgs {
+        RunLoopArgs {
+            dir,
+            name: "test-session".to_string(),
+            max_iterations: None,
+            task_file: None,
+            completion_marker: None,
+            backend: None,
+            model: None,
+            variant: None,
+            prompt_template: None,
+            webhook: None,
+            no_worktree: false,
+            strict_prd: false,
+        }
+    }
+
+    fn git_status_ok(dir: &Path, args: &[&str]) {
+        let output = ProcCommand::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn init_git_repo(dir: &Path) {
+        git_status_ok(dir, &["init"]);
+        git_status_ok(dir, &["config", "user.email", "test@example.com"]);
+        git_status_ok(dir, &["config", "user.name", "Test User"]);
+    }
+
+    fn commit_file(dir: &Path, relative: &str, contents: &str) {
+        let path = dir.join(relative);
+        write_file(&path, contents);
+        git_status_ok(dir, &["add", relative]);
+        git_status_ok(dir, &["commit", "-m", "init"]);
+    }
+
     #[test]
     fn resolve_prd_output_handles_relative_and_absolute_paths() {
         let temp = tempfile::tempdir().unwrap();
@@ -2066,6 +2111,98 @@ mod tests {
 
         assert!(!resolve_auto_worktree(&config, false));
         assert!(!resolve_auto_worktree(&config, true));
+    }
+
+    #[test]
+    fn auto_worktree_skips_non_git_directory() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config = Config::load(Some(temp.path())).unwrap();
+        let mut args = run_loop_args(temp.path().to_path_buf());
+        let original = args.dir.clone();
+
+        maybe_create_auto_worktree(&mut args, &config).unwrap();
+
+        assert_eq!(args.dir, original);
+        assert!(!args.no_worktree);
+    }
+
+    #[test]
+    fn auto_worktree_skips_repo_without_commits() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        let config = Config::load(Some(temp.path())).unwrap();
+        let mut args = run_loop_args(temp.path().to_path_buf());
+
+        maybe_create_auto_worktree(&mut args, &config).unwrap();
+
+        assert_eq!(args.dir, temp.path());
+        assert!(!args.no_worktree);
+        assert!(!temp.path().join(".worktrees").exists());
+    }
+
+    #[test]
+    fn auto_worktree_errors_on_dirty_repo() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        write_file(&temp.path().join("README.md"), "dirty");
+        let config = Config::load(Some(temp.path())).unwrap();
+        let mut args = run_loop_args(temp.path().to_path_buf());
+
+        let err = maybe_create_auto_worktree(&mut args, &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Git working tree is dirty"));
+            }
+            _ => panic!("unexpected error type"),
+        }
+    }
+
+    #[test]
+    fn auto_worktree_maps_subdir_to_worktree_path() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        let nested = temp.path().join("nested");
+        commit_file(temp.path(), "nested/task.md", "content");
+        let config = Config::load(Some(temp.path())).unwrap();
+        let mut args = run_loop_args(nested.clone());
+
+        maybe_create_auto_worktree(&mut args, &config).unwrap();
+
+        let worktrees_dir = temp.path().join(".worktrees");
+        let mut entries: Vec<PathBuf> = fs::read_dir(&worktrees_dir)
+            .unwrap()
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .collect();
+        assert_eq!(entries.len(), 1);
+        let worktree_path = entries.remove(0);
+        let expected = fs::canonicalize(worktree_path.join("nested")).unwrap();
+        let actual = fs::canonicalize(&args.dir).unwrap();
+        assert_eq!(actual, expected);
+        assert!(args.no_worktree);
+    }
+
+    #[test]
+    fn ensure_unique_worktree_branch_handles_collisions() {
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+        git_status_ok(temp.path(), &["branch", "prd-collision"]);
+        fs::create_dir_all(worktrees_dir.join("prd-collision-2")).unwrap();
+
+        let branch = ensure_unique_worktree_branch(
+            temp.path().to_str().unwrap(),
+            &worktrees_dir,
+            "prd-collision",
+        );
+
+        assert_eq!(branch, "prd-collision-3");
     }
 }
 

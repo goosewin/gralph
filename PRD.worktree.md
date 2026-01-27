@@ -64,7 +64,7 @@ Auto worktree changes must preserve the dirty-repo guardrail, keep test coverage
   * Validate that the resolved run directory is the worktree subdirectory when starting from a subdir.
   * `cargo test --workspace` passes and coverage remains >= 90%.
 - **Dependencies** AW-1
-- [ ] AW-2 Add regression tests for auto worktree behavior
+- [x] AW-2 Add regression tests for auto worktree behavior
 ### Task AW-3
 
 - **ID** AW-3

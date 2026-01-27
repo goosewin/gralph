@@ -12,6 +12,7 @@ CI=<status/link>; PR=<link if final PRD task>
 ## [Unreleased]
 
 ### Added
+- AW-2 Added auto worktree edge case tests for skip behavior, subdir mapping, and collisions.
 - WT-1 Auto-create worktrees for PRD runs with config and CLI controls.
 - INIT-1 Added init CLI subcommand and routing.
 - INIT-4 Documented init command and updated shell completions.
@@ -109,4 +110,4 @@ CI=<status/link>; PR=<link if final PRD task>
 - OSS-19 Removed legacy shell artifacts and aligned context defaults with Rust sources.
 
 ### Verification
-- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
+- Verification: Tests=cargo test --workspace; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
