@@ -1,0 +1,31 @@
+uninstall.ps1
+  d97571f73df8c3a3 1-76
+README.md
+  d97571f73df8c3a3 31-32,41,43,45-47,49,51-62,65-77,96,98-101,103-106
+uninstall.sh
+  d97571f73df8c3a3 1-58
+install.sh
+  d97571f73df8c3a3 1-113
+install.ps1
+  d97571f73df8c3a3 1-100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "ed2276daf7ea55237f1094c8797290c7544d7454",
+  "prompts": {
+    "d97571f73df8c3a3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_402f9ec36ffe73QmQJC59kzYcB",
+        "model": "opencode/claude-opus-4-5"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 391,
+      "total_deletions": 18,
+      "accepted_lines": 391,
+      "overriden_lines": 0
+    }
+  }
+}
