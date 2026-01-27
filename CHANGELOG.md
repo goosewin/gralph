@@ -18,6 +18,15 @@ CI=<status/link>; PR=<link if final PRD task>
 ### Verification
 - Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
 
+## [0.2.2]
+
+### Fixed
+- Installer: add PATH auto-update for local installs.
+- Windows installer: fix Join-Path usage when piping to iex.
+
+### Verification
+- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
+
 ## [0.2.1]
 
 ### Added

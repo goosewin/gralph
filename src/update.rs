@@ -355,13 +355,13 @@ mod tests {
 
     #[test]
     fn parse_version_accepts_v_prefix() {
-        let version = Version::parse("v0.2.1").expect("version parsed");
+        let version = Version::parse("v0.2.2").expect("version parsed");
         assert_eq!(
             version,
             Version {
                 major: 0,
                 minor: 2,
-                patch: 1
+                patch: 2
             }
         );
     }
@@ -380,14 +380,14 @@ mod tests {
 
     #[test]
     fn parse_release_tag_accepts_valid_tag() {
-        let body = r#"{ "tag_name": "v0.2.1" }"#;
+        let body = r#"{ "tag_name": "v0.2.2" }"#;
         let tag = parse_release_tag(body).expect("tag parsed");
-        assert_eq!(tag, "v0.2.1");
+        assert_eq!(tag, "v0.2.2");
     }
 
     #[test]
     fn detect_newer_version() {
-        let latest = Version::parse("0.2.1").expect("latest parsed");
+        let latest = Version::parse("0.2.2").expect("latest parsed");
         let current = Version::parse("0.2.0").expect("current parsed");
         assert!(latest > current);
     }
@@ -400,8 +400,8 @@ mod tests {
 
     #[test]
     fn normalize_version_accepts_plain_input() {
-        let version = normalize_version("0.2.1").expect("normalized");
-        assert_eq!(version, "0.2.1");
+        let version = normalize_version("0.2.2").expect("normalized");
+        assert_eq!(version, "0.2.2");
     }
 
     #[test]
