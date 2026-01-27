@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using Gralph.Backends;
 using Gralph.Config;
 using Gralph.Core;
@@ -99,7 +100,7 @@ public static class Program
                                      "  gralph worktree finish C-1\n" +
                                      "  gralph server --host 0.0.0.0 --port 8080";
 
-    public static int Main(string[] args)
+    public static async Task<int> Main(string[] args)
     {
         args ??= Array.Empty<string>();
 
@@ -138,20 +139,31 @@ public static class Program
 
         try
         {
-            return command.ToLowerInvariant() switch
+            switch (command.ToLowerInvariant())
             {
-                "start" => HandleStart(commandArgs),
-                "stop" => HandleStop(commandArgs),
-                "status" => HandleStatus(commandArgs),
-                "logs" => HandleLogs(commandArgs),
-                "resume" => HandleResume(commandArgs),
-                "prd" => HandlePrd(commandArgs),
-                "worktree" => HandleWorktree(commandArgs),
-                "backends" => HandleBackends(commandArgs),
-                "config" => HandleConfig(commandArgs),
-                "server" => HandleServer(commandArgs),
-                _ => HandleUnknownCommand(command)
-            };
+                case "start":
+                    return await HandleStartAsync(commandArgs);
+                case "stop":
+                    return await HandleStopAsync(commandArgs);
+                case "status":
+                    return HandleStatus(commandArgs);
+                case "logs":
+                    return HandleLogs(commandArgs);
+                case "resume":
+                    return HandleResume(commandArgs);
+                case "prd":
+                    return HandlePrd(commandArgs);
+                case "worktree":
+                    return HandleWorktree(commandArgs);
+                case "backends":
+                    return HandleBackends(commandArgs);
+                case "config":
+                    return HandleConfig(commandArgs);
+                case "server":
+                    return HandleServer(commandArgs);
+                default:
+                    return HandleUnknownCommand(command);
+            }
         }
         catch (ArgumentException ex)
         {
@@ -159,7 +171,7 @@ public static class Program
         }
     }
 
-    private static int HandleStart(string[] args)
+    private static async Task<int> HandleStartAsync(string[] args)
     {
         var options = new StartOptions();
         var positional = new List<string>();
@@ -432,7 +444,7 @@ public static class Program
         };
 
         var loop = new CoreLoop(config, backend);
-        var result = loop.RunAsync(loopOptions, update =>
+        var result = await loop.RunAsync(loopOptions, update =>
         {
             state.SetSession(sessionName, new Dictionary<string, object?>
             {
@@ -440,7 +452,7 @@ public static class Program
                 ["status"] = update.Status,
                 ["last_task_count"] = update.RemainingTasks
             });
-        }).GetAwaiter().GetResult();
+        });
 
         var finalStatus = result.Status switch
         {
@@ -463,12 +475,12 @@ public static class Program
 
         if (result.Status == CoreLoopStatus.Complete)
         {
-            TryNotifyCompletion(config, options.Webhook, sessionName, targetDir, result);
+            await TryNotifyCompletionAsync(config, options.Webhook, sessionName, targetDir, result);
         }
         else
         {
             var reason = result.Status == CoreLoopStatus.MaxIterations ? "max_iterations" : "error";
-            TryNotifyFailure(
+            await TryNotifyFailureAsync(
                 config,
                 options.Webhook,
                 sessionWebhook: null,
@@ -484,7 +496,7 @@ public static class Program
         return result.Status == CoreLoopStatus.Complete ? 0 : 1;
     }
 
-    private static int HandleStop(string[] args)
+    private static async Task<int> HandleStopAsync(string[] args)
     {
         var all = false;
         var positional = new List<string>();
@@ -548,7 +560,7 @@ public static class Program
                 }
 
                 StopSession(session, name, inspector, state, quietWarnings: true);
-                TryNotifyManualStop(session, name);
+                await TryNotifyManualStopAsync(session, name);
                 stoppedCount++;
             }
 
@@ -578,7 +590,7 @@ public static class Program
         }
 
         StopSession(existing, sessionName, inspector, state, quietWarnings: false);
-        TryNotifyManualStop(existing, sessionName);
+        await TryNotifyManualStopAsync(existing, sessionName);
         Console.WriteLine($"Stopped session: {sessionName}");
         return 0;
     }
@@ -2002,7 +2014,7 @@ public static class Program
         return -1;
     }
 
-    private static void TryNotifyCompletion(
+    private static async Task TryNotifyCompletionAsync(
         ConfigService config,
         string? optionWebhook,
         string sessionName,
@@ -2023,7 +2035,7 @@ public static class Program
         try
         {
             var notification = new CompletionNotification(sessionName, projectDir, result.Iterations, result.Duration);
-            var success = WebhookNotifier.NotifyCompleteAsync(notification, webhookUrl).GetAwaiter().GetResult();
+            var success = await WebhookNotifier.NotifyCompleteAsync(notification, webhookUrl);
             if (!success)
             {
                 Console.Error.WriteLine("Warning: Failed to send completion notification");
@@ -2035,7 +2047,7 @@ public static class Program
         }
     }
 
-    private static void TryNotifyFailure(
+    private static async Task TryNotifyFailureAsync(
         ConfigService config,
         string? optionWebhook,
         string? sessionWebhook,
@@ -2061,7 +2073,7 @@ public static class Program
         try
         {
             var notification = new FailureNotification(sessionName, projectDir, reason, iterations, maxIterations, remainingTasks, duration);
-            var success = WebhookNotifier.NotifyFailedAsync(notification, webhookUrl).GetAwaiter().GetResult();
+            var success = await WebhookNotifier.NotifyFailedAsync(notification, webhookUrl);
             if (!success)
             {
                 Console.Error.WriteLine("Warning: Failed to send failure notification");
@@ -2073,7 +2085,7 @@ public static class Program
         }
     }
 
-    private static void TryNotifyManualStop(JsonObject session, string sessionName)
+    private static async Task TryNotifyManualStopAsync(JsonObject session, string sessionName)
     {
         var projectDir = GetSessionString(session, "dir") ?? string.Empty;
         var config = new ConfigService(ConfigPaths.FromEnvironment());
@@ -2107,7 +2119,7 @@ public static class Program
                 remainingTasks,
                 duration);
 
-            var success = WebhookNotifier.NotifyFailedAsync(notification, webhookUrl).GetAwaiter().GetResult();
+            var success = await WebhookNotifier.NotifyFailedAsync(notification, webhookUrl);
             if (!success)
             {
                 Console.Error.WriteLine("Warning: Failed to send stop notification");
