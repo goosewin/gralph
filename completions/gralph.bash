@@ -37,6 +37,9 @@ _gralph() {
             gralph,resume)
                 cmd="gralph__resume"
                 ;;
+            gralph,init)
+                cmd="gralph__init"
+                ;;
             gralph,run-loop)
                 cmd="gralph__run__loop"
                 ;;
@@ -102,6 +105,9 @@ _gralph() {
                 ;;
             gralph__help,resume)
                 cmd="gralph__help__resume"
+                ;;
+            gralph__help,init)
+                cmd="gralph__help__init"
                 ;;
             gralph__help,run-loop)
                 cmd="gralph__help__run__loop"
@@ -523,6 +529,20 @@ _gralph() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        gralph__help__init)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         gralph__help__run__loop)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
@@ -834,6 +854,24 @@ _gralph() {
                 return 0
             fi
             case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__init)
+            opts="-h --help --dir --force"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 *)
                     COMPREPLY=()
                     ;;
