@@ -60,6 +60,9 @@ jobs:
           - os: macos-14
             target: aarch64-apple-darwin
             asset: macos-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            asset: windows-x86_64
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -72,7 +75,8 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Create release tarball
+      - name: Create release tarball (Unix)
+        if: runner.os != 'Windows'
         run: |
           VERSION=${{ needs.prepare.outputs.version }}
           mkdir -p dist/gralph-${VERSION}
@@ -83,11 +87,32 @@ jobs:
           tar -czvf dist/gralph-${VERSION}-${{ matrix.asset }}.tar.gz \
             -C dist gralph-${VERSION}
 
-      - name: Upload artifact
+      - name: Create release zip (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $VERSION = "${{ needs.prepare.outputs.version }}"
+          New-Item -ItemType Directory -Force -Path "dist/gralph-${VERSION}"
+          Copy-Item "target/${{ matrix.target }}/release/gralph.exe" "dist/gralph-${VERSION}/gralph.exe"
+          Copy-Item -Recurse "completions" "dist/gralph-${VERSION}/"
+          Copy-Item -Recurse "config" "dist/gralph-${VERSION}/"
+          Copy-Item "README.md", "LICENSE" "dist/gralph-${VERSION}/"
+          Compress-Archive -Path "dist/gralph-${VERSION}" -DestinationPath "dist/gralph-${VERSION}-${{ matrix.asset }}.zip"
+
+      - name: Upload artifact (Unix)
+        if: runner.os != 'Windows'
         uses: actions/upload-artifact@v4
         with:
           name: gralph-${{ needs.prepare.outputs.version }}-${{ matrix.asset }}
           path: dist/gralph-${{ needs.prepare.outputs.version }}-${{ matrix.asset }}.tar.gz
+          if-no-files-found: error
+
+      - name: Upload artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gralph-${{ needs.prepare.outputs.version }}-${{ matrix.asset }}
+          path: dist/gralph-${{ needs.prepare.outputs.version }}-${{ matrix.asset }}.zip
           if-no-files-found: error
 
   release:
@@ -103,7 +128,7 @@ jobs:
       - name: Generate checksums
         run: |
           cd dist
-          sha256sum gralph-*.tar.gz > checksums.txt
+          sha256sum gralph-*.tar.gz gralph-*.zip > checksums.txt
           cat checksums.txt
 
       - name: Generate release notes
@@ -118,11 +143,12 @@ jobs:
           | Linux | aarch64 | gralph-${{ needs.prepare.outputs.version }}-linux-aarch64.tar.gz |
           | macOS | x86_64 | gralph-${{ needs.prepare.outputs.version }}-macos-x86_64.tar.gz |
           | macOS | arm64 | gralph-${{ needs.prepare.outputs.version }}-macos-arm64.tar.gz |
+          | Windows | x86_64 | gralph-${{ needs.prepare.outputs.version }}-windows-x86_64.zip |
 
           ### Installation
 
           \`\`\`bash
-          # Set your platform (linux-x86_64, linux-aarch64, macos-x86_64, macos-arm64)
+          # Set your platform (linux-x86_64, linux-aarch64, macos-x86_64, macos-arm64, windows-x86_64)
           ASSET="macos-arm64"
           VERSION="${{ needs.prepare.outputs.version }}"
 
@@ -162,6 +188,7 @@ jobs:
           prerelease: ${{ contains(needs.prepare.outputs.tag, '-') }}
           files: |
             dist/gralph-*.tar.gz
+            dist/gralph-*.zip
             dist/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -176,4 +203,5 @@ jobs:
           echo "  - gralph-${{ needs.prepare.outputs.version }}-linux-aarch64.tar.gz" >> $GITHUB_STEP_SUMMARY
           echo "  - gralph-${{ needs.prepare.outputs.version }}-macos-x86_64.tar.gz" >> $GITHUB_STEP_SUMMARY
           echo "  - gralph-${{ needs.prepare.outputs.version }}-macos-arm64.tar.gz" >> $GITHUB_STEP_SUMMARY
+          echo "  - gralph-${{ needs.prepare.outputs.version }}-windows-x86_64.zip" >> $GITHUB_STEP_SUMMARY
           echo "- **Status:** Released successfully" >> $GITHUB_STEP_SUMMARY

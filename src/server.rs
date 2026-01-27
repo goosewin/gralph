@@ -345,7 +345,17 @@ fn stop_session(_name: &str, session: &Value) {
             .arg(tmux_session)
             .status();
     } else if pid > 0 {
-        let _ = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+        #[cfg(unix)]
+        {
+            let _ = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+        }
+        #[cfg(windows)]
+        {
+            // On Windows, use taskkill to terminate the process
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/F"])
+                .status();
+        }
     }
 }
 
