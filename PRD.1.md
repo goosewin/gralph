@@ -69,7 +69,7 @@ Implement a new `gralph init` subcommand in the Rust CLI that reads the configur
   * Write starter templates for ARCHITECTURE.md, PROCESS.md, DECISIONS.md, RISK_REGISTER.md, and CHANGELOG.md when missing.
   * Preserve existing content unless `--force` is set.
 - **Dependencies** INIT-1
-- [ ] INIT-2 Implement init scaffolding logic and templates
+- [x] INIT-2 Implement init scaffolding logic and templates
 ---
 
 ### Task INIT-3

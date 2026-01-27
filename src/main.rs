@@ -393,10 +393,78 @@ fn cmd_prd(args: PrdArgs) -> Result<(), CliError> {
     }
 }
 
-fn cmd_init(_args: InitArgs) -> Result<(), CliError> {
-    Err(CliError::Message(
-        "Init scaffolding is not implemented yet. See task INIT-2.".to_string(),
-    ))
+fn cmd_init(args: InitArgs) -> Result<(), CliError> {
+    let target_dir = args
+        .dir
+        .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    if !target_dir.is_dir() {
+        return Err(CliError::Message(format!(
+            "Directory does not exist: {}",
+            target_dir.display()
+        )));
+    }
+
+    let config =
+        Config::load(Some(&target_dir)).map_err(|err| CliError::Message(err.to_string()))?;
+    let config_list = config.get("defaults.context_files");
+    let entries = resolve_init_context_files(&target_dir, config_list.as_deref());
+    if entries.is_empty() {
+        println!("No context files configured.");
+        return Ok(());
+    }
+
+    let mut created = Vec::new();
+    let mut overwritten = Vec::new();
+    let mut skipped = Vec::new();
+    let mut skipped_non_md = Vec::new();
+
+    for entry in entries {
+        let path = if Path::new(&entry).is_absolute() {
+            PathBuf::from(&entry)
+        } else {
+            target_dir.join(&entry)
+        };
+        if !is_markdown_path(&path) {
+            println!("Skipping non-markdown entry: {}", entry);
+            skipped_non_md.push(entry);
+            continue;
+        }
+        let display = format_display_path(&path, &target_dir);
+        let existed = path.exists();
+        if existed && !args.force {
+            skipped.push(display);
+            continue;
+        }
+
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(CliError::Io)?;
+        }
+        let contents = init_template_for_path(&path);
+        write_atomic(&path, &contents, args.force).map_err(CliError::Io)?;
+
+        if existed {
+            overwritten.push(display);
+        } else {
+            created.push(display);
+        }
+    }
+
+    println!("Init summary:");
+    println!("Created ({}): {}", created.len(), join_or_none(&created));
+    println!(
+        "Overwritten ({}): {}",
+        overwritten.len(),
+        join_or_none(&overwritten)
+    );
+    println!("Skipped ({}): {}", skipped.len(), join_or_none(&skipped));
+    if !skipped_non_md.is_empty() {
+        println!(
+            "Non-markdown skipped ({}): {}",
+            skipped_non_md.len(),
+            join_or_none(&skipped_non_md)
+        );
+    }
+    Ok(())
 }
 
 fn cmd_prd_check(args: PrdCheckArgs) -> Result<(), CliError> {
@@ -1328,6 +1396,166 @@ fn normalize_csv(input: &str) -> Vec<String> {
         .collect()
 }
 
+fn resolve_init_context_files(target_dir: &Path, config_list: Option<&str>) -> Vec<String> {
+    let mut entries = Vec::new();
+    let mut seen: BTreeMap<String, bool> = BTreeMap::new();
+
+    let configured = config_list
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(normalize_csv)
+        .unwrap_or_default();
+
+    let fallback = if configured.is_empty() {
+        let from_readme = read_readme_context_files(target_dir);
+        if from_readme.is_empty() {
+            default_context_files()
+                .iter()
+                .map(|item| item.to_string())
+                .collect()
+        } else {
+            from_readme
+        }
+    } else {
+        configured
+    };
+
+    for entry in fallback {
+        if entry.trim().is_empty() {
+            continue;
+        }
+        if seen.contains_key(&entry) {
+            continue;
+        }
+        seen.insert(entry.clone(), true);
+        entries.push(entry);
+    }
+
+    entries
+}
+
+fn read_readme_context_files(target_dir: &Path) -> Vec<String> {
+    let mut entries = Vec::new();
+    let mut seen: BTreeMap<String, bool> = BTreeMap::new();
+    let readme_path = target_dir.join("README.md");
+    let contents = match fs::read_to_string(&readme_path) {
+        Ok(contents) => contents,
+        Err(_) => return entries,
+    };
+
+    let mut in_section = false;
+    for line in contents.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("## ") {
+            if in_section {
+                break;
+            }
+            if trimmed.contains("Context Files") {
+                in_section = true;
+            }
+            continue;
+        }
+        if !in_section {
+            continue;
+        }
+
+        let mut rest = trimmed;
+        while let Some(start) = rest.find('`') {
+            let remaining = &rest[start + 1..];
+            if let Some(end) = remaining.find('`') {
+                let candidate = &remaining[..end];
+                if candidate.ends_with(".md") && !candidate.contains(' ') {
+                    let value = candidate.to_string();
+                    if !seen.contains_key(&value) {
+                        seen.insert(value.clone(), true);
+                        entries.push(value);
+                    }
+                }
+                rest = &remaining[end + 1..];
+            } else {
+                break;
+            }
+        }
+    }
+
+    entries
+}
+
+fn default_context_files() -> [&'static str; 5] {
+    [
+        "ARCHITECTURE.md",
+        "PROCESS.md",
+        "DECISIONS.md",
+        "RISK_REGISTER.md",
+        "CHANGELOG.md",
+    ]
+}
+
+fn is_markdown_path(path: &Path) -> bool {
+    match path.extension().and_then(|ext| ext.to_str()) {
+        Some("md") | Some("markdown") => true,
+        _ => false,
+    }
+}
+
+fn format_display_path(path: &Path, base: &Path) -> String {
+    if path.starts_with(base) {
+        path.strip_prefix(base)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .to_string()
+    } else {
+        path.to_string_lossy().to_string()
+    }
+}
+
+fn join_or_none(entries: &[String]) -> String {
+    if entries.is_empty() {
+        "None".to_string()
+    } else {
+        entries.join(", ")
+    }
+}
+
+fn init_template_for_path(path: &Path) -> String {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    match file_name {
+        name if name.eq_ignore_ascii_case("ARCHITECTURE.md") => ARCHITECTURE_TEMPLATE.to_string(),
+        name if name.eq_ignore_ascii_case("PROCESS.md") => PROCESS_TEMPLATE.to_string(),
+        name if name.eq_ignore_ascii_case("DECISIONS.md") => DECISIONS_TEMPLATE.to_string(),
+        name if name.eq_ignore_ascii_case("RISK_REGISTER.md") => RISK_REGISTER_TEMPLATE.to_string(),
+        name if name.eq_ignore_ascii_case("CHANGELOG.md") => CHANGELOG_TEMPLATE.to_string(),
+        _ => generic_markdown_template(path),
+    }
+}
+
+fn generic_markdown_template(path: &Path) -> String {
+    let stem = path
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or("Context");
+    let title = stem.replace('_', " ");
+    format!("# {}\n\n## Overview\n\nTBD.\n", title)
+}
+
+fn write_atomic(path: &Path, contents: &str, force: bool) -> Result<(), io::Error> {
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("context.md");
+    let temp_name = format!("{}.tmp-{}", file_name, std::process::id());
+    let temp_path = path.with_file_name(temp_name);
+    fs::write(&temp_path, contents)?;
+    if force && path.exists() {
+        let _ = fs::remove_file(path);
+    }
+    fs::rename(&temp_path, path)?;
+    Ok(())
+}
+
 fn build_context_file_list(
     target_dir: &Path,
     user_list: Option<&str>,
@@ -1523,3 +1751,13 @@ mod tests {
 }
 
 const DEFAULT_PRD_TEMPLATE: &str = "## Overview\n\nBriefly describe the project, goals, and intended users.\n\n## Problem Statement\n\n- What problem does this solve?\n- What pain points exist today?\n\n## Solution\n\nHigh-level solution summary.\n\n---\n\n## Functional Requirements\n\n### FR-1: Core Feature\n\nDescribe the primary user-facing behavior.\n\n### FR-2: Secondary Feature\n\nDescribe supporting behavior.\n\n---\n\n## Non-Functional Requirements\n\n### NFR-1: Performance\n\n- Example: Response times under 200ms for key operations.\n\n### NFR-2: Reliability\n\n- Example: Crash recovery or retries where appropriate.\n\n---\n\n## Implementation Tasks\n\nEach task must use a `### Task <ID>` block header and include the required fields.\nEach task block must contain exactly one unchecked task line.\n\n### Task EX-1\n\n- **ID** EX-1\n- **Context Bundle** `path/to/file`, `path/to/other`\n- **DoD** Define the done criteria for this task.\n- **Checklist**\n  * First verification item.\n  * Second verification item.\n- **Dependencies** None\n- [ ] EX-1 Short task summary\n\n---\n\n## Success Criteria\n\n- Define measurable outcomes that indicate completion.\n\n---\n\n## Sources\n\n- List authoritative URLs used as source of truth.\n\n---\n\n## Warnings\n\n- Only include this section if no reliable sources were found.\n- State what is missing and what must be verified.\n";
+
+const ARCHITECTURE_TEMPLATE: &str = "# Architecture\n\n## Overview\n\nDescribe the system at a high level.\n\n## Modules\n\nList key modules and what they own.\n\n## Runtime Flow\n\nDescribe the primary runtime path.\n\n## Storage\n\nRecord where state or data is stored.\n";
+
+const PROCESS_TEMPLATE: &str = "# Process\n\n## Worktree Protocol\n\n1) Read required context files.\n2) Create a task worktree.\n3) Implement the scoped task.\n4) Update shared docs as needed.\n5) Verify changes.\n6) Finish and merge worktree.\n\n## Guardrails\n\n- Keep changes scoped to the assigned task.\n- Update CHANGELOG with the task ID.\n- Record new decisions and risks.\n";
+
+const DECISIONS_TEMPLATE: &str = "# Decisions\n\n## D-001 Decision Title\n- Date: YYYY-MM-DD\n- Status: Proposed\n\n### Context\n\nWhy this decision is needed.\n\n### Decision\n\nWhat was decided.\n\n### Rationale\n\nWhy this choice was made.\n\n### Alternatives\n\nOther options considered.\n";
+
+const RISK_REGISTER_TEMPLATE: &str = "# Risk Register\n\n## R-001 Risk Title\n- Risk: Describe the risk.\n- Impact: Low/Medium/High\n- Mitigation: How to reduce or monitor it.\n";
+
+const CHANGELOG_TEMPLATE: &str = "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\nThe format is based on Keep a Changelog.\n\n## [Unreleased]\n\n### Added\n\n### Fixed\n";
