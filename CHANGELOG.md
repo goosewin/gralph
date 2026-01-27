@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - Added multi-arch release assets for Linux and macOS.
 - Initial public release notes for the gralph CLI.
+- T-CORE-1 Added core task parsing edge-case tests.
 - RS-1 Scaffolded Rust project with clap CLI skeleton.
 - RS-2 Added Rust config loader with serde_yaml merging and env overrides.
 - RS-3 Added Rust state module with file locking and atomic JSON writes.

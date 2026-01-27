@@ -834,7 +834,50 @@ fn create_temp_file(prefix: &str) -> Result<PathBuf, CoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
     use std::fs;
+
+    struct TestBackend {
+        prompt: RefCell<Option<String>>,
+    }
+
+    impl TestBackend {
+        fn new() -> Self {
+            Self {
+                prompt: RefCell::new(None),
+            }
+        }
+    }
+
+    impl Backend for TestBackend {
+        fn check_installed(&self) -> bool {
+            true
+        }
+
+        fn run_iteration(
+            &self,
+            prompt: &str,
+            _model: Option<&str>,
+            output_file: &Path,
+        ) -> Result<(), BackendError> {
+            *self.prompt.borrow_mut() = Some(prompt.to_string());
+            fs::write(output_file, "ok").map_err(|source| BackendError::Io {
+                path: output_file.to_path_buf(),
+                source,
+            })
+        }
+
+        fn parse_text(&self, response_file: &Path) -> Result<String, BackendError> {
+            fs::read_to_string(response_file).map_err(|source| BackendError::Io {
+                path: response_file.to_path_buf(),
+                source,
+            })
+        }
+
+        fn get_models(&self) -> Vec<String> {
+            Vec::new()
+        }
+    }
 
     #[test]
     fn count_remaining_tasks_ignores_outside_blocks() {
@@ -879,5 +922,56 @@ mod tests {
         let raw = "README.md,  ARCHITECTURE.md ,";
         let normalized = normalize_context_files(raw);
         assert_eq!(normalized, "README.md\nARCHITECTURE.md");
+    }
+
+    #[test]
+    fn task_blocks_end_on_separator_and_section_heading() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        let contents = "### Task RS-1\n- [ ] First\n---\n- [ ] Outside\n## Success Criteria\n- Pass\n### Task RS-2\n- [ ] Second\n";
+        fs::write(&path, contents).unwrap();
+
+        let blocks = get_task_blocks(&path).unwrap();
+        assert_eq!(blocks.len(), 2);
+        assert!(!blocks[0].contains("Outside"));
+        assert!(!blocks[0].contains("Success Criteria"));
+        assert!(blocks[1].contains("Second"));
+    }
+
+    #[test]
+    fn get_next_unchecked_task_block_ignores_stray_outside_blocks() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        let contents = "### Task RS-1\n- [x] Done\n---\n- [ ] Outside\n";
+        fs::write(&path, contents).unwrap();
+
+        let block = get_next_unchecked_task_block(&path).unwrap();
+        assert!(block.is_none());
+    }
+
+    #[test]
+    fn run_iteration_falls_back_to_first_unchecked_line() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [ ] Solo task\n").unwrap();
+
+        let backend = TestBackend::new();
+        let _ = run_iteration(
+            &backend,
+            temp.path(),
+            "PRD.md",
+            1,
+            2,
+            "COMPLETE",
+            None,
+            None,
+            Some("Block:\n{task_block}\n"),
+            None,
+        )
+        .unwrap();
+
+        let prompt = backend.prompt.borrow().clone().unwrap();
+        assert!(prompt.contains("- [ ] Solo task"));
+        assert!(!prompt.contains("No task block available."));
     }
 }
