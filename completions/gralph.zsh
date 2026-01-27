@@ -322,6 +322,12 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
+(update)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
 (run-loop)
 _arguments "${_arguments_options[@]}" : \
 '--name=[Session name]:NAME:_default' \
@@ -464,6 +470,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(update)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (run-loop)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -496,6 +506,7 @@ _gralph_commands() {
 'config:Manage configuration' \
 'server:Start status API server' \
 'version:Show version' \
+'update:Install the latest release' \
 'run-loop:' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
@@ -576,6 +587,7 @@ _gralph__help_commands() {
 'config:Manage configuration' \
 'server:Start status API server' \
 'version:Show version' \
+'update:Install the latest release' \
 'run-loop:' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
@@ -672,6 +684,11 @@ _gralph__help__status_commands() {
 _gralph__help__stop_commands() {
     local commands; commands=()
     _describe -t commands 'gralph help stop commands' commands "$@"
+}
+(( $+functions[_gralph__help__update_commands] )) ||
+_gralph__help__update_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph help update commands' commands "$@"
 }
 (( $+functions[_gralph__help__version_commands] )) ||
 _gralph__help__version_commands() {
@@ -778,6 +795,11 @@ _gralph__status_commands() {
 _gralph__stop_commands() {
     local commands; commands=()
     _describe -t commands 'gralph stop commands' commands "$@"
+}
+(( $+functions[_gralph__update_commands] )) ||
+_gralph__update_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph update commands' commands "$@"
 }
 (( $+functions[_gralph__version_commands] )) ||
 _gralph__version_commands() {

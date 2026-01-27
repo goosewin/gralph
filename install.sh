@@ -72,9 +72,14 @@ main() {
 
     # Download
     local url="https://github.com/${REPO}/releases/download/v${VERSION}/gralph-${VERSION}-${platform}.tar.gz"
-    local tmp_dir
+    local tmp_dir=""
+    cleanup() {
+        if [[ -n "${tmp_dir:-}" && -d "${tmp_dir}" ]]; then
+            rm -rf "${tmp_dir}"
+        fi
+    }
+    trap cleanup EXIT
     tmp_dir="$(mktemp -d)"
-    trap 'rm -rf "$tmp_dir"' EXIT
 
     info "Downloading from $url..."
     curl -fsSL "$url" -o "$tmp_dir/gralph.tar.gz" || error "Download failed. Check if version $VERSION exists for platform $platform"
@@ -100,13 +105,26 @@ main() {
     fi
 
     # Verify
-    if command -v gralph >/dev/null 2>&1; then
+    local installed_bin="$INSTALL_DIR/gralph"
+    if [[ -x "$installed_bin" ]]; then
+        local installed_version
+        installed_version="$($installed_bin --version 2>/dev/null || echo "$VERSION")"
         echo
-        info "Successfully installed gralph $(gralph --version 2>/dev/null || echo "$VERSION")"
+        info "Successfully installed gralph ${installed_version}"
+        if command -v gralph >/dev/null 2>&1; then
+            local resolved_path
+            resolved_path="$(command -v gralph)"
+            if [[ "$resolved_path" != "$installed_bin" ]]; then
+                warn "PATH resolves gralph to $resolved_path"
+                warn "Run $installed_bin or update PATH to prefer $INSTALL_DIR"
+            fi
+        else
+            warn "Installed to $installed_bin but it's not in PATH"
+            warn "Add $INSTALL_DIR to your PATH or run $installed_bin"
+        fi
         info "Run 'gralph --help' to get started"
     else
-        warn "Installed to $INSTALL_DIR/gralph but it's not in PATH"
-        warn "Add $INSTALL_DIR to your PATH or move the binary"
+        error "Installed binary not found at $installed_bin"
     fi
 }
 

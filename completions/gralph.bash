@@ -52,6 +52,9 @@ _gralph() {
             gralph,stop)
                 cmd="gralph__stop"
                 ;;
+            gralph,update)
+                cmd="gralph__update"
+                ;;
             gralph,version)
                 cmd="gralph__version"
                 ;;
@@ -117,6 +120,9 @@ _gralph() {
                 ;;
             gralph__help,stop)
                 cmd="gralph__help__stop"
+                ;;
+            gralph__help,update)
+                cmd="gralph__help__update"
                 ;;
             gralph__help,version)
                 cmd="gralph__help__version"
@@ -188,7 +194,7 @@ _gralph() {
 
     case "${cmd}" in
         gralph)
-            opts="-h -V --help --version start stop status logs resume init prd worktree backends config server version run-loop help"
+            opts="-h -V --help --version start stop status logs resume init prd worktree backends config server version update run-loop help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -342,7 +348,7 @@ _gralph() {
             return 0
             ;;
         gralph__help)
-            opts="start stop status logs resume init prd worktree backends config server version run-loop help"
+            opts="start stop status logs resume init prd worktree backends config server version update run-loop help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -580,6 +586,20 @@ _gralph() {
             return 0
             ;;
         gralph__help__stop)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__update)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -1011,6 +1031,20 @@ _gralph() {
             ;;
         gralph__stop)
             opts="-a -h --all --help [NAME]"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__update)
+            opts="-h --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

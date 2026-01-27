@@ -16,8 +16,13 @@ CI=<status/link>; PR=<link if final PRD task>
 - AW-3 Documented auto worktree UX, skip reasons, and Graphite stacking guidance.
 - WT-1 Auto-create worktrees for PRD runs with config and CLI controls.
 - INIT-1 Added init CLI subcommand and routing.
+- UPD-1 Added session-start update check with version parsing.
+- UPD-2 Added update subcommand to install release binaries.
+- DOC-1 Documented update command, update notice, and regenerated completions.
 
 ### Fixed
+- START-1 Added session name fallback for dot and root paths.
+- INST-1 Hardened installer cleanup and PATH-aware verification.
 - LOG-1 Format loop start/finish timestamps and human-readable durations.
 
 ### Verification
@@ -92,7 +97,6 @@ CI=<status/link>; PR=<link if final PRD task>
 - RS-11 Added Rust tests coverage and CI workflow with coverage threshold.
 - RS-12 Documented Rust build/install steps and migration notes.
 - RS-13 Updated release workflow to package Rust binaries and completions.
-- DOC-1 Refreshed shared docs for the Rust-only codebase.
 - T-CLI-1 Added CLI unit tests for PRD output resolution and parse validation.
 - T-CLI-2 Added tests for PRD template selection and fallback behavior.
 - T-CONFIG-1 Added config path precedence tests.

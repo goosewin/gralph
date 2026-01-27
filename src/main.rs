@@ -13,6 +13,7 @@ use gralph_rs::notify;
 use gralph_rs::prd;
 use gralph_rs::server::{self, ServerConfig};
 use gralph_rs::state::{CleanupMode, StateStore};
+use gralph_rs::update;
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsStr;
@@ -51,6 +52,7 @@ fn dispatch(command: Command) -> Result<(), CliError> {
         Command::Config(args) => cmd_config(args),
         Command::Server(args) => cmd_server(args),
         Command::Version => cmd_version(),
+        Command::Update => cmd_update(),
     }
 }
 
@@ -102,6 +104,50 @@ fn cmd_intro() -> Result<(), CliError> {
 fn cmd_version() -> Result<(), CliError> {
     println!("gralph v{}", env!("CARGO_PKG_VERSION"));
     Ok(())
+}
+
+fn cmd_update() -> Result<(), CliError> {
+    let outcome = update::install_release().map_err(|err| CliError::Message(err.to_string()))?;
+    println!(
+        "Installed gralph v{} to {}",
+        outcome.version,
+        outcome.install_path.display()
+    );
+    match outcome.resolved_path {
+        Some(resolved) if resolved != outcome.install_path => {
+            println!("Warning: PATH resolves gralph to {}", resolved.display());
+            println!(
+                "Run {} or update PATH to prefer {}",
+                outcome.install_path.display(),
+                outcome.install_dir.display()
+            );
+        }
+        Some(_) => {}
+        None => {
+            println!(
+                "Warning: gralph not found in PATH. Add {} to PATH or run {}",
+                outcome.install_dir.display(),
+                outcome.install_path.display()
+            );
+        }
+    }
+    Ok(())
+}
+
+fn maybe_check_for_update() {
+    let current_version = env!("CARGO_PKG_VERSION");
+    match update::check_for_update(current_version) {
+        Ok(Some(info)) => {
+            println!(
+                "Update available: gralph v{} -> v{}. Run `gralph update`.",
+                info.current, info.latest
+            );
+        }
+        Ok(None) => {}
+        Err(err) => {
+            eprintln!("Warning: update check failed: {}", err);
+        }
+    }
 }
 
 fn cmd_start(args: StartArgs) -> Result<(), CliError> {
@@ -824,6 +870,7 @@ fn cmd_server(args: ServerArgs) -> Result<(), CliError> {
 
 fn run_loop_with_state(args: RunLoopArgs) -> Result<(), CliError> {
     let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
+    maybe_check_for_update();
     let task_file = args
         .task_file
         .clone()
@@ -1016,15 +1063,29 @@ fn run_loop_args_from_start(args: StartArgs, name: String) -> Result<RunLoopArgs
     })
 }
 
+const DEFAULT_SESSION_NAME: &str = "gralph";
+
 fn session_name(name: &Option<String>, dir: &Path) -> Result<String, CliError> {
     if let Some(name) = name {
         return Ok(sanitize_session_name(name));
     }
-    let basename = dir
-        .file_name()
-        .and_then(OsStr::to_str)
-        .ok_or_else(|| CliError::Message("Invalid directory name".to_string()))?;
-    Ok(sanitize_session_name(basename))
+    let canonical_name = dir.canonicalize().ok().and_then(|path| {
+        path.file_name()
+            .and_then(OsStr::to_str)
+            .map(|value| value.to_string())
+    });
+    let raw_name = canonical_name.or_else(|| {
+        dir.file_name()
+            .and_then(OsStr::to_str)
+            .map(|value| value.to_string())
+    });
+    if let Some(raw_name) = raw_name {
+        let sanitized = sanitize_session_name(&raw_name);
+        if !sanitized.is_empty() {
+            return Ok(sanitized);
+        }
+    }
+    Ok(DEFAULT_SESSION_NAME.to_string())
 }
 
 fn sanitize_session_name(name: &str) -> String {
@@ -2088,6 +2149,32 @@ mod tests {
 
         let empty = auto_worktree_branch_name("", "20260126-120000");
         assert_eq!(empty, "prd-20260126-120000");
+    }
+
+    #[test]
+    fn session_name_uses_canonical_basename_for_dot() {
+        let expected_path = env::current_dir().unwrap().canonicalize().unwrap();
+        let expected = expected_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap()
+            .to_string();
+        let resolved = session_name(&None, Path::new(".")).unwrap();
+        assert_eq!(resolved, sanitize_session_name(&expected));
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn session_name_falls_back_for_root() {
+        let resolved = session_name(&None, Path::new("/")).unwrap();
+        assert_eq!(resolved, DEFAULT_SESSION_NAME);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn session_name_falls_back_for_root() {
+        let resolved = session_name(&None, Path::new(r"C:\\")).unwrap();
+        assert_eq!(resolved, DEFAULT_SESSION_NAME);
     }
 
     #[test]
