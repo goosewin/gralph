@@ -45,7 +45,7 @@ gralph resume                     # Resume after crash
 
 ## How It Works
 
-1. Reads task file (`PRD.md` by default)
+1. Reads task file (`PRD.md` by default) - [see example PRDs](examples/)
 2. Finds unchecked tasks (`- [ ]` lines)
 3. Spawns AI to complete one task
 4. Repeats until all tasks done or max iterations hit
@@ -54,13 +54,15 @@ gralph resume                     # Resume after crash
 
 Gralph agents are stateless - each iteration starts fresh with no memory of previous runs. To prevent context loss and rework, maintain these files in your project root:
 
-| File | Purpose |
-|------|---------|
-| `ARCHITECTURE.md` | Module map, runtime flow, storage locations. Agents read this to understand where code lives and how components connect. |
-| `PROCESS.md` | Step-by-step protocol agents must follow. Defines guardrails like "update CHANGELOG after each task" or "reject tasks without Context Bundle." |
-| `DECISIONS.md` | Architectural decisions with context, rationale, and rejected alternatives. Prevents agents from revisiting settled debates. |
-| `RISK_REGISTER.md` | Known risks (e.g., "context loss between iterations") with mitigations. Agents add new risks they discover. |
-| `CHANGELOG.md` | Record of what each agent accomplished, tagged by task ID. Next agent sees what was done and builds on it. |
+| File | Purpose | Example |
+|------|---------|---------|
+| `ARCHITECTURE.md` | Module map, runtime flow, storage locations. Agents read this to understand where code lives and how components connect. | [see example](ARCHITECTURE.md) |
+| `PROCESS.md` | Step-by-step protocol agents must follow. Defines guardrails like "update CHANGELOG after each task" or "reject tasks without Context Bundle." | [see example](PROCESS.md) |
+| `DECISIONS.md` | Architectural decisions with context, rationale, and rejected alternatives. Prevents agents from revisiting settled debates. | [see example](DECISIONS.md) |
+| `RISK_REGISTER.md` | Known risks (e.g., "context loss between iterations") with mitigations. Agents add new risks they discover. | [see example](RISK_REGISTER.md) |
+| `CHANGELOG.md` | Record of what each agent accomplished, tagged by task ID. Next agent sees what was done and builds on it. | [see example](CHANGELOG.md) |
+
+For PRD task files, see [example PRDs](examples/).
 
 Gralph injects these into every prompt, so each agent:
 - Knows the codebase structure without exploring
@@ -89,13 +91,14 @@ Or use environment variables: `GRALPH_DEFAULTS_BACKEND=opencode`
 
 ## Documentation
 
-- [Configuration Reference](docs/configuration.md) - All config options
+- [Example PRDs](examples/) - See what good task files look like
+- [PRD Format](docs/prd-format.md) - Task file structure
 - [CLI Reference](docs/cli.md) - Full command documentation  
+- [Configuration Reference](docs/configuration.md) - All config options
 - [Backends](docs/backends.md) - Backend setup and models
 - [Notifications](docs/notifications.md) - Webhook setup
 - [Troubleshooting](docs/troubleshooting.md) - Common issues
-- [PRD Format](docs/prd-format.md) - Task file structure
 
 ## License
 
-MIT - Dan Goosewin
+MIT © Dan Goosewin
