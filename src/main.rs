@@ -1,10 +1,10 @@
 mod cli;
 
-use clap::{CommandFactory, Parser};
+use clap::Parser;
 use cli::{
     Cli, Command, ConfigArgs, ConfigCommand, LogsArgs, PrdArgs, PrdCheckArgs, PrdCommand,
     PrdCreateArgs, ResumeArgs, RunLoopArgs, ServerArgs, StartArgs, StopArgs, WorktreeCommand,
-    WorktreeCreateArgs, WorktreeFinishArgs,
+    WorktreeCreateArgs, WorktreeFinishArgs, ASCII_BANNER,
 };
 use gralph_rs::backend::backend_from_name;
 use gralph_rs::config::Config;
@@ -27,7 +27,7 @@ use std::time::Duration;
 fn main() {
     let cli = Cli::parse();
     let Some(command) = cli.command else {
-        let _ = cmd_help();
+        let _ = cmd_intro();
         return;
     };
     if let Err(err) = dispatch(command) {
@@ -74,11 +74,26 @@ impl From<io::Error> for CliError {
     }
 }
 
-fn cmd_help() -> Result<(), CliError> {
-    Cli::command()
-        .print_help()
-        .map_err(|err| CliError::Io(err))?;
-    println!();
+fn cmd_intro() -> Result<(), CliError> {
+    println!("{}", ASCII_BANNER);
+    println!("gralph - Autonomous AI coding loops\n");
+    println!(
+        "gralph reads your PRD tasks and iterates with your chosen backend until tasks complete."
+    );
+    println!("Run in foreground with --no-tmux (tmux is disabled here).\n");
+    println!("Get started:");
+    println!("  gralph start . --no-tmux");
+    println!("  gralph start /path/to/project --backend opencode --no-tmux\n");
+    println!("Common commands:");
+    println!("  gralph status");
+    println!("  gralph logs <name>");
+    println!("  gralph stop <name>");
+    println!("  gralph backends");
+    println!("  gralph prd create --dir . --output PRD.new.md --goal \"Add a billing dashboard\"");
+    println!("  gralph worktree create C-1\n");
+    println!("More help:");
+    println!("  gralph --help");
+    println!("  gralph <command> --help");
     Ok(())
 }
 

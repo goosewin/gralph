@@ -15,8 +15,8 @@ _gralph() {
 
     local context curcontext="$curcontext" state line
     _arguments "${_arguments_options[@]}" : \
-'-h[Print help]' \
-'--help[Print help]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
 '-V[Print version]' \
 '--version[Print version]' \
 ":: :_gralph_commands" \
@@ -30,33 +30,33 @@ _gralph() {
         case $line[1] in
             (start)
 _arguments "${_arguments_options[@]}" : \
-'-n+[]:NAME:_default' \
-'--name=[]:NAME:_default' \
-'--max-iterations=[]:MAX_ITERATIONS:_default' \
-'-f+[]:TASK_FILE:_default' \
-'--task-file=[]:TASK_FILE:_default' \
-'--completion-marker=[]:COMPLETION_MARKER:_default' \
-'-b+[]:BACKEND:_default' \
-'--backend=[]:BACKEND:_default' \
-'-m+[]:MODEL:_default' \
-'--model=[]:MODEL:_default' \
-'--variant=[]:VARIANT:_default' \
-'--prompt-template=[]:PROMPT_TEMPLATE:_files' \
-'--webhook=[]:WEBHOOK:_default' \
-'--no-tmux[]' \
-'--strict-prd[]' \
+'-n+[Session name (default\: directory name)]:NAME:_default' \
+'--name=[Session name (default\: directory name)]:NAME:_default' \
+'--max-iterations=[Max iterations before giving up (default\: 30)]:MAX_ITERATIONS:_default' \
+'-f+[Task file path (default\: PRD.md)]:TASK_FILE:_default' \
+'--task-file=[Task file path (default\: PRD.md)]:TASK_FILE:_default' \
+'--completion-marker=[Completion promise text (default\: COMPLETE)]:COMPLETION_MARKER:_default' \
+'-b+[AI backend (default\: claude)]:BACKEND:_default' \
+'--backend=[AI backend (default\: claude)]:BACKEND:_default' \
+'-m+[Model override (format depends on backend)]:MODEL:_default' \
+'--model=[Model override (format depends on backend)]:MODEL:_default' \
+'--variant=[Model variant override (backend-specific)]:VARIANT:_default' \
+'--prompt-template=[Path to custom prompt template file]:PROMPT_TEMPLATE:_files' \
+'--webhook=[Notification webhook URL]:WEBHOOK:_default' \
+'--no-tmux[Run in foreground (blocks)]' \
+'--strict-prd[Validate PRD before starting the loop]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':dir:_files' \
+':dir -- Project directory to run the loop in:_files' \
 && ret=0
 ;;
 (stop)
 _arguments "${_arguments_options[@]}" : \
-'-a[]' \
-'--all[]' \
+'-a[Stop all loops]' \
+'--all[Stop all loops]' \
 '-h[Print help]' \
 '--help[Print help]' \
-'::name:_default' \
+'::name -- Session name:_default' \
 && ret=0
 ;;
 (status)
@@ -67,17 +67,17 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (logs)
 _arguments "${_arguments_options[@]}" : \
-'--follow[]' \
+'--follow[Follow log output]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':name:_default' \
+':name -- Session name:_default' \
 && ret=0
 ;;
 (resume)
 _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
-'::name:_default' \
+'::name -- Session name:_default' \
 && ret=0
 ;;
 (prd)
@@ -96,30 +96,30 @@ _arguments "${_arguments_options[@]}" : \
         case $line[1] in
             (check)
 _arguments "${_arguments_options[@]}" : \
-'--allow-missing-context[]' \
+'--allow-missing-context[Allow missing Context Bundle paths]' \
 '-h[Print help]' \
 '--help[Print help]' \
-':file:_files' \
+':file -- PRD file to validate:_files' \
 && ret=0
 ;;
 (create)
 _arguments "${_arguments_options[@]}" : \
-'--dir=[]:DIR:_files' \
-'-o+[]:OUTPUT:_files' \
-'--output=[]:OUTPUT:_files' \
-'--goal=[]:GOAL:_default' \
-'--constraints=[]:CONSTRAINTS:_default' \
-'--context=[]:CONTEXT:_default' \
-'--sources=[]:SOURCES:_default' \
-'-b+[]:BACKEND:_default' \
-'--backend=[]:BACKEND:_default' \
-'-m+[]:MODEL:_default' \
-'--model=[]:MODEL:_default' \
-'--allow-missing-context[]' \
-'--multiline[]' \
-'(--interactive)--no-interactive[]' \
-'(--no-interactive)--interactive[]' \
-'--force[]' \
+'--dir=[Project directory (default\: current)]:DIR:_files' \
+'-o+[Output PRD file path (default\: PRD.generated.md)]:OUTPUT:_files' \
+'--output=[Output PRD file path (default\: PRD.generated.md)]:OUTPUT:_files' \
+'--goal=[Short description of what to build]:GOAL:_default' \
+'--constraints=[Constraints or non-functional requirements]:CONSTRAINTS:_default' \
+'--context=[Extra context files (comma-separated)]:CONTEXT:_default' \
+'--sources=[External URLs or references (comma-separated)]:SOURCES:_default' \
+'-b+[Backend for PRD generation (default\: config/default)]:BACKEND:_default' \
+'--backend=[Backend for PRD generation (default\: config/default)]:BACKEND:_default' \
+'-m+[Model override for PRD generation]:MODEL:_default' \
+'--model=[Model override for PRD generation]:MODEL:_default' \
+'--allow-missing-context[Allow missing Context Bundle paths]' \
+'--multiline[Enable multiline prompts (interactive)]' \
+'(--interactive)--no-interactive[Disable interactive prompts]' \
+'(--no-interactive)--interactive[Force interactive prompts]' \
+'--force[Overwrite existing output file]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -174,14 +174,14 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
-':id:_default' \
+':id -- Task ID (e.g. C-1):_default' \
 && ret=0
 ;;
 (finish)
 _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
-':id:_default' \
+':id -- Task ID (e.g. C-1):_default' \
 && ret=0
 ;;
 (help)
@@ -240,15 +240,15 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
-':key:_default' \
+':key -- Config key:_default' \
 && ret=0
 ;;
 (set)
 _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
-':key:_default' \
-':value:_default' \
+':key -- Config key:_default' \
+':value -- Config value:_default' \
 && ret=0
 ;;
 (list)
@@ -295,13 +295,13 @@ esac
 ;;
 (server)
 _arguments "${_arguments_options[@]}" : \
-'-H+[]:HOST:_default' \
-'--host=[]:HOST:_default' \
-'-p+[]:PORT:_default' \
-'--port=[]:PORT:_default' \
-'-t+[]:TOKEN:_default' \
-'--token=[]:TOKEN:_default' \
-'--open[]' \
+'-H+[Host/IP to bind to (default\: 127.0.0.1)]:HOST:_default' \
+'--host=[Host/IP to bind to (default\: 127.0.0.1)]:HOST:_default' \
+'-p+[Port number (default\: 8080)]:PORT:_default' \
+'--port=[Port number (default\: 8080)]:PORT:_default' \
+'-t+[Authentication token (required for non-localhost)]:TOKEN:_default' \
+'--token=[Authentication token (required for non-localhost)]:TOKEN:_default' \
+'--open[Disable token requirement (use with caution)]' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -314,7 +314,7 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (run-loop)
 _arguments "${_arguments_options[@]}" : \
-'--name=[]:NAME:_default' \
+'--name=[Session name]:NAME:_default' \
 '--max-iterations=[]:MAX_ITERATIONS:_default' \
 '--task-file=[]:TASK_FILE:_default' \
 '--completion-marker=[]:COMPLETION_MARKER:_default' \
@@ -469,17 +469,17 @@ esac
 (( $+functions[_gralph_commands] )) ||
 _gralph_commands() {
     local commands; commands=(
-'start:' \
-'stop:' \
-'status:' \
-'logs:' \
-'resume:' \
-'prd:' \
-'worktree:' \
-'backends:' \
-'config:' \
-'server:' \
-'version:' \
+'start:Start a new gralph loop' \
+'stop:Stop a running loop' \
+'status:Show status of all loops' \
+'logs:View logs for a loop' \
+'resume:Resume crashed/stopped loops' \
+'prd:Generate or validate PRDs' \
+'worktree:Manage task worktrees' \
+'backends:List available AI backends' \
+'config:Manage configuration' \
+'server:Start status API server' \
+'version:Show version' \
 'run-loop:' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
@@ -493,9 +493,9 @@ _gralph__backends_commands() {
 (( $+functions[_gralph__config_commands] )) ||
 _gralph__config_commands() {
     local commands; commands=(
-'get:' \
-'set:' \
-'list:' \
+'get:Get config value' \
+'set:Set config value' \
+'list:List config values' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'gralph config commands' commands "$@"
@@ -508,9 +508,9 @@ _gralph__config__get_commands() {
 (( $+functions[_gralph__config__help_commands] )) ||
 _gralph__config__help_commands() {
     local commands; commands=(
-'get:' \
-'set:' \
-'list:' \
+'get:Get config value' \
+'set:Set config value' \
+'list:List config values' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'gralph config help commands' commands "$@"
@@ -548,17 +548,17 @@ _gralph__config__set_commands() {
 (( $+functions[_gralph__help_commands] )) ||
 _gralph__help_commands() {
     local commands; commands=(
-'start:' \
-'stop:' \
-'status:' \
-'logs:' \
-'resume:' \
-'prd:' \
-'worktree:' \
-'backends:' \
-'config:' \
-'server:' \
-'version:' \
+'start:Start a new gralph loop' \
+'stop:Stop a running loop' \
+'status:Show status of all loops' \
+'logs:View logs for a loop' \
+'resume:Resume crashed/stopped loops' \
+'prd:Generate or validate PRDs' \
+'worktree:Manage task worktrees' \
+'backends:List available AI backends' \
+'config:Manage configuration' \
+'server:Start status API server' \
+'version:Show version' \
 'run-loop:' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
@@ -572,9 +572,9 @@ _gralph__help__backends_commands() {
 (( $+functions[_gralph__help__config_commands] )) ||
 _gralph__help__config_commands() {
     local commands; commands=(
-'get:' \
-'set:' \
-'list:' \
+'get:Get config value' \
+'set:Set config value' \
+'list:List config values' \
     )
     _describe -t commands 'gralph help config commands' commands "$@"
 }
@@ -606,8 +606,8 @@ _gralph__help__logs_commands() {
 (( $+functions[_gralph__help__prd_commands] )) ||
 _gralph__help__prd_commands() {
     local commands; commands=(
-'check:' \
-'create:' \
+'check:Validate PRD task blocks' \
+'create:Generate a spec-compliant PRD' \
     )
     _describe -t commands 'gralph help prd commands' commands "$@"
 }
@@ -659,8 +659,8 @@ _gralph__help__version_commands() {
 (( $+functions[_gralph__help__worktree_commands] )) ||
 _gralph__help__worktree_commands() {
     local commands; commands=(
-'create:' \
-'finish:' \
+'create:Create task worktree' \
+'finish:Finish task worktree' \
     )
     _describe -t commands 'gralph help worktree commands' commands "$@"
 }
@@ -682,8 +682,8 @@ _gralph__logs_commands() {
 (( $+functions[_gralph__prd_commands] )) ||
 _gralph__prd_commands() {
     local commands; commands=(
-'check:' \
-'create:' \
+'check:Validate PRD task blocks' \
+'create:Generate a spec-compliant PRD' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'gralph prd commands' commands "$@"
@@ -701,8 +701,8 @@ _gralph__prd__create_commands() {
 (( $+functions[_gralph__prd__help_commands] )) ||
 _gralph__prd__help_commands() {
     local commands; commands=(
-'check:' \
-'create:' \
+'check:Validate PRD task blocks' \
+'create:Generate a spec-compliant PRD' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'gralph prd help commands' commands "$@"
@@ -760,8 +760,8 @@ _gralph__version_commands() {
 (( $+functions[_gralph__worktree_commands] )) ||
 _gralph__worktree_commands() {
     local commands; commands=(
-'create:' \
-'finish:' \
+'create:Create task worktree' \
+'finish:Finish task worktree' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'gralph worktree commands' commands "$@"
@@ -779,8 +779,8 @@ _gralph__worktree__finish_commands() {
 (( $+functions[_gralph__worktree__help_commands] )) ||
 _gralph__worktree__help_commands() {
     local commands; commands=(
-'create:' \
-'finish:' \
+'create:Create task worktree' \
+'finish:Finish task worktree' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'gralph worktree help commands' commands "$@"
