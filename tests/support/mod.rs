@@ -2,7 +2,7 @@ use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Mutex;
 use tempfile::TempDir;
 
@@ -11,7 +11,6 @@ static PATH_LOCK: Mutex<()> = Mutex::new(());
 pub struct FakeCli {
     temp_dir: TempDir,
     bin_name: String,
-    bin_path: PathBuf,
 }
 
 impl FakeCli {
@@ -30,13 +29,10 @@ impl FakeCli {
             fs::set_permissions(&bin_path, perms)?;
         }
 
-        Ok(Self {
-            temp_dir,
-            bin_name,
-            bin_path,
-        })
+        Ok(Self { temp_dir, bin_name })
     }
 
+    #[allow(dead_code)]
     pub fn new_script(name: &str, script: &str) -> io::Result<Self> {
         let temp_dir = tempfile::tempdir()?;
         let bin_name = name.to_string();
@@ -51,19 +47,11 @@ impl FakeCli {
             fs::set_permissions(&bin_path, perms)?;
         }
 
-        Ok(Self {
-            temp_dir,
-            bin_name,
-            bin_path,
-        })
+        Ok(Self { temp_dir, bin_name })
     }
 
     pub fn command(&self) -> &str {
         &self.bin_name
-    }
-
-    pub fn bin_path(&self) -> &Path {
-        &self.bin_path
     }
 
     pub fn prepend_to_path(&self) -> io::Result<PathGuard> {

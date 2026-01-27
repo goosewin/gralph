@@ -6,7 +6,7 @@ use cli::{
     PrdCreateArgs, ResumeArgs, RunLoopArgs, ServerArgs, StartArgs, StopArgs, WorktreeCommand,
     WorktreeCreateArgs, WorktreeFinishArgs,
 };
-use gralph_rs::backend::{backend_from_name, Backend};
+use gralph_rs::backend::backend_from_name;
 use gralph_rs::config::Config;
 use gralph_rs::core::{self, LoopStatus};
 use gralph_rs::notify;
