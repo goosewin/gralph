@@ -337,7 +337,7 @@ fn acquire_lock(file: &File, timeout: Duration) -> Result<(), StateError> {
     loop {
         match file.try_lock_exclusive() {
             Ok(()) => return Ok(()),
-            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+            Err(err) if is_lock_contention(&err) => {
                 if start.elapsed() >= timeout {
                     return Err(StateError::LockTimeout { timeout });
                 }
@@ -351,6 +351,20 @@ fn acquire_lock(file: &File, timeout: Duration) -> Result<(), StateError> {
             }
         }
     }
+}
+
+/// Check if an error indicates lock contention (file is locked by another process)
+fn is_lock_contention(err: &std::io::Error) -> bool {
+    // Unix returns WouldBlock
+    if err.kind() == std::io::ErrorKind::WouldBlock {
+        return true;
+    }
+    // Windows returns raw OS error 33 (ERROR_LOCK_VIOLATION)
+    #[cfg(windows)]
+    if err.raw_os_error() == Some(33) {
+        return true;
+    }
+    false
 }
 
 fn parse_value(raw: &str) -> Value {
