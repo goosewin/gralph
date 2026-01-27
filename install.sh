@@ -17,6 +17,35 @@ info() { echo -e "${GREEN}[INFO]${NC} $*"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 
+# Ensure install directory is on PATH
+ensure_path() {
+    local target_dir="$1"
+    if [[ ":$PATH:" == *":${target_dir}:"* ]]; then
+        return 0
+    fi
+
+    local shell_name rc_file
+    shell_name="$(basename "${SHELL:-}")"
+    case "$shell_name" in
+        zsh)  rc_file="$HOME/.zshrc" ;;
+        bash) rc_file="$HOME/.bashrc" ;;
+        *)    rc_file="$HOME/.profile" ;;
+    esac
+
+    if [[ ! -f "$rc_file" ]]; then
+        touch "$rc_file"
+    fi
+
+    if ! grep -Fqs "$target_dir" "$rc_file"; then
+        echo "" >> "$rc_file"
+        echo "# Added by Gralph installer" >> "$rc_file"
+        echo "export PATH=\"$target_dir:\$PATH\"" >> "$rc_file"
+    fi
+
+    info "Updated PATH in $rc_file"
+    info "Run 'source $rc_file' or open a new terminal"
+}
+
 # Detect OS and architecture
 detect_platform() {
     local os arch
@@ -125,7 +154,7 @@ main() {
             fi
         else
             warn "Installed to $installed_bin but it's not in PATH"
-            warn "Add $INSTALL_DIR to your PATH or run $installed_bin"
+            ensure_path "$INSTALL_DIR"
         fi
         info "Run 'gralph --help' to get started"
     else
