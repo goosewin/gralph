@@ -249,7 +249,7 @@ fn detect_platform() -> Result<String, UpdateError> {
             return Err(UpdateError::UnsupportedPlatform(format!(
                 "{}-{}",
                 os, other
-            )))
+            )));
         }
     };
     Ok(format!("{}-{}", os, arch))

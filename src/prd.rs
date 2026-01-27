@@ -1236,10 +1236,11 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(err
-            .messages
-            .iter()
-            .any(|line| line.contains("Missing required field: DoD")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| line.contains("Missing required field: DoD"))
+        );
     }
 
     #[test]
@@ -1258,10 +1259,11 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(err
-            .messages
-            .iter()
-            .any(|line| line.contains("Multiple unchecked task lines")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| line.contains("Multiple unchecked task lines"))
+        );
     }
 
     #[test]
@@ -1280,10 +1282,11 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(err
-            .messages
-            .iter()
-            .any(|line| line.contains("Unchecked task line outside task block")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| line.contains("Unchecked task line outside task block"))
+        );
     }
 
     #[test]
@@ -1299,10 +1302,11 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(err
-            .messages
-            .iter()
-            .any(|line| line.contains("Context Bundle path not found")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| line.contains("Context Bundle path not found"))
+        );
     }
 
     #[test]

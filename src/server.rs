@@ -3,7 +3,7 @@ use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, options, post};
 use axum::{Json, Router};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::env;
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -29,7 +29,9 @@ impl ServerConfig {
             .ok()
             .and_then(|value| value.parse::<u16>().ok())
             .unwrap_or(8080);
-        let token = env::var("GRALPH_SERVER_TOKEN").ok().filter(|value| !value.is_empty());
+        let token = env::var("GRALPH_SERVER_TOKEN")
+            .ok()
+            .filter(|value| !value.is_empty());
         let open = env::var("GRALPH_SERVER_OPEN")
             .ok()
             .map(|value| value == "true")
@@ -50,7 +52,9 @@ impl ServerConfig {
 
     pub fn validate(&self) -> Result<(), ServerError> {
         if self.port == 0 {
-            return Err(ServerError::InvalidConfig("port must be between 1 and 65535".to_string()));
+            return Err(ServerError::InvalidConfig(
+                "port must be between 1 and 65535".to_string(),
+            ));
         }
         if !is_localhost(&self.host) && self.token.is_none() && !self.open {
             return Err(ServerError::InvalidConfig(format!(
@@ -78,7 +82,9 @@ pub enum ServerError {
 impl std::fmt::Display for ServerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ServerError::InvalidConfig(message) => write!(f, "invalid server configuration: {}", message),
+            ServerError::InvalidConfig(message) => {
+                write!(f, "invalid server configuration: {}", message)
+            }
             ServerError::Io(error) => write!(f, "server io error: {}", error),
             ServerError::State(error) => write!(f, "server state error: {}", error),
         }
@@ -160,10 +166,7 @@ async fn status_handler(State(state): State<Arc<AppState>>, headers: HeaderMap) 
             );
         }
     };
-    let enriched: Vec<Value> = sessions
-        .into_iter()
-        .map(enrich_session)
-        .collect();
+    let enriched: Vec<Value> = sessions.into_iter().map(enrich_session).collect();
     json_response(StatusCode::OK, json!({"sessions": enriched}), cors_origin)
 }
 
@@ -244,7 +247,11 @@ async fn fallback_handler(
     )
 }
 
-fn check_auth(headers: &HeaderMap, state: &AppState, cors_origin: Option<&str>) -> Option<Response> {
+fn check_auth(
+    headers: &HeaderMap,
+    state: &AppState,
+    cors_origin: Option<&str>,
+) -> Option<Response> {
     let Some(expected) = state.config.token.as_deref() else {
         return None;
     };
@@ -255,7 +262,7 @@ fn check_auth(headers: &HeaderMap, state: &AppState, cors_origin: Option<&str>) 
                 StatusCode::UNAUTHORIZED,
                 json!({"error": "Invalid or missing Bearer token"}),
                 cors_origin.map(|value| value.to_string()),
-            ))
+            ));
         }
     };
     let header = match header.to_str() {
@@ -265,7 +272,7 @@ fn check_auth(headers: &HeaderMap, state: &AppState, cors_origin: Option<&str>) 
                 StatusCode::UNAUTHORIZED,
                 json!({"error": "Invalid or missing Bearer token"}),
                 cors_origin.map(|value| value.to_string()),
-            ))
+            ));
         }
     };
     let Some(token) = header.strip_prefix("Bearer ") else {
@@ -291,7 +298,10 @@ fn enrich_session(session: Value) -> Value {
         Some(map) => map.clone(),
         None => Map::new(),
     };
-    let dir = map.get("dir").and_then(|value| value.as_str()).unwrap_or("");
+    let dir = map
+        .get("dir")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
     let task_file = map
         .get("task_file")
         .and_then(|value| value.as_str())
@@ -375,7 +385,9 @@ fn resolve_cors_origin(headers: &HeaderMap, config: &ServerConfig) -> Option<Str
     }
 
     match origin {
-        "http://localhost" | "http://127.0.0.1" | "http://[::1]" => return Some(origin.to_string()),
+        "http://localhost" | "http://127.0.0.1" | "http://[::1]" => {
+            return Some(origin.to_string());
+        }
         _ => {}
     }
 
@@ -398,10 +410,7 @@ fn apply_cors(response: &mut Response, cors_origin: Option<String>) {
         headers.insert(axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN, value);
     }
     if origin != "*" {
-        headers.insert(
-            axum::http::header::VARY,
-            HeaderValue::from_static("Origin"),
-        );
+        headers.insert(axum::http::header::VARY, HeaderValue::from_static("Origin"));
     }
     headers.insert(
         axum::http::header::ACCESS_CONTROL_ALLOW_METHODS,
@@ -448,7 +457,7 @@ fn is_process_alive(pid: i64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::body::{to_bytes, Body};
+    use axum::body::{Body, to_bytes};
     use axum::http::Request;
     use tower::util::ServiceExt;
 
@@ -456,7 +465,12 @@ mod tests {
         let state_dir = dir.join("state");
         let state_file = state_dir.join("state.json");
         let lock_file = state_dir.join("state.lock");
-        StateStore::with_paths(state_dir, state_file, lock_file, std::time::Duration::from_secs(1))
+        StateStore::with_paths(
+            state_dir,
+            state_file,
+            lock_file,
+            std::time::Duration::from_secs(1),
+        )
     }
 
     #[tokio::test]
@@ -657,7 +671,10 @@ mod tests {
         assert_eq!(body["message"], "Session stopped");
 
         let session = state.store.get_session("alpha").unwrap().unwrap();
-        assert_eq!(session.get("status").and_then(|v| v.as_str()), Some("stopped"));
+        assert_eq!(
+            session.get("status").and_then(|v| v.as_str()),
+            Some("stopped")
+        );
     }
 
     #[tokio::test]
@@ -724,6 +741,11 @@ mod tests {
         let body: Value = serde_json::from_slice(&body).unwrap();
         let object = body.as_object().expect("error response object");
         assert_eq!(object.len(), 1);
-        assert!(object.get("error").and_then(|value| value.as_str()).is_some());
+        assert!(
+            object
+                .get("error")
+                .and_then(|value| value.as_str())
+                .is_some()
+        );
     }
 }
