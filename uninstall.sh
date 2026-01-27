@@ -3,7 +3,7 @@
 set -euo pipefail
 
 # Default to user-local bin to match install.sh
-INSTALL_DIR="${GRALPH_INSTALL_DIR:-$HOME/.local/bin}"
+INSTALL_DIR="${GRALPH_INSTALL_DIR:-${HOME}/.local/bin}"
 
 # Colors for output
 RED='\033[0;31m'

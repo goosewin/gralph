@@ -4,7 +4,7 @@ set -euo pipefail
 
 REPO="goosewin/gralph"
 # Default to user-local bin to avoid permission issues
-INSTALL_DIR="${GRALPH_INSTALL_DIR:-$HOME/.local/bin}"
+INSTALL_DIR="${GRALPH_INSTALL_DIR:-${HOME}/.local/bin}"
 VERSION="${GRALPH_VERSION:-latest}"
 
 # Colors for output
