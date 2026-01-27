@@ -1,0 +1,89 @@
+README.md
+  d97571f73df8c3a3 1,3,5,8,11,14,17,21-23,26,28-33,35,38-39,42-45,61,63-66,68-71,74-82,84-92,95,100,104,107,109,111-117,121
+docs/cli.md
+  d97571f73df8c3a3 1-36,38-40,44-99
+docs/notifications.md
+  d97571f73df8c3a3 1-62
+docs/troubleshooting.md
+  d97571f73df8c3a3 1-74
+config/default.yaml
+  e1d5d9e911d470f3 8,30-31,34-38,41-44
+docs/backends.md
+  d97571f73df8c3a3 1-64
+src/state.rs
+  d97571f73df8c3a3 424-425,432-433,439-440
+docs/configuration.md
+  d97571f73df8c3a3 1-14,16-68,70-100
+docs/prd-format.md
+  d97571f73df8c3a3 1-65
+.github/workflows/macos-smoke.yml
+  d97571f73df8c3a3 11
+CHANGELOG.md
+  cd862b00547d606e 87
+LICENSE
+  d97571f73df8c3a3 3
+examples/PRD-Stage-P-Example.md
+  cd862b00547d606e 56
+  29528314e78f4d81 45
+.github/workflows/release.yml
+  d97571f73df8c3a3 57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "625dc177db17951762a39cad2bf5a3a2e9626b96",
+  "prompts": {
+    "29528314e78f4d81": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cbe32d9a-a3e6-4103-af45-d54a884bcd29",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 1,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "cd862b00547d606e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "37b42d4d-0326-47c1-ac0e-c73b37fa8fcb",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 7,
+      "total_deletions": 1,
+      "accepted_lines": 7,
+      "overriden_lines": 0
+    },
+    "d97571f73df8c3a3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_402f9ec36ffe73QmQJC59kzYcB",
+        "model": "anthropic/claude-opus-4-5"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 14,
+      "total_deletions": 11,
+      "accepted_lines": 14,
+      "overriden_lines": 0
+    },
+    "e1d5d9e911d470f3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2af31800-9d73-4dd7-9f1c-1c39754a98f7",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 19,
+      "total_deletions": 2,
+      "accepted_lines": 19,
+      "overriden_lines": 0
+    }
+  }
+}
