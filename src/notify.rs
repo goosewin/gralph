@@ -537,6 +537,7 @@ fn timestamp_iso8601() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
 
     #[test]
     fn detect_webhook_type_matches() {
@@ -556,5 +557,76 @@ mod tests {
             detect_webhook_type("https://example.com/webhook"),
             WebhookType::Generic
         );
+    }
+
+    #[test]
+    fn format_discord_complete_payload_fields() {
+        let payload =
+            format_discord_complete("alpha", "./demo", "7", "2m 4s", "2026-01-26T10:11:12Z")
+                .expect("discord payload");
+        let value: Value = serde_json::from_str(&payload).expect("json payload");
+        let embed = &value["embeds"][0];
+
+        assert_eq!(embed["title"], "✅ Gralph Complete");
+        assert_eq!(embed["color"], 5763719);
+        assert_eq!(embed["timestamp"], "2026-01-26T10:11:12Z");
+        assert_eq!(embed["footer"]["text"], "Gralph CLI");
+        assert!(embed["description"].as_str().unwrap().contains("alpha"));
+
+        let fields = embed["fields"].as_array().expect("fields array");
+        assert_eq!(fields[0]["name"], "Project");
+        assert_eq!(fields[0]["value"], "`./demo`");
+        assert_eq!(fields[1]["name"], "Iterations");
+        assert_eq!(fields[1]["value"], "7");
+        assert_eq!(fields[2]["name"], "Duration");
+        assert_eq!(fields[2]["value"], "2m 4s");
+    }
+
+    #[test]
+    fn format_slack_complete_payload_structure() {
+        let payload = format_slack_complete("beta", "repo", "3", "14s", "2026-01-26T11:12:13Z")
+            .expect("slack payload");
+        let value: Value = serde_json::from_str(&payload).expect("json payload");
+        let attachment = &value["attachments"][0];
+
+        assert_eq!(attachment["color"], "#57F287");
+        let blocks = attachment["blocks"].as_array().expect("blocks array");
+        assert_eq!(blocks[0]["type"], "header");
+        assert_eq!(blocks[0]["text"]["type"], "plain_text");
+        assert_eq!(blocks[0]["text"]["text"], "✅ Gralph Complete");
+        assert_eq!(blocks[1]["type"], "section");
+        assert!(blocks[1]["text"]["text"].as_str().unwrap().contains("beta"));
+
+        let fields = blocks[2]["fields"].as_array().expect("fields array");
+        assert_eq!(fields[0]["text"], "*Project:*\n`repo`");
+        assert_eq!(fields[1]["text"], "*Iterations:*\n3");
+        assert_eq!(fields[2]["text"], "*Duration:*\n14s");
+        assert_eq!(blocks[3]["type"], "context");
+        assert_eq!(
+            blocks[3]["elements"][0]["text"],
+            "Gralph CLI • 2026-01-26T11:12:13Z"
+        );
+    }
+
+    #[test]
+    fn format_generic_complete_payload_fields() {
+        let payload = format_generic_complete(
+            "gamma",
+            "/tmp/project",
+            "9",
+            "1h 2m 3s",
+            "2026-01-26T12:13:14Z",
+        )
+        .expect("generic payload");
+        let value: Value = serde_json::from_str(&payload).expect("json payload");
+
+        assert_eq!(value["event"], "complete");
+        assert_eq!(value["status"], "success");
+        assert_eq!(value["session"], "gamma");
+        assert_eq!(value["project"], "/tmp/project");
+        assert_eq!(value["iterations"], "9");
+        assert_eq!(value["duration"], "1h 2m 3s");
+        assert_eq!(value["timestamp"], "2026-01-26T12:13:14Z");
+        assert!(value["message"].as_str().unwrap().contains("gamma"));
     }
 }
