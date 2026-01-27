@@ -40,7 +40,7 @@ Expand unit coverage of task parsing, loop control, completion detection, and st
   * Loop stops on max iterations with failure status.
   * State updates reflect iterations and status.
 - **Dependencies** None
-- [ ] T-CORE-2 Add loop execution tests with fake backend
+- [x] T-CORE-2 Add loop execution tests with fake backend
 
 ### Task T-STATE-1
 

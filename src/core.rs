@@ -879,6 +879,59 @@ mod tests {
         }
     }
 
+    struct LoopBackend {
+        response: String,
+        fail_run: bool,
+    }
+
+    impl LoopBackend {
+        fn success(response: &str) -> Self {
+            Self {
+                response: response.to_string(),
+                fail_run: false,
+            }
+        }
+
+        fn fail() -> Self {
+            Self {
+                response: String::new(),
+                fail_run: true,
+            }
+        }
+    }
+
+    impl Backend for LoopBackend {
+        fn check_installed(&self) -> bool {
+            true
+        }
+
+        fn run_iteration(
+            &self,
+            _prompt: &str,
+            _model: Option<&str>,
+            output_file: &Path,
+        ) -> Result<(), BackendError> {
+            if self.fail_run {
+                return Err(BackendError::Command("backend error".to_string()));
+            }
+            fs::write(output_file, &self.response).map_err(|source| BackendError::Io {
+                path: output_file.to_path_buf(),
+                source,
+            })
+        }
+
+        fn parse_text(&self, response_file: &Path) -> Result<String, BackendError> {
+            fs::read_to_string(response_file).map_err(|source| BackendError::Io {
+                path: response_file.to_path_buf(),
+                source,
+            })
+        }
+
+        fn get_models(&self) -> Vec<String> {
+            Vec::new()
+        }
+    }
+
     #[test]
     fn count_remaining_tasks_ignores_outside_blocks() {
         let temp = tempfile::tempdir().unwrap();
@@ -973,5 +1026,111 @@ mod tests {
         let prompt = backend.prompt.borrow().clone().unwrap();
         assert!(prompt.contains("- [ ] Solo task"));
         assert!(!prompt.contains("No task block available."));
+    }
+
+    #[test]
+    fn loop_completes_with_promise_and_updates_state() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [x] Done\n").unwrap();
+
+        let backend = LoopBackend::success("All done\n<promise>COMPLETE</promise>\n");
+        let mut updates: Vec<(u32, LoopStatus, usize)> = Vec::new();
+        let mut callback = |_: Option<&str>, iteration, status, remaining| {
+            updates.push((iteration, status, remaining));
+        };
+
+        let outcome = run_loop(
+            &backend,
+            temp.path(),
+            Some("PRD.md"),
+            Some(1),
+            Some("COMPLETE"),
+            None,
+            Some("session"),
+            None,
+            None,
+            Some(&mut callback),
+        )
+        .unwrap();
+
+        assert_eq!(outcome.status, LoopStatus::Complete);
+        assert_eq!(outcome.iterations, 1);
+        assert_eq!(outcome.remaining_tasks, 0);
+        assert_eq!(
+            updates,
+            vec![(1, LoopStatus::Running, 0), (1, LoopStatus::Complete, 0)]
+        );
+    }
+
+    #[test]
+    fn loop_reports_backend_error_and_failed_state() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [ ] Task\n").unwrap();
+
+        let backend = LoopBackend::fail();
+        let mut updates: Vec<(u32, LoopStatus, usize)> = Vec::new();
+        let mut callback = |_: Option<&str>, iteration, status, remaining| {
+            updates.push((iteration, status, remaining));
+        };
+
+        let result = run_loop(
+            &backend,
+            temp.path(),
+            Some("PRD.md"),
+            Some(1),
+            Some("COMPLETE"),
+            None,
+            Some("session"),
+            None,
+            None,
+            Some(&mut callback),
+        );
+
+        assert!(matches!(result, Err(CoreError::Backend(_))));
+        assert_eq!(
+            updates,
+            vec![(1, LoopStatus::Running, 1), (1, LoopStatus::Failed, 1)]
+        );
+    }
+
+    #[test]
+    fn loop_hits_max_iterations_and_updates_state() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [ ] Task\n").unwrap();
+
+        let backend = LoopBackend::success("Still working\n");
+        let mut updates: Vec<(u32, LoopStatus, usize)> = Vec::new();
+        let mut callback = |_: Option<&str>, iteration, status, remaining| {
+            updates.push((iteration, status, remaining));
+        };
+
+        let outcome = run_loop(
+            &backend,
+            temp.path(),
+            Some("PRD.md"),
+            Some(1),
+            Some("COMPLETE"),
+            None,
+            Some("session"),
+            None,
+            None,
+            Some(&mut callback),
+        )
+        .unwrap();
+
+        assert_eq!(outcome.status, LoopStatus::MaxIterations);
+        assert_eq!(outcome.iterations, 1);
+        assert_eq!(outcome.remaining_tasks, 1);
+        assert_eq!(
+            updates,
+            vec![
+                (1, LoopStatus::Running, 1),
+                (1, LoopStatus::Running, 1),
+                (1, LoopStatus::MaxIterations, 1)
+            ]
+        );
     }
 }
