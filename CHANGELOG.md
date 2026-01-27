@@ -12,6 +12,15 @@ CI=<status/link>; PR=<link if final PRD task>
 ## [Unreleased]
 
 ### Added
+
+### Fixed
+
+### Verification
+- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
+
+## [0.2.1]
+
+### Added
 - AW-2 Added auto worktree edge case tests for skip behavior, subdir mapping, and collisions.
 - AW-3 Documented auto worktree UX, skip reasons, and Graphite stacking guidance.
 - WT-1 Auto-create worktrees for PRD runs with config and CLI controls.
