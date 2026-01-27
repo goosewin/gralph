@@ -73,14 +73,14 @@ _arguments "${_arguments_options[@]}" : \
 ':name -- Session name:_default' \
 && ret=0
 ;;
-            (resume)
+(resume)
 _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
 '::name -- Session name:_default' \
 && ret=0
 ;;
-            (init)
+(init)
 _arguments "${_arguments_options[@]}" : \
 '--dir=[Target directory (default\: current)]:DIR:_files' \
 '--force[Overwrite existing files]' \
@@ -88,7 +88,7 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
-            (prd)
+(prd)
 _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
@@ -354,27 +354,27 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-            (stop)
+(stop)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-            (status)
+(status)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-            (logs)
+(logs)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-            (resume)
+(resume)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-            (init)
+(init)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-            (prd)
+(prd)
 _arguments "${_arguments_options[@]}" : \
 ":: :_gralph__help__prd_commands" \
 "*::: :->prd" \
@@ -613,6 +613,11 @@ _gralph__help__help_commands() {
     local commands; commands=()
     _describe -t commands 'gralph help help commands' commands "$@"
 }
+(( $+functions[_gralph__help__init_commands] )) ||
+_gralph__help__init_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph help init commands' commands "$@"
+}
 (( $+functions[_gralph__help__logs_commands] )) ||
 _gralph__help__logs_commands() {
     local commands; commands=()
@@ -688,6 +693,11 @@ _gralph__help__worktree__create_commands() {
 _gralph__help__worktree__finish_commands() {
     local commands; commands=()
     _describe -t commands 'gralph help worktree finish commands' commands "$@"
+}
+(( $+functions[_gralph__init_commands] )) ||
+_gralph__init_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph init commands' commands "$@"
 }
 (( $+functions[_gralph__logs_commands] )) ||
 _gralph__logs_commands() {

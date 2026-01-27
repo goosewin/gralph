@@ -45,6 +45,7 @@ impl Backend for OpenCodeBackend {
         &self,
         prompt: &str,
         model: Option<&str>,
+        variant: Option<&str>,
         output_file: &Path,
         working_dir: &Path,
     ) -> Result<(), BackendError> {
@@ -64,6 +65,11 @@ impl Backend for OpenCodeBackend {
         if let Some(model) = model {
             if !model.trim().is_empty() {
                 cmd.arg("--model").arg(model);
+            }
+        }
+        if let Some(variant) = variant {
+            if !variant.trim().is_empty() {
+                cmd.arg("--variant").arg(variant);
             }
         }
         cmd.arg(prompt)

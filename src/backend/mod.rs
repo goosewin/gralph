@@ -18,6 +18,7 @@ pub trait Backend {
         &self,
         prompt: &str,
         model: Option<&str>,
+        variant: Option<&str>,
         output_file: &Path,
         working_dir: &Path,
     ) -> Result<(), BackendError>;
