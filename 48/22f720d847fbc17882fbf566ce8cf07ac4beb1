@@ -1,0 +1,23 @@
+src/state.rs
+  d97571f73df8c3a3 424-425,432-433,439-440
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "4822f720d847fbc17882fbf566ce8cf07ac4beb1",
+  "prompts": {
+    "d97571f73df8c3a3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_402f9ec36ffe73QmQJC59kzYcB",
+        "model": "opencode/claude-opus-4-5"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 6,
+      "total_deletions": 3,
+      "accepted_lines": 6,
+      "overriden_lines": 0
+    }
+  }
+}
