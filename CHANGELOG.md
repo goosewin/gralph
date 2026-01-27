@@ -18,7 +18,7 @@ CI=<status/link>; PR=<link if final PRD task>
 ### Verification
 - Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
 
-## [0.2.2]
+## [0.2.1]
 
 ### Added
 - AW-2 Added auto worktree edge case tests for skip behavior, subdir mapping, and collisions.
