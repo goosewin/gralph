@@ -13,6 +13,7 @@ use gralph_rs::notify;
 use gralph_rs::prd;
 use gralph_rs::server::{self, ServerConfig};
 use gralph_rs::state::{CleanupMode, StateStore};
+use gralph_rs::update;
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsStr;
@@ -102,6 +103,22 @@ fn cmd_intro() -> Result<(), CliError> {
 fn cmd_version() -> Result<(), CliError> {
     println!("gralph v{}", env!("CARGO_PKG_VERSION"));
     Ok(())
+}
+
+fn maybe_check_for_update() {
+    let current_version = env!("CARGO_PKG_VERSION");
+    match update::check_for_update(current_version) {
+        Ok(Some(info)) => {
+            println!(
+                "Update available: gralph v{} -> v{}. Run `gralph update`.",
+                info.current, info.latest
+            );
+        }
+        Ok(None) => {}
+        Err(err) => {
+            eprintln!("Warning: update check failed: {}", err);
+        }
+    }
 }
 
 fn cmd_start(args: StartArgs) -> Result<(), CliError> {
@@ -824,6 +841,7 @@ fn cmd_server(args: ServerArgs) -> Result<(), CliError> {
 
 fn run_loop_with_state(args: RunLoopArgs) -> Result<(), CliError> {
     let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
+    maybe_check_for_update();
     let task_file = args
         .task_file
         .clone()

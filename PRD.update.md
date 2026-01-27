@@ -82,7 +82,7 @@ Harden `install.sh` to safely clean temp directories and verify `$INSTALL_DIR/gr
   * Session start path calls the update check once per run.
   * Tests validate newer-version detection and parsing errors.
 - **Dependencies** None
-- [ ] UPD-1 Add update check message on session start
+- [x] UPD-1 Add update check message on session start
 ### Task UPD-2
 
 - **ID** UPD-2
