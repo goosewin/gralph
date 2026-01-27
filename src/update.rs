@@ -345,6 +345,8 @@ impl Drop for TempDir {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::tempdir;
 
     #[test]
     fn parse_version_accepts_v_prefix() {
@@ -372,6 +374,13 @@ mod tests {
     }
 
     #[test]
+    fn parse_release_tag_accepts_valid_tag() {
+        let body = r#"{ "tag_name": "v0.2.1" }"#;
+        let tag = parse_release_tag(body).expect("tag parsed");
+        assert_eq!(tag, "v0.2.1");
+    }
+
+    #[test]
     fn detect_newer_version() {
         let latest = Version::parse("0.2.1").expect("latest parsed");
         let current = Version::parse("0.2.0").expect("current parsed");
@@ -382,5 +391,55 @@ mod tests {
     fn reject_invalid_version_in_check() {
         let result = Version::parse("0.2.beta");
         assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
+    fn normalize_version_accepts_plain_input() {
+        let version = normalize_version("0.2.1").expect("normalized");
+        assert_eq!(version, "0.2.1");
+    }
+
+    #[test]
+    fn detect_platform_reports_current_target() {
+        let os = match env::consts::OS {
+            "linux" => "linux",
+            "macos" => "macos",
+            other => other,
+        };
+        let arch = match (os, env::consts::ARCH) {
+            ("linux", "x86_64") => "x86_64",
+            ("linux", "aarch64") | ("linux", "arm64") => "aarch64",
+            ("macos", "x86_64") => "x86_64",
+            ("macos", "aarch64") | ("macos", "arm64") => "arm64",
+            (_, other) => other,
+        };
+        let expected = format!("{}-{}", os, arch);
+        let resolved = detect_platform().expect("platform");
+        assert_eq!(resolved, expected);
+    }
+
+    #[test]
+    fn resolve_in_path_finds_binary() {
+        let temp = tempdir().expect("tempdir");
+        let bin_path = temp.path().join("gralph");
+        fs::write(&bin_path, "binary").expect("write");
+        let original_path = env::var_os("PATH");
+        env::set_var("PATH", temp.path());
+        let resolved = resolve_in_path("gralph");
+        if let Some(value) = original_path {
+            env::set_var("PATH", value);
+        }
+        assert_eq!(resolved.as_deref(), Some(bin_path.as_path()));
+    }
+
+    #[test]
+    fn install_binary_copies_to_install_dir() {
+        let temp = tempdir().expect("tempdir");
+        let source = temp.path().join("gralph");
+        fs::write(&source, "binary").expect("write");
+        let install_dir = temp.path().join("install");
+        install_binary(&source, &install_dir).expect("install");
+        let target = install_dir.join("gralph");
+        assert!(target.is_file());
     }
 }
