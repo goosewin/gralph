@@ -91,7 +91,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - RS-11 Added Rust tests coverage and CI workflow with coverage threshold.
 - RS-12 Documented Rust build/install steps and migration notes.
 - RS-13 Updated release workflow to package Rust binaries and completions.
-- DOC-1 Refreshed shared docs for the Rust-only codebase.
+- DOC-1 Documented update command, update notice, and regenerated completions.
 - T-CLI-1 Added CLI unit tests for PRD output resolution and parse validation.
 - T-CLI-2 Added tests for PRD template selection and fallback behavior.
 - T-CONFIG-1 Added config path precedence tests.

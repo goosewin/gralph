@@ -104,7 +104,7 @@ Harden `install.sh` to safely clean temp directories and verify `$INSTALL_DIR/gr
   * `docs/cli.md` documents `gralph update` usage.
   * Completions are regenerated from `src/cli.rs` and committed.
 - **Dependencies** UPD-2
-- [ ] DOC-1 Update docs and completions for update feature
+- [x] DOC-1 Update docs and completions for update feature
 ### Task REL-1
 
 - **ID** REL-1

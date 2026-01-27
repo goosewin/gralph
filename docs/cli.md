@@ -17,6 +17,7 @@ gralph backends             List backends
 gralph config               Manage config
 gralph server               Start status server
 gralph version              Show version
+gralph update               Install latest release
 ```
 
 ## `gralph start`
@@ -97,3 +98,12 @@ gralph config              # Show merged config
 gralph config get <key>    # Get value
 gralph config set <key> <value>  # Set value
 ```
+
+## `gralph update`
+
+```bash
+gralph update
+```
+
+Installs the latest release. Override install behavior with `GRALPH_INSTALL_DIR`
+or pin a specific version with `GRALPH_VERSION`.

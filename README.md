@@ -43,7 +43,11 @@ gralph status                     # Check all running loops
 gralph logs myapp --follow        # Watch logs
 gralph stop myapp                 # Stop a loop
 gralph resume                     # Resume after crash
+gralph update                     # Install latest release
 ```
+
+On session start, gralph performs a best-effort update check and prints a notice
+if a newer release is available (it never blocks startup).
 
 By default, `gralph start` creates a git worktree under `.worktrees/` for each PRD run
 when the target directory is inside a git repo with at least one commit and the
