@@ -18,9 +18,10 @@ CI=<status/link>; PR=<link if final PRD task>
 - INIT-1 Added init CLI subcommand and routing.
 - UPD-1 Added session-start update check with version parsing.
 - UPD-2 Added update subcommand to install release binaries.
+- DOC-1 Documented update command, update notice, and regenerated completions.
 
 ### Verification
-- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
+- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened (required)
 
 ## [0.1.0]
 

@@ -115,7 +115,7 @@ Harden `install.sh` to safely clean temp directories and verify `$INSTALL_DIR/gr
   * Unreleased entries reference INST-1, START-1, UPD-1, UPD-2, DOC-1.
   * Verification line updated with test and coverage status.
 - **Dependencies** INST-1, UPD-1, UPD-2, DOC-1
-- [ ] REL-1 Prep 0.2.1 version and changelog
+- [x] REL-1 Prep 0.2.1 version and changelog
 ---
 
 ## Success Criteria
