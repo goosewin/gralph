@@ -51,4 +51,4 @@ Expand unit coverage of task parsing, loop control, completion detection, and st
   * Corrupted state file yields recovery behavior (per current logic).
   * Missing state file initializes cleanly.
 - **Dependencies** None
-- [ ] T-STATE-1 Add state error-path tests
+- [x] T-STATE-1 Add state error-path tests
