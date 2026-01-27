@@ -52,6 +52,7 @@ fn dispatch(command: Command) -> Result<(), CliError> {
         Command::Config(args) => cmd_config(args),
         Command::Server(args) => cmd_server(args),
         Command::Version => cmd_version(),
+        Command::Update => cmd_update(),
     }
 }
 
@@ -102,6 +103,34 @@ fn cmd_intro() -> Result<(), CliError> {
 
 fn cmd_version() -> Result<(), CliError> {
     println!("gralph v{}", env!("CARGO_PKG_VERSION"));
+    Ok(())
+}
+
+fn cmd_update() -> Result<(), CliError> {
+    let outcome = update::install_release().map_err(|err| CliError::Message(err.to_string()))?;
+    println!(
+        "Installed gralph v{} to {}",
+        outcome.version,
+        outcome.install_path.display()
+    );
+    match outcome.resolved_path {
+        Some(resolved) if resolved != outcome.install_path => {
+            println!("Warning: PATH resolves gralph to {}", resolved.display());
+            println!(
+                "Run {} or update PATH to prefer {}",
+                outcome.install_path.display(),
+                outcome.install_dir.display()
+            );
+        }
+        Some(_) => {}
+        None => {
+            println!(
+                "Warning: gralph not found in PATH. Add {} to PATH or run {}",
+                outcome.install_dir.display(),
+                outcome.install_path.display()
+            );
+        }
+    }
     Ok(())
 }
 

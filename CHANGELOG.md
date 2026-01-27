@@ -17,6 +17,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - WT-1 Auto-create worktrees for PRD runs with config and CLI controls.
 - INIT-1 Added init CLI subcommand and routing.
 - UPD-1 Added session-start update check with version parsing.
+- UPD-2 Added update subcommand to install release binaries.
 
 ### Verification
 - Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened

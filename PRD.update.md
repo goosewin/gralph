@@ -93,7 +93,7 @@ Harden `install.sh` to safely clean temp directories and verify `$INSTALL_DIR/gr
   * Dispatch path runs update flow and surfaces failures.
   * Tests confirm CLI parsing accepts `update`.
 - **Dependencies** UPD-1
-- [ ] UPD-2 Add gralph update subcommand for release installs
+- [x] UPD-2 Add gralph update subcommand for release installs
 ### Task DOC-1
 
 - **ID** DOC-1

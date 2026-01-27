@@ -100,6 +100,8 @@ pub enum Command {
     Server(ServerArgs),
     #[command(about = "Show version")]
     Version,
+    #[command(about = "Install the latest release")]
+    Update,
     #[command(hide = true)]
     RunLoop(RunLoopArgs),
 }
@@ -324,4 +326,18 @@ pub struct ServerArgs {
     pub token: Option<String>,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Disable token requirement (use with caution)")]
     pub open: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_update_command() {
+        let cli = Cli::parse_from(["gralph", "update"]);
+        match cli.command {
+            Some(Command::Update) => {}
+            other => panic!("Expected update command, got: {other:?}"),
+        }
+    }
 }
