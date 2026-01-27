@@ -27,7 +27,7 @@ irm https://raw.githubusercontent.com/goosewin/gralph/main/install.ps1 | iex
 
 - One AI backend CLI:
   - `claude` (Claude Code) - `npm install -g @anthropic-ai/claude-code`
-  - `opencode` - See [opencode.ai](https://opencode.ai/docs/cli/)
+  - `opencode` - `npm install -g opencode-ai`
   - `gemini` - `npm install -g @google/gemini-cli`
   - `codex` - `npm install -g @openai/codex`
 - `tmux` for background sessions (optional with `--no-tmux`)
@@ -49,6 +49,27 @@ gralph resume                     # Resume after crash
 2. Finds unchecked tasks (`- [ ]` lines)
 3. Spawns AI to complete one task
 4. Repeats until all tasks done or max iterations hit
+
+## Context Files
+
+Gralph agents are stateless - each iteration starts fresh. To maintain context across iterations, create these metadata files in your project root:
+
+| File | Purpose |
+|------|---------|
+| `README.md` | Project overview, setup instructions |
+| `ARCHITECTURE.md` | System design, modules, data flow |
+| `DECISIONS.md` | Architectural decisions with rationale |
+| `PROCESS.md` | Workflow rules, PR guidelines, conventions |
+| `RISK_REGISTER.md` | Known risks and mitigations |
+| `CHANGELOG.md` | What previous agents accomplished |
+
+Gralph injects these files into the prompt so each AI session understands:
+- What the project does
+- How it's structured  
+- What decisions were made and why
+- What work was already completed
+
+**This is the key to effective autonomous coding** - well-maintained context files let agents build on each other's work without losing direction.
 
 ## Configuration
 

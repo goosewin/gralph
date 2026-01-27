@@ -15,7 +15,7 @@ gralph start . --backend claude
 ## OpenCode
 
 ```bash
-# Install from https://opencode.ai/docs/cli/
+npm install -g opencode-ai
 gralph start . --backend opencode
 gralph start . --backend opencode --model google/gemini-1.5-pro
 ```
