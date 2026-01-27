@@ -95,6 +95,8 @@ CI=<status/link>; PR=<link if final PRD task>
 - T-CONFIG-1 Added config path precedence tests.
 
 ### Fixed
+- START-1 Added session name fallback for dot and root paths.
+- INST-1 Hardened installer cleanup and PATH-aware verification.
 - AW-1 Resolve auto worktree repo roots from target dirs and preserve subdir runs.
 - Aligned the Cargo-installed binary name with release assets (`gralph`).
 - OSS-1 Removed duplicate introductory text from README.
