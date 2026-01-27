@@ -17,8 +17,11 @@ CI=<status/link>; PR=<link if final PRD task>
 - WT-1 Auto-create worktrees for PRD runs with config and CLI controls.
 - INIT-1 Added init CLI subcommand and routing.
 
+### Fixed
+- LOG-1 Format loop start/finish timestamps and human-readable durations.
+
 ### Verification
-- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
+- Verification: Tests=CI; Coverage=CI (>= 90%); CI=green; PR=not-required
 
 ## [0.1.0]
 
