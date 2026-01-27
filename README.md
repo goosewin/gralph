@@ -46,9 +46,17 @@ gralph resume                     # Resume after crash
 ```
 
 By default, `gralph start` creates a git worktree under `.worktrees/` for each PRD run
-when the directory is a git repo with at least one commit. Disable with
-`--no-worktree` or set
+when the target directory is inside a git repo with at least one commit and the
+repo is clean. Subdirectory runs are preserved, so `gralph start path/to/subdir`
+continues the loop from the matching subdirectory inside the worktree.
+
+Auto worktree creation is skipped when the target directory is not inside a git
+repo, the repo has no commits, or the repo is dirty. In those cases the loop runs
+in the target directory. Disable auto worktrees with `--no-worktree` or set
 `defaults.auto_worktree: false`.
+
+When stacking with Graphite, run `gt` inside the worktree created for the task
+so the stack is attached to the correct checkout and branch.
 
 ## How It Works
 

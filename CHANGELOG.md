@@ -13,6 +13,7 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 - AW-2 Added auto worktree edge case tests for skip behavior, subdir mapping, and collisions.
+- AW-3 Documented auto worktree UX, skip reasons, and Graphite stacking guidance.
 - WT-1 Auto-create worktrees for PRD runs with config and CLI controls.
 - INIT-1 Added init CLI subcommand and routing.
 - INIT-4 Documented init command and updated shell completions.

@@ -75,7 +75,7 @@ Auto worktree changes must preserve the dirty-repo guardrail, keep test coverage
   * Guidance includes Graphite CLI usage for stacking inside worktrees.
   * CHANGELOG entry added for the task ID; DECISIONS updated if behavior changes require a new decision record.
 - **Dependencies** AW-1
-- [ ] AW-3 Document auto worktree UX and Graphite stacking guidance
+- [x] AW-3 Document auto worktree UX and Graphite stacking guidance
 ---
 
 ## Success Criteria
