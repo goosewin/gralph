@@ -1,238 +1,1103 @@
-# Bash completions for gralph
-#
-# Installation:
-#   - Copy to /etc/bash_completion.d/gralph  (system-wide)
-#   - Or add to ~/.bashrc: source /path/to/gralph.bash
-#   - Or copy to ~/.local/share/bash-completion/completions/gralph
-
-_gralph_completions() {
-    local cur prev words cword
-    _init_completion 2>/dev/null || {
-        COMPREPLY=()
+_gralph() {
+    local i cur prev opts cmd
+    COMPREPLY=()
+    if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
+        cur="$2"
+    else
         cur="${COMP_WORDS[COMP_CWORD]}"
-        prev="${COMP_WORDS[COMP_CWORD-1]}"
-        words=("${COMP_WORDS[@]}")
-        cword=$COMP_CWORD
-    }
+    fi
+    prev="$3"
+    cmd=""
+    opts=""
 
-    # Main commands
-    local commands="start stop status logs resume prd backends config server version help"
-
-    # Options for start command
-    local start_opts="--name -n --max-iterations --task-file -f --completion-marker --backend -b --model -m --variant --webhook --no-tmux --help -h"
-
-    # Options for stop command
-    local stop_opts="--all -a --help -h"
-
-    # Options for logs command
-    local logs_opts="--follow --help -h"
-
-    # Options for server command
-    local server_opts="--host -H --port -p --token -t --open --help -h"
-
-    # Determine the command (first non-option argument after 'gralph')
-    local cmd=""
-    local i
-    for ((i=1; i < cword; i++)); do
-        case "${words[i]}" in
-            -*)
-                continue
+    for i in "${COMP_WORDS[@]:0:COMP_CWORD}"
+    do
+        case "${cmd},${i}" in
+            ",$1")
+                cmd="gralph"
                 ;;
-            start|stop|status|logs|resume|prd|config|server|version|help)
-                cmd="${words[i]}"
-                break
+            gralph,backends)
+                cmd="gralph__backends"
+                ;;
+            gralph,config)
+                cmd="gralph__config"
+                ;;
+            gralph,help)
+                cmd="gralph__help"
+                ;;
+            gralph,logs)
+                cmd="gralph__logs"
+                ;;
+            gralph,prd)
+                cmd="gralph__prd"
+                ;;
+            gralph,resume)
+                cmd="gralph__resume"
+                ;;
+            gralph,run-loop)
+                cmd="gralph__run__loop"
+                ;;
+            gralph,server)
+                cmd="gralph__server"
+                ;;
+            gralph,start)
+                cmd="gralph__start"
+                ;;
+            gralph,status)
+                cmd="gralph__status"
+                ;;
+            gralph,stop)
+                cmd="gralph__stop"
+                ;;
+            gralph,version)
+                cmd="gralph__version"
+                ;;
+            gralph,worktree)
+                cmd="gralph__worktree"
+                ;;
+            gralph__config,get)
+                cmd="gralph__config__get"
+                ;;
+            gralph__config,help)
+                cmd="gralph__config__help"
+                ;;
+            gralph__config,list)
+                cmd="gralph__config__list"
+                ;;
+            gralph__config,set)
+                cmd="gralph__config__set"
+                ;;
+            gralph__config__help,get)
+                cmd="gralph__config__help__get"
+                ;;
+            gralph__config__help,help)
+                cmd="gralph__config__help__help"
+                ;;
+            gralph__config__help,list)
+                cmd="gralph__config__help__list"
+                ;;
+            gralph__config__help,set)
+                cmd="gralph__config__help__set"
+                ;;
+            gralph__help,backends)
+                cmd="gralph__help__backends"
+                ;;
+            gralph__help,config)
+                cmd="gralph__help__config"
+                ;;
+            gralph__help,help)
+                cmd="gralph__help__help"
+                ;;
+            gralph__help,logs)
+                cmd="gralph__help__logs"
+                ;;
+            gralph__help,prd)
+                cmd="gralph__help__prd"
+                ;;
+            gralph__help,resume)
+                cmd="gralph__help__resume"
+                ;;
+            gralph__help,run-loop)
+                cmd="gralph__help__run__loop"
+                ;;
+            gralph__help,server)
+                cmd="gralph__help__server"
+                ;;
+            gralph__help,start)
+                cmd="gralph__help__start"
+                ;;
+            gralph__help,status)
+                cmd="gralph__help__status"
+                ;;
+            gralph__help,stop)
+                cmd="gralph__help__stop"
+                ;;
+            gralph__help,version)
+                cmd="gralph__help__version"
+                ;;
+            gralph__help,worktree)
+                cmd="gralph__help__worktree"
+                ;;
+            gralph__help__config,get)
+                cmd="gralph__help__config__get"
+                ;;
+            gralph__help__config,list)
+                cmd="gralph__help__config__list"
+                ;;
+            gralph__help__config,set)
+                cmd="gralph__help__config__set"
+                ;;
+            gralph__help__prd,check)
+                cmd="gralph__help__prd__check"
+                ;;
+            gralph__help__prd,create)
+                cmd="gralph__help__prd__create"
+                ;;
+            gralph__help__worktree,create)
+                cmd="gralph__help__worktree__create"
+                ;;
+            gralph__help__worktree,finish)
+                cmd="gralph__help__worktree__finish"
+                ;;
+            gralph__prd,check)
+                cmd="gralph__prd__check"
+                ;;
+            gralph__prd,create)
+                cmd="gralph__prd__create"
+                ;;
+            gralph__prd,help)
+                cmd="gralph__prd__help"
+                ;;
+            gralph__prd__help,check)
+                cmd="gralph__prd__help__check"
+                ;;
+            gralph__prd__help,create)
+                cmd="gralph__prd__help__create"
+                ;;
+            gralph__prd__help,help)
+                cmd="gralph__prd__help__help"
+                ;;
+            gralph__worktree,create)
+                cmd="gralph__worktree__create"
+                ;;
+            gralph__worktree,finish)
+                cmd="gralph__worktree__finish"
+                ;;
+            gralph__worktree,help)
+                cmd="gralph__worktree__help"
+                ;;
+            gralph__worktree__help,create)
+                cmd="gralph__worktree__help__create"
+                ;;
+            gralph__worktree__help,finish)
+                cmd="gralph__worktree__help__finish"
+                ;;
+            gralph__worktree__help,help)
+                cmd="gralph__worktree__help__help"
+                ;;
+            *)
                 ;;
         esac
     done
 
-    # If no command yet, complete commands
-    if [[ -z "$cmd" ]]; then
-        COMPREPLY=($(compgen -W "$commands" -- "$cur"))
-        return 0
-    fi
-
-    # Command-specific completions
-    case "$cmd" in
-        start)
-            case "$prev" in
-                -n|--name)
-                    # Session name - no specific completion
+    case "${cmd}" in
+        gralph)
+            opts="-h -V --help --version start stop status logs resume prd worktree backends config server version run-loop help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__backends)
+            opts="-h --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__config)
+            opts="-h --help get set list help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__config__get)
+            opts="-h --help <KEY>"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__config__help)
+            opts="get set list help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__config__help__get)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__config__help__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__config__help__list)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__config__help__set)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__config__list)
+            opts="-h --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__config__set)
+            opts="-h --help <KEY> <VALUE>"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help)
+            opts="start stop status logs resume prd worktree backends config server version run-loop help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__backends)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__config)
+            opts="get set list"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__config__get)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__config__list)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__config__set)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__logs)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__prd)
+            opts="check create"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__prd__check)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__prd__create)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__resume)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__run__loop)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__server)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__start)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__status)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__stop)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__version)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__worktree)
+            opts="create finish"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__worktree__create)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__worktree__finish)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__logs)
+            opts="-h --follow --help <NAME>"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__prd)
+            opts="-h --help check create help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__prd__check)
+            opts="-h --allow-missing-context --help <FILE>"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__prd__create)
+            opts="-o -b -m -h --dir --output --goal --constraints --context --sources --backend --model --allow-missing-context --multiline --no-interactive --interactive --force --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --output)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -o)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --goal)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --constraints)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --context)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --sources)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --backend)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -b)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --model)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -m)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__prd__help)
+            opts="check create help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__prd__help__check)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__prd__help__create)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__prd__help__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__resume)
+            opts="-h --help [NAME]"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__run__loop)
+            opts="-h --name --max-iterations --task-file --completion-marker --backend --model --variant --prompt-template --webhook --strict-prd --help <DIR>"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --name)
+                    COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
                 --max-iterations)
-                    # Suggest common iteration counts
-                    COMPREPLY=($(compgen -W "10 20 30 50 100" -- "$cur"))
+                    COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                -f|--task-file)
-                    # Complete with markdown files
-                    COMPREPLY=($(compgen -f -X '!*.md' -- "$cur"))
+                --task-file)
+                    COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
                 --completion-marker)
-                    # Suggest common markers
-                    COMPREPLY=($(compgen -W "COMPLETE DONE FINISHED ALL_DONE" -- "$cur"))
+                    COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                -b|--backend)
-                    # Suggest available backends
-                    COMPREPLY=($(compgen -W "claude opencode gemini codex" -- "$cur"))
+                --backend)
+                    COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                -m|--model)
-                    # Suggest models for all backends
-                    # Claude models
-                    local claude_models="claude-opus-4-5"
-                    # OpenCode models (provider/model format)
-                    local opencode_models="opencode/example-code-model anthropic/claude-opus-4-5 google/gemini-1.5-pro"
-                    # Gemini models (native backend)
-                    local gemini_models="gemini-1.5-pro"
-                    # Codex models (native backend)
-                    local codex_models="example-codex-model"
-                    COMPREPLY=($(compgen -W "$claude_models $opencode_models $gemini_models $codex_models" -- "$cur"))
+                --model)
+                    COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
                 --variant)
-                    # Suggest common variants
-                    COMPREPLY=($(compgen -W "xhigh high medium low" -- "$cur"))
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --prompt-template)
+                    COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
                 --webhook)
-                    # URL - no specific completion
+                    COMPREPLY=($(compgen -f "${cur}"))
                     return 0
+                    ;;
+                *)
+                    COMPREPLY=()
                     ;;
             esac
-
-            # If current word starts with -, complete options
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=($(compgen -W "$start_opts" -- "$cur"))
-                return 0
-            fi
-
-            # Otherwise complete directories
-            COMPREPLY=($(compgen -d -- "$cur"))
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-
-        stop)
-            case "$prev" in
-                stop)
-                    # Complete with session names or --all
-                    local sessions=""
-                    if command -v gralph &>/dev/null; then
-                        sessions=$(_gralph_get_sessions)
-                    fi
-                    COMPREPLY=($(compgen -W "$sessions --all -a" -- "$cur"))
+        gralph__server)
+            opts="-H -p -t -h --host --port --token --open --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --host)
+                    COMPREPLY=($(compgen -f "${cur}"))
                     return 0
+                    ;;
+                -H)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --port)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -p)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --token)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -t)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
                     ;;
             esac
-
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=($(compgen -W "$stop_opts" -- "$cur"))
-                return 0
-            fi
-
-            # Complete with session names
-            local sessions=""
-            if command -v gralph &>/dev/null; then
-                sessions=$(_gralph_get_sessions)
-            fi
-            COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-
-        logs)
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=($(compgen -W "$logs_opts" -- "$cur"))
+        gralph__start)
+            opts="-n -f -b -m -h --name --max-iterations --task-file --completion-marker --backend --model --variant --prompt-template --webhook --no-tmux --strict-prd --help <DIR>"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
-
-            # Complete with session names
-            local sessions=""
-            if command -v gralph &>/dev/null; then
-                sessions=$(_gralph_get_sessions)
-            fi
-            COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
-            return 0
-            ;;
-
-        prd)
-            case "$prev" in
-                prd)
-                    COMPREPLY=($(compgen -W "check create" -- "$cur"))
+            case "${prev}" in
+                --name)
+                    COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
-                check)
-                    COMPREPLY=($(compgen -f -X '!*.md' -- "$cur"))
+                -n)
+                    COMPREPLY=($(compgen -f "${cur}"))
                     return 0
+                    ;;
+                --max-iterations)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --task-file)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -f)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --completion-marker)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --backend)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -b)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --model)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -m)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --variant)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --prompt-template)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --webhook)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
                     ;;
             esac
-
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=($(compgen -W "--dir --output -o --goal --constraints --context --sources --allow-missing-context --multiline --no-interactive --interactive --force" -- "$cur"))
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__status)
+            opts="-h --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
-
-            return 0
-            ;;
-
-        resume)
-            # Complete with session names
-            local sessions=""
-            if command -v gralph &>/dev/null; then
-                sessions=$(_gralph_get_sessions)
-            fi
-            COMPREPLY=($(compgen -W "$sessions" -- "$cur"))
-            return 0
-            ;;
-
-        server)
-            case "$prev" in
-                -H|--host)
-                    # Suggest common host bindings
-                    COMPREPLY=($(compgen -W "127.0.0.1 0.0.0.0 localhost" -- "$cur"))
-                    return 0
-                    ;;
-                -p|--port)
-                    # Suggest common ports
-                    COMPREPLY=($(compgen -W "8080 3000 8000 9000" -- "$cur"))
-                    return 0
-                    ;;
-                -t|--token)
-                    # Token - no specific completion
-                    return 0
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
                     ;;
             esac
-
-            if [[ "$cur" == -* ]]; then
-                COMPREPLY=($(compgen -W "$server_opts" -- "$cur"))
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__stop)
+            opts="-a -h --all --help [NAME]"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-
-        config)
-            # Config subcommands
-            COMPREPLY=($(compgen -W "get set list" -- "$cur"))
+        gralph__version)
+            opts="-h --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
-
-        status|version|help)
-            # No further completions needed
+        gralph__worktree)
+            opts="-h --help create finish help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__worktree__create)
+            opts="-h --help <ID>"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__worktree__finish)
+            opts="-h --help <ID>"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__worktree__help)
+            opts="create finish help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__worktree__help__create)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__worktree__help__finish)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__worktree__help__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
     esac
-
-    return 0
 }
 
-# Helper function to get session names from state file
-_gralph_get_sessions() {
-    local state_file="${HOME}/.config/gralph/state.json"
-    if [[ -f "$state_file" ]] && command -v jq &>/dev/null; then
-        jq -r '.sessions | keys[]' "$state_file" 2>/dev/null
-    fi
-}
-
-# Register the completion function
-complete -F _gralph_completions gralph
+if [[ "${BASH_VERSINFO[0]}" -eq 4 && "${BASH_VERSINFO[1]}" -ge 4 || "${BASH_VERSINFO[0]}" -gt 4 ]]; then
+    complete -F _gralph -o nosort -o bashdefault -o default gralph
+else
+    complete -F _gralph -o bashdefault -o default gralph
+fi

@@ -5,40 +5,40 @@ Environment: Ubuntu 24.04.3 LTS
 
 ## Checks
 
-- Dependencies present: `jq`, `tmux`, `bash`
-- `./bin/gralph version` returns current version
-- `./bin/gralph help` prints CLI usage
-- `./bin/gralph status` runs with empty state
-- `./bin/gralph backends` lists available backends
-- `./bin/gralph config list` shows configuration
-- Help output includes new flags: `--no-tmux`, `--backend`, `--webhook`, `--variant`, `--prompt-template`
+- Rust toolchain installed: `cargo --version`
+- Build succeeds: `cargo build --release`
+- `./target/release/gralph version` returns current version
+- `./target/release/gralph help` prints CLI usage
+- `./target/release/gralph status` runs with empty state
+- `./target/release/gralph backends` lists available backends
+- `./target/release/gralph config list` shows configuration
+- Help output includes flags: `--no-tmux`, `--backend`, `--webhook`, `--variant`, `--prompt-template`
 - Server command available in help
+- If testing a release asset, confirm the tarball matches the host architecture (linux-x86_64 vs linux-aarch64).
 
 ## Command Output
 
 ```bash
-# Verify dependencies
-command -v jq && command -v tmux && command -v bash
+cargo --version
+cargo build --release
 
-# Basic commands
-./bin/gralph version
-./bin/gralph help
-./bin/gralph status
+./target/release/gralph version
+./target/release/gralph help
+./target/release/gralph status
 
-# New commands
-./bin/gralph backends
-./bin/gralph config list
+./target/release/gralph backends
+./target/release/gralph config list
 
-# Verify new flags in help
-./bin/gralph help | grep -E '\-\-(no-tmux|backend|webhook|variant|prompt-template)'
-./bin/gralph help | grep 'server'
+./target/release/gralph help | grep -E '\-\-(no-tmux|backend|webhook|variant|prompt-template)'
+./target/release/gralph help | grep 'server'
 ```
 
 Expected results:
-- All dependency commands resolve in PATH
-- Version prints `gralph v1.1.0`
+- Cargo is available in PATH
+- Build completes successfully
+- Version prints the current gralph release
 - Help output lists commands and options including new flags
 - Status reports no sessions found
-- Backends lists `claude` as available
+- Backends lists available backends
 - Config list shows default configuration values
 - New flags appear in help text

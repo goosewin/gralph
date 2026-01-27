@@ -18,146 +18,81 @@ Autonomous AI coding loops using Claude Code or OpenCode. Spawns fresh AI coding
   - `opencode` CLI (OpenCode) - See https://opencode.ai/docs/cli/
   - `gemini` CLI (Gemini CLI) - `npm install -g @google/gemini-cli` (optional)
   - `codex` CLI (Codex CLI) - `npm install -g @openai/codex` (optional)
-- `jq` for JSON parsing
-- `tmux` for session management
-- `bash` 4.0+
-- `curl` (optional, for notifications)
-- `socat` or `nc` (optional, required for `gralph server`)
-- `flock` (optional, for safer concurrent state access - built-in on Linux, available via Homebrew on macOS)
+- `tmux` for background session management (optional with `--no-tmux`)
+- `git` for worktree commands (optional but recommended)
+- Rust toolchain (only if building from source)
 
 ### Platform Support
 
 | Platform | Status | Notes |
 |----------|--------|-------|
 | Linux | ✅ Fully supported | Primary development platform |
-| macOS 12+ | ✅ Supported | Requires Homebrew dependencies |
+| macOS 12+ | ✅ Supported | Install tmux for background sessions |
 | WSL2 | ⚠️ Best effort | Should work like Linux |
 
 **macOS Users:** Install dependencies via Homebrew:
 ```bash
-brew install bash jq tmux
+brew install tmux
 ```
 
 ## Installation
 
-Gralph uses a dual-mode installer that automatically detects whether it's being piped from curl or run from a local clone. Both methods use the same `install.sh` script.
+Gralph is distributed as a Rust CLI. Install from a release tarball or build from source.
 
 ### Quick Install (curl)
 
-The recommended installation method uses the latest GitHub release tarball:
+Release assets are published per OS/arch. Pick the matching asset and place the binary on your PATH:
 
 ```bash
-curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
+VERSION="0.1.0" # replace with the latest tag
+ASSET="linux-x86_64" # linux-aarch64, macos-x86_64, macos-arm64
+curl -L -o gralph.tar.gz https://github.com/goosewin/gralph/releases/download/v${VERSION}/gralph-${VERSION}-${ASSET}.tar.gz
+tar -xzf gralph.tar.gz
+cd gralph-${VERSION}
+chmod +x gralph
+sudo mv gralph /usr/local/bin/gralph
 ```
 
-This downloads the installer and runs it in **bootstrap mode**, which:
-1. Fetches the latest release tarball from GitHub
-2. Extracts it to a temporary directory
-3. Installs the binary, libraries, and completions
-4. Cleans up the temporary files
-
-#### Bootstrap Environment Overrides
-
-When installing via `curl|bash`, you can customize the download source using environment variables:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GRALPH_REPO` | GitHub repository slug | `goosewin/gralph` |
-| `GRALPH_REF` | Git ref (tag or branch) to download | Latest release |
-| `GRALPH_ASSET_URL` | Direct URL to tarball (overrides repo/ref) | (none) |
-
-**Examples:**
-
-```bash
-# Install from a fork
-GRALPH_REPO=myuser/gralph-fork curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
-
-# Install a specific version
-GRALPH_REF=v1.2.0 curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
-
-# Install from a custom URL
-GRALPH_ASSET_URL=https://example.com/gralph.tar.gz curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/install.sh | bash
-```
+Use `uname -s` and `uname -m` to map your OS/arch to an asset name. Release assets are available for Linux x86_64/aarch64 and macOS x86_64/arm64; build from source for other platforms.
 
 ### From Source (git clone)
 
 ```bash
 git clone git@github.com:goosewin/gralph.git
 cd gralph
-./install.sh
+cargo build --release
+./target/release/gralph --version
 ```
 
-When run from a cloned repository, the installer operates in **local mode**, which:
-1. Detects `bin/gralph` in the current directory
-2. Installs directly from the local files (no download)
-3. Copies binary, libraries, config, and completions to their destinations
+### Rust Build and Install (cargo)
 
-Both modes perform the same installation steps:
-- Check and optionally install dependencies (`jq`, `tmux`, backend CLI)
-- Copy `gralph` binary to `~/.local/bin` (or `/usr/local/bin`)
-- Copy library files to `~/.config/gralph/lib/`
-- Create default config at `~/.config/gralph/config.yaml`
-- Install shell completions for bash/zsh
+```bash
+cargo install --path . --locked
+```
+
+The installed binary name is `gralph`.
 
 ### Manual Installation
 
-If you prefer not to use the installer:
+If you prefer not to use Cargo:
 
-1. Clone this repository
-2. Copy `bin/gralph` to a directory in your PATH (e.g., `~/.local/bin/` or `/usr/local/bin/`)
-3. Copy `lib/` to `~/.config/gralph/lib/`
-4. Copy `config/default.yaml` to `~/.config/gralph/config.yaml`
-5. (Optional) Copy `completions/` to `~/.config/gralph/completions/`
+1. Copy the `gralph` binary to a directory in your PATH (e.g., `~/.local/bin/` or `/usr/local/bin/`).
+2. Copy `config/default.yaml` to `~/.config/gralph/config.yaml`.
+3. (Optional) Copy `completions/` to your shell completion directory.
 
 ### Uninstalling
 
-To remove gralph from your system, use the provided uninstaller:
+Remove the binary and config manually:
 
 ```bash
-# Interactive uninstall (prompts for confirmation)
-./uninstall.sh
-
-# Or download and run directly
-curl -fsSL https://github.com/goosewin/gralph/releases/latest/download/uninstall.sh | bash
+rm -f ~/.local/bin/gralph ~/.cargo/bin/gralph
+rm -f ~/.config/gralph/config.yaml
 ```
 
-**Options:**
+Optional cleanup:
 
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--all` | `-a` | Remove everything including logs and state data |
-| `--force` | `-f` | Skip confirmation prompts |
-| `--help` | `-h` | Show help message |
-
-**What gets removed by default:**
-- gralph binary (from `~/.local/bin` or `/usr/local/bin`)
-- Library files (`~/.config/gralph/lib/`)
-- Shell completions (`~/.config/gralph/completions/` and system locations)
-- Configuration file (`~/.config/gralph/config.yaml`)
-
-**What gets removed with `--all`:**
-- All of the above
-- State files (`~/.config/gralph/state.json` and `~/.config/gralph/state.lock`)
-- Default config template (`~/.config/gralph/config/default.yaml`) if present
-- Any remaining `~/.config/gralph/` data
-
-Project logs live under each project's `.gralph/` directory and are not removed automatically.
-
-**Examples:**
-
-```bash
-# Uninstall but keep logs and session data
-./uninstall.sh
-
-# Uninstall everything including user data
-./uninstall.sh --all
-
-# Uninstall without prompts (for scripts)
-./uninstall.sh --force
-
-# Complete removal without prompts
-./uninstall.sh --all --force
-```
+- State files: `~/.config/gralph/state.json` and `~/.config/gralph/state.lock`
+- Logs live under each project's `.gralph/` directory
 
 ## Backends
 
@@ -342,6 +277,15 @@ cd .worktrees/task-C-6
 # Finish the task (merge and remove worktree)
 gralph worktree finish C-6
 ```
+
+## Migration Notes (Bash -> Rust)
+
+The legacy Bash implementation has been removed; the Rust CLI keeps the same commands, flags, PRD format, and file locations. The main differences:
+
+- Release tarballs ship a `gralph` binary; Cargo installs `gralph`.
+- Rust removes the `jq`, `socat/nc`, and `flock` dependencies; `tmux` is still used for background sessions.
+- Configuration and state stay in `~/.config/gralph/`, and logs remain under `.gralph/` in each project.
+- Shell completions are generated during the Rust build.
 
 ## Configuration
 
@@ -550,7 +494,7 @@ Configuration values are loaded in the following order (later sources override e
 
 ### Supported YAML Features
 
-Gralph uses a lightweight built-in YAML parser (no external dependencies). The following YAML features are supported:
+Gralph uses `serde_yaml` and flattens values into string settings. The following YAML features are supported:
 
 **Supported:**
 - Simple key-value pairs: `key: value`
@@ -981,7 +925,7 @@ gralph server [options]
 | GET | `/status/:name` | Get specific session |
 | POST | `/stop/:name` | Stop a session |
 
-**Dependencies:** `socat` is preferred; `nc` (netcat) is used as a fallback.
+**Dependencies:** None beyond the Rust binary.
 
 **Security note:** The server defaults to localhost-only binding. When binding to non-localhost addresses (e.g., `0.0.0.0`), a `--token` is required for security. Use `--open` to explicitly disable this requirement (not recommended). Always restrict network access via firewall/VPN when exposing the server.
 
@@ -1089,7 +1033,7 @@ unchecked `- [ ]` line.
 ### Task P-1
 
 - **ID** P-1
-- **Context Bundle** `lib/core.sh`
+- **Context Bundle** `src/core.rs`
 - **DoD** Add task block parsing
 - **Checklist**
   * Parser extracts task blocks from PRD.
@@ -1158,17 +1102,10 @@ Gralph runs stateless iterations, so shared documents provide durable context be
 
 ## Using gralph to build gralph
 
-The repo includes a minimal self-hosting example set plus a runner script that
-executes the example stages in order.
+The repo includes a minimal self-hosting example set under `examples/`.
 
 - Example PRDs: `examples/README.md` (see `examples/PRD-Stage-P-Example.md` and `examples/PRD-Stage-A-Example.md`).
-- Runner script: `scripts/run-release.sh`.
-
-Run the example release flow from the repo root:
-
-```bash
-./scripts/run-release.sh
-```
+- Run them manually with `gralph` as described in `examples/README.md`.
 
 ## Usage Examples
 
@@ -1467,11 +1404,6 @@ gralph start . --name myapp-v2
    rm ~/.config/gralph/state.lock
    ```
 
-3. **Missing flock on macOS**
-   ```bash
-   brew install flock
-   ```
-
 #### Status server not responding
 
 **Symptom:** `curl: (7) Failed to connect` when querying status server
@@ -1530,29 +1462,15 @@ gralph start . --name myapp-v2
    chmod +x ~/.local/bin/gralph
    ```
 
-2. **Check lib files are readable:**
+2. **Check config files are readable:**
    ```bash
-   chmod -R 755 ~/.config/gralph/lib/
+   chmod -R 755 ~/.config/gralph/
    ```
 
 3. **Check project directory is writable:**
    ```bash
    ls -la ~/projects/myapp/
    ```
-
-#### JSON parse errors in logs
-
-**Symptom:** `jq: parse error` messages in output
-
-**Causes:**
-
-1. **jq not installed:**
-   ```bash
-   sudo apt install jq  # Ubuntu/Debian
-   brew install jq      # macOS
-   ```
-
-2. **Claude output contains invalid JSON** - Usually transient, loop will retry
 
 #### Loop stuck at max iterations
 
@@ -1596,9 +1514,9 @@ gralph start . --no-tmux
 
 ```bash
 # View current state
-cat ~/.config/gralph/state.json | jq .
+cat ~/.config/gralph/state.json
 
-# Find specific session
+# Find specific session (requires jq)
 jq '.sessions.myapp' ~/.config/gralph/state.json
 ```
 
@@ -1620,7 +1538,7 @@ If state file becomes corrupted or out of sync:
 # Backup current state
 cp ~/.config/gralph/state.json ~/.config/gralph/state.json.bak
 
-# Remove specific session from state
+# Remove specific session from state (requires jq)
 jq 'del(.sessions.myapp)' ~/.config/gralph/state.json > tmp.json && \
   mv tmp.json ~/.config/gralph/state.json
 
@@ -1634,8 +1552,8 @@ rm ~/.config/gralph/state.json
 If you continue to experience issues:
 
 1. **Check the logs** - Most issues are visible in `gralph logs <name>`
-2. **Verify dependencies** - Run `./install.sh` to check all requirements
-3. **Open an issue** - Include logs and system info (OS, bash version, etc.)
+2. **Verify dependencies** - Check backend CLI availability and tmux (if using background sessions)
+3. **Open an issue** - Include logs and system info (OS, gralph version, backend version)
 
 ## Security
 

@@ -7,7 +7,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Added multi-arch release assets for Linux and macOS.
 - Initial public release notes for the gralph CLI.
+- T-SERVER-1 Added status endpoint auth and response tests.
+- T-SERVER-2 Added stop endpoint behavior tests.
+- T-SERVER-3 Added CORS and error response tests.
+- T-NOTIFY-2 Added send_webhook HTTP delivery tests for headers and response handling.
+- T-NOTIFY-1 Added webhook payload formatting tests for Discord, Slack, and generic webhooks.
+- T-BACKEND-3 Added backend registry tests for selection and model listing.
+- T-BACKEND-2 Added run-iteration success/failure tests for backend adapters.
+- T-BACKEND-1 Added reusable fake CLI helper for backend adapter tests.
+- T-STATE-1 Added state error-path tests for corrupted/missing files.
+- T-CORE-2 Added core loop execution tests for completion, failure, and max-iteration paths.
+- T-CORE-1 Added core task parsing edge-case tests.
+- RS-1 Scaffolded Rust project with clap CLI skeleton.
+- RS-2 Added Rust config loader with serde_yaml merging and env overrides.
+- RS-3 Added Rust state module with file locking and atomic JSON writes.
+- RS-4 Added backend trait with Claude CLI implementation and tests.
+- RS-5 Added OpenCode, Gemini, and Codex Rust backends with integration test stubs.
+- RS-6 Added Rust core loop module with iteration execution and completion checks.
+- RS-7 Added Rust webhook notifications with Discord, Slack, and generic payloads via reqwest.
+- RS-8 Added Rust PRD validation, sanitization, and stack detection utilities with tests.
+- RS-9 Added Rust HTTP status server with bearer auth and CORS handling.
 - G-1 Added interactive PRD generator via `gralph prd create`.
 - C-1 Added worktree commands to help output and examples.
 - C-2 Added worktree command routing and validation.
@@ -47,8 +68,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - E-5 Documented self-hosting workflow in README.
 - E-6 Recorded Stage E example and runner rationale in DECISIONS.
 - P-EX-2 Updated README task block example to include all required fields.
+- RS-10 Wired Rust CLI subcommands with build-time shell completions.
+- RS-11 Added Rust tests coverage and CI workflow with coverage threshold.
+- RS-12 Documented Rust build/install steps and migration notes.
+- RS-13 Updated release workflow to package Rust binaries and completions.
+- DOC-1 Refreshed shared docs for the Rust-only codebase.
+- T-CLI-1 Added CLI unit tests for PRD output resolution and parse validation.
+- T-CLI-2 Added tests for PRD template selection and fallback behavior.
+- T-CONFIG-1 Added config path precedence tests.
 
 ### Fixed
+- Aligned the Cargo-installed binary name with release assets (`gralph`).
 - OSS-1 Removed duplicate introductory text from README.
 - OSS-2 Corrected Gemini CLI install hints and README instructions.
 - OSS-3 Updated backend model names to real or placeholder values.
@@ -67,3 +97,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - OSS-16 Hardened core loop completion detection and parse error handling.
 - OSS-17 Documented PRD validation rules, sanitization behavior, and stack detection heuristics.
 - OSS-18 Reviewed README for CLI reference, model names, and doc accuracy.
+- OSS-19 Removed legacy shell artifacts and aligned context defaults with Rust sources.
