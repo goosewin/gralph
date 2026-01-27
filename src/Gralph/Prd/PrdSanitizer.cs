@@ -326,24 +326,28 @@ public static class PrdSanitizer
             return false;
         }
 
-        if (Path.IsPathRooted(entry))
-        {
-            fullPath = Path.GetFullPath(entry);
-            if (!IsSubPath(baseDir, fullPath))
-            {
-                return false;
-            }
-            displayPath = Path.GetRelativePath(baseDir, fullPath);
-            return true;
-        }
-
-        fullPath = Path.GetFullPath(Path.Combine(baseDir, entry));
-        if (!IsSubPath(baseDir, fullPath))
+        if (string.IsNullOrWhiteSpace(baseDir))
         {
             return false;
         }
 
-        displayPath = entry.Replace('\u005c', '/');
+        var baseFullPath = Path.GetFullPath(baseDir);
+
+        if (Path.IsPathRooted(entry))
+        {
+            fullPath = Path.GetFullPath(entry);
+        }
+        else
+        {
+            fullPath = Path.GetFullPath(Path.Combine(baseFullPath, entry));
+        }
+
+        if (!IsSubPath(baseFullPath, fullPath))
+        {
+            return false;
+        }
+
+        displayPath = NormalizePath(Path.GetRelativePath(baseFullPath, fullPath));
         return true;
     }
 
@@ -358,18 +362,20 @@ public static class PrdSanitizer
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
 
-        var normalizedBase = baseDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (!path.StartsWith(normalizedBase, comparison))
+        var normalizedBase = Path.GetFullPath(baseDir)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedPath = Path.GetFullPath(path);
+        if (!normalizedPath.StartsWith(normalizedBase, comparison))
         {
             return false;
         }
 
-        if (path.Length == normalizedBase.Length)
+        if (normalizedPath.Length == normalizedBase.Length)
         {
             return true;
         }
 
-        var next = path[normalizedBase.Length];
+        var next = normalizedPath[normalizedBase.Length];
         return next == Path.DirectorySeparatorChar || next == Path.AltDirectorySeparatorChar;
     }
 
