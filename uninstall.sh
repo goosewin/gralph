@@ -2,7 +2,8 @@
 # Gralph uninstaller for Unix systems (Linux/macOS)
 set -euo pipefail
 
-INSTALL_DIR="${GRALPH_INSTALL_DIR:-/usr/local/bin}"
+# Default to user-local bin to match install.sh
+INSTALL_DIR="${GRALPH_INSTALL_DIR:-$HOME/.local/bin}"
 
 # Colors for output
 RED='\033[0;31m'
