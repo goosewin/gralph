@@ -6,8 +6,7 @@ use cli::{
     PrdCreateArgs, ResumeArgs, RunLoopArgs, ServerArgs, StartArgs, StopArgs, WorktreeCommand,
     WorktreeCreateArgs, WorktreeFinishArgs,
 };
-use gralph_rs::backend::{claude::ClaudeBackend, codex::CodexBackend, gemini::GeminiBackend};
-use gralph_rs::backend::{opencode::OpenCodeBackend, Backend};
+use gralph_rs::backend::{backend_from_name, Backend};
 use gralph_rs::config::Config;
 use gralph_rs::core::{self, LoopStatus};
 use gralph_rs::notify;
@@ -419,7 +418,7 @@ fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
         model = config.get("opencode.default_model");
     }
 
-    let backend = backend_from_name(&backend_name)?;
+    let backend = backend_from_name(&backend_name).map_err(CliError::Message)?;
     if !backend.check_installed() {
         return Err(CliError::Message(format!(
             "Backend is not installed: {}",
@@ -638,22 +637,22 @@ fn cmd_backends() -> Result<(), CliError> {
     let backends = vec![
         (
             "claude",
-            backend_from_name("claude")?,
+            backend_from_name("claude").map_err(CliError::Message)?,
             "https://docs.anthropic.com/claude-code",
         ),
         (
             "opencode",
-            backend_from_name("opencode")?,
+            backend_from_name("opencode").map_err(CliError::Message)?,
             "https://opencode.ai",
         ),
         (
             "gemini",
-            backend_from_name("gemini")?,
+            backend_from_name("gemini").map_err(CliError::Message)?,
             "https://ai.google.dev",
         ),
         (
             "codex",
-            backend_from_name("codex")?,
+            backend_from_name("codex").map_err(CliError::Message)?,
             "https://platform.openai.com/docs",
         ),
     ];
@@ -783,7 +782,7 @@ fn run_loop_with_state(args: RunLoopArgs) -> Result<(), CliError> {
         None => None,
     };
 
-    let backend = backend_from_name(&backend_name)?;
+    let backend = backend_from_name(&backend_name).map_err(CliError::Message)?;
     if !backend.check_installed() {
         return Err(CliError::Message(format!(
             "Backend is not installed: {}",
@@ -956,16 +955,6 @@ fn sanitize_session_name(name: &str) -> String {
             }
         })
         .collect()
-}
-
-fn backend_from_name(name: &str) -> Result<Box<dyn Backend>, CliError> {
-    match name {
-        "claude" => Ok(Box::new(ClaudeBackend::new())),
-        "opencode" => Ok(Box::new(OpenCodeBackend::new())),
-        "gemini" => Ok(Box::new(GeminiBackend::new())),
-        "codex" => Ok(Box::new(CodexBackend::new())),
-        other => Err(CliError::Message(format!("Unknown backend: {}", other))),
-    }
 }
 
 fn spawn_run_loop(args: &RunLoopArgs) -> Result<std::process::Child, CliError> {

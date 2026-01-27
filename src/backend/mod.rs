@@ -7,6 +7,11 @@ pub mod codex;
 pub mod gemini;
 pub mod opencode;
 
+use self::claude::ClaudeBackend;
+use self::codex::CodexBackend;
+use self::gemini::GeminiBackend;
+use self::opencode::OpenCodeBackend;
+
 pub trait Backend {
     fn check_installed(&self) -> bool;
     fn run_iteration(
@@ -17,6 +22,16 @@ pub trait Backend {
     ) -> Result<(), BackendError>;
     fn parse_text(&self, response_file: &Path) -> Result<String, BackendError>;
     fn get_models(&self) -> Vec<String>;
+}
+
+pub fn backend_from_name(name: &str) -> Result<Box<dyn Backend>, String> {
+    match name {
+        "claude" => Ok(Box::new(ClaudeBackend::new())),
+        "opencode" => Ok(Box::new(OpenCodeBackend::new())),
+        "gemini" => Ok(Box::new(GeminiBackend::new())),
+        "codex" => Ok(Box::new(CodexBackend::new())),
+        other => Err(format!("Unknown backend: {}", other)),
+    }
 }
 
 #[derive(Debug)]
@@ -53,6 +68,58 @@ impl Error for BackendError {
             BackendError::Io { source, .. } => Some(source),
             BackendError::Json { source } => Some(source),
             _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::any::type_name_of_val;
+
+    #[test]
+    fn backend_selection_returns_expected_type() {
+        let cases = [
+            ("claude", "ClaudeBackend"),
+            ("opencode", "OpenCodeBackend"),
+            ("gemini", "GeminiBackend"),
+            ("codex", "CodexBackend"),
+        ];
+
+        for (name, expected_suffix) in cases {
+            let backend = backend_from_name(name).expect("backend should be available");
+            let type_name = type_name_of_val(backend.as_ref());
+            assert!(
+                type_name.ends_with(expected_suffix),
+                "expected {} to resolve to {}, got {}",
+                name,
+                expected_suffix,
+                type_name
+            );
+        }
+    }
+
+    #[test]
+    fn backend_models_are_non_empty_and_stable() {
+        let cases = [
+            ("claude", vec!["claude-opus-4-5".to_string()]),
+            (
+                "opencode",
+                vec![
+                    "opencode/example-code-model".to_string(),
+                    "anthropic/claude-opus-4-5".to_string(),
+                    "google/gemini-1.5-pro".to_string(),
+                ],
+            ),
+            ("gemini", vec!["gemini-1.5-pro".to_string()]),
+            ("codex", vec!["example-codex-model".to_string()]),
+        ];
+
+        for (name, expected_models) in cases {
+            let backend = backend_from_name(name).expect("backend should be available");
+            let models = backend.get_models();
+            assert!(!models.is_empty(), "{} models should be non-empty", name);
+            assert_eq!(models, expected_models, "{} models should be stable", name);
         }
     }
 }

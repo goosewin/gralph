@@ -49,4 +49,4 @@ Validate backend CLI adapters for command construction, env usage, output parsin
   * Backend selection returns expected type.
   * Model listing is non-empty and stable.
 - **Dependencies** None
-- [ ] T-BACKEND-3 Add backend registry tests
+- [x] T-BACKEND-3 Add backend registry tests

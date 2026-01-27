@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - Added multi-arch release assets for Linux and macOS.
 - Initial public release notes for the gralph CLI.
+- T-BACKEND-3 Added backend registry tests for selection and model listing.
 - T-BACKEND-2 Added run-iteration success/failure tests for backend adapters.
 - T-BACKEND-1 Added reusable fake CLI helper for backend adapter tests.
 - T-STATE-1 Added state error-path tests for corrupted/missing files.
