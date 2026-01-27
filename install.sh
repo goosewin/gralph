@@ -96,6 +96,10 @@ main() {
     fi
 
     info "Installing to $INSTALL_DIR..."
+    # Create install directory if it doesn't exist
+    if [[ ! -d "$INSTALL_DIR" ]]; then
+        mkdir -p "$INSTALL_DIR"
+    fi
     if [[ -w "$INSTALL_DIR" ]]; then
         cp "$binary" "$INSTALL_DIR/gralph"
         chmod +x "$INSTALL_DIR/gralph"
