@@ -154,8 +154,11 @@ pub fn check_for_update(current_version: &str) -> Result<Option<UpdateInfo>, Upd
 }
 
 pub fn install_release() -> Result<InstallOutcome, UpdateError> {
-    let install_dir =
-        env::var("GRALPH_INSTALL_DIR").unwrap_or_else(|_| "/usr/local/bin".to_string());
+    let install_dir = env::var("GRALPH_INSTALL_DIR").unwrap_or_else(|_| {
+        dirs::home_dir()
+            .map(|h| h.join(".local/bin").to_string_lossy().to_string())
+            .unwrap_or_else(|| "/usr/local/bin".to_string())
+    });
     let requested_version = env::var("GRALPH_VERSION").unwrap_or_else(|_| "latest".to_string());
     let version = resolve_install_version(&requested_version)?;
     let platform = detect_platform()?;
