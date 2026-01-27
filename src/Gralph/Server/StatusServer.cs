@@ -452,7 +452,7 @@ public sealed class StatusServer
 
             if (value.TryGetValue<long>(out var longValue))
             {
-                if (longValue is > int.MinValue and < int.MaxValue)
+                if (longValue is >= int.MinValue and <= int.MaxValue)
                 {
                     result = (int)longValue;
                     return true;
