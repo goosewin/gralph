@@ -6,3 +6,4 @@ pub mod prd;
 pub mod server;
 pub mod state;
 pub mod update;
+pub mod version;

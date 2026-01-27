@@ -14,6 +14,7 @@ use gralph_rs::prd;
 use gralph_rs::server::{self, ServerConfig};
 use gralph_rs::state::{CleanupMode, StateStore};
 use gralph_rs::update;
+use gralph_rs::version;
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::OsStr;
@@ -102,7 +103,7 @@ fn cmd_intro() -> Result<(), CliError> {
 }
 
 fn cmd_version() -> Result<(), CliError> {
-    println!("gralph v{}", env!("CARGO_PKG_VERSION"));
+    println!("gralph v{}", version::VERSION);
     Ok(())
 }
 
@@ -135,7 +136,7 @@ fn cmd_update() -> Result<(), CliError> {
 }
 
 fn maybe_check_for_update() {
-    let current_version = env!("CARGO_PKG_VERSION");
+    let current_version = version::VERSION;
     match update::check_for_update(current_version) {
         Ok(Some(info)) => {
             println!(
