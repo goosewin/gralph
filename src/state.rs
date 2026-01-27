@@ -421,20 +421,23 @@ mod tests {
     #[test]
     fn lock_times_out_when_held() {
         let temp = tempfile::tempdir().unwrap();
-        let store = Arc::new(store_for_test(temp.path(), Duration::from_millis(200)));
+        // Short timeout (100ms) so test completes quickly
+        let store = Arc::new(store_for_test(temp.path(), Duration::from_millis(100)));
         store.init_state().unwrap();
 
         let blocker = Arc::clone(&store);
         let handle = thread::spawn(move || {
             blocker
                 .with_lock(|| {
-                    thread::sleep(Duration::from_millis(400));
+                    // Hold lock much longer than timeout (2s vs 100ms)
+                    thread::sleep(Duration::from_secs(2));
                     Ok(())
                 })
                 .unwrap();
         });
 
-        thread::sleep(Duration::from_millis(50));
+        // Wait for blocker thread to acquire lock
+        thread::sleep(Duration::from_millis(100));
         let result = store.with_lock(|| Ok(()));
         assert!(matches!(result, Err(StateError::LockTimeout { .. })));
         handle.join().unwrap();
