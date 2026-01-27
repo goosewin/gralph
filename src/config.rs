@@ -366,6 +366,53 @@ mod tests {
     }
 
     #[test]
+    fn default_config_env_override_used() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("override.yaml");
+
+        write_file(&default_path, "defaults:\n  backend: gemini\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("defaults.backend").as_deref(), Some("gemini"));
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn config_dir_env_sets_global_path() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let config_dir = temp.path().join("config-root");
+        let global_path = config_dir.join("config.yaml");
+
+        write_file(&global_path, "defaults:\n  max_iterations: 99\n");
+        set_env("GRALPH_CONFIG_DIR", &config_dir);
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("defaults.max_iterations").as_deref(), Some("99"));
+
+        remove_env("GRALPH_CONFIG_DIR");
+    }
+
+    #[test]
+    fn missing_files_fall_back_to_bundled_default() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let config_dir = temp.path().join("empty-config");
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        set_env("GRALPH_CONFIG_DIR", &config_dir);
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("defaults.task_file").as_deref(), Some("PRD.md"));
+
+        remove_env("GRALPH_CONFIG_DIR");
+    }
+
+    #[test]
     fn list_includes_nested_entries() {
         let _guard = ENV_LOCK.lock().unwrap();
         let temp = tempfile::tempdir().unwrap();

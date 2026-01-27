@@ -40,7 +40,7 @@ Increase confidence in CLI argument handling and configuration resolution by add
   * `GRALPH_CONFIG_DIR` affects global config path.
   * Missing files fall back to `config/default.yaml`.
 - **Dependencies** None
-- [ ] T-CONFIG-1 Add config path precedence tests
+- [x] T-CONFIG-1 Add config path precedence tests
 
 ### Task T-CLI-2
 
