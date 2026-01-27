@@ -1031,7 +1031,16 @@ fn stop_session(
     }
     let pid = session.get("pid").and_then(|v| v.as_i64()).unwrap_or(0);
     if pid > 0 {
-        let _ = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+        #[cfg(unix)]
+        {
+            let _ = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+        }
+        #[cfg(windows)]
+        {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/F"])
+                .status();
+        }
     }
     store
         .set_session(

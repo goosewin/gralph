@@ -50,8 +50,8 @@ impl FakeCli {
         Ok(Self { temp_dir, bin_name })
     }
 
-    pub fn command(&self) -> &str {
-        &self.bin_name
+    pub fn command(&self) -> String {
+        script_name(&self.bin_name)
     }
 
     pub fn prepend_to_path(&self) -> io::Result<PathGuard> {
@@ -124,9 +124,10 @@ fn render_windows_script(stdout: &str, stderr: &str, exit_code: i32) -> String {
         script.push_str("\r\n");
     }
     for line in stderr.lines() {
-        script.push_str("echo ");
+        // Use parentheses to avoid trailing space before redirect
+        script.push_str("(echo ");
         script.push_str(line);
-        script.push_str(" 1>&2\r\n");
+        script.push_str(")1>&2\r\n");
     }
     script.push_str(&format!("exit /b {}\r\n", exit_code));
     script
