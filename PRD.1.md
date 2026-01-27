@@ -82,7 +82,7 @@ Implement a new `gralph init` subcommand in the Rust CLI that reads the configur
   * Add a force overwrite test that rewrites existing files.
   * Add a failure test for missing target directory.
 - **Dependencies** INIT-2
-- [ ] INIT-3 Add init unit tests for idempotency and force behavior
+- [x] INIT-3 Add init unit tests for idempotency and force behavior
 ---
 
 ### Task INIT-4

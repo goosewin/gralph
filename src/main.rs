@@ -1675,6 +1675,45 @@ mod tests {
     use super::*;
     use clap::Parser;
     use std::fs;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn env_guard() -> std::sync::MutexGuard<'static, ()> {
+        let guard = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+        clear_env_overrides();
+        guard
+    }
+
+    fn clear_env_overrides() {
+        for key in [
+            "GRALPH_DEFAULT_CONFIG",
+            "GRALPH_GLOBAL_CONFIG",
+            "GRALPH_CONFIG_DIR",
+            "GRALPH_PROJECT_CONFIG_NAME",
+        ] {
+            remove_env(key);
+        }
+    }
+
+    fn write_file(path: &Path, contents: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(path, contents).unwrap();
+    }
+
+    fn set_env(key: &str, value: impl AsRef<std::ffi::OsStr>) {
+        unsafe {
+            env::set_var(key, value);
+        }
+    }
+
+    fn remove_env(key: &str) {
+        unsafe {
+            env::remove_var(key);
+        }
+    }
 
     #[test]
     fn resolve_prd_output_handles_relative_and_absolute_paths() {
@@ -1747,6 +1786,91 @@ mod tests {
         let template = read_prd_template_with_manifest(project.path(), manifest.path()).unwrap();
 
         assert_eq!(template, DEFAULT_PRD_TEMPLATE);
+    }
+
+    #[test]
+    fn init_is_idempotent_without_force() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("default.yaml");
+
+        write_file(
+            &config_path,
+            "defaults:\n  context_files: ARCHITECTURE.md\n",
+        );
+        set_env("GRALPH_DEFAULT_CONFIG", &config_path);
+        set_env("GRALPH_GLOBAL_CONFIG", temp.path().join("missing.yaml"));
+
+        let args = InitArgs {
+            dir: Some(temp.path().to_path_buf()),
+            force: false,
+        };
+        cmd_init(args.clone()).unwrap();
+
+        let path = temp.path().join("ARCHITECTURE.md");
+        let first = fs::read_to_string(&path).unwrap();
+        cmd_init(args).unwrap();
+        let second = fs::read_to_string(&path).unwrap();
+
+        assert_eq!(first, second);
+        clear_env_overrides();
+    }
+
+    #[test]
+    fn init_overwrites_with_force() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("default.yaml");
+
+        write_file(
+            &config_path,
+            "defaults:\n  context_files: ARCHITECTURE.md\n",
+        );
+        set_env("GRALPH_DEFAULT_CONFIG", &config_path);
+        set_env("GRALPH_GLOBAL_CONFIG", temp.path().join("missing.yaml"));
+
+        let path = temp.path().join("ARCHITECTURE.md");
+        write_file(&path, "custom content");
+
+        let args = InitArgs {
+            dir: Some(temp.path().to_path_buf()),
+            force: true,
+        };
+        cmd_init(args).unwrap();
+
+        let contents = fs::read_to_string(&path).unwrap();
+        assert_eq!(contents, ARCHITECTURE_TEMPLATE);
+        clear_env_overrides();
+    }
+
+    #[test]
+    fn init_reports_missing_directory() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let missing = temp.path().join("missing");
+
+        let args = InitArgs {
+            dir: Some(missing.clone()),
+            force: false,
+        };
+        let err = cmd_init(args).unwrap_err();
+        match err {
+            CliError::Message(message) => assert!(message.contains("Directory does not exist")),
+            _ => panic!("unexpected error type"),
+        }
+    }
+
+    #[test]
+    fn init_falls_back_to_readme_context_files() {
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join("README.md"),
+            "## Context Files\n\n- `ARCHITECTURE.md`\n- `PROCESS.md`\n",
+        );
+
+        let entries = resolve_init_context_files(temp.path(), Some(""));
+
+        assert_eq!(entries, vec!["ARCHITECTURE.md", "PROCESS.md"]);
     }
 }
 
