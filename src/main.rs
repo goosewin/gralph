@@ -1541,7 +1541,11 @@ fn generic_markdown_template(path: &Path) -> String {
     format!("# {}\n\n## Overview\n\nTBD.\n", title)
 }
 
+<<<<<<< HEAD
 fn write_atomic(path: &Path, contents: &str, _force: bool) -> Result<(), io::Error> {
+=======
+fn write_atomic(path: &Path, contents: &str, force: bool) -> Result<(), io::Error> {
+>>>>>>> 36054fe (Implement init scaffolding for context docs)
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
@@ -1549,6 +1553,12 @@ fn write_atomic(path: &Path, contents: &str, _force: bool) -> Result<(), io::Err
     let temp_name = format!("{}.tmp-{}", file_name, std::process::id());
     let temp_path = path.with_file_name(temp_name);
     fs::write(&temp_path, contents)?;
+<<<<<<< HEAD
+=======
+    if force && path.exists() {
+        let _ = fs::remove_file(path);
+    }
+>>>>>>> 36054fe (Implement init scaffolding for context docs)
     fs::rename(&temp_path, path)?;
     Ok(())
 }
