@@ -19,7 +19,7 @@ Autonomous AI coding loops using Claude Code or OpenCode. Spawns fresh AI coding
   - `gemini` CLI (Gemini CLI) - `npm install -g @google/gemini-cli` (optional)
   - `codex` CLI (Codex CLI) - `npm install -g @openai/codex` (optional)
 - `git` (required for worktree commands)
-- .NET 10 SDK (only for building from source or running tests)
+- .NET 10 SDK (required for running from source, building releases, or running tests)
 
 ### Platform Support
 
