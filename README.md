@@ -28,7 +28,8 @@ Autonomous AI coding loops using Claude Code or OpenCode. Spawns fresh AI coding
 |----------|--------|-------|
 | Linux | ✅ Fully supported | Primary development platform |
 | macOS 12+ | ✅ Supported | Install tmux for background sessions |
-| WSL2 | ⚠️ Best effort | Should work like Linux |
+| Windows | ✅ Supported | Native Windows build (no WSL required) |
+| WSL2 | ✅ Supported | Works like Linux |
 
 **macOS Users:** Install dependencies via Homebrew:
 ```bash
@@ -37,23 +38,43 @@ brew install tmux
 
 ## Installation
 
-Gralph is distributed as a Rust CLI. Install from a release tarball or build from source.
+Gralph is distributed as a Rust CLI. Install using the install script, from a release archive, or build from source.
 
-### Quick Install (curl)
-
-Release assets are published per OS/arch. Pick the matching asset and place the binary on your PATH:
+### Quick Install (Linux/macOS)
 
 ```bash
-VERSION="0.1.0" # replace with the latest tag
-ASSET="linux-x86_64" # linux-aarch64, macos-x86_64, macos-arm64
-curl -L -o gralph.tar.gz https://github.com/goosewin/gralph/releases/download/v${VERSION}/gralph-${VERSION}-${ASSET}.tar.gz
-tar -xzf gralph.tar.gz
-cd gralph-${VERSION}
-chmod +x gralph
-sudo mv gralph /usr/local/bin/gralph
+curl -fsSL https://raw.githubusercontent.com/goosewin/gralph/main/install.sh | bash
 ```
 
-Use `uname -s` and `uname -m` to map your OS/arch to an asset name. Release assets are available for Linux x86_64/aarch64 and macOS x86_64/arm64; build from source for other platforms.
+To install a specific version:
+```bash
+GRALPH_VERSION="0.1.0" curl -fsSL https://raw.githubusercontent.com/goosewin/gralph/main/install.sh | bash
+```
+
+### Quick Install (Windows PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/goosewin/gralph/main/install.ps1 | iex
+```
+
+To install a specific version:
+```powershell
+.\install.ps1 -Version "0.1.0"
+```
+
+### Manual Download
+
+Release assets are published per OS/arch:
+
+| Platform | Asset |
+|----------|-------|
+| Linux x86_64 | `gralph-VERSION-linux-x86_64.tar.gz` |
+| Linux aarch64 | `gralph-VERSION-linux-aarch64.tar.gz` |
+| macOS x86_64 | `gralph-VERSION-macos-x86_64.tar.gz` |
+| macOS arm64 | `gralph-VERSION-macos-arm64.tar.gz` |
+| Windows x86_64 | `gralph-VERSION-windows-x86_64.zip` |
+
+Download from the [releases page](https://github.com/goosewin/gralph/releases) and extract to a directory in your PATH.
 
 ### From Source (git clone)
 
@@ -72,12 +93,17 @@ cargo install --path . --locked
 
 The installed binary name is `gralph`.
 
-### Manual Installation
+### Uninstall
 
-If you prefer not to use Cargo:
+**Linux/macOS:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/goosewin/gralph/main/uninstall.sh | bash
+```
 
-1. Copy the `gralph` binary to a directory in your PATH (e.g., `~/.local/bin/` or `/usr/local/bin/`).
-2. Copy `config/default.yaml` to `~/.config/gralph/config.yaml`.
+**Windows PowerShell:**
+```powershell
+irm https://raw.githubusercontent.com/goosewin/gralph/main/uninstall.ps1 | iex
+```
 3. (Optional) Copy `completions/` to your shell completion directory.
 
 ### Uninstalling
