@@ -65,7 +65,8 @@ function Main {
         Expand-Archive -Path $ZipPath -DestinationPath $TempDir -Force
 
         # Find binary
-        $BinaryPath = Join-Path $TempDir "gralph-$Version" "gralph.exe"
+        $BinaryDir = Join-Path $TempDir "gralph-$Version"
+        $BinaryPath = Join-Path $BinaryDir "gralph.exe"
         if (-not (Test-Path $BinaryPath)) {
             Write-Err "Binary not found in archive"
         }
