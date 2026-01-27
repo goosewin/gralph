@@ -1,4 +1,5 @@
 using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -247,7 +248,7 @@ public static class PrdStackDetector
         var runtimeList = runtimes.OrderBy(item => item, StringComparer.Ordinal).ToList();
         var packageList = packageManagers.OrderBy(item => item, StringComparer.Ordinal).ToList();
         var evidenceList = evidence.Distinct(StringComparer.Ordinal).OrderBy(item => item, StringComparer.Ordinal).ToList();
-        return new PrdStackSummary(stackList, languageList, frameworkList, toolList, runtimeList, packageList, evidenceList, stackList);
+        return new PrdStackSummary(stackList, languageList, frameworkList, toolList, runtimeList, packageList, evidenceList, Array.Empty<string>());
     }
 
     private static void AddIfExists(

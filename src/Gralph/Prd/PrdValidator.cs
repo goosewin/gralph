@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace Gralph.Prd;
@@ -100,6 +101,14 @@ public static class PrdValidator
             }
         }
 
+        if (block.DuplicateFields.Count > 0)
+        {
+            foreach (var duplicate in block.DuplicateFields.Distinct(StringComparer.Ordinal))
+            {
+                result.Add(new PrdValidationError(taskFilePath, $"Duplicate field: {duplicate}", taskLabel));
+            }
+        }
+
         if (block.UncheckedCount == 0)
         {
             result.Add(new PrdValidationError(taskFilePath, "Missing unchecked task line", taskLabel));
@@ -164,13 +173,14 @@ public static class PrdValidator
             }
         }
 
-        var directory = Path.GetDirectoryName(taskFilePath);
+        var fullPath = Path.GetFullPath(taskFilePath);
+        var directory = Path.GetDirectoryName(fullPath);
         if (string.IsNullOrWhiteSpace(directory))
         {
-            return NormalizePath(Path.GetFullPath(taskFilePath));
+            return NormalizePath(fullPath);
         }
 
-        return NormalizePath(Path.GetFullPath(directory));
+        return NormalizePath(directory);
     }
 
     private static string NormalizePath(string path)

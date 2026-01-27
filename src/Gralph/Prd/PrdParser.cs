@@ -74,7 +74,7 @@ public static class PrdParser
     {
         var headerLine = lines.Count > 0 ? lines[0] : string.Empty;
         var headerId = ExtractHeaderId(headerLine);
-        var fields = ExtractFields(lines);
+        var (fields, duplicateFields) = ExtractFields(lines);
         fields.TryGetValue("ID", out var idField);
         var contextEntries = ExtractContextEntries(lines);
         var uncheckedCount = lines.Count(line => UncheckedRegex.IsMatch(line));
@@ -89,7 +89,8 @@ public static class PrdParser
             idField,
             fields,
             contextEntries,
-            uncheckedCount);
+            uncheckedCount,
+            duplicateFields);
     }
 
     private static string? ExtractHeaderId(string headerLine)
@@ -103,9 +104,10 @@ public static class PrdParser
         return match.Groups[1].Value.Trim();
     }
 
-    private static Dictionary<string, string?> ExtractFields(IReadOnlyList<string> lines)
+    private static (Dictionary<string, string?> Fields, List<string> Duplicates) ExtractFields(IReadOnlyList<string> lines)
     {
         var fields = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var duplicates = new List<string>();
         foreach (var line in lines)
         {
             var match = FieldRegex.Match(line);
@@ -115,8 +117,14 @@ public static class PrdParser
             }
 
             var name = match.Groups["name"].Value.Trim();
-            if (string.IsNullOrEmpty(name) || fields.ContainsKey(name))
+            if (string.IsNullOrEmpty(name))
             {
+                continue;
+            }
+
+            if (fields.ContainsKey(name))
+            {
+                duplicates.Add(name);
                 continue;
             }
 
@@ -124,19 +132,21 @@ public static class PrdParser
             fields[name] = string.IsNullOrEmpty(rest) ? null : rest;
         }
 
-        return fields;
+        return (fields, duplicates);
     }
 
     private static List<string> ExtractContextEntries(IReadOnlyList<string> lines)
     {
         var entries = new List<string>();
         var inContext = false;
+        var contextIndent = 0;
 
         foreach (var line in lines)
         {
             if (!inContext && ContextHeaderRegex.IsMatch(line))
             {
                 inContext = true;
+                contextIndent = GetIndentation(line);
                 AddBacktickEntries(line, entries);
                 continue;
             }
@@ -145,7 +155,11 @@ public static class PrdParser
             {
                 if (FieldRegex.IsMatch(line))
                 {
-                    break;
+                    var indent = GetIndentation(line);
+                    if (indent <= contextIndent)
+                    {
+                        break;
+                    }
                 }
 
                 AddBacktickEntries(line, entries);
@@ -164,5 +178,27 @@ public static class PrdParser
                 entries.Add(match.Groups[1].Value);
             }
         }
+    }
+
+    private static int GetIndentation(string line)
+    {
+        if (string.IsNullOrEmpty(line))
+        {
+            return 0;
+        }
+
+        var count = 0;
+        foreach (var ch in line)
+        {
+            if (ch == ' ' || ch == '\t')
+            {
+                count++;
+                continue;
+            }
+
+            break;
+        }
+
+        return count;
     }
 }

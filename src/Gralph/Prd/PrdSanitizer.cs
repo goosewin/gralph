@@ -381,6 +381,6 @@ public static class PrdSanitizer
 
     private static string NormalizePath(string path)
     {
-        return path.Replace('\u005c', '/');
+        return path.Replace('\\', '/');
     }
 }

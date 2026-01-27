@@ -13,7 +13,8 @@ public sealed class PrdTaskBlock
         string? idField,
         IReadOnlyDictionary<string, string?> fields,
         IReadOnlyList<string> contextEntries,
-        int uncheckedCount)
+        int uncheckedCount,
+        IReadOnlyList<string> duplicateFields)
     {
         HeaderLine = headerLine;
         RawText = rawText;
@@ -24,6 +25,7 @@ public sealed class PrdTaskBlock
         Fields = fields;
         ContextEntries = contextEntries;
         UncheckedCount = uncheckedCount;
+        DuplicateFields = duplicateFields;
     }
 
     public string HeaderLine { get; }
@@ -35,4 +37,5 @@ public sealed class PrdTaskBlock
     public IReadOnlyDictionary<string, string?> Fields { get; }
     public IReadOnlyList<string> ContextEntries { get; }
     public int UncheckedCount { get; }
+    public IReadOnlyList<string> DuplicateFields { get; }
 }
