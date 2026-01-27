@@ -2,7 +2,7 @@ mod cli;
 
 use clap::Parser;
 use cli::{
-    Cli, Command, ConfigArgs, ConfigCommand, LogsArgs, PrdArgs, PrdCheckArgs, PrdCommand,
+    Cli, Command, ConfigArgs, ConfigCommand, InitArgs, LogsArgs, PrdArgs, PrdCheckArgs, PrdCommand,
     PrdCreateArgs, ResumeArgs, RunLoopArgs, ServerArgs, StartArgs, StopArgs, WorktreeCommand,
     WorktreeCreateArgs, WorktreeFinishArgs, ASCII_BANNER,
 };
@@ -44,6 +44,7 @@ fn dispatch(command: Command) -> Result<(), CliError> {
         Command::Status => cmd_status(),
         Command::Logs(args) => cmd_logs(args),
         Command::Resume(args) => cmd_resume(args),
+        Command::Init(args) => cmd_init(args),
         Command::Prd(args) => cmd_prd(args),
         Command::Worktree(args) => cmd_worktree(args),
         Command::Backends => cmd_backends(),
@@ -90,6 +91,7 @@ fn cmd_intro() -> Result<(), CliError> {
     println!("  gralph stop <name>");
     println!("  gralph backends");
     println!("  gralph prd create --dir . --output PRD.new.md --goal \"Add a billing dashboard\"");
+    println!("  gralph init --dir .");
     println!("  gralph worktree create C-1\n");
     println!("More help:");
     println!("  gralph --help");
@@ -391,6 +393,12 @@ fn cmd_prd(args: PrdArgs) -> Result<(), CliError> {
     }
 }
 
+fn cmd_init(_args: InitArgs) -> Result<(), CliError> {
+    Err(CliError::Message(
+        "Init scaffolding is not implemented yet. See task INIT-2.".to_string(),
+    ))
+}
+
 fn cmd_prd_check(args: PrdCheckArgs) -> Result<(), CliError> {
     prd::prd_validate_file(&args.file, args.allow_missing_context, None)
         .map_err(|err| CliError::Message(err.to_string()))?;
@@ -483,7 +491,13 @@ fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
     let tmp_dir = env::temp_dir();
     let output_file = tmp_dir.join(format!("gralph-prd-{}.tmp", std::process::id()));
     backend
-        .run_iteration(&prompt, model.as_deref(), &output_file, &target_dir)
+        .run_iteration(
+            &prompt,
+            model.as_deref(),
+            args.variant.as_deref(),
+            &output_file,
+            &target_dir,
+        )
         .map_err(|err| CliError::Message(err.to_string()))?;
     let result = backend
         .parse_text(&output_file)
@@ -856,6 +870,7 @@ fn run_loop_with_state(args: RunLoopArgs) -> Result<(), CliError> {
         Some(max_iterations),
         Some(&completion_marker),
         model.as_deref(),
+        args.variant.as_deref(),
         Some(&args.name),
         prompt_template.as_deref(),
         Some(&config),

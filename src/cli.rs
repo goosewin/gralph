@@ -29,11 +29,16 @@ PRD OPTIONS:
   --sources           External URLs or references (comma-separated)
   --backend, -b        Backend for PRD generation (default: config/default)
   --model, -m          Model override for PRD generation
+  --variant           Model variant override (backend-specific)
   --allow-missing-context Allow missing Context Bundle paths
   --multiline         Enable multiline prompts (interactive)
   --no-interactive    Disable interactive prompts
   --interactive       Force interactive prompts
   --force             Overwrite existing output file
+
+INIT OPTIONS:
+  --dir               Target directory (default: current)
+  --force             Overwrite existing files
 
 SERVER OPTIONS:
   --host, -H            Host/IP to bind to (default: 127.0.0.1)
@@ -48,6 +53,7 @@ EXAMPLES:
   gralph logs myapp --follow
   gralph stop myapp
   gralph prd create --dir . --output PRD.new.md --goal "Add a billing dashboard"
+  gralph init --dir .
   gralph worktree create C-1
   gralph worktree finish C-1
   gralph server --host 0.0.0.0 --port 8080
@@ -79,6 +85,8 @@ pub enum Command {
     Logs(LogsArgs),
     #[command(about = "Resume crashed/stopped loops")]
     Resume(ResumeArgs),
+    #[command(about = "Initialize shared context files")]
+    Init(InitArgs),
     #[command(about = "Generate or validate PRDs")]
     Prd(PrdArgs),
     #[command(about = "Manage task worktrees")]
@@ -171,6 +179,14 @@ pub struct ResumeArgs {
     pub name: Option<String>,
 }
 
+#[derive(Args, Debug, Clone)]
+pub struct InitArgs {
+    #[arg(long, help = "Target directory (default: current)")]
+    pub dir: Option<PathBuf>,
+    #[arg(long, action = clap::ArgAction::SetTrue, help = "Overwrite existing files")]
+    pub force: bool,
+}
+
 #[derive(Args, Debug)]
 pub struct PrdArgs {
     #[command(subcommand)]
@@ -219,6 +235,8 @@ pub struct PrdCreateArgs {
     pub backend: Option<String>,
     #[arg(short = 'm', long, help = "Model override for PRD generation")]
     pub model: Option<String>,
+    #[arg(long, help = "Model variant override (backend-specific)")]
+    pub variant: Option<String>,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Allow missing Context Bundle paths")]
     pub allow_missing_context: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Enable multiline prompts (interactive)")]

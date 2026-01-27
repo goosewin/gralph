@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- INIT-1 Added init CLI subcommand and routing.
 - Added multi-arch release assets for Linux and macOS.
 - Initial public release notes for the gralph CLI.
 - T-SERVER-1 Added status endpoint auth and response tests.
