@@ -49,4 +49,4 @@ Validate the status API server for auth, endpoint behavior, and error handling.
   * CORS headers present on status endpoint.
   * Error body matches expected schema.
 - **Dependencies** T-SERVER-1
-- [ ] T-SERVER-3 Add CORS + error response tests
+- [x] T-SERVER-3 Add CORS + error response tests

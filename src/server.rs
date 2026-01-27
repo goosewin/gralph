@@ -527,6 +527,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn status_endpoint_includes_cors_headers() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/status")
+                    .method("GET")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer secret")
+                    .header(axum::http::header::ORIGIN, "http://localhost")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let headers = response.headers();
+        assert_eq!(
+            headers
+                .get(axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .and_then(|value| value.to_str().ok()),
+            Some("http://localhost")
+        );
+        assert_eq!(
+            headers
+                .get(axum::http::header::ACCESS_CONTROL_ALLOW_METHODS)
+                .and_then(|value| value.to_str().ok()),
+            Some("GET, POST, OPTIONS")
+        );
+        assert_eq!(
+            headers
+                .get(axum::http::header::ACCESS_CONTROL_ALLOW_HEADERS)
+                .and_then(|value| value.to_str().ok()),
+            Some("Authorization, Content-Type")
+        );
+    }
+
+    #[tokio::test]
     async fn status_name_unknown_returns_not_found() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path());
@@ -630,5 +681,39 @@ mod tests {
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["error"], "Session not found: missing");
+    }
+
+    #[tokio::test]
+    async fn error_response_has_expected_schema() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/status")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        let object = body.as_object().expect("error response object");
+        assert_eq!(object.len(), 1);
+        assert!(object.get("error").and_then(|value| value.as_str()).is_some());
     }
 }
