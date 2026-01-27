@@ -1,0 +1,23 @@
+.github/workflows/ci.yml
+  d97571f73df8c3a3 9-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "b20477bab7b80df85937077a62c49f70d6d1a1da",
+  "prompts": {
+    "d97571f73df8c3a3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_402f9ec36ffe73QmQJC59kzYcB",
+        "model": "opencode/claude-opus-4-5"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 1,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  }
+}
