@@ -558,4 +558,77 @@ mod tests {
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["error"], "Session not found: missing");
     }
+
+    #[tokio::test]
+    async fn stop_endpoint_marks_session_stopped() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+        store
+            .set_session("alpha", &[("status", "running"), ("pid", "0")])
+            .unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/stop/alpha")
+                    .method("POST")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["success"], true);
+        assert_eq!(body["message"], "Session stopped");
+
+        let session = state.store.get_session("alpha").unwrap().unwrap();
+        assert_eq!(session.get("status").and_then(|v| v.as_str()), Some("stopped"));
+    }
+
+    #[tokio::test]
+    async fn stop_endpoint_unknown_session_returns_not_found() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/stop/missing")
+                    .method("POST")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["error"], "Session not found: missing");
+    }
 }

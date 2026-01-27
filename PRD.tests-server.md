@@ -38,7 +38,7 @@ Validate the status API server for auth, endpoint behavior, and error handling.
   * Valid token stops existing session.
   * Missing session returns expected error.
 - **Dependencies** None
-- [ ] T-SERVER-2 Add stop endpoint behavior tests
+- [x] T-SERVER-2 Add stop endpoint behavior tests
 
 ### Task T-SERVER-3
 
