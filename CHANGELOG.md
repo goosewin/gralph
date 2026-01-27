@@ -12,6 +12,7 @@ CI=<status/link>; PR=<link if final PRD task>
 ## [Unreleased]
 
 ### Added
+- WT-1 Auto-create worktrees for PRD runs with config and CLI controls.
 - INIT-1 Added init CLI subcommand and routing.
 - INIT-4 Documented init command and updated shell completions.
 - Added multi-arch release assets for Linux and macOS.
@@ -105,3 +106,6 @@ CI=<status/link>; PR=<link if final PRD task>
 - OSS-17 Documented PRD validation rules, sanitization behavior, and stack detection heuristics.
 - OSS-18 Reviewed README for CLI reference, model names, and doc accuracy.
 - OSS-19 Removed legacy shell artifacts and aligned context defaults with Rust sources.
+
+### Verification
+- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened

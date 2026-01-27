@@ -12,7 +12,7 @@ Environment: Ubuntu 24.04.3 LTS
 - `./target/release/gralph status` runs with empty state
 - `./target/release/gralph backends` lists available backends
 - `./target/release/gralph config list` shows configuration
-- Help output includes flags: `--no-tmux`, `--backend`, `--webhook`, `--variant`, `--prompt-template`
+- Help output includes flags: `--no-tmux`, `--no-worktree`, `--backend`, `--webhook`, `--variant`, `--prompt-template`
 - Server command available in help
 - If testing a release asset, confirm the tarball matches the host architecture (linux-x86_64 vs linux-aarch64).
 
@@ -29,7 +29,7 @@ cargo build --release
 ./target/release/gralph backends
 ./target/release/gralph config list
 
-./target/release/gralph help | grep -E '\-\-(no-tmux|backend|webhook|variant|prompt-template)'
+./target/release/gralph help | grep -E '\-\-(no-tmux|no-worktree|backend|webhook|variant|prompt-template)'
 ./target/release/gralph help | grep 'server'
 ```
 

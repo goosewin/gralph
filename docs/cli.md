@@ -34,8 +34,12 @@ gralph start <directory> [options]
 | `--backend` | `-b` | AI backend | claude |
 | `--model` | `-m` | Model | (from config) |
 | `--webhook` | | Notification URL | (none) |
+| `--no-worktree` | | Disable automatic worktree creation | false |
 | `--no-tmux` | | Run in foreground | false |
 | `--strict-prd` | | Validate PRD first | false |
+
+By default, `gralph start` creates a git worktree under `.worktrees/` for each PRD run
+when the directory is a git repo with at least one commit.
 
 ## `gralph stop`
 

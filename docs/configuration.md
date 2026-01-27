@@ -12,6 +12,7 @@
 | `max_iterations` | integer | `30` | Maximum loop iterations |
 | `task_file` | string | `PRD.md` | Task file path |
 | `completion_marker` | string | `COMPLETE` | Completion signal text |
+| `auto_worktree` | boolean | `true` | Create a worktree per PRD run |
 | `context_files` | string | `ARCHITECTURE.md, DECISIONS.md, ...` | Context files to inject |
 | `backend` | string | `claude` | AI backend (`claude`, `opencode`, `gemini`, `codex`) |
 | `model` | string | (none) | Model override |
@@ -65,6 +66,7 @@ All config keys can be overridden with `GRALPH_` prefix:
 |------------|---------------------|
 | `defaults.max_iterations` | `GRALPH_DEFAULTS_MAX_ITERATIONS` |
 | `defaults.backend` | `GRALPH_DEFAULTS_BACKEND` |
+| `defaults.auto_worktree` | `GRALPH_DEFAULTS_AUTO_WORKTREE` |
 | `notifications.webhook` | `GRALPH_NOTIFICATIONS_WEBHOOK` |
 
 ## Precedence

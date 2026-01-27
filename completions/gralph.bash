@@ -842,7 +842,7 @@ _gralph() {
             return 0
             ;;
         gralph__run__loop)
-            opts="-h --name --max-iterations --task-file --completion-marker --backend --model --variant --prompt-template --webhook --strict-prd --help <DIR>"
+            opts="-h --name --max-iterations --task-file --completion-marker --backend --model --variant --prompt-template --webhook --no-worktree --strict-prd --help <DIR>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -930,7 +930,7 @@ _gralph() {
             return 0
             ;;
         gralph__start)
-            opts="-n -f -b -m -h --name --max-iterations --task-file --completion-marker --backend --model --variant --prompt-template --webhook --no-tmux --strict-prd --help <DIR>"
+            opts="-n -f -b -m -h --name --max-iterations --task-file --completion-marker --backend --model --variant --prompt-template --webhook --no-worktree --no-tmux --strict-prd --help <DIR>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

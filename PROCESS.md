@@ -2,7 +2,8 @@
 
 ## Worktree Protocol
 1) Read: ARCHITECTURE.md, PROCESS.md, DECISIONS.md, CHANGELOG.md, RISK_REGISTER.md.
-2) Create worktree: `.worktrees/task-<ID>` (new `task-<ID>` branch).
+2) Create worktree: `.worktrees/task-<ID>` (new `task-<ID>` branch). `gralph start`
+   auto-creates a worktree per PRD run unless `--no-worktree` is set.
 3) Implement ONLY the assigned task in the Rust codebase (`src/`) or scoped docs.
 4) Update:
    - CHANGELOG.md (include Task ID)

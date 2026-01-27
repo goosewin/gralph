@@ -3,6 +3,7 @@ defaults:
   max_iterations: 30
   task_file: PRD.md
   completion_marker: COMPLETE
+  auto_worktree: true
   context_files: ARCHITECTURE.md, DECISIONS.md, CHANGELOG.md, RISK_REGISTER.md, PROCESS.md
   # Backend: claude, opencode, gemini, or codex
   backend: claude

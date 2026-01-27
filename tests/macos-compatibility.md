@@ -59,7 +59,7 @@ cargo build --release
 ```bash
 mkdir ~/test-project && cd ~/test-project
 echo '- [ ] Test task 1' > PRD.md
-gralph start . --no-tmux --max-iterations 1
+gralph start . --no-worktree --no-tmux --max-iterations 1
 ```
 
 ### Scenario 3: tmux Session Management

@@ -43,6 +43,7 @@ _arguments "${_arguments_options[@]}" : \
 '--variant=[Model variant override (backend-specific)]:VARIANT:_default' \
 '--prompt-template=[Path to custom prompt template file]:PROMPT_TEMPLATE:_files' \
 '--webhook=[Notification webhook URL]:WEBHOOK:_default' \
+'--no-worktree[Disable automatic worktree creation]' \
 '--no-tmux[Run in foreground (blocks)]' \
 '--strict-prd[Validate PRD before starting the loop]' \
 '-h[Print help]' \
@@ -332,6 +333,7 @@ _arguments "${_arguments_options[@]}" : \
 '--variant=[]:VARIANT:_default' \
 '--prompt-template=[]:PROMPT_TEMPLATE:_files' \
 '--webhook=[]:WEBHOOK:_default' \
+'--no-worktree[Disable automatic worktree creation]' \
 '--strict-prd[]' \
 '-h[Print help]' \
 '--help[Print help]' \

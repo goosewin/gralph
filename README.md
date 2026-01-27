@@ -37,12 +37,18 @@ irm https://raw.githubusercontent.com/goosewin/gralph/main/install.ps1 | iex
 ```bash
 gralph start .                    # Start loop in current directory
 gralph start . --backend opencode # Use different backend
+gralph start . --no-worktree      # Skip auto worktree creation
 gralph init .                     # Scaffold shared context files
 gralph status                     # Check all running loops
 gralph logs myapp --follow        # Watch logs
 gralph stop myapp                 # Stop a loop
 gralph resume                     # Resume after crash
 ```
+
+By default, `gralph start` creates a git worktree under `.worktrees/` for each PRD run
+when the directory is a git repo with at least one commit. Disable with
+`--no-worktree` or set
+`defaults.auto_worktree: false`.
 
 ## How It Works
 
