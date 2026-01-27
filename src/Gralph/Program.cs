@@ -99,21 +99,21 @@ root.SetAction(_ => Console.WriteLine(helpText));
 
 var start = new Command("start", "Start a new gralph loop");
 var startDirArgument = new Argument<string>("dir") { Arity = ArgumentArity.ExactlyOne };
-var startNameOption = new Option<string?>("--name", "Session name (default: directory name)");
-var startNameShortOption = new Option<string?>("-n", "Session name (default: directory name)");
-var startMaxIterationsOption = new Option<int?>("--max-iterations", "Max iterations before giving up");
-var startTaskFileOption = new Option<string?>("--task-file", "Task file path");
-var startTaskFileShortOption = new Option<string?>("-f", "Task file path");
-var startCompletionMarkerOption = new Option<string?>("--completion-marker", "Completion promise text");
-var startBackendOption = new Option<string?>("--backend", "AI backend");
-var startBackendShortOption = new Option<string?>("-b", "AI backend");
-var startModelOption = new Option<string?>("--model", "Model override");
-var startModelShortOption = new Option<string?>("-m", "Model override");
-var startVariantOption = new Option<string?>("--variant", "Model variant override");
-var startPromptTemplateOption = new Option<string?>("--prompt-template", "Path to custom prompt template file");
-var startWebhookOption = new Option<string?>("--webhook", "Notification webhook URL");
-var startNoTmuxOption = new Option<bool>("--no-tmux", "Run in foreground (blocks)");
-var startStrictPrdOption = new Option<bool>("--strict-prd", "Validate PRD before starting the loop");
+var startNameOption = new Option<string?>("--name") { Description = "Session name (default: directory name)" };
+var startNameShortOption = new Option<string?>("-n") { Description = "Session name (default: directory name)" };
+var startMaxIterationsOption = new Option<int?>("--max-iterations") { Description = "Max iterations before giving up" };
+var startTaskFileOption = new Option<string?>("--task-file") { Description = "Task file path" };
+var startTaskFileShortOption = new Option<string?>("-f") { Description = "Task file path" };
+var startCompletionMarkerOption = new Option<string?>("--completion-marker") { Description = "Completion promise text" };
+var startBackendOption = new Option<string?>("--backend") { Description = "AI backend" };
+var startBackendShortOption = new Option<string?>("-b") { Description = "AI backend" };
+var startModelOption = new Option<string?>("--model") { Description = "Model override" };
+var startModelShortOption = new Option<string?>("-m") { Description = "Model override" };
+var startVariantOption = new Option<string?>("--variant") { Description = "Model variant override" };
+var startPromptTemplateOption = new Option<string?>("--prompt-template") { Description = "Path to custom prompt template file" };
+var startWebhookOption = new Option<string?>("--webhook") { Description = "Notification webhook URL" };
+var startNoTmuxOption = new Option<bool>("--no-tmux") { Description = "Run in foreground (blocks)" };
+var startStrictPrdOption = new Option<bool>("--strict-prd") { Description = "Validate PRD before starting the loop" };
 var startBackgroundChildOption = new Option<bool>("--background-child");
 
 start.Add(startDirArgument);
@@ -159,7 +159,7 @@ start.SetAction(parseResult =>
 
 var stop = new Command("stop", "Stop a running loop");
 var stopNameArgument = new Argument<string>("name") { Arity = ArgumentArity.ZeroOrOne };
-var stopAllOption = new Option<bool>("--all", "Stop all loops");
+var stopAllOption = new Option<bool>("--all") { Description = "Stop all loops" };
 stop.Add(stopNameArgument);
 stop.Add(stopAllOption);
 stop.SetAction(parseResult =>
@@ -184,7 +184,7 @@ status.SetAction(_ =>
 
 var logs = new Command("logs", "View logs for a loop");
 var logsNameArgument = new Argument<string>("name") { Arity = ArgumentArity.ExactlyOne };
-var logsFollowOption = new Option<bool>("--follow", "Follow log output");
+var logsFollowOption = new Option<bool>("--follow") { Description = "Follow log output" };
 logs.Add(logsNameArgument);
 logs.Add(logsFollowOption);
 logs.SetAction(parseResult =>
@@ -216,7 +216,7 @@ resume.SetAction(parseResult =>
 var prd = new Command("prd", "Validate or generate PRDs");
 var prdCheck = new Command("check", "Validate PRD task blocks");
 var prdCheckFileArgument = new Argument<string>("file") { Arity = ArgumentArity.ExactlyOne };
-var prdCheckAllowMissingContextOption = new Option<bool>("--allow-missing-context", "Allow missing Context Bundle paths");
+var prdCheckAllowMissingContextOption = new Option<bool>("--allow-missing-context") { Description = "Allow missing Context Bundle paths" };
 prdCheck.Add(prdCheckFileArgument);
 prdCheck.Add(prdCheckAllowMissingContextOption);
 prdCheck.SetAction(parseResult =>
@@ -231,22 +231,22 @@ prdCheck.SetAction(parseResult =>
     Environment.ExitCode = exitCode;
 });
 var prdCreate = new Command("create", "Generate a spec-compliant PRD");
-var prdCreateDirOption = new Option<string?>("--dir", "Project directory (default: current)");
-var prdCreateOutputOption = new Option<string?>("--output", "Output PRD file path (default: PRD.generated.md)");
-var prdCreateOutputShortOption = new Option<string?>("-o", "Output PRD file path (default: PRD.generated.md)");
-var prdCreateGoalOption = new Option<string?>("--goal", "Short description of what to build");
-var prdCreateConstraintsOption = new Option<string?>("--constraints", "Constraints or non-functional requirements");
-var prdCreateContextOption = new Option<string?>("--context", "Extra context files (comma-separated)");
-var prdCreateSourcesOption = new Option<string?>("--sources", "External URLs or references (comma-separated)");
-var prdCreateBackendOption = new Option<string?>("--backend", "Backend for PRD generation");
-var prdCreateBackendShortOption = new Option<string?>("-b", "Backend for PRD generation");
-var prdCreateModelOption = new Option<string?>("--model", "Model override for PRD generation");
-var prdCreateModelShortOption = new Option<string?>("-m", "Model override for PRD generation");
-var prdCreateAllowMissingContextOption = new Option<bool>("--allow-missing-context", "Allow missing Context Bundle paths");
-var prdCreateMultilineOption = new Option<bool>("--multiline", "Enable multiline prompts (interactive)");
-var prdCreateNoInteractiveOption = new Option<bool>("--no-interactive", "Disable interactive prompts");
-var prdCreateInteractiveOption = new Option<bool>("--interactive", "Force interactive prompts");
-var prdCreateForceOption = new Option<bool>("--force", "Overwrite existing output file");
+var prdCreateDirOption = new Option<string?>("--dir") { Description = "Project directory (default: current)" };
+var prdCreateOutputOption = new Option<string?>("--output") { Description = "Output PRD file path (default: PRD.generated.md)" };
+var prdCreateOutputShortOption = new Option<string?>("-o") { Description = "Output PRD file path (default: PRD.generated.md)" };
+var prdCreateGoalOption = new Option<string?>("--goal") { Description = "Short description of what to build" };
+var prdCreateConstraintsOption = new Option<string?>("--constraints") { Description = "Constraints or non-functional requirements" };
+var prdCreateContextOption = new Option<string?>("--context") { Description = "Extra context files (comma-separated)" };
+var prdCreateSourcesOption = new Option<string?>("--sources") { Description = "External URLs or references (comma-separated)" };
+var prdCreateBackendOption = new Option<string?>("--backend") { Description = "Backend for PRD generation" };
+var prdCreateBackendShortOption = new Option<string?>("-b") { Description = "Backend for PRD generation" };
+var prdCreateModelOption = new Option<string?>("--model") { Description = "Model override for PRD generation" };
+var prdCreateModelShortOption = new Option<string?>("-m") { Description = "Model override for PRD generation" };
+var prdCreateAllowMissingContextOption = new Option<bool>("--allow-missing-context") { Description = "Allow missing Context Bundle paths" };
+var prdCreateMultilineOption = new Option<bool>("--multiline") { Description = "Enable multiline prompts (interactive)" };
+var prdCreateNoInteractiveOption = new Option<bool>("--no-interactive") { Description = "Disable interactive prompts" };
+var prdCreateInteractiveOption = new Option<bool>("--interactive") { Description = "Force interactive prompts" };
+var prdCreateForceOption = new Option<bool>("--force") { Description = "Overwrite existing output file" };
 
 prdCreate.Add(prdCreateDirOption);
 prdCreate.Add(prdCreateOutputOption);
@@ -377,13 +377,13 @@ config.Add(configGet);
 config.Add(configSet);
 
 var server = new Command("server", "Start status API server");
-var serverHostOption = new Option<string?>("--host", "Host/IP to bind to");
-var serverHostShortOption = new Option<string?>("-H", "Host/IP to bind to");
-var serverPortOption = new Option<int?>("--port", "Port number");
-var serverPortShortOption = new Option<int?>("-p", "Port number");
-var serverTokenOption = new Option<string?>("--token", "Authentication token");
-var serverTokenShortOption = new Option<string?>("-t", "Authentication token");
-var serverOpenOption = new Option<bool>("--open", "Disable token requirement (use with caution)");
+var serverHostOption = new Option<string?>("--host") { Description = "Host/IP to bind to" };
+var serverHostShortOption = new Option<string?>("-H") { Description = "Host/IP to bind to" };
+var serverPortOption = new Option<int?>("--port") { Description = "Port number" };
+var serverPortShortOption = new Option<int?>("-p") { Description = "Port number" };
+var serverTokenOption = new Option<string?>("--token") { Description = "Authentication token" };
+var serverTokenShortOption = new Option<string?>("-t") { Description = "Authentication token" };
+var serverOpenOption = new Option<bool>("--open") { Description = "Disable token requirement (use with caution)" };
 server.Add(serverHostOption);
 server.Add(serverHostShortOption);
 server.Add(serverPortOption);
