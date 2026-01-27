@@ -1222,6 +1222,25 @@ fn git_output(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<Strin
     }
 }
 
+fn git_output_in_dir(
+    dir: &Path,
+    args: impl IntoIterator<Item = impl AsRef<OsStr>>,
+) -> Result<String, CliError> {
+    let output = ProcCommand::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .output()
+        .map_err(CliError::Io)?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    } else {
+        Err(CliError::Message(
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        ))
+    }
+}
+
 fn git_status_in_repo(
     repo_root: &str,
     args: impl IntoIterator<Item = impl AsRef<OsStr>>,
@@ -1351,28 +1370,51 @@ fn maybe_create_auto_worktree(args: &mut RunLoopArgs, config: &Config) -> Result
         return Ok(());
     }
 
-    let repo_root = match git_output(["rev-parse", "--show-toplevel"]) {
+    let target_dir = args.dir.clone();
+    let target_display = target_dir.display();
+    let repo_root = match git_output_in_dir(&target_dir, ["rev-parse", "--show-toplevel"]) {
         Ok(output) => output.trim().to_string(),
         Err(CliError::Message(message)) => {
             if message.to_lowercase().contains("not a git repository") {
-                println!("Auto worktree skipped: not a git repository.");
+                println!(
+                    "Auto worktree skipped for {}: not a git repository.",
+                    target_display
+                );
                 return Ok(());
             }
             return Err(CliError::Message(message));
         }
         Err(CliError::Io(err)) => {
-            println!("Auto worktree skipped: git unavailable ({}).", err);
+            println!(
+                "Auto worktree skipped for {}: git unavailable ({}).",
+                target_display, err
+            );
             return Ok(());
         }
     };
     if !git_has_commits(&repo_root) {
-        println!("Auto worktree skipped: repository has no commits.");
+        println!(
+            "Auto worktree skipped for {}: repository has no commits.",
+            target_display
+        );
         return Ok(());
     }
     ensure_git_clean(&repo_root)?;
 
     let worktrees_dir = PathBuf::from(&repo_root).join(".worktrees");
     fs::create_dir_all(&worktrees_dir).map_err(CliError::Io)?;
+
+    let target_dir = target_dir
+        .canonicalize()
+        .unwrap_or_else(|_| target_dir.clone());
+    let repo_root_path = PathBuf::from(&repo_root);
+    let repo_root_path = repo_root_path
+        .canonicalize()
+        .unwrap_or_else(|_| repo_root_path.clone());
+    let relative_target = target_dir
+        .strip_prefix(&repo_root_path)
+        .unwrap_or_else(|_| Path::new(""))
+        .to_path_buf();
 
     let timestamp = worktree_timestamp_slug();
     let base_branch = auto_worktree_branch_name(&args.name, &timestamp);
@@ -1386,7 +1428,11 @@ fn maybe_create_auto_worktree(args: &mut RunLoopArgs, config: &Config) -> Result
         branch
     );
 
-    args.dir = worktree_path;
+    args.dir = if relative_target.as_os_str().is_empty() {
+        worktree_path
+    } else {
+        worktree_path.join(relative_target)
+    };
     args.no_worktree = true;
     Ok(())
 }
