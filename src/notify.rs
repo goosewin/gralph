@@ -538,6 +538,108 @@ fn timestamp_iso8601() -> String {
 mod tests {
     use super::*;
     use serde_json::Value;
+    use std::collections::HashMap;
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+
+    #[derive(Debug, Clone)]
+    struct CapturedRequest {
+        method: String,
+        path: String,
+        headers: HashMap<String, String>,
+        body: String,
+    }
+
+    fn read_request(stream: &mut TcpStream) -> CapturedRequest {
+        let mut buffer = Vec::new();
+        let mut temp = [0u8; 1024];
+        let header_end = loop {
+            let read = stream.read(&mut temp).unwrap_or(0);
+            if read == 0 {
+                break None;
+            }
+            buffer.extend_from_slice(&temp[..read]);
+            if let Some(pos) = buffer.windows(4).position(|window| window == b"\r\n\r\n") {
+                break Some(pos + 4);
+            }
+        };
+
+        let header_end = header_end.unwrap_or(buffer.len());
+        let (header_bytes, mut body_bytes) = buffer.split_at(header_end);
+        let header_text = String::from_utf8_lossy(header_bytes);
+        let mut lines = header_text.lines();
+        let request_line = lines.next().unwrap_or_default();
+        let mut request_parts = request_line.split_whitespace();
+        let method = request_parts.next().unwrap_or_default().to_string();
+        let path = request_parts.next().unwrap_or_default().to_string();
+
+        let mut headers = HashMap::new();
+        for line in lines {
+            if line.trim().is_empty() {
+                continue;
+            }
+            if let Some((name, value)) = line.split_once(':') {
+                headers.insert(name.trim().to_lowercase(), value.trim().to_string());
+            }
+        }
+
+        let content_length = headers
+            .get("content-length")
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(0);
+
+        let mut full_body = body_bytes.to_vec();
+        if full_body.len() < content_length {
+            let mut remaining = vec![0u8; content_length - full_body.len()];
+            stream.read_exact(&mut remaining).unwrap();
+            full_body.extend_from_slice(&remaining);
+        }
+
+        let body =
+            String::from_utf8_lossy(&full_body[..content_length.min(full_body.len())]).to_string();
+
+        CapturedRequest {
+            method,
+            path,
+            headers,
+            body,
+        }
+    }
+
+    fn start_test_server(
+        status_line: &'static str,
+        response_body: &'static str,
+    ) -> (
+        String,
+        Arc<Mutex<Option<CapturedRequest>>>,
+        thread::JoinHandle<()>,
+    ) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
+        let addr = listener.local_addr().expect("local addr");
+        let captured = Arc::new(Mutex::new(None));
+        let captured_clone = Arc::clone(&captured);
+
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept connection");
+            let request = read_request(&mut stream);
+            *captured_clone.lock().unwrap() = Some(request);
+
+            let body_bytes = response_body.as_bytes();
+            let response = format!(
+                "{}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                status_line,
+                body_bytes.len()
+            );
+            stream.write_all(response.as_bytes()).unwrap();
+            if !body_bytes.is_empty() {
+                stream.write_all(body_bytes).unwrap();
+            }
+        });
+
+        (format!("http://{}", addr), captured, handle)
+    }
 
     #[test]
     fn detect_webhook_type_matches() {
@@ -628,5 +730,38 @@ mod tests {
         assert_eq!(value["duration"], "1h 2m 3s");
         assert_eq!(value["timestamp"], "2026-01-26T12:13:14Z");
         assert!(value["message"].as_str().unwrap().contains("gamma"));
+    }
+
+    #[test]
+    fn send_webhook_posts_payload_and_headers() {
+        let payload = "{\"hello\":\"world\"}";
+        let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
+
+        send_webhook(&format!("{}/notify", base), payload, Some(5)).expect("send webhook");
+
+        let request = captured.lock().unwrap().clone().expect("captured request");
+        assert_eq!(request.method, "POST");
+        assert_eq!(request.path, "/notify");
+        assert_eq!(
+            request.headers.get("content-type").map(String::as_str),
+            Some("application/json")
+        );
+        assert_eq!(request.body, payload);
+
+        handle.join().expect("server thread");
+    }
+
+    #[test]
+    fn send_webhook_handles_non_success_status() {
+        let payload = "{}";
+        let (base, captured, handle) =
+            start_test_server("HTTP/1.1 500 Internal Server Error", "oops");
+
+        let err = send_webhook(&format!("{}/fail", base), payload, Some(5))
+            .expect_err("non-success status");
+        assert!(matches!(err, NotifyError::HttpStatus(500)));
+        assert!(captured.lock().unwrap().is_some());
+
+        handle.join().expect("server thread");
     }
 }

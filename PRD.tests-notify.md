@@ -38,4 +38,4 @@ Validate webhook type detection, payload formatting, and HTTP delivery behavior 
   * Local server captures request body.
   * Non-2xx response is handled per current logic.
 - **Dependencies** T-NOTIFY-1
-- [ ] T-NOTIFY-2 Add send_webhook request/response tests
+- [x] T-NOTIFY-2 Add send_webhook request/response tests
