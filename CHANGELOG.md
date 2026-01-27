@@ -16,6 +16,13 @@ CI=<status/link>; PR=<link if final PRD task>
 - AW-3 Documented auto worktree UX, skip reasons, and Graphite stacking guidance.
 - WT-1 Auto-create worktrees for PRD runs with config and CLI controls.
 - INIT-1 Added init CLI subcommand and routing.
+
+### Verification
+- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
+
+## [0.1.0]
+
+### Added
 - INIT-4 Documented init command and updated shell completions.
 - Added multi-arch release assets for Linux and macOS.
 - Initial public release notes for the gralph CLI.
@@ -109,6 +116,3 @@ CI=<status/link>; PR=<link if final PRD task>
 - OSS-17 Documented PRD validation rules, sanitization behavior, and stack detection heuristics.
 - OSS-18 Reviewed README for CLI reference, model names, and doc accuracy.
 - OSS-19 Removed legacy shell artifacts and aligned context defaults with Rust sources.
-
-### Verification
-- Verification: Tests=cargo test --workspace; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
