@@ -52,7 +52,7 @@ public sealed class OpenCodeBackend : IBackend
 
         EnsureOutputDirectories(request);
 
-        var process = new Process
+        using var process = new Process
         {
             StartInfo = new ProcessStartInfo
             {

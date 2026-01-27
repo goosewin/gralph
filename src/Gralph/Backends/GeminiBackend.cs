@@ -47,7 +47,7 @@ public sealed class GeminiBackend : IBackend
 
         EnsureOutputDirectories(request);
 
-        var process = new Process
+        using var process = new Process
         {
             StartInfo = new ProcessStartInfo
             {

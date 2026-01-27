@@ -1,4 +1,5 @@
 using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -124,6 +125,7 @@ public sealed class ClaudeBackend : IBackend
         string? finalResult = null;
         var builder = new StringBuilder();
 
+        var parseErrors = 0;
         foreach (var line in SplitLines(rawResponse))
         {
             if (!line.AsSpan().TrimStart().StartsWith("{", StringComparison.Ordinal))
@@ -154,7 +156,13 @@ public sealed class ClaudeBackend : IBackend
             }
             catch (JsonException)
             {
+                parseErrors++;
             }
+        }
+
+        if (parseErrors > 0)
+        {
+            Console.Error.WriteLine($"Warning: Failed to parse {parseErrors} Claude JSON line(s).");
         }
 
         return finalResult ?? builder.ToString().TrimEnd();

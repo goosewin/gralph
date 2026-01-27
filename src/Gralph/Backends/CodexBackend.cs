@@ -47,13 +47,14 @@ public sealed class CodexBackend : IBackend
 
         EnsureOutputDirectories(request);
 
-        var process = new Process
+        using var process = new Process
         {
             StartInfo = new ProcessStartInfo
             {
                 FileName = "codex",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                RedirectStandardInput = true,
                 UseShellExecute = false
             }
         };
@@ -67,9 +68,13 @@ public sealed class CodexBackend : IBackend
             process.StartInfo.ArgumentList.Add(request.ModelOverride);
         }
 
-        process.StartInfo.ArgumentList.Add(request.Prompt);
+        process.StartInfo.ArgumentList.Add("-");
 
         process.Start();
+
+        await process.StandardInput.WriteAsync(request.Prompt.AsMemory(), cancellationToken);
+        await process.StandardInput.FlushAsync(cancellationToken);
+        process.StandardInput.Close();
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
