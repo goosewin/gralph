@@ -646,23 +646,13 @@ fn cmd_worktree_create(args: WorktreeCreateArgs) -> Result<(), CliError> {
 
 fn cmd_worktree_finish(args: WorktreeFinishArgs) -> Result<(), CliError> {
     validate_task_id(&args.id)?;
-    let repo_root = match git_output(["rev-parse", "--show-toplevel"]) {
-        Ok(output) => output.trim().to_string(),
-        Err(CliError::Message(message)) => {
-            if message.to_lowercase().contains("not a git repository") {
-                println!("Auto worktree skipped: not a git repository.");
-                return Ok(());
-            }
-            return Err(CliError::Message(message));
-        }
-        Err(CliError::Io(err)) => {
-            println!("Auto worktree skipped: git unavailable ({}).", err);
-            return Ok(());
-        }
-    };
+    let repo_root = git_output(["rev-parse", "--show-toplevel"])?
+        .trim()
+        .to_string();
     if !git_has_commits(&repo_root) {
-        println!("Auto worktree skipped: repository has no commits.");
-        return Ok(());
+        return Err(CliError::Message(
+            "Repository has no commits; cannot finish worktree.".to_string(),
+        ));
     }
     ensure_git_clean(&repo_root)?;
 
@@ -1361,9 +1351,24 @@ fn maybe_create_auto_worktree(args: &mut RunLoopArgs, config: &Config) -> Result
         return Ok(());
     }
 
-    let repo_root = git_output(["rev-parse", "--show-toplevel"])?
-        .trim()
-        .to_string();
+    let repo_root = match git_output(["rev-parse", "--show-toplevel"]) {
+        Ok(output) => output.trim().to_string(),
+        Err(CliError::Message(message)) => {
+            if message.to_lowercase().contains("not a git repository") {
+                println!("Auto worktree skipped: not a git repository.");
+                return Ok(());
+            }
+            return Err(CliError::Message(message));
+        }
+        Err(CliError::Io(err)) => {
+            println!("Auto worktree skipped: git unavailable ({}).", err);
+            return Ok(());
+        }
+    };
+    if !git_has_commits(&repo_root) {
+        println!("Auto worktree skipped: repository has no commits.");
+        return Ok(());
+    }
     ensure_git_clean(&repo_root)?;
 
     let worktrees_dir = PathBuf::from(&repo_root).join(".worktrees");
