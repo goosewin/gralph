@@ -95,7 +95,7 @@ Implement a new `gralph init` subcommand in the Rust CLI that reads the configur
   * Add an Added entry in CHANGELOG for the new command.
   * Update bash and zsh completions to include `init` and its flags.
 - **Dependencies** INIT-2
-- [ ] INIT-4 Update docs and completions for init
+- [x] INIT-4 Update docs and completions for init
 ---
 
 ## Success Criteria
