@@ -54,9 +54,6 @@ jobs:
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             asset: linux-aarch64
-          - os: macos-15-large
-            target: x86_64-apple-darwin
-            asset: macos-x86_64
           - os: macos-26
             target: aarch64-apple-darwin
             asset: macos-arm64
@@ -141,14 +138,13 @@ jobs:
           |----------|--------------|----------|
           | Linux | x86_64 | gralph-${{ needs.prepare.outputs.version }}-linux-x86_64.tar.gz |
           | Linux | aarch64 | gralph-${{ needs.prepare.outputs.version }}-linux-aarch64.tar.gz |
-          | macOS | x86_64 | gralph-${{ needs.prepare.outputs.version }}-macos-x86_64.tar.gz |
           | macOS | arm64 | gralph-${{ needs.prepare.outputs.version }}-macos-arm64.tar.gz |
           | Windows | x86_64 | gralph-${{ needs.prepare.outputs.version }}-windows-x86_64.zip |
 
           ### Installation
 
           \`\`\`bash
-          # Set your platform (linux-x86_64, linux-aarch64, macos-x86_64, macos-arm64, windows-x86_64)
+          # Set your platform (linux-x86_64, linux-aarch64, macos-arm64, windows-x86_64)
           ASSET="macos-arm64"
           VERSION="${{ needs.prepare.outputs.version }}"
 
@@ -201,7 +197,6 @@ jobs:
           echo "- **Assets:**" >> $GITHUB_STEP_SUMMARY
           echo "  - gralph-${{ needs.prepare.outputs.version }}-linux-x86_64.tar.gz" >> $GITHUB_STEP_SUMMARY
           echo "  - gralph-${{ needs.prepare.outputs.version }}-linux-aarch64.tar.gz" >> $GITHUB_STEP_SUMMARY
-          echo "  - gralph-${{ needs.prepare.outputs.version }}-macos-x86_64.tar.gz" >> $GITHUB_STEP_SUMMARY
           echo "  - gralph-${{ needs.prepare.outputs.version }}-macos-arm64.tar.gz" >> $GITHUB_STEP_SUMMARY
           echo "  - gralph-${{ needs.prepare.outputs.version }}-windows-x86_64.zip" >> $GITHUB_STEP_SUMMARY
           echo "- **Status:** Released successfully" >> $GITHUB_STEP_SUMMARY

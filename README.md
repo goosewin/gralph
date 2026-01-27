@@ -70,7 +70,6 @@ Release assets are published per OS/arch:
 |----------|-------|
 | Linux x86_64 | `gralph-VERSION-linux-x86_64.tar.gz` |
 | Linux aarch64 | `gralph-VERSION-linux-aarch64.tar.gz` |
-| macOS x86_64 | `gralph-VERSION-macos-x86_64.tar.gz` |
 | macOS arm64 | `gralph-VERSION-macos-arm64.tar.gz` |
 | Windows x86_64 | `gralph-VERSION-windows-x86_64.zip` |
 
