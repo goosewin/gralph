@@ -2,6 +2,29 @@
 
 Autonomous AI coding loops using Claude Code or OpenCode. Spawns fresh AI coding sessions iteratively until all tasks in a PRD are complete.
 
+## Table of Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Backends](#backends)
+- [Usage](#usage)
+- [Migration Notes (Bash -> Rust)](#migration-notes-bash---rust)
+- [Configuration](#configuration)
+- [Configuration Options Reference](#configuration-options-reference)
+- [Notifications](#notifications)
+- [CLI Reference](#cli-reference)
+- [How It Works](#how-it-works)
+- [Shared Memory System](#shared-memory-system)
+- [Using gralph to build gralph](#using-gralph-to-build-gralph)
+- [Usage Examples](#usage-examples)
+- [Troubleshooting](#troubleshooting)
+- [Security](#security)
+- [Contributing](#contributing)
+- [Code of Conduct](#code-of-conduct)
+- [Changelog](#changelog)
+- [License](#license)
+
 ## Features
 
 - **Multi-backend support** - Use Claude Code or OpenCode as your AI coding assistant
