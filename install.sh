@@ -3,7 +3,8 @@
 set -euo pipefail
 
 REPO="goosewin/gralph"
-INSTALL_DIR="${GRALPH_INSTALL_DIR:-/usr/local/bin}"
+# Default to user-local bin to avoid permission issues
+INSTALL_DIR="${GRALPH_INSTALL_DIR:-${HOME}/.local/bin}"
 VERSION="${GRALPH_VERSION:-latest}"
 
 # Colors for output
@@ -95,6 +96,10 @@ main() {
     fi
 
     info "Installing to $INSTALL_DIR..."
+    # Create install directory if it doesn't exist
+    if [[ ! -d "$INSTALL_DIR" ]]; then
+        mkdir -p "$INSTALL_DIR"
+    fi
     if [[ -w "$INSTALL_DIR" ]]; then
         cp "$binary" "$INSTALL_DIR/gralph"
         chmod +x "$INSTALL_DIR/gralph"

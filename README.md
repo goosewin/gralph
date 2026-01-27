@@ -5,7 +5,7 @@ Autonomous AI coding loops. Spawns fresh AI sessions iteratively until all tasks
 ## Quick Start
 
 ```bash
-# Install
+# Install (defaults to ~/.local/bin, no sudo needed)
 curl -fsSL https://raw.githubusercontent.com/goosewin/gralph/main/install.sh | bash
 
 # Create a task file
@@ -43,7 +43,7 @@ gralph status                     # Check all running loops
 gralph logs myapp --follow        # Watch logs
 gralph stop myapp                 # Stop a loop
 gralph resume                     # Resume after crash
-gralph update                     # Install latest release
+gralph update                     # Install latest release to ~/.local/bin
 ```
 
 On session start, gralph performs a best-effort update check and prints a notice

@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 axum = "0.7"
+dirs = "5"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 clap = { version = "4", features = ["derive"] }
 fs2 = "0.4"
