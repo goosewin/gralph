@@ -12,7 +12,17 @@ CI=<status/link>; PR=<link if final PRD task>
 ## [Unreleased]
 
 ### Added
+- AW-2 Added auto worktree edge case tests for skip behavior, subdir mapping, and collisions.
+- AW-3 Documented auto worktree UX, skip reasons, and Graphite stacking guidance.
+- WT-1 Auto-create worktrees for PRD runs with config and CLI controls.
 - INIT-1 Added init CLI subcommand and routing.
+
+### Verification
+- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
+
+## [0.1.0]
+
+### Added
 - INIT-4 Documented init command and updated shell completions.
 - Added multi-arch release assets for Linux and macOS.
 - Initial public release notes for the gralph CLI.
@@ -85,6 +95,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - T-CONFIG-1 Added config path precedence tests.
 
 ### Fixed
+- AW-1 Resolve auto worktree repo roots from target dirs and preserve subdir runs.
 - Aligned the Cargo-installed binary name with release assets (`gralph`).
 - OSS-1 Removed duplicate introductory text from README.
 - OSS-2 Corrected Gemini CLI install hints and README instructions.

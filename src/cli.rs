@@ -17,6 +17,7 @@ const ROOT_AFTER_HELP: &str = r#"START OPTIONS:
   --variant           Model variant override (backend-specific)
   --prompt-template   Path to custom prompt template file
   --webhook           Notification webhook URL
+  --no-worktree       Disable automatic worktree creation
   --no-tmux           Run in foreground (blocks)
   --strict-prd        Validate PRD before starting the loop
 
@@ -125,6 +126,8 @@ pub struct StartArgs {
     pub prompt_template: Option<PathBuf>,
     #[arg(long, help = "Notification webhook URL")]
     pub webhook: Option<String>,
+    #[arg(long, action = clap::ArgAction::SetTrue, help = "Disable automatic worktree creation")]
+    pub no_worktree: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Run in foreground (blocks)")]
     pub no_tmux: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Validate PRD before starting the loop")]
@@ -153,6 +156,8 @@ pub struct RunLoopArgs {
     pub prompt_template: Option<PathBuf>,
     #[arg(long)]
     pub webhook: Option<String>,
+    #[arg(long, action = clap::ArgAction::SetTrue, help = "Disable automatic worktree creation")]
+    pub no_worktree: bool,
     #[arg(long, action = clap::ArgAction::SetTrue)]
     pub strict_prd: bool,
 }

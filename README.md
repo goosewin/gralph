@@ -37,12 +37,26 @@ irm https://raw.githubusercontent.com/goosewin/gralph/main/install.ps1 | iex
 ```bash
 gralph start .                    # Start loop in current directory
 gralph start . --backend opencode # Use different backend
+gralph start . --no-worktree      # Skip auto worktree creation
 gralph init .                     # Scaffold shared context files
 gralph status                     # Check all running loops
 gralph logs myapp --follow        # Watch logs
 gralph stop myapp                 # Stop a loop
 gralph resume                     # Resume after crash
 ```
+
+By default, `gralph start` creates a git worktree under `.worktrees/` for each PRD run
+when the target directory is inside a git repo with at least one commit and the
+repo is clean. Subdirectory runs are preserved, so `gralph start path/to/subdir`
+continues the loop from the matching subdirectory inside the worktree.
+
+Auto worktree creation is skipped when the target directory is not inside a git
+repo, the repo has no commits, or the repo is dirty. In those cases the loop runs
+in the target directory. Disable auto worktrees with `--no-worktree` or set
+`defaults.auto_worktree: false`.
+
+When stacking with Graphite, run `gt` inside the worktree created for the task
+so the stack is attached to the correct checkout and branch.
 
 ## How It Works
 

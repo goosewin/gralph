@@ -111,12 +111,15 @@ fn cmd_start(args: StartArgs) -> Result<(), CliError> {
             args.dir.display()
         )));
     }
+    let no_tmux = args.no_tmux;
     let session_name = session_name(&args.name, &args.dir)?;
-    if args.no_tmux {
-        return run_loop_with_state(run_loop_args_from_start(args, session_name)?);
+    let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
+    let mut run_args = run_loop_args_from_start(args, session_name)?;
+    maybe_create_auto_worktree(&mut run_args, &config)?;
+    if no_tmux {
+        return run_loop_with_state(run_args);
     }
 
-    let run_args = run_loop_args_from_start(args, session_name)?;
     let child = spawn_run_loop(&run_args)?;
 
     let store = StateStore::new_from_env();
@@ -166,7 +169,9 @@ fn cmd_start(args: StartArgs) -> Result<(), CliError> {
     Ok(())
 }
 
-fn cmd_run_loop(args: RunLoopArgs) -> Result<(), CliError> {
+fn cmd_run_loop(mut args: RunLoopArgs) -> Result<(), CliError> {
+    let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
+    maybe_create_auto_worktree(&mut args, &config)?;
     run_loop_with_state(args)
 }
 
@@ -366,6 +371,7 @@ fn cmd_resume(args: ResumeArgs) -> Result<(), CliError> {
             variant,
             prompt_template: None,
             webhook,
+            no_worktree: true,
             strict_prd: false,
         };
         let child = spawn_run_loop(&run_args)?;
@@ -616,6 +622,11 @@ fn cmd_worktree_create(args: WorktreeCreateArgs) -> Result<(), CliError> {
     let repo_root = git_output(["rev-parse", "--show-toplevel"])?
         .trim()
         .to_string();
+    if !git_has_commits(&repo_root) {
+        return Err(CliError::Message(
+            "Repository has no commits; cannot create worktree.".to_string(),
+        ));
+    }
     ensure_git_clean(&repo_root)?;
 
     let worktrees_dir = PathBuf::from(&repo_root).join(".worktrees");
@@ -623,40 +634,7 @@ fn cmd_worktree_create(args: WorktreeCreateArgs) -> Result<(), CliError> {
 
     let branch = format!("task-{}", args.id);
     let worktree_path = worktrees_dir.join(&branch);
-    if git_status_in_repo(
-        &repo_root,
-        [
-            "show-ref",
-            "--verify",
-            "--quiet",
-            &format!("refs/heads/{}", branch),
-        ],
-    )
-    .is_ok()
-    {
-        return Err(CliError::Message(format!(
-            "Branch already exists: {}",
-            branch
-        )));
-    }
-    if worktree_path.exists() {
-        return Err(CliError::Message(format!(
-            "Worktree path already exists: {}",
-            worktree_path.display()
-        )));
-    }
-
-    git_status_in_repo(
-        &repo_root,
-        [
-            "worktree",
-            "add",
-            "-b",
-            &branch,
-            worktree_path.to_string_lossy().as_ref(),
-        ],
-    )
-    .map_err(|err| CliError::Message(format!("Failed to create worktree: {}", err)))?;
+    create_worktree_at(&repo_root, &branch, &worktree_path)?;
 
     println!(
         "Created worktree {} on branch {}",
@@ -671,6 +649,11 @@ fn cmd_worktree_finish(args: WorktreeFinishArgs) -> Result<(), CliError> {
     let repo_root = git_output(["rev-parse", "--show-toplevel"])?
         .trim()
         .to_string();
+    if !git_has_commits(&repo_root) {
+        return Err(CliError::Message(
+            "Repository has no commits; cannot finish worktree.".to_string(),
+        ));
+    }
     ensure_git_clean(&repo_root)?;
 
     let branch = format!("task-{}", args.id);
@@ -1028,6 +1011,7 @@ fn run_loop_args_from_start(args: StartArgs, name: String) -> Result<RunLoopArgs
         variant: args.variant,
         prompt_template: args.prompt_template,
         webhook: args.webhook,
+        no_worktree: args.no_worktree,
         strict_prd: args.strict_prd,
     })
 }
@@ -1086,6 +1070,9 @@ fn spawn_run_loop(args: &RunLoopArgs) -> Result<std::process::Child, CliError> {
     }
     if let Some(webhook) = args.webhook.as_deref() {
         cmd.arg("--webhook").arg(webhook);
+    }
+    if args.no_worktree {
+        cmd.arg("--no-worktree");
     }
     if args.strict_prd {
         cmd.arg("--strict-prd");
@@ -1235,6 +1222,25 @@ fn git_output(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<Strin
     }
 }
 
+fn git_output_in_dir(
+    dir: &Path,
+    args: impl IntoIterator<Item = impl AsRef<OsStr>>,
+) -> Result<String, CliError> {
+    let output = ProcCommand::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .output()
+        .map_err(CliError::Io)?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    } else {
+        Err(CliError::Message(
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        ))
+    }
+}
+
 fn git_status_in_repo(
     repo_root: &str,
     args: impl IntoIterator<Item = impl AsRef<OsStr>>,
@@ -1269,6 +1275,165 @@ fn ensure_git_clean(repo_root: &str) -> Result<(), CliError> {
                 .to_string(),
         ));
     }
+    Ok(())
+}
+
+fn parse_bool_value(value: &str) -> Option<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "true" | "1" | "yes" | "y" | "on" => Some(true),
+        "false" | "0" | "no" | "n" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+fn resolve_auto_worktree(config: &Config, no_worktree: bool) -> bool {
+    if no_worktree {
+        return false;
+    }
+    config
+        .get("defaults.auto_worktree")
+        .as_deref()
+        .and_then(parse_bool_value)
+        .unwrap_or(true)
+}
+
+fn worktree_timestamp_slug() -> String {
+    chrono::Local::now().format("%Y%m%d-%H%M%S").to_string()
+}
+
+fn auto_worktree_branch_name(session_name: &str, timestamp: &str) -> String {
+    let sanitized = sanitize_session_name(session_name);
+    if sanitized.is_empty() {
+        format!("prd-{}", timestamp)
+    } else {
+        format!("prd-{}-{}", sanitized, timestamp)
+    }
+}
+
+fn git_branch_exists(repo_root: &str, branch: &str) -> bool {
+    git_status_in_repo(
+        repo_root,
+        [
+            "show-ref",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{}", branch),
+        ],
+    )
+    .is_ok()
+}
+
+fn git_has_commits(repo_root: &str) -> bool {
+    git_status_in_repo(repo_root, ["rev-parse", "--verify", "HEAD"]).is_ok()
+}
+
+fn ensure_unique_worktree_branch(repo_root: &str, worktrees_dir: &Path, base: &str) -> String {
+    let mut candidate = base.to_string();
+    let mut suffix = 2;
+    while git_branch_exists(repo_root, &candidate) || worktrees_dir.join(&candidate).exists() {
+        candidate = format!("{}-{}", base, suffix);
+        suffix += 1;
+    }
+    candidate
+}
+
+fn create_worktree_at(repo_root: &str, branch: &str, worktree_path: &Path) -> Result<(), CliError> {
+    if git_branch_exists(repo_root, branch) {
+        return Err(CliError::Message(format!(
+            "Branch already exists: {}",
+            branch
+        )));
+    }
+    if worktree_path.exists() {
+        return Err(CliError::Message(format!(
+            "Worktree path already exists: {}",
+            worktree_path.display()
+        )));
+    }
+
+    git_status_in_repo(
+        repo_root,
+        [
+            "worktree",
+            "add",
+            "-b",
+            branch,
+            worktree_path.to_string_lossy().as_ref(),
+        ],
+    )
+    .map_err(|err| CliError::Message(format!("Failed to create worktree: {}", err)))?;
+    Ok(())
+}
+
+fn maybe_create_auto_worktree(args: &mut RunLoopArgs, config: &Config) -> Result<(), CliError> {
+    if !resolve_auto_worktree(config, args.no_worktree) {
+        return Ok(());
+    }
+
+    let target_dir = args.dir.clone();
+    let target_display = target_dir.display();
+    let repo_root = match git_output_in_dir(&target_dir, ["rev-parse", "--show-toplevel"]) {
+        Ok(output) => output.trim().to_string(),
+        Err(CliError::Message(message)) => {
+            if message.to_lowercase().contains("not a git repository") {
+                println!(
+                    "Auto worktree skipped for {}: not a git repository.",
+                    target_display
+                );
+                return Ok(());
+            }
+            return Err(CliError::Message(message));
+        }
+        Err(CliError::Io(err)) => {
+            println!(
+                "Auto worktree skipped for {}: git unavailable ({}).",
+                target_display, err
+            );
+            return Ok(());
+        }
+    };
+    if !git_has_commits(&repo_root) {
+        println!(
+            "Auto worktree skipped for {}: repository has no commits.",
+            target_display
+        );
+        return Ok(());
+    }
+    ensure_git_clean(&repo_root)?;
+
+    let worktrees_dir = PathBuf::from(&repo_root).join(".worktrees");
+    fs::create_dir_all(&worktrees_dir).map_err(CliError::Io)?;
+
+    let target_dir = target_dir
+        .canonicalize()
+        .unwrap_or_else(|_| target_dir.clone());
+    let repo_root_path = PathBuf::from(&repo_root);
+    let repo_root_path = repo_root_path
+        .canonicalize()
+        .unwrap_or_else(|_| repo_root_path.clone());
+    let relative_target = target_dir
+        .strip_prefix(&repo_root_path)
+        .unwrap_or_else(|_| Path::new(""))
+        .to_path_buf();
+
+    let timestamp = worktree_timestamp_slug();
+    let base_branch = auto_worktree_branch_name(&args.name, &timestamp);
+    let branch = ensure_unique_worktree_branch(&repo_root, &worktrees_dir, &base_branch);
+    let worktree_path = worktrees_dir.join(&branch);
+
+    create_worktree_at(&repo_root, &branch, &worktree_path)?;
+    println!(
+        "Auto worktree created: {} (branch {})",
+        worktree_path.display(),
+        branch
+    );
+
+    args.dir = if relative_target.as_os_str().is_empty() {
+        worktree_path
+    } else {
+        worktree_path.join(relative_target)
+    };
+    args.no_worktree = true;
     Ok(())
 }
 
@@ -1688,6 +1853,7 @@ mod tests {
             "GRALPH_GLOBAL_CONFIG",
             "GRALPH_CONFIG_DIR",
             "GRALPH_PROJECT_CONFIG_NAME",
+            "GRALPH_DEFAULTS_AUTO_WORKTREE",
         ] {
             remove_env(key);
         }
@@ -1710,6 +1876,51 @@ mod tests {
         unsafe {
             env::remove_var(key);
         }
+    }
+
+    fn run_loop_args(dir: PathBuf) -> RunLoopArgs {
+        RunLoopArgs {
+            dir,
+            name: "test-session".to_string(),
+            max_iterations: None,
+            task_file: None,
+            completion_marker: None,
+            backend: None,
+            model: None,
+            variant: None,
+            prompt_template: None,
+            webhook: None,
+            no_worktree: false,
+            strict_prd: false,
+        }
+    }
+
+    fn git_status_ok(dir: &Path, args: &[&str]) {
+        let output = ProcCommand::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn init_git_repo(dir: &Path) {
+        git_status_ok(dir, &["init"]);
+        git_status_ok(dir, &["config", "user.email", "test@example.com"]);
+        git_status_ok(dir, &["config", "user.name", "Test User"]);
+    }
+
+    fn commit_file(dir: &Path, relative: &str, contents: &str) {
+        let path = dir.join(relative);
+        write_file(&path, contents);
+        git_status_ok(dir, &["add", relative]);
+        git_status_ok(dir, &["commit", "-m", "init"]);
     }
 
     #[test]
@@ -1868,6 +2079,130 @@ mod tests {
         let entries = resolve_init_context_files(temp.path(), Some(""));
 
         assert_eq!(entries, vec!["ARCHITECTURE.md", "PROCESS.md"]);
+    }
+
+    #[test]
+    fn auto_worktree_branch_name_uses_session_and_timestamp() {
+        let name = auto_worktree_branch_name("demo-app", "20260126-120000");
+        assert_eq!(name, "prd-demo-app-20260126-120000");
+
+        let empty = auto_worktree_branch_name("", "20260126-120000");
+        assert_eq!(empty, "prd-20260126-120000");
+    }
+
+    #[test]
+    fn resolve_auto_worktree_defaults_true() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config = Config::load(Some(temp.path())).unwrap();
+
+        assert!(resolve_auto_worktree(&config, false));
+    }
+
+    #[test]
+    fn resolve_auto_worktree_respects_project_config_and_cli_override() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join(".gralph.yaml"),
+            "defaults:\n  auto_worktree: false\n",
+        );
+        let config = Config::load(Some(temp.path())).unwrap();
+
+        assert!(!resolve_auto_worktree(&config, false));
+        assert!(!resolve_auto_worktree(&config, true));
+    }
+
+    #[test]
+    fn auto_worktree_skips_non_git_directory() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config = Config::load(Some(temp.path())).unwrap();
+        let mut args = run_loop_args(temp.path().to_path_buf());
+        let original = args.dir.clone();
+
+        maybe_create_auto_worktree(&mut args, &config).unwrap();
+
+        assert_eq!(args.dir, original);
+        assert!(!args.no_worktree);
+    }
+
+    #[test]
+    fn auto_worktree_skips_repo_without_commits() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        let config = Config::load(Some(temp.path())).unwrap();
+        let mut args = run_loop_args(temp.path().to_path_buf());
+
+        maybe_create_auto_worktree(&mut args, &config).unwrap();
+
+        assert_eq!(args.dir, temp.path());
+        assert!(!args.no_worktree);
+        assert!(!temp.path().join(".worktrees").exists());
+    }
+
+    #[test]
+    fn auto_worktree_errors_on_dirty_repo() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        write_file(&temp.path().join("README.md"), "dirty");
+        let config = Config::load(Some(temp.path())).unwrap();
+        let mut args = run_loop_args(temp.path().to_path_buf());
+
+        let err = maybe_create_auto_worktree(&mut args, &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Git working tree is dirty"));
+            }
+            _ => panic!("unexpected error type"),
+        }
+    }
+
+    #[test]
+    fn auto_worktree_maps_subdir_to_worktree_path() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        let nested = temp.path().join("nested");
+        commit_file(temp.path(), "nested/task.md", "content");
+        let config = Config::load(Some(temp.path())).unwrap();
+        let mut args = run_loop_args(nested.clone());
+
+        maybe_create_auto_worktree(&mut args, &config).unwrap();
+
+        let worktrees_dir = temp.path().join(".worktrees");
+        let mut entries: Vec<PathBuf> = fs::read_dir(&worktrees_dir)
+            .unwrap()
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .collect();
+        assert_eq!(entries.len(), 1);
+        let worktree_path = entries.remove(0);
+        let expected = fs::canonicalize(worktree_path.join("nested")).unwrap();
+        let actual = fs::canonicalize(&args.dir).unwrap();
+        assert_eq!(actual, expected);
+        assert!(args.no_worktree);
+    }
+
+    #[test]
+    fn ensure_unique_worktree_branch_handles_collisions() {
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+        git_status_ok(temp.path(), &["branch", "prd-collision"]);
+        fs::create_dir_all(worktrees_dir.join("prd-collision-2")).unwrap();
+
+        let branch = ensure_unique_worktree_branch(
+            temp.path().to_str().unwrap(),
+            &worktrees_dir,
+            "prd-collision",
+        );
+
+        assert_eq!(branch, "prd-collision-3");
     }
 }
 

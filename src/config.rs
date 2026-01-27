@@ -294,6 +294,7 @@ mod tests {
             "GRALPH_DEFAULTS_COMPLETION_MARKER",
             "GRALPH_DEFAULTS_BACKEND",
             "GRALPH_DEFAULTS_MODEL",
+            "GRALPH_DEFAULTS_AUTO_WORKTREE",
             "GRALPH_MAX_ITERATIONS",
             "GRALPH_TASK_FILE",
             "GRALPH_COMPLETION_MARKER",
