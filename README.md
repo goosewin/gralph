@@ -50,26 +50,26 @@ gralph resume                     # Resume after crash
 3. Spawns AI to complete one task
 4. Repeats until all tasks done or max iterations hit
 
-## Context Files
+## Context Files (Shared Memory)
 
-Gralph agents are stateless - each iteration starts fresh. To maintain context across iterations, create these metadata files in your project root:
+Gralph agents are stateless - each iteration starts fresh with no memory of previous runs. To prevent context loss and rework, maintain these files in your project root:
 
 | File | Purpose |
 |------|---------|
-| `README.md` | Project overview, setup instructions |
-| `ARCHITECTURE.md` | System design, modules, data flow |
-| `DECISIONS.md` | Architectural decisions with rationale |
-| `PROCESS.md` | Workflow rules, PR guidelines, conventions |
-| `RISK_REGISTER.md` | Known risks and mitigations |
-| `CHANGELOG.md` | What previous agents accomplished |
+| `ARCHITECTURE.md` | Module map, runtime flow, storage locations. Agents read this to understand where code lives and how components connect. |
+| `PROCESS.md` | Step-by-step protocol agents must follow. Defines guardrails like "update CHANGELOG after each task" or "reject tasks without Context Bundle." |
+| `DECISIONS.md` | Architectural decisions with context, rationale, and rejected alternatives. Prevents agents from revisiting settled debates. |
+| `RISK_REGISTER.md` | Known risks (e.g., "context loss between iterations") with mitigations. Agents add new risks they discover. |
+| `CHANGELOG.md` | Record of what each agent accomplished, tagged by task ID. Next agent sees what was done and builds on it. |
 
-Gralph injects these files into the prompt so each AI session understands:
-- What the project does
-- How it's structured  
-- What decisions were made and why
-- What work was already completed
+Gralph injects these into every prompt, so each agent:
+- Knows the codebase structure without exploring
+- Follows established conventions and protocols
+- Understands why past decisions were made
+- Sees what previous agents completed
+- Adds to the shared memory for future agents
 
-**This is the key to effective autonomous coding** - well-maintained context files let agents build on each other's work without losing direction.
+**This is how stateless agents maintain continuity** - the context lives in the repo, not in memory.
 
 ## Configuration
 
