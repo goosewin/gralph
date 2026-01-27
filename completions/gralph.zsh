@@ -73,7 +73,7 @@ _arguments "${_arguments_options[@]}" : \
 ':name -- Session name:_default' \
 && ret=0
 ;;
-            (resume)
+(resume)
 _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
 '--help[Print help]' \
@@ -354,35 +354,27 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-            (stop)
+(stop)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-            (status)
+(status)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-            (logs)
+(logs)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-            (resume)
+(resume)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
-<<<<<<< HEAD
 (init)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
 (prd)
-=======
-            (init)
-_arguments "${_arguments_options[@]}" : \
-&& ret=0
-;;
-            (prd)
->>>>>>> b41b503 (docs: document init scaffolding and completions)
 _arguments "${_arguments_options[@]}" : \
 ":: :_gralph__help__prd_commands" \
 "*::: :->prd" \
