@@ -1,0 +1,25 @@
+.github/workflows/release.yml
+  d97571f73df8c3a3 63-65,78-79,90-103,110-115,131,146,151,191,206
+src/server.rs
+  d97571f73df8c3a3 348-358
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.37",
+  "base_commit_sha": "c927144f61d8af1b035cb05a3cbe30a83995934f",
+  "prompts": {
+    "d97571f73df8c3a3": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_402f9ec36ffe73QmQJC59kzYcB",
+        "model": "opencode/claude-opus-4-5"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 43,
+      "total_deletions": 5,
+      "accepted_lines": 43,
+      "overriden_lines": 0
+    }
+  }
+}
