@@ -85,6 +85,7 @@ pub fn run_iteration<B: Backend + ?Sized>(
     max_iterations: u32,
     completion_marker: &str,
     model: Option<&str>,
+    variant: Option<&str>,
     log_file: Option<&Path>,
     prompt_template: Option<&str>,
     config: Option<&Config>,
@@ -158,7 +159,7 @@ pub fn run_iteration<B: Backend + ?Sized>(
         },
     );
 
-    let backend_result = backend.run_iteration(&prompt, model, &tmpfile, project_dir);
+    let backend_result = backend.run_iteration(&prompt, model, variant, &tmpfile, project_dir);
 
     if let Some(raw_path) = raw_output_file.as_ref() {
         if let Err(err) = copy_if_exists(&tmpfile, raw_path) {
@@ -283,6 +284,7 @@ pub fn run_loop<B: Backend + ?Sized>(
     max_iterations: Option<u32>,
     completion_marker: Option<&str>,
     model: Option<&str>,
+    variant: Option<&str>,
     session_name: Option<&str>,
     prompt_template: Option<&str>,
     config: Option<&Config>,
@@ -353,6 +355,9 @@ pub fn run_loop<B: Backend + ?Sized>(
     if let Some(model) = model {
         log_message(Some(&log_file), &format!("Model: {}", model))?;
     }
+    if let Some(variant) = variant {
+        log_message(Some(&log_file), &format!("Variant: {}", variant))?;
+    }
     log_message(
         Some(&log_file),
         &format!("Started at: {}", timestamp_seconds()),
@@ -400,6 +405,7 @@ pub fn run_loop<B: Backend + ?Sized>(
             max_iterations,
             completion_marker,
             model,
+            variant,
             Some(&log_file),
             prompt_template,
             config,
@@ -844,6 +850,7 @@ mod tests {
             &self,
             prompt: &str,
             _model: Option<&str>,
+            _variant: Option<&str>,
             output_file: &Path,
             _working_dir: &Path,
         ) -> Result<(), BackendError> {
@@ -896,6 +903,7 @@ mod tests {
             &self,
             _prompt: &str,
             _model: Option<&str>,
+            _variant: Option<&str>,
             output_file: &Path,
             _working_dir: &Path,
         ) -> Result<(), BackendError> {
@@ -1006,6 +1014,7 @@ mod tests {
             "COMPLETE",
             None,
             None,
+            None,
             Some("Block:\n{task_block}\n"),
             None,
         )
@@ -1034,6 +1043,7 @@ mod tests {
             Some("PRD.md"),
             Some(1),
             Some("COMPLETE"),
+            None,
             None,
             Some("session"),
             None,
@@ -1070,6 +1080,7 @@ mod tests {
             Some(1),
             Some("COMPLETE"),
             None,
+            None,
             Some("session"),
             None,
             None,
@@ -1101,6 +1112,7 @@ mod tests {
             Some("PRD.md"),
             Some(1),
             Some("COMPLETE"),
+            None,
             None,
             Some("session"),
             None,

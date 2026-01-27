@@ -37,6 +37,7 @@ irm https://raw.githubusercontent.com/goosewin/gralph/main/install.ps1 | iex
 ```bash
 gralph start .                    # Start loop in current directory
 gralph start . --backend opencode # Use different backend
+gralph init .                     # Scaffold shared context files
 gralph status                     # Check all running loops
 gralph logs myapp --follow        # Watch logs
 gralph stop myapp                 # Stop a loop
@@ -53,6 +54,8 @@ gralph resume                     # Resume after crash
 ## Context Files (Shared Memory)
 
 Gralph agents are stateless - each iteration starts fresh with no memory of previous runs. To prevent context loss and rework, maintain these files in your project root:
+
+Use `gralph init --dir .` to scaffold the shared context files when missing. Pass `--force` to overwrite existing files.
 
 | File | Purpose | Example |
 |------|---------|---------|

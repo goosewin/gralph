@@ -32,3 +32,12 @@ notifications.
 Session state is stored in `~/.config/gralph/state.json` with a lock file
 at `~/.config/gralph/state.lock` (or a lock dir fallback). Loop logs are
 written to `.gralph/<session>.log` inside the target project directory.
+
+## Quality Gates
+
+CI workflows live in `.github/workflows/` (notably `ci.yml`). Tests and
+coverage checks are required before merge; coverage must remain at or
+above 90%. CI runs `cargo test --workspace` and
+`cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs
+src/core.rs src/notify.rs src/server.rs src/backend/*`. Release and smoke
+workflows assume CI is green.

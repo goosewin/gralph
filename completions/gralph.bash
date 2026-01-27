@@ -25,6 +25,9 @@ _gralph() {
             gralph,help)
                 cmd="gralph__help"
                 ;;
+            gralph,init)
+                cmd="gralph__init"
+                ;;
             gralph,logs)
                 cmd="gralph__logs"
                 ;;
@@ -87,6 +90,9 @@ _gralph() {
                 ;;
             gralph__help,help)
                 cmd="gralph__help__help"
+                ;;
+            gralph__help,init)
+                cmd="gralph__help__init"
                 ;;
             gralph__help,logs)
                 cmd="gralph__help__logs"
@@ -182,7 +188,7 @@ _gralph() {
 
     case "${cmd}" in
         gralph)
-            opts="-h -V --help --version start stop status logs resume prd worktree backends config server version run-loop help"
+            opts="-h -V --help --version start stop status logs resume init prd worktree backends config server version run-loop help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -336,7 +342,7 @@ _gralph() {
             return 0
             ;;
         gralph__help)
-            opts="start stop status logs resume prd worktree backends config server version run-loop help"
+            opts="start stop status logs resume init prd worktree backends config server version run-loop help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -420,6 +426,20 @@ _gralph() {
             return 0
             ;;
         gralph__help__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__init)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -629,6 +649,24 @@ _gralph() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        gralph__init)
+            opts="-h --dir --force --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         gralph__logs)
             opts="-h --follow --help <NAME>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
@@ -672,7 +710,7 @@ _gralph() {
             return 0
             ;;
         gralph__prd__create)
-            opts="-o -b -m -h --dir --output --goal --constraints --context --sources --backend --model --allow-missing-context --multiline --no-interactive --interactive --force --help"
+            opts="-o -b -m -h --dir --output --goal --constraints --context --sources --backend --model --variant --allow-missing-context --multiline --no-interactive --interactive --force --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -719,6 +757,10 @@ _gralph() {
                     return 0
                     ;;
                 -m)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --variant)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

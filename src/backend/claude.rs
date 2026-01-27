@@ -50,6 +50,7 @@ impl Backend for ClaudeBackend {
         &self,
         prompt: &str,
         model: Option<&str>,
+        _variant: Option<&str>,
         output_file: &Path,
         working_dir: &Path,
     ) -> Result<(), BackendError> {
@@ -263,7 +264,7 @@ mod tests {
 
         let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
         backend
-            .run_iteration("prompt", None, &output_path, temp.path())
+            .run_iteration("prompt", None, None, &output_path, temp.path())
             .expect("run_iteration should succeed");
 
         let output = fs::read_to_string(&output_path).unwrap();

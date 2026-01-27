@@ -4,9 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## Verification Notes
+When adding entries under [Unreleased], include a single-line verification note:
+Verification: Tests=<command|not-run>; Coverage=<percent> (>= 90%);
+CI=<status/link>; PR=<link if final PRD task>
+
 ## [Unreleased]
 
 ### Added
+- INIT-1 Added init CLI subcommand and routing.
+- INIT-4 Documented init command and updated shell completions.
 - Added multi-arch release assets for Linux and macOS.
 - Initial public release notes for the gralph CLI.
 - T-SERVER-1 Added status endpoint auth and response tests.

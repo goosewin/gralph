@@ -161,3 +161,26 @@ the result, and prints the exact loop command to run next.
 - Maintain only a static PRD template and manual editing.
 - Build an external generator script outside the CLI.
 - Skip validation and rely on runtime failures.
+
+## D-008 Final PRD Task Quality Gate
+- Date: 2026-01-26
+- Status: Accepted
+
+### Context
+Completing the last PRD task is a release-quality checkpoint. Missing tests or
+coverage regressions can break CI/CD or ship unstable changes.
+
+### Decision
+Require the final PRD task to be completed on a new task branch/worktree, with
+all tests passing, coverage >= 90%, and CI/CD expected to pass. Open a PR before
+merging the final task.
+
+### Rationale
+- Ensures reviewable, auditable completion of the final task.
+- Keeps quality gates aligned with CI enforcement and prevents regressions.
+- Provides a clear handoff point for release readiness.
+
+### Alternatives
+- Allow direct-to-main completion with manual verification.
+- Enforce only tests without a coverage threshold.
+- Skip the PR requirement for small changes.

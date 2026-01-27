@@ -80,6 +80,14 @@ _arguments "${_arguments_options[@]}" : \
 '::name -- Session name:_default' \
 && ret=0
 ;;
+(init)
+_arguments "${_arguments_options[@]}" : \
+'--dir=[Target directory (default\: current)]:DIR:_files' \
+'--force[Overwrite existing files]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
 (prd)
 _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
@@ -115,6 +123,7 @@ _arguments "${_arguments_options[@]}" : \
 '--backend=[Backend for PRD generation (default\: config/default)]:BACKEND:_default' \
 '-m+[Model override for PRD generation]:MODEL:_default' \
 '--model=[Model override for PRD generation]:MODEL:_default' \
+'--variant=[Model variant override (backend-specific)]:VARIANT:_default' \
 '--allow-missing-context[Allow missing Context Bundle paths]' \
 '--multiline[Enable multiline prompts (interactive)]' \
 '(--interactive)--no-interactive[Disable interactive prompts]' \
@@ -361,6 +370,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(init)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (prd)
 _arguments "${_arguments_options[@]}" : \
 ":: :_gralph__help__prd_commands" \
@@ -474,6 +487,7 @@ _gralph_commands() {
 'status:Show status of all loops' \
 'logs:View logs for a loop' \
 'resume:Resume crashed/stopped loops' \
+'init:Initialize shared context files' \
 'prd:Generate or validate PRDs' \
 'worktree:Manage task worktrees' \
 'backends:List available AI backends' \
@@ -553,6 +567,7 @@ _gralph__help_commands() {
 'status:Show status of all loops' \
 'logs:View logs for a loop' \
 'resume:Resume crashed/stopped loops' \
+'init:Initialize shared context files' \
 'prd:Generate or validate PRDs' \
 'worktree:Manage task worktrees' \
 'backends:List available AI backends' \
@@ -597,6 +612,11 @@ _gralph__help__config__set_commands() {
 _gralph__help__help_commands() {
     local commands; commands=()
     _describe -t commands 'gralph help help commands' commands "$@"
+}
+(( $+functions[_gralph__help__init_commands] )) ||
+_gralph__help__init_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph help init commands' commands "$@"
 }
 (( $+functions[_gralph__help__logs_commands] )) ||
 _gralph__help__logs_commands() {
@@ -673,6 +693,11 @@ _gralph__help__worktree__create_commands() {
 _gralph__help__worktree__finish_commands() {
     local commands; commands=()
     _describe -t commands 'gralph help worktree finish commands' commands "$@"
+}
+(( $+functions[_gralph__init_commands] )) ||
+_gralph__init_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph init commands' commands "$@"
 }
 (( $+functions[_gralph__logs_commands] )) ||
 _gralph__logs_commands() {
