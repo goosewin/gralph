@@ -149,7 +149,7 @@ Add tests for backend adapters, server endpoints, notifications, update/install 
   * Use `GRALPH_TEST_LATEST_TAG` to validate `check_for_update` returns None when current is latest.
   * Add tests for `fetch_latest_release_tag` and `extract_archive` error handling using local test fixtures.
 - **Dependencies** None
-- [ ] COV-9 Expand update check and archive error coverage
+- [x] COV-9 Expand update check and archive error coverage
 ---
 
 ### Task COV-10

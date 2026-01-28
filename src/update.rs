@@ -13,6 +13,19 @@ const RELEASE_URL: &str = "https://api.github.com/repos/goosewin/gralph/releases
 const RELEASE_DOWNLOAD_URL: &str = "https://github.com/goosewin/gralph/releases/download";
 const USER_AGENT: &str = "gralph-cli";
 
+fn release_url() -> String {
+    #[cfg(test)]
+    {
+        if let Ok(value) = env::var("GRALPH_TEST_RELEASE_URL") {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+    RELEASE_URL.to_string()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpdateInfo {
     pub current: String,
@@ -198,9 +211,12 @@ pub fn install_release() -> Result<InstallOutcome, UpdateError> {
 }
 
 fn fetch_latest_release_tag() -> Result<String, UpdateError> {
+    if let Some(tag) = latest_release_override() {
+        return Ok(tag);
+    }
     let client = Client::builder().timeout(Duration::from_secs(2)).build()?;
     let response = client
-        .get(RELEASE_URL)
+        .get(release_url())
         .header(reqwest::header::USER_AGENT, USER_AGENT)
         .send()?
         .error_for_status()?;
@@ -370,6 +386,9 @@ mod tests {
     use crate::version;
     use std::ffi::{OsStr, OsString};
     use std::fs;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::thread;
     use tempfile::tempdir;
 
     struct EnvGuard {
@@ -430,6 +449,23 @@ mod tests {
                 },
             }
         }
+    }
+
+    fn start_release_server(response_body: &'static str) -> (String, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind release listener");
+        let addr = listener.local_addr().expect("local addr");
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept connection");
+            let mut buffer = [0u8; 512];
+            let _ = stream.read(&mut buffer);
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n{}",
+                response_body.len(),
+                response_body
+            );
+            let _ = stream.write_all(response.as_bytes());
+        });
+        (format!("http://{}", addr), handle)
     }
 
     #[test]
@@ -495,6 +531,22 @@ mod tests {
     #[test]
     fn parse_release_tag_rejects_blank_tag() {
         let result = parse_release_tag(r#"{ "tag_name": "   " }"#);
+        assert!(matches!(result, Err(UpdateError::MissingTag)));
+    }
+
+    #[test]
+    fn check_for_update_returns_none_when_latest_is_current() {
+        let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", version::VERSION_TAG);
+        let result = check_for_update(version::VERSION).expect("check");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn fetch_latest_release_tag_reports_missing_tag_from_local_server() {
+        let (url, handle) = start_release_server(r#"{ "name": "release" }"#);
+        let _guard = EnvGuard::set("GRALPH_TEST_RELEASE_URL", &url);
+        let result = fetch_latest_release_tag();
+        handle.join().expect("server thread");
         assert!(matches!(result, Err(UpdateError::MissingTag)));
     }
 
@@ -606,6 +658,17 @@ mod tests {
         fs::write(&archive_path, "not a tar").expect("write invalid");
         let invalid_result = extract_archive(&archive_path, temp.path());
         assert!(matches!(invalid_result, Err(UpdateError::CommandFailed(_))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_archive_reports_failure_for_missing_target_dir() {
+        let temp = tempdir().expect("tempdir");
+        let archive_path = temp.path().join("gralph.tar.gz");
+        fs::write(&archive_path, "not a tar").expect("write invalid");
+        let missing_target = temp.path().join("missing");
+        let result = extract_archive(&archive_path, &missing_target);
+        assert!(matches!(result, Err(UpdateError::CommandFailed(_))));
     }
 
     #[test]
