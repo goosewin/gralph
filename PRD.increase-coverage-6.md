@@ -105,7 +105,7 @@ Add tests for remaining modules (CLI helpers, server endpoints, notifications, b
   * Add tests for resolve_env_override precedence between legacy aliases, normalized keys, and compat env vars.
   * Add tests for list() with sequences and null values to confirm value_to_string behavior.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-5 Expand config normalization and override tests
+- [x] COV-5 Expand config normalization and override tests
 ---
 
 ### Task COV-6

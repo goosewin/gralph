@@ -446,6 +446,21 @@ mod tests {
     }
 
     #[test]
+    fn lookup_value_resolves_nested_mixed_case_and_hyphenated_keys() {
+        let value: Value = serde_yaml::from_str(
+            "Defaults:\n  Task-File: PRD.md\n  Sub-Section:\n    Mixed-Key: 12\n",
+        )
+        .unwrap();
+
+        let task_file = lookup_value(&value, "defaults.task-file").and_then(Value::as_str);
+        assert_eq!(task_file, Some("PRD.md"));
+
+        let nested_value =
+            lookup_value(&value, "DeFaUlts.Sub-Section.Mixed-Key").and_then(Value::as_i64);
+        assert_eq!(nested_value, Some(12));
+    }
+
+    #[test]
     fn normalized_env_override_precedes_legacy_hyphenated() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -666,6 +681,19 @@ mod tests {
     }
 
     #[test]
+    fn normalized_env_override_precedes_compat_without_legacy_alias() {
+        let _guard = env_guard();
+        set_env("GRALPH_DEFAULTS_AUTO_WORKTREE", "normalized");
+        set_env("GRALPH_DEFAULTS_AUTO-WORKTREE", "compat");
+
+        let value = resolve_env_override("defaults.auto-worktree", "defaults.auto_worktree");
+        assert_eq!(value.as_deref(), Some("normalized"));
+
+        remove_env("GRALPH_DEFAULTS_AUTO-WORKTREE");
+        remove_env("GRALPH_DEFAULTS_AUTO_WORKTREE");
+    }
+
+    #[test]
     fn default_config_env_override_used() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -823,6 +851,35 @@ mod tests {
         assert!(
             list.iter()
                 .any(|(key, value)| key == "logging.level" && value == "info")
+        );
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn list_renders_sequences_and_null_values() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("missing-global.yaml");
+
+        write_file(
+            &default_path,
+            "defaults:\n  flags:\n    - one\n    - 2\n  empty: null\nlogging:\n  level: info\n",
+        );
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+        let list = config.list();
+        assert_eq!(
+            list,
+            vec![
+                ("defaults.empty".to_string(), "".to_string()),
+                ("defaults.flags".to_string(), "one,2".to_string()),
+                ("logging.level".to_string(), "info".to_string()),
+            ]
         );
 
         remove_env("GRALPH_GLOBAL_CONFIG");

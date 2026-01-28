@@ -21,6 +21,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-3 Expand state store edge-case coverage.
 - COV-4 Expand verifier parsing and gate evaluation tests.
 - COV-5 Add Codex backend run_iteration flag validation tests.
+- COV-5 Expand config normalization and override tests.
 - COV-6 Expand config path and key normalization coverage.
 - COV-7 Expand CLI helper coverage in main.
 - COV-8 Expand notification formatting and defaults coverage.
