@@ -296,11 +296,7 @@ impl StateStore {
             path: self.state_file.clone(),
             source,
         })?;
-        if content.trim().is_empty() {
-            return Err(StateError::InvalidState(
-                "refusing to write empty state content".to_string(),
-            ));
-        }
+        validate_state_content(&content)?;
         let tmp_file = self
             .state_file
             .with_extension(format!("tmp.{}", std::process::id()));
@@ -325,6 +321,15 @@ fn empty_state() -> StateData {
     StateData {
         sessions: BTreeMap::new(),
     }
+}
+
+fn validate_state_content(content: &str) -> Result<(), StateError> {
+    if content.trim().is_empty() {
+        return Err(StateError::InvalidState(
+            "refusing to write empty state content".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 fn default_state_dir() -> PathBuf {
@@ -584,5 +589,33 @@ mod tests {
         assert!(store.state_file.exists());
         let state = store.read_state().unwrap();
         assert!(state.sessions.is_empty());
+    }
+
+    #[test]
+    fn lock_path_directory_returns_io_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_millis(100));
+        fs::create_dir_all(&store.state_dir).unwrap();
+        fs::create_dir_all(&store.lock_file).unwrap();
+
+        let err = store.get_session("alpha").unwrap_err();
+        match err {
+            StateError::Io { path, .. } => {
+                assert_eq!(path, store.lock_file);
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_state_content_rejects_empty_payloads() {
+        let err = validate_state_content("   ").unwrap_err();
+        match err {
+            StateError::InvalidState(message) => {
+                assert!(message.contains("empty state"));
+            }
+            other => panic!("expected InvalidState, got {other:?}"),
+        }
+        assert!(validate_state_content("{\"sessions\":{}}").is_ok());
     }
 }

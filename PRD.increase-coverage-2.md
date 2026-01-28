@@ -68,7 +68,7 @@ Add tests that cover update version parsing and verifier parsing/gate logic with
   * Add tests for lock contention and timeout handling using short timeouts.
   * Add tests for invalid input paths and state write guardrails.
 - **Dependencies** None
-- [ ] COV-8 Expand state store edge case coverage
+- [x] COV-8 Expand state store edge case coverage
 ### Task COV-9
 
 - **ID** COV-9
