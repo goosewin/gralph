@@ -209,7 +209,7 @@ Add tests for remaining modules (CLI helpers, server endpoints, notifications, b
   * Add tests for run_iteration ensuring --quiet/--auto-approve and model flag behavior.
   * Add tests for parse_text with empty file and missing file errors.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-13 Expand Codex backend command tests
+- [x] COV-13 Expand Codex backend command tests
 ---
 
 ### Task COV-14

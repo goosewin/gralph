@@ -151,6 +151,25 @@ mod tests {
     }
 
     #[test]
+    fn command_accessor_returns_custom_command() {
+        let backend = CodexBackend::with_command("codex-custom");
+
+        assert_eq!(backend.command(), "codex-custom");
+    }
+
+    #[test]
+    fn parse_text_returns_empty_string_for_empty_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("empty.txt");
+        fs::write(&path, "").unwrap();
+
+        let backend = CodexBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+
+        assert!(result.is_empty());
+    }
+
+    #[test]
     fn parse_text_returns_raw_contents() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("codex.txt");
