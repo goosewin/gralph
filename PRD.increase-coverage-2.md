@@ -78,7 +78,7 @@ Add tests that cover update version parsing and verifier parsing/gate logic with
   * Add tests for `Version::parse` and normalization error paths using invalid inputs.
   * Add tests for `resolve_install_version` when a concrete version string is provided.
 - **Dependencies** None
-- [ ] COV-9 Expand update module parsing coverage
+- [x] COV-9 Expand update module parsing coverage
 ### Task COV-10
 
 - **ID** COV-10

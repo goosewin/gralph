@@ -368,6 +368,26 @@ mod tests {
     }
 
     #[test]
+    fn parse_version_rejects_empty_input() {
+        let result = Version::parse(" ");
+        assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
+    fn parse_version_rejects_prerelease_and_build_metadata() {
+        let prerelease = Version::parse("1.2.3-beta");
+        assert!(matches!(prerelease, Err(UpdateError::InvalidVersion(_))));
+        let build = Version::parse("1.2.3+build");
+        assert!(matches!(build, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
+    fn parse_version_rejects_extra_segments() {
+        let result = Version::parse("1.2.3.4");
+        assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
     fn parse_release_tag_requires_tag_name() {
         let result = parse_release_tag("{}");
         assert!(matches!(result, Err(UpdateError::MissingTag)));
@@ -397,6 +417,18 @@ mod tests {
     fn normalize_version_accepts_plain_input() {
         let version = normalize_version(version::VERSION).expect("normalized");
         assert_eq!(version, version::VERSION);
+    }
+
+    #[test]
+    fn normalize_version_rejects_invalid_input() {
+        let result = normalize_version("1.2");
+        assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
+    fn resolve_install_version_accepts_concrete_version() {
+        let resolved = resolve_install_version("v1.2.3").expect("resolved");
+        assert_eq!(resolved, "1.2.3");
     }
 
     #[test]
