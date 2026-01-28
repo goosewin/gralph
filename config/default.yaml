@@ -22,6 +22,16 @@ verifier:
   pr:
     base: main
     title: "chore: verifier run"
+  review:
+    enabled: true
+    reviewer: greptile
+    min_rating: 8
+    max_issues: 0
+    poll_seconds: 20
+    timeout_seconds: 1800
+    require_approval: false
+    require_checks: true
+    merge_method: merge
 
 # Claude Code backend settings
 claude:

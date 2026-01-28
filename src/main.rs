@@ -1016,14 +1016,15 @@ fn run_verifier_command(label: &str, dir: &Path, command: &str) -> Result<String
 }
 
 fn parse_verifier_command(command: &str) -> Result<(String, Vec<String>), CliError> {
-    let parts: Vec<&str> = command.split_whitespace().collect();
+    let parts = shell_words::split(command)
+        .map_err(|err| CliError::Message(format!("Failed to parse command: {}", err)))?;
     if parts.is_empty() {
         return Err(CliError::Message(
             "Verifier command cannot be empty.".to_string(),
         ));
     }
     let program = parts[0].to_string();
-    let args = parts[1..].iter().map(|part| (*part).to_string()).collect();
+    let args = parts[1..].iter().cloned().collect();
     Ok((program, args))
 }
 
@@ -2179,9 +2180,15 @@ fn resolve_static_check_patterns(value: Option<String>, default: Vec<String>) ->
         .map(normalize_csv)
         .unwrap_or_default();
     if parsed.is_empty() {
-        default.into_iter().map(normalize_pattern).collect()
+        default
+            .into_iter()
+            .map(|pattern| normalize_pattern(&pattern))
+            .collect()
     } else {
-        parsed.into_iter().map(normalize_pattern).collect()
+        parsed
+            .into_iter()
+            .map(|pattern| normalize_pattern(&pattern))
+            .collect()
     }
 }
 
@@ -2840,7 +2847,7 @@ fn run_loop_with_state(args: RunLoopArgs) -> Result<(), CliError> {
             )
             .map_err(|err| CliError::Message(err.to_string()))?;
         if let Err(err) = run_verifier_pipeline(&args.dir, &config, None, None, None) {
-            let _ = store.set_session(&args.name, &[("status", "failed")]);
+            let _ = store.set_session(&args.name, &[("status", "verify-failed")]);
             return Err(err);
         }
         store
