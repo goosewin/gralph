@@ -81,7 +81,7 @@ The test suite covers configuration resolution and overrides, state store lifecy
   * Add tests for parsing `gralph prd create` options and `gralph server` flags.
   * Add tests for `--no-worktree`, `--strict-prd`, and worktree create/finish IDs.
 - **Dependencies** None
-- [ ] COV-4 Expand CLI parsing coverage for core commands
+- [x] COV-4 Expand CLI parsing coverage for core commands
 ### Task COV-5
 
 - **ID** COV-5
