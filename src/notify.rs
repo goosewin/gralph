@@ -463,17 +463,15 @@ fn format_discord_failed(
     let fields = vec![
         discord_field("Project", format!("`{}`", project_dir), false),
         discord_field("Reason", failure_reason, true),
-        discord_field("Iterations", format!("{}/{}", iterations, max_iterations), true),
+        discord_field(
+            "Iterations",
+            format!("{}/{}", iterations, max_iterations),
+            true,
+        ),
         discord_field("Remaining Tasks", remaining_tasks, true),
         discord_field("Duration", duration_str, true),
     ];
-    let embed = discord_embed(
-        "❌ Gralph Failed",
-        description,
-        15548997,
-        fields,
-        timestamp,
-    );
+    let embed = discord_embed("❌ Gralph Failed", description, 15548997, fields, timestamp);
     let payload = json!({
         "embeds": [embed]
     });

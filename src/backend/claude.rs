@@ -1,4 +1,4 @@
-use super::{stream_command_output, Backend, BackendError};
+use super::{Backend, BackendError, stream_command_output};
 use serde_json::Value;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};

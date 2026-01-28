@@ -486,14 +486,7 @@ mod tests {
     #[test]
     fn parse_server_flags() {
         let cli = Cli::parse_from([
-            "gralph",
-            "server",
-            "--host",
-            "0.0.0.0",
-            "--port",
-            "9090",
-            "--token",
-            "secret",
+            "gralph", "server", "--host", "0.0.0.0", "--port", "9090", "--token", "secret",
             "--open",
         ]);
         match cli.command {

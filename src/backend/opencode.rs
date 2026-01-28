@@ -1,4 +1,4 @@
-use super::{command_in_path, stream_command_output, Backend, BackendError};
+use super::{Backend, BackendError, command_in_path, stream_command_output};
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};

@@ -438,10 +438,7 @@ mod tests {
         set_env("GRALPH_DEFAULTS_MAX-ITERATIONS", "24");
 
         let config = Config::load(None).unwrap();
-        assert_eq!(
-            config.get("defaults.max-iterations").as_deref(),
-            Some("42")
-        );
+        assert_eq!(config.get("defaults.max-iterations").as_deref(), Some("42"));
 
         remove_env("GRALPH_DEFAULTS_MAX-ITERATIONS");
         remove_env("GRALPH_DEFAULTS_MAX_ITERATIONS");
