@@ -597,6 +597,21 @@ mod tests {
     }
 
     #[test]
+    fn legacy_env_override_precedes_normalized_and_compat() {
+        let _guard = env_guard();
+        set_env("GRALPH_MAX_ITERATIONS", "legacy");
+        set_env("GRALPH_DEFAULTS_MAX_ITERATIONS", "normalized");
+        set_env("GRALPH_DEFAULTS_MAX-ITERATIONS", "compat");
+
+        let value = resolve_env_override("defaults.max-iterations", "defaults.max_iterations");
+        assert_eq!(value.as_deref(), Some("legacy"));
+
+        remove_env("GRALPH_DEFAULTS_MAX-ITERATIONS");
+        remove_env("GRALPH_DEFAULTS_MAX_ITERATIONS");
+        remove_env("GRALPH_MAX_ITERATIONS");
+    }
+
+    #[test]
     fn default_config_env_override_used() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -670,6 +685,31 @@ mod tests {
     }
 
     #[test]
+    fn config_paths_include_project_with_custom_name() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("global.yaml");
+        let project_dir = temp.path().join("project");
+        let project_path = project_dir.join("custom.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 1\n");
+        write_file(&global_path, "defaults:\n  backend: claude\n");
+        write_file(&project_path, "defaults:\n  backend: gemini\n");
+
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+        set_env("GRALPH_PROJECT_CONFIG_NAME", "custom.yaml");
+
+        let paths = config_paths(Some(&project_dir));
+        assert_eq!(paths, vec![default_path.clone(), global_path.clone(), project_path.clone()]);
+
+        remove_env("GRALPH_PROJECT_CONFIG_NAME");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
     fn missing_files_fall_back_to_bundled_default() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -712,6 +752,26 @@ mod tests {
 
         remove_env("GRALPH_GLOBAL_CONFIG");
         remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn flatten_value_ignores_non_string_keys() {
+        let mut map = Mapping::new();
+        map.insert(
+            Value::Number(serde_yaml::Number::from(1)),
+            Value::String("one".to_string()),
+        );
+        map.insert(
+            Value::String("valid".to_string()),
+            Value::String("yes".to_string()),
+        );
+
+        let value = Value::Mapping(map);
+        let mut entries = BTreeMap::new();
+        flatten_value("", &value, &mut entries);
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries.get("valid").map(String::as_str), Some("yes"));
     }
 
     #[test]

@@ -118,6 +118,7 @@ Tests verify existing behavior without changing production logic, CLI outputs, o
   * Cover value_to_string returning None for mappings and flatten_value ignoring non-string keys.
 - **Dependencies** None
 - [ ] COV-22 Expand config loader and override coverage
+ - [x] COV-22 Expand config loader and override coverage
 ---
 
 ### Task COV-23
