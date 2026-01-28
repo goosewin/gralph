@@ -15,7 +15,7 @@ use gralph_rs::server::{self, ServerConfig};
 use gralph_rs::state::{CleanupMode, StateStore};
 use gralph_rs::update;
 use gralph_rs::version;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::ffi::OsStr;
 use std::fmt::Display;
@@ -61,6 +61,11 @@ fn dispatch(command: Command) -> Result<(), CliError> {
 const DEFAULT_TEST_COMMAND: &str = "cargo test --workspace";
 const DEFAULT_COVERAGE_COMMAND: &str = "cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*";
 const DEFAULT_COVERAGE_MIN: f64 = 90.0;
+const DEFAULT_STATIC_MAX_COMMENT_LINES: usize = 12;
+const DEFAULT_STATIC_MAX_COMMENT_CHARS: usize = 600;
+const DEFAULT_STATIC_DUPLICATE_BLOCK_LINES: usize = 8;
+const DEFAULT_STATIC_DUPLICATE_MIN_ALNUM_LINES: usize = 4;
+const DEFAULT_STATIC_MAX_FILE_BYTES: u64 = 1_000_000;
 
 #[derive(Debug)]
 enum CliError {
@@ -896,6 +901,8 @@ fn cmd_verifier(args: VerifierArgs) -> Result<(), CliError> {
     }
     println!("Coverage OK: {:.2}% (>= {:.2}%)", coverage, coverage_min);
 
+    run_verifier_static_checks(&dir, &config)?;
+
     Ok(())
 }
 
@@ -1038,6 +1045,761 @@ fn parse_percent_from_line(line: &str) -> Option<f64> {
         }
     }
     found
+}
+
+#[derive(Debug, Clone)]
+struct StaticCheckSettings {
+    enabled: bool,
+    check_todo: bool,
+    check_comments: bool,
+    check_duplicates: bool,
+    allow_patterns: Vec<String>,
+    ignore_patterns: Vec<String>,
+    todo_markers: Vec<String>,
+    max_comment_lines: usize,
+    max_comment_chars: usize,
+    duplicate_block_lines: usize,
+    duplicate_min_alnum_lines: usize,
+    max_file_bytes: u64,
+}
+
+#[derive(Debug)]
+struct StaticViolation {
+    path: PathBuf,
+    line: usize,
+    message: String,
+}
+
+#[derive(Debug)]
+struct BlockLocation {
+    path: PathBuf,
+    line: usize,
+}
+
+#[derive(Debug)]
+struct FileSnapshot {
+    path: PathBuf,
+    lines: Vec<String>,
+}
+
+#[derive(Clone, Copy)]
+struct CommentStyle {
+    line_prefixes: &'static [&'static str],
+    block_start: Option<&'static str>,
+    block_end: Option<&'static str>,
+}
+
+fn run_verifier_static_checks(dir: &Path, config: &Config) -> Result<(), CliError> {
+    println!("\n==> Static checks");
+    let settings = resolve_static_check_settings(config)?;
+    if !settings.enabled {
+        println!("Static checks skipped (disabled).");
+        return Ok(());
+    }
+
+    let files = collect_static_check_files(dir, &settings)?;
+    if files.is_empty() {
+        println!("Static checks OK.");
+        return Ok(());
+    }
+
+    let mut violations = Vec::new();
+    let mut snapshots = Vec::new();
+
+    for path in files {
+        let Some(contents) = read_text_file(&path, settings.max_file_bytes)? else {
+            continue;
+        };
+        let lines: Vec<String> = contents.lines().map(|line| line.to_string()).collect();
+        if settings.check_todo {
+            check_todo_markers(&path, &lines, &settings, &mut violations);
+        }
+        if settings.check_comments {
+            check_verbose_comments(&path, &lines, &settings, &mut violations);
+        }
+        if settings.check_duplicates && is_duplicate_candidate(&path) {
+            snapshots.push(FileSnapshot { path, lines });
+        }
+    }
+
+    if settings.check_duplicates {
+        let mut duplicates = find_duplicate_blocks(&snapshots, &settings);
+        violations.append(&mut duplicates);
+    }
+
+    if violations.is_empty() {
+        println!("Static checks OK.");
+        return Ok(());
+    }
+
+    violations.sort_by(|left, right| {
+        let left_path = left.path.to_string_lossy();
+        let right_path = right.path.to_string_lossy();
+        match left_path.cmp(&right_path) {
+            std::cmp::Ordering::Equal => left.line.cmp(&right.line),
+            ordering => ordering,
+        }
+    });
+
+    eprintln!("Static checks failed ({} issue(s)):", violations.len());
+    for violation in &violations {
+        let display = format_static_violation_path(dir, &violation.path, violation.line);
+        eprintln!("  {} {}", display, violation.message);
+    }
+
+    Err(CliError::Message(format!(
+        "Static checks failed with {} issue(s).",
+        violations.len()
+    )))
+}
+
+fn resolve_static_check_settings(config: &Config) -> Result<StaticCheckSettings, CliError> {
+    let enabled = resolve_static_check_bool(config, "verifier.static_checks.enabled", true)?;
+    let check_todo = resolve_static_check_bool(config, "verifier.static_checks.todo", true)?;
+    let check_comments =
+        resolve_static_check_bool(config, "verifier.static_checks.comments", true)?;
+    let check_duplicates =
+        resolve_static_check_bool(config, "verifier.static_checks.duplicate", true)?;
+    let allow_patterns = resolve_static_check_patterns(
+        config.get("verifier.static_checks.allow"),
+        default_static_allow_patterns(),
+    );
+    let ignore_patterns = resolve_static_check_patterns(
+        config.get("verifier.static_checks.ignore"),
+        default_static_ignore_patterns(),
+    );
+    let todo_markers = resolve_static_check_markers(
+        config.get("verifier.static_checks.todo_markers"),
+        vec!["TODO".to_string(), "FIXME".to_string()],
+    );
+    let max_comment_lines = resolve_static_check_usize(
+        config.get("verifier.static_checks.max_comment_lines"),
+        "verifier.static_checks.max_comment_lines",
+        DEFAULT_STATIC_MAX_COMMENT_LINES,
+        1,
+    )?;
+    let max_comment_chars = resolve_static_check_usize(
+        config.get("verifier.static_checks.max_comment_chars"),
+        "verifier.static_checks.max_comment_chars",
+        DEFAULT_STATIC_MAX_COMMENT_CHARS,
+        1,
+    )?;
+    let duplicate_block_lines = resolve_static_check_usize(
+        config.get("verifier.static_checks.duplicate_block_lines"),
+        "verifier.static_checks.duplicate_block_lines",
+        DEFAULT_STATIC_DUPLICATE_BLOCK_LINES,
+        2,
+    )?;
+    let duplicate_min_alnum_lines = resolve_static_check_usize(
+        config.get("verifier.static_checks.duplicate_min_alnum_lines"),
+        "verifier.static_checks.duplicate_min_alnum_lines",
+        DEFAULT_STATIC_DUPLICATE_MIN_ALNUM_LINES,
+        1,
+    )?;
+    let max_file_bytes = resolve_static_check_u64(
+        config.get("verifier.static_checks.max_file_bytes"),
+        "verifier.static_checks.max_file_bytes",
+        DEFAULT_STATIC_MAX_FILE_BYTES,
+        64,
+    )?;
+
+    Ok(StaticCheckSettings {
+        enabled,
+        check_todo,
+        check_comments,
+        check_duplicates,
+        allow_patterns,
+        ignore_patterns,
+        todo_markers,
+        max_comment_lines,
+        max_comment_chars,
+        duplicate_block_lines,
+        duplicate_min_alnum_lines,
+        max_file_bytes,
+    })
+}
+
+fn resolve_static_check_bool(config: &Config, key: &str, default: bool) -> Result<bool, CliError> {
+    let Some(value) = config.get(key) else {
+        return Ok(default);
+    };
+    if value.trim().is_empty() {
+        return Ok(default);
+    }
+    parse_bool_value(&value)
+        .ok_or_else(|| CliError::Message(format!("Invalid {}: {}", key, value.trim())))
+}
+
+fn resolve_static_check_usize(
+    value: Option<String>,
+    key: &str,
+    default: usize,
+    min: usize,
+) -> Result<usize, CliError> {
+    let Some(value) = value else {
+        return Ok(default);
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(default);
+    }
+    let parsed = trimmed
+        .parse::<usize>()
+        .map_err(|_| CliError::Message(format!("Invalid {}: {}", key, trimmed)))?;
+    if parsed < min {
+        return Err(CliError::Message(format!(
+            "Invalid {}: {} (minimum {})",
+            key, parsed, min
+        )));
+    }
+    Ok(parsed)
+}
+
+fn resolve_static_check_u64(
+    value: Option<String>,
+    key: &str,
+    default: u64,
+    min: u64,
+) -> Result<u64, CliError> {
+    let Some(value) = value else {
+        return Ok(default);
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(default);
+    }
+    let parsed = trimmed
+        .parse::<u64>()
+        .map_err(|_| CliError::Message(format!("Invalid {}: {}", key, trimmed)))?;
+    if parsed < min {
+        return Err(CliError::Message(format!(
+            "Invalid {}: {} (minimum {})",
+            key, parsed, min
+        )));
+    }
+    Ok(parsed)
+}
+
+fn resolve_static_check_patterns(value: Option<String>, default: Vec<String>) -> Vec<String> {
+    let parsed = value
+        .as_deref()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(normalize_csv)
+        .unwrap_or_default();
+    if parsed.is_empty() {
+        default.into_iter().map(normalize_pattern).collect()
+    } else {
+        parsed.into_iter().map(normalize_pattern).collect()
+    }
+}
+
+fn resolve_static_check_markers(value: Option<String>, default: Vec<String>) -> Vec<String> {
+    let parsed = value
+        .as_deref()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(normalize_csv)
+        .unwrap_or_default();
+    let markers = if parsed.is_empty() { default } else { parsed };
+    let mut unique = BTreeMap::new();
+    for marker in markers {
+        let trimmed = marker.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        unique.insert(trimmed.to_ascii_uppercase(), true);
+    }
+    unique.keys().cloned().collect()
+}
+
+fn default_static_allow_patterns() -> Vec<String> {
+    vec![
+        "**/*.rs".to_string(),
+        "**/*.md".to_string(),
+        "**/*.toml".to_string(),
+        "**/*.yaml".to_string(),
+        "**/*.yml".to_string(),
+        "**/*.json".to_string(),
+        "**/*.js".to_string(),
+        "**/*.ts".to_string(),
+        "**/*.tsx".to_string(),
+        "**/*.jsx".to_string(),
+        "**/*.py".to_string(),
+        "**/*.go".to_string(),
+        "**/*.java".to_string(),
+        "**/*.c".to_string(),
+        "**/*.h".to_string(),
+        "**/*.hpp".to_string(),
+        "**/*.cpp".to_string(),
+        "**/*.cc".to_string(),
+        "**/*.cs".to_string(),
+        "**/*.sh".to_string(),
+        "**/*.ps1".to_string(),
+        "**/*.txt".to_string(),
+        "**/Dockerfile".to_string(),
+        "**/Makefile".to_string(),
+    ]
+}
+
+fn default_static_ignore_patterns() -> Vec<String> {
+    vec![
+        "**/.git/**".to_string(),
+        "**/.worktrees/**".to_string(),
+        "**/.gralph/**".to_string(),
+        "**/target/**".to_string(),
+        "**/node_modules/**".to_string(),
+        "**/dist/**".to_string(),
+        "**/build/**".to_string(),
+    ]
+}
+
+fn normalize_pattern(pattern: &str) -> String {
+    let mut value = pattern.trim().replace('\\', "/");
+    while value.starts_with("./") {
+        value = value.trim_start_matches("./").to_string();
+    }
+    while value.starts_with('/') {
+        value = value.trim_start_matches('/').to_string();
+    }
+    value
+}
+
+fn normalize_relative_path(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+fn collect_static_check_files(
+    root: &Path,
+    settings: &StaticCheckSettings,
+) -> Result<Vec<PathBuf>, CliError> {
+    let mut files = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+
+    while let Some(dir) = stack.pop() {
+        let entries = fs::read_dir(&dir).map_err(CliError::Io)?;
+        for entry in entries {
+            let entry = entry.map_err(CliError::Io)?;
+            let path = entry.path();
+            let file_type = entry.file_type().map_err(CliError::Io)?;
+            if file_type.is_symlink() {
+                continue;
+            }
+            let rel = normalize_relative_path(root, &path);
+            if file_type.is_dir() {
+                if path_is_ignored(&rel, true, &settings.ignore_patterns) {
+                    continue;
+                }
+                stack.push(path);
+                continue;
+            }
+            if !file_type.is_file() {
+                continue;
+            }
+            if !path_is_allowed(&rel, &settings.allow_patterns) {
+                continue;
+            }
+            if path_is_ignored(&rel, false, &settings.ignore_patterns) {
+                continue;
+            }
+            files.push(path);
+        }
+    }
+
+    files.sort();
+    Ok(files)
+}
+
+fn path_is_allowed(path: &str, allow_patterns: &[String]) -> bool {
+    if allow_patterns.is_empty() {
+        return true;
+    }
+    path_matches_any(path, allow_patterns)
+}
+
+fn path_is_ignored(path: &str, is_dir: bool, ignore_patterns: &[String]) -> bool {
+    if path_matches_any(path, ignore_patterns) {
+        return true;
+    }
+    if is_dir {
+        let with_slash = format!("{}/", path);
+        if path_matches_any(&with_slash, ignore_patterns) {
+            return true;
+        }
+    }
+    false
+}
+
+fn path_matches_any(path: &str, patterns: &[String]) -> bool {
+    for pattern in patterns {
+        if wildcard_match(pattern, path) {
+            return true;
+        }
+        if let Some(stripped) = pattern.strip_prefix("**/") {
+            if wildcard_match(stripped, path) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn wildcard_match(pattern: &str, text: &str) -> bool {
+    let p = pattern.as_bytes();
+    let t = text.as_bytes();
+    let mut pi = 0;
+    let mut ti = 0;
+    let mut star = None;
+    let mut match_index = 0;
+
+    while ti < t.len() {
+        if pi < p.len() && (p[pi] == t[ti]) {
+            pi += 1;
+            ti += 1;
+        } else if pi < p.len() && p[pi] == b'*' {
+            star = Some(pi);
+            match_index = ti;
+            pi += 1;
+        } else if let Some(star_idx) = star {
+            pi = star_idx + 1;
+            match_index += 1;
+            ti = match_index;
+        } else {
+            return false;
+        }
+    }
+
+    while pi < p.len() && p[pi] == b'*' {
+        pi += 1;
+    }
+    pi == p.len()
+}
+
+fn read_text_file(path: &Path, max_bytes: u64) -> Result<Option<String>, CliError> {
+    let metadata = fs::metadata(path).map_err(CliError::Io)?;
+    if metadata.len() > max_bytes {
+        return Ok(None);
+    }
+    let bytes = fs::read(path).map_err(CliError::Io)?;
+    if bytes.len() as u64 > max_bytes {
+        return Ok(None);
+    }
+    match String::from_utf8(bytes) {
+        Ok(text) => Ok(Some(text)),
+        Err(_) => Ok(None),
+    }
+}
+
+fn check_todo_markers(
+    path: &Path,
+    lines: &[String],
+    settings: &StaticCheckSettings,
+    violations: &mut Vec<StaticViolation>,
+) {
+    for (index, line) in lines.iter().enumerate() {
+        if let Some(marker) = line_contains_marker(line, &settings.todo_markers) {
+            violations.push(StaticViolation {
+                path: path.to_path_buf(),
+                line: index + 1,
+                message: format!("Found {} marker.", marker),
+            });
+        }
+    }
+}
+
+fn line_contains_marker(line: &str, markers: &[String]) -> Option<String> {
+    if markers.is_empty() {
+        return None;
+    }
+    let upper = line.to_ascii_uppercase();
+    for marker in markers {
+        let mut offset = 0;
+        while let Some(pos) = upper[offset..].find(marker) {
+            let start = offset + pos;
+            let end = start + marker.len();
+            let before = upper[..start].chars().last();
+            let after = upper[end..].chars().next();
+            let before_ok = before
+                .map(|c| !c.is_ascii_alphanumeric() && c != '_')
+                .unwrap_or(true);
+            let after_ok = after
+                .map(|c| !c.is_ascii_alphanumeric() && c != '_')
+                .unwrap_or(true);
+            if before_ok && after_ok {
+                return Some(marker.clone());
+            }
+            offset = end;
+        }
+    }
+    None
+}
+
+fn check_verbose_comments(
+    path: &Path,
+    lines: &[String],
+    settings: &StaticCheckSettings,
+    violations: &mut Vec<StaticViolation>,
+) {
+    let Some(style) = comment_style_for_path(path) else {
+        return;
+    };
+    let mut in_block = false;
+    let mut block_start_line = 0;
+    let mut block_lines = 0;
+    let mut block_chars = 0;
+
+    for (index, line) in lines.iter().enumerate() {
+        let line_no = index + 1;
+        let trimmed = line.trim_start();
+        let mut is_comment = false;
+        if in_block {
+            is_comment = true;
+            if let Some(end) = style.block_end {
+                if trimmed.contains(end) {
+                    in_block = false;
+                }
+            }
+        } else if let Some(start) = style.block_start {
+            if trimmed.starts_with(start) {
+                is_comment = true;
+                if let Some(end) = style.block_end {
+                    if !trimmed.contains(end) {
+                        in_block = true;
+                    }
+                }
+            }
+        }
+
+        if !is_comment
+            && style
+                .line_prefixes
+                .iter()
+                .any(|prefix| trimmed.starts_with(prefix))
+        {
+            is_comment = true;
+        }
+
+        if is_comment {
+            if block_lines == 0 {
+                block_start_line = line_no;
+            }
+            block_lines += 1;
+            block_chars += comment_text_len(trimmed, &style);
+        } else if block_lines > 0 {
+            record_verbose_comment(
+                path,
+                block_start_line,
+                block_lines,
+                block_chars,
+                settings,
+                violations,
+            );
+            block_lines = 0;
+            block_chars = 0;
+        }
+    }
+
+    if block_lines > 0 {
+        record_verbose_comment(
+            path,
+            block_start_line,
+            block_lines,
+            block_chars,
+            settings,
+            violations,
+        );
+    }
+}
+
+fn record_verbose_comment(
+    path: &Path,
+    start_line: usize,
+    block_lines: usize,
+    block_chars: usize,
+    settings: &StaticCheckSettings,
+    violations: &mut Vec<StaticViolation>,
+) {
+    if block_lines <= settings.max_comment_lines && block_chars <= settings.max_comment_chars {
+        return;
+    }
+    violations.push(StaticViolation {
+        path: path.to_path_buf(),
+        line: start_line,
+        message: format!(
+            "Verbose comment block ({} lines, {} chars) exceeds limits ({} lines, {} chars).",
+            block_lines, block_chars, settings.max_comment_lines, settings.max_comment_chars
+        ),
+    });
+}
+
+fn comment_style_for_path(path: &Path) -> Option<CommentStyle> {
+    let ext = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("");
+    match ext {
+        "rs" | "js" | "ts" | "tsx" | "jsx" | "c" | "cc" | "cpp" | "h" | "hpp" | "java" | "go"
+        | "cs" => Some(CommentStyle {
+            line_prefixes: &["//"],
+            block_start: Some("/*"),
+            block_end: Some("*/"),
+        }),
+        "py" | "rb" | "sh" | "bash" | "zsh" | "yaml" | "yml" | "toml" | "ini" | "ps1" => {
+            Some(CommentStyle {
+                line_prefixes: &["#"],
+                block_start: None,
+                block_end: None,
+            })
+        }
+        "sql" => Some(CommentStyle {
+            line_prefixes: &["--"],
+            block_start: Some("/*"),
+            block_end: Some("*/"),
+        }),
+        _ => None,
+    }
+}
+
+fn comment_text_len(line: &str, style: &CommentStyle) -> usize {
+    let trimmed = line.trim_start();
+    for prefix in style.line_prefixes {
+        if trimmed.starts_with(prefix) {
+            return trimmed[prefix.len()..].trim_start().len();
+        }
+    }
+    if let Some(start) = style.block_start {
+        if trimmed.starts_with(start) {
+            return trimmed[start.len()..].trim_start().len();
+        }
+    }
+    if let Some(end) = style.block_end {
+        if trimmed.starts_with(end) {
+            return trimmed[end.len()..].trim_start().len();
+        }
+    }
+    if trimmed.starts_with('*') {
+        return trimmed[1..].trim_start().len();
+    }
+    trimmed.len()
+}
+
+fn is_duplicate_candidate(path: &Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("");
+    matches!(
+        ext,
+        "rs" | "js"
+            | "ts"
+            | "tsx"
+            | "jsx"
+            | "py"
+            | "go"
+            | "java"
+            | "c"
+            | "cc"
+            | "cpp"
+            | "h"
+            | "hpp"
+            | "cs"
+    )
+}
+
+fn find_duplicate_blocks(
+    snapshots: &[FileSnapshot],
+    settings: &StaticCheckSettings,
+) -> Vec<StaticViolation> {
+    let mut seen: HashMap<String, BlockLocation> = HashMap::new();
+    let mut violations = Vec::new();
+
+    for snapshot in snapshots {
+        for (start_line, block) in split_nonempty_blocks(&snapshot.lines) {
+            if block.len() < settings.duplicate_block_lines {
+                continue;
+            }
+            if !block_is_substantive(&block, settings.duplicate_min_alnum_lines) {
+                continue;
+            }
+            let normalized: Vec<String> = block
+                .iter()
+                .map(|line| normalize_line_for_duplicate(line))
+                .collect();
+            let key = normalized.join("\n");
+            if key.trim().is_empty() {
+                continue;
+            }
+            if let Some(existing) = seen.get(&key) {
+                violations.push(StaticViolation {
+                    path: snapshot.path.to_path_buf(),
+                    line: start_line,
+                    message: format!(
+                        "Duplicate block matches {}:{}.",
+                        existing.path.display(),
+                        existing.line
+                    ),
+                });
+            } else {
+                seen.insert(
+                    key,
+                    BlockLocation {
+                        path: snapshot.path.to_path_buf(),
+                        line: start_line,
+                    },
+                );
+            }
+        }
+    }
+
+    violations
+}
+
+fn split_nonempty_blocks(lines: &[String]) -> Vec<(usize, Vec<String>)> {
+    let mut blocks = Vec::new();
+    let mut current: Vec<String> = Vec::new();
+    let mut start_line = 0;
+
+    for (index, line) in lines.iter().enumerate() {
+        if line.trim().is_empty() {
+            if !current.is_empty() {
+                blocks.push((start_line, current));
+                current = Vec::new();
+            }
+            continue;
+        }
+        if current.is_empty() {
+            start_line = index + 1;
+        }
+        current.push(line.to_string());
+    }
+
+    if !current.is_empty() {
+        blocks.push((start_line, current));
+    }
+
+    blocks
+}
+
+fn block_is_substantive(lines: &[String], min_alnum_lines: usize) -> bool {
+    let mut count = 0;
+    for line in lines {
+        if line.chars().any(|ch| ch.is_ascii_alphanumeric()) {
+            count += 1;
+        }
+    }
+    count >= min_alnum_lines
+}
+
+fn normalize_line_for_duplicate(line: &str) -> String {
+    line.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn format_static_violation_path(root: &Path, path: &Path, line: usize) -> String {
+    let rel = path.strip_prefix(root).unwrap_or(path);
+    format!("{}:{}", rel.display(), line)
 }
 
 fn cmd_server(args: ServerArgs) -> Result<(), CliError> {
