@@ -473,6 +473,27 @@ mod tests {
         )
     }
 
+    fn assert_cors_headers(headers: &HeaderMap, origin: &str) {
+        assert_eq!(
+            headers
+                .get(axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .and_then(|value| value.to_str().ok()),
+            Some(origin)
+        );
+        assert_eq!(
+            headers
+                .get(axum::http::header::ACCESS_CONTROL_ALLOW_METHODS)
+                .and_then(|value| value.to_str().ok()),
+            Some("GET, POST, OPTIONS")
+        );
+        assert_eq!(
+            headers
+                .get(axum::http::header::ACCESS_CONTROL_ALLOW_HEADERS)
+                .and_then(|value| value.to_str().ok()),
+            Some("Authorization, Content-Type")
+        );
+    }
+
     #[test]
     fn server_config_validate_rejects_port_zero() {
         let config = ServerConfig {
@@ -646,6 +667,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn check_auth_rejects_bearer_without_token() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let state = AppState {
+            config: ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 0,
+                token: Some("secret".to_string()),
+                open: false,
+                max_body_bytes: 4096,
+            },
+            store,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer"),
+        );
+
+        let response = check_auth(&headers, &state, None).expect("missing token unauthorized");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["error"], "Invalid or missing Bearer token");
+    }
+
+    #[tokio::test]
     async fn check_auth_rejects_wrong_token() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path());
@@ -672,6 +722,38 @@ mod tests {
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["error"], "Invalid or missing Bearer token");
+    }
+
+    #[tokio::test]
+    async fn status_endpoint_allows_requests_when_token_disabled() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/status")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert!(body.get("sessions").and_then(|value| value.as_array()).is_some());
     }
 
     #[tokio::test]
@@ -956,6 +1038,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn status_name_error_includes_cors_headers() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/status/missing")
+                    .method("GET")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer secret")
+                    .header(axum::http::header::ORIGIN, "http://localhost")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_cors_headers(response.headers(), "http://localhost");
+    }
+
+    #[tokio::test]
     async fn stop_endpoint_marks_session_stopped() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path());
@@ -1071,6 +1185,38 @@ mod tests {
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["error"], "Session not found: missing");
+    }
+
+    #[tokio::test]
+    async fn stop_endpoint_error_includes_cors_headers() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/stop/missing")
+                    .method("POST")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer secret")
+                    .header(axum::http::header::ORIGIN, "http://localhost")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_cors_headers(response.headers(), "http://localhost");
     }
 
     #[tokio::test]

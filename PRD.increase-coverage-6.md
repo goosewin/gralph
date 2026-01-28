@@ -131,7 +131,7 @@ Add tests for remaining modules (CLI helpers, server endpoints, notifications, b
   * Add tests for resolve_cors_origin on host-specific matches and open mode wildcard behavior.
   * Add tests asserting CORS headers on error responses from stop/status endpoints.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-7 Expand server auth and CORS error-path tests
+- [x] COV-7 Expand server auth and CORS error-path tests
 ---
 
 ### Task COV-8

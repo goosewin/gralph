@@ -23,7 +23,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-5 Add Codex backend run_iteration flag validation tests.
 - COV-5 Expand config normalization and override tests.
 - COV-6 Expand CLI helper coverage in main.
-- COV-7 Expand CLI helper coverage in main.
+- COV-7 Expand server auth and CORS error-path coverage.
 - COV-8 Expand notification formatting and defaults coverage.
 - COV-9 Add notify validation and failure formatting tests.
 - COV-10 Add property-based tests for task parsing invariants.
