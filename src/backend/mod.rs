@@ -156,6 +156,7 @@ mod tests {
     use super::*;
     use std::ffi::{OsStr, OsString};
     use std::fs;
+    use std::io;
 
     #[cfg(unix)]
     use std::process::{Command, Stdio};
@@ -225,6 +226,40 @@ mod tests {
             assert!(!models.is_empty(), "{} models should be non-empty", name);
             assert_eq!(models, expected_models, "{} models should be stable", name);
         }
+    }
+
+    #[test]
+    fn backend_error_display_and_source_for_io() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("missing-file");
+        let source = io::Error::new(io::ErrorKind::Other, "disk full");
+        let source_message = source.to_string();
+        let error = BackendError::Io { path: path.clone(), source };
+
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "backend io error at {}: {}",
+                path.display(),
+                source_message
+            )
+        );
+        let error_source = error.source().expect("io error source");
+        assert_eq!(error_source.to_string(), source_message);
+    }
+
+    #[test]
+    fn backend_error_display_and_source_for_json() {
+        let source = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
+        let source_message = source.to_string();
+        let error = BackendError::Json { source };
+
+        assert_eq!(
+            error.to_string(),
+            format!("backend json error: {}", source_message)
+        );
+        let error_source = error.source().expect("json error source");
+        assert_eq!(error_source.to_string(), source_message);
     }
 
     #[test]

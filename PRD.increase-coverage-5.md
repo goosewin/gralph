@@ -173,7 +173,7 @@ Add tests for backend adapters, server endpoints, notifications, update/install 
   * Validate Display formatting and `source()` behavior for Io and Json variants of `BackendError`.
   * Add edge-case tests for `command_in_path` with missing or empty PATH.
 - **Dependencies** None
-- [ ] COV-11 Expand backend module error formatting coverage
+- [x] COV-11 Expand backend module error formatting coverage
 ---
 
 ### Task COV-12

@@ -25,7 +25,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-8 Expand notification formatting and defaults coverage.
 - COV-9 Add notify validation and failure formatting tests.
 - COV-10 Add property-based tests for task parsing invariants.
-- COV-11 Expand server config and CORS handler coverage.
+- COV-11 Expand backend module error formatting coverage.
 - COV-12 Expand state helper and cleanup edge case coverage.
 - COV-13 Expand task parsing edge-case coverage.
 - COV-14 Expand update helper edge-case coverage.
