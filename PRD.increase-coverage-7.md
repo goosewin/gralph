@@ -144,7 +144,7 @@ Add tests for CLI helpers, server endpoints, notification formatting, update/ins
   * Cover send_webhook input validation and detect_webhook_type case handling.
   * `cargo test --workspace` passes.
 - **Dependencies** None
-- [ ] COV-8 Expand notification formatting and error handling coverage
+- [x] COV-8 Expand notification formatting and error handling coverage
 ---
 
 ### Task COV-9

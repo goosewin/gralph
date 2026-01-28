@@ -1115,6 +1115,12 @@ mod tests {
     }
 
     #[test]
+    fn format_failure_description_handles_manual_stop() {
+        let description = format_failure_description("alpha", "manual_stop", "**");
+        assert_eq!(description, "Session **alpha** was manually stopped.");
+    }
+
+    #[test]
     fn send_webhook_rejects_empty_payload() {
         let err = send_webhook("https://example.com", "", Some(5))
             .expect_err("empty payload");
@@ -1130,6 +1136,25 @@ mod tests {
         match err {
             NotifyError::InvalidInput(message) => {
                 assert_eq!(message, "payload is required")
+            }
+            _ => panic!("expected invalid input"),
+        }
+    }
+
+    #[test]
+    fn send_webhook_rejects_empty_url() {
+        let err = send_webhook("", "{}", Some(5)).expect_err("empty url");
+        match err {
+            NotifyError::InvalidInput(message) => {
+                assert_eq!(message, "webhook url is required")
+            }
+            _ => panic!("expected invalid input"),
+        }
+
+        let err = send_webhook("  ", "{}", Some(5)).expect_err("whitespace url");
+        match err {
+            NotifyError::InvalidInput(message) => {
+                assert_eq!(message, "webhook url is required")
             }
             _ => panic!("expected invalid input"),
         }

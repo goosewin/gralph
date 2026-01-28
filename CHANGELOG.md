@@ -27,7 +27,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-5 Cover config env override conflicts and empty values.
 - COV-6 Expand CLI helper coverage in main.
 - COV-7 Expand server auth and CORS error-path coverage.
-- COV-8 Expand notification formatting and HTTP error coverage.
+- COV-8 Add notification manual-stop formatting and input validation tests.
 - COV-9 Expand backend module utility coverage.
 - COV-9 Add notify validation and failure formatting tests.
 - COV-10 Add property-based tests for task parsing invariants.
