@@ -66,7 +66,7 @@ Add tests for CLI helpers, server endpoints, notification formatting, update/ins
   * Cover read_state and write_state error propagation and validate_state_content failures.
   * `cargo test --workspace` passes.
 - **Dependencies** None
-- [ ] COV-2 Expand state store coverage for lock and IO failure paths
+- [x] COV-2 Expand state store coverage for lock and IO failure paths
 ---
 
 ### Task COV-3

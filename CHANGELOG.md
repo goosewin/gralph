@@ -16,6 +16,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - VER-1 Add verifier command for tests and coverage gates.
 - DOC-1 Document verifier workflow, review gate, and commit conventions.
 - COV-1 Expand core loop error-path, prompt rendering, and log helper coverage.
+- COV-2 Expand state store lock acquisition and io error-path coverage.
 - COV-2 Expand PRD validation and sanitization coverage.
 - COV-3 Add OpenCode backend run_iteration argument and env coverage.
 - COV-3 Expand state store edge-case coverage.

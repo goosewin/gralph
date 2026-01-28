@@ -414,6 +414,8 @@ fn is_process_alive(pid: i64) -> bool {
 mod tests {
     use super::*;
     use std::env;
+    #[cfg(unix)]
+    use std::os::unix::io::FromRawFd;
     use std::path::Path;
     use std::process::Command;
     use std::sync::{Arc, Mutex};
@@ -469,6 +471,28 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
+    fn acquire_lock_maps_non_contention_errors() {
+        let mut fds = [0; 2];
+        let result = unsafe { libc::pipe(fds.as_mut_ptr()) };
+        assert_eq!(result, 0);
+        let read_fd = fds[0];
+        let write_fd = fds[1];
+        unsafe {
+            libc::close(write_fd);
+        }
+
+        let file = unsafe { File::from_raw_fd(read_fd) };
+        let err = acquire_lock(&file, Duration::from_millis(10)).unwrap_err();
+        match err {
+            StateError::Io { path, .. } => {
+                assert_eq!(path, PathBuf::from("state.lock"));
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn atomic_write_persists_state() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path(), Duration::from_secs(1));
@@ -485,6 +509,54 @@ mod tests {
             Some("running")
         );
         assert_eq!(session.get("pid").and_then(|v| v.as_i64()), Some(123));
+    }
+
+    #[test]
+    fn read_state_propagates_io_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        fs::create_dir_all(&store.state_dir).unwrap();
+        fs::create_dir_all(&store.state_file).unwrap();
+
+        let err = store.read_state().unwrap_err();
+        match err {
+            StateError::Io { path, .. } => {
+                assert_eq!(path, store.state_file);
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_state_propagates_json_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        fs::create_dir_all(&store.state_dir).unwrap();
+        fs::write(&store.state_file, "{not json").unwrap();
+
+        let err = store.read_state().unwrap_err();
+        match err {
+            StateError::Json { path, .. } => {
+                assert_eq!(path, store.state_file);
+            }
+            other => panic!("expected Json, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn write_state_propagates_rename_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        fs::create_dir_all(&store.state_dir).unwrap();
+        fs::create_dir_all(&store.state_file).unwrap();
+
+        let err = store.write_state(&empty_state()).unwrap_err();
+        match err {
+            StateError::Io { path, .. } => {
+                assert_eq!(path, store.state_file);
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
     }
 
     #[test]
