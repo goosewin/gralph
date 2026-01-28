@@ -91,7 +91,7 @@ Tests verify existing behavior without changing production logic, CLI outputs, o
   * Verify OPENCODE_EXPERIMENTAL_LSP_TOOL is set and model or variant flags are omitted when empty.
   * Assert run_iteration returns BackendError::Command on spawn failure or non-zero exit.
 - **Dependencies** None
-- [ ] COV-20 Expand OpenCode backend env and failure coverage
+- [x] COV-20 Expand OpenCode backend env and failure coverage
 ---
 
 ### Task COV-21

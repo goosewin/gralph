@@ -123,10 +123,44 @@ impl Backend for OpenCodeBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+    use std::ffi::{OsStr, OsString};
     use std::fs;
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+
+    struct PathGuard {
+        original: Option<OsString>,
+    }
+
+    impl PathGuard {
+        fn set(value: Option<&OsStr>) -> Self {
+            let original = env::var_os("PATH");
+            match value {
+                Some(value) => unsafe {
+                    env::set_var("PATH", value);
+                },
+                None => unsafe {
+                    env::remove_var("PATH");
+                },
+            }
+            Self { original }
+        }
+    }
+
+    impl Drop for PathGuard {
+        fn drop(&mut self) {
+            match self.original.as_ref() {
+                Some(value) => unsafe {
+                    env::set_var("PATH", value);
+                },
+                None => unsafe {
+                    env::remove_var("PATH");
+                },
+            }
+        }
+    }
 
     #[test]
     fn parse_text_returns_raw_contents() {
@@ -140,6 +174,25 @@ mod tests {
     }
 
     #[test]
+    fn check_installed_reflects_path_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        let command_name = "opencode-stub";
+
+        {
+            let _guard = PathGuard::set(None);
+            let backend = OpenCodeBackend::with_command(command_name.to_string());
+            assert!(!backend.check_installed());
+        }
+
+        let _guard = PathGuard::set(Some(temp.path().as_os_str()));
+        let backend = OpenCodeBackend::with_command(command_name.to_string());
+        assert!(!backend.check_installed());
+
+        fs::write(temp.path().join(command_name), "stub").unwrap();
+        assert!(backend.check_installed());
+    }
+
+    #[test]
     fn run_iteration_rejects_empty_prompt() {
         let temp = tempfile::tempdir().unwrap();
         let output_path = temp.path().join("output.txt");
@@ -150,6 +203,21 @@ mod tests {
         assert!(matches!(
             result,
             Err(BackendError::InvalidInput(message)) if message == "prompt is required"
+        ));
+    }
+
+    #[test]
+    fn run_iteration_reports_spawn_failure() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_path = temp.path().join("output.txt");
+        let missing_command = temp.path().join("missing-opencode");
+        let backend = OpenCodeBackend::with_command(missing_command.to_string_lossy().to_string());
+
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message.contains("failed to spawn opencode")
         ));
     }
 
@@ -187,7 +255,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let script_path = temp.path().join("opencode-mock");
         let output_path = temp.path().join("output.txt");
-        let script = "#!/bin/sh\nprintf 'args:'\nfor arg in \"$@\"; do\n  printf '%s|' \"$arg\"\ndone\nprintf '\\n'\n";
+        let script = "#!/bin/sh\nprintf 'env:%s\\n' \"$OPENCODE_EXPERIMENTAL_LSP_TOOL\"\nprintf 'args:'\nfor arg in \"$@\"; do\n  printf '%s|' \"$arg\"\ndone\nprintf '\\n'\n";
         fs::write(&script_path, script).unwrap();
         let mut perms = fs::metadata(&script_path).unwrap().permissions();
         perms.set_mode(0o755);
@@ -205,8 +273,30 @@ mod tests {
             .expect("run_iteration should succeed");
 
         let output = fs::read_to_string(&output_path).unwrap();
+        assert!(output.contains("env:true"));
         assert!(output.contains("args:run|prompt|"));
         assert!(!output.contains("--model"));
         assert!(!output.contains("--variant"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_reports_non_zero_exit() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("opencode-fail");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf 'boom\\n'\nexit 3\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = OpenCodeBackend::with_command(script_path.to_string_lossy().to_string());
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message.contains("opencode exited with")
+        ));
     }
 }
