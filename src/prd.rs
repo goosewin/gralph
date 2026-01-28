@@ -1580,4 +1580,86 @@ mod tests {
         assert!(sanitized.contains("- **Context Bundle** `docs/allowed.md`"));
         assert!(!sanitized.contains("docs/blocked.md"));
     }
+
+    #[test]
+    fn extract_context_entries_handles_multiline_context_bundle() {
+        let block = "### Task X-1\n- **ID** X-1\n- **Context Bundle** `README.md`,\n  `docs/alpha.md`, `docs/beta.md`\n- **DoD** Confirm parsing.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] X-1 Task\n";
+
+        let entries = extract_context_entries(block);
+
+        assert_eq!(
+            entries,
+            vec![
+                "README.md".to_string(),
+                "docs/alpha.md".to_string(),
+                "docs/beta.md".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn context_bundle_indent_detects_indentation() {
+        let indent = context_bundle_indent("  - **Context Bundle** `README.md`").unwrap();
+        assert_eq!(indent, "  ");
+        assert!(context_bundle_indent("- **DoD** Sample").is_none());
+    }
+
+    #[test]
+    fn context_paths_resolve_inside_and_outside_base_dir() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        let inside_rel = "docs/inside.md";
+        let inside_abs = docs.join("inside.md");
+        fs::write(&inside_abs, "ok").unwrap();
+
+        let parent = base.parent().unwrap();
+        let outside_abs = parent.join("outside.md");
+        fs::write(&outside_abs, "ok").unwrap();
+        let outside_rel = "../outside.md";
+
+        assert!(context_entry_exists(inside_rel, Some(base)));
+        assert!(context_entry_exists(inside_abs.to_string_lossy().as_ref(), Some(base)));
+        assert!(!context_entry_exists(
+            outside_abs.to_string_lossy().as_ref(),
+            Some(base)
+        ));
+        assert!(context_entry_exists(outside_rel, Some(base)));
+
+        assert_eq!(context_display_path(inside_rel, Some(base)), inside_rel);
+        assert_eq!(
+            context_display_path(inside_abs.to_string_lossy().as_ref(), Some(base)),
+            inside_rel
+        );
+        assert_eq!(
+            context_display_path(outside_abs.to_string_lossy().as_ref(), Some(base)),
+            outside_abs.to_string_lossy()
+        );
+        assert_eq!(context_display_path(outside_rel, Some(base)), outside_rel);
+    }
+
+    #[test]
+    fn sanitize_task_block_rebuilds_context_and_dedupes_unchecked_lines() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("allowed.md"), "ok").unwrap();
+        fs::write(docs.join("blocked.md"), "ok").unwrap();
+
+        let allowed = base.join("allowed.txt");
+        fs::write(&allowed, "docs/allowed.md\n").unwrap();
+
+        let block = "### Task X-2\n- **ID** X-2\n- **Context Bundle** `missing.md`,\n  `docs/blocked.md`\n- **DoD** Confirm sanitize.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] X-2 Keep\n- [ ] X-2 Drop\n";
+
+        let sanitized = sanitize_task_block(block, Some(base), Some(&allowed));
+
+        assert!(sanitized.contains("- **Context Bundle** `docs/allowed.md`"));
+        assert!(sanitized.contains("- [ ] X-2 Keep"));
+        assert!(sanitized.contains("- X-2 Drop"));
+        assert!(!sanitized.contains("- [ ] X-2 Drop"));
+        assert!(!sanitized.contains("missing.md"));
+        assert!(!sanitized.contains("docs/blocked.md"));
+    }
 }

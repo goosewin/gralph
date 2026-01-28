@@ -151,7 +151,7 @@ Increase coverage without changing user-visible CLI behavior, error messages, or
   * Test `context_entry_exists` and `context_display_path` for absolute and relative paths inside and outside base dir.
   * Test `sanitize_task_block` removing extra unchecked lines and rebuilding Context Bundle with fallback.
 - **Dependencies** None
-- [ ] COV-10 Expand PRD context parsing and sanitization coverage
+- [x] COV-10 Expand PRD context parsing and sanitization coverage
 ### Task COV-11
 
 - **ID** COV-11
