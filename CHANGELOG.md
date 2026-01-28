@@ -26,6 +26,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-10 Expand PRD context parsing and sanitization coverage.
 - COV-11 Expand server config and CORS handler coverage.
 - COV-12 Expand state helper and cleanup edge case coverage.
+- COV-13 Expand task parsing edge-case coverage.
 
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.

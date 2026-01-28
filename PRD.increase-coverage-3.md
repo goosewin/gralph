@@ -184,7 +184,7 @@ Increase coverage without changing user-visible CLI behavior, error messages, or
   * Test `is_task_header` and `is_unchecked_line` with leading whitespace.
   * Test `is_task_block_end` for section headings and separator lines.
 - **Dependencies** None
-- [ ] COV-13 Expand task parsing edge-case coverage
+- [x] COV-13 Expand task parsing edge-case coverage
 ### Task COV-14
 
 - **ID** COV-14
