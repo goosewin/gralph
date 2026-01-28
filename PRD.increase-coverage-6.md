@@ -196,7 +196,7 @@ Add tests for remaining modules (CLI helpers, server endpoints, notifications, b
   * Add tests for run_iteration ensuring --headless is always included and prompt is last arg.
   * Add tests for parse_text with empty file and missing file errors.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-12 Expand Gemini backend command tests
+- [x] COV-12 Expand Gemini backend command tests
 ---
 
 ### Task COV-13

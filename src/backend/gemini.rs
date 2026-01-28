@@ -151,6 +151,13 @@ mod tests {
     }
 
     #[test]
+    fn command_accessor_returns_configured_command() {
+        let backend = GeminiBackend::with_command("gemini-custom".to_string());
+
+        assert_eq!(backend.command(), "gemini-custom");
+    }
+
+    #[test]
     fn parse_text_returns_raw_contents() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("gemini.txt");
@@ -159,6 +166,18 @@ mod tests {
         let backend = GeminiBackend::new();
         let result = backend.parse_text(&path).unwrap();
         assert_eq!(result, "hello gemini\n");
+    }
+
+    #[test]
+    fn parse_text_allows_empty_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("empty.txt");
+        fs::write(&path, "").unwrap();
+
+        let backend = GeminiBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+
+        assert!(result.is_empty());
     }
 
     #[test]
@@ -173,6 +192,19 @@ mod tests {
             result,
             Err(BackendError::Io { path: error_path, .. }) if error_path == path
         ));
+    }
+
+    #[test]
+    fn check_installed_respects_path_override() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        let command_name = "gemini-path";
+        fs::write(temp.path().join(command_name), "stub").unwrap();
+
+        let _guard = PathGuard::set(Some(temp.path().as_os_str()));
+        let backend = GeminiBackend::with_command(command_name.to_string());
+
+        assert!(backend.check_installed());
     }
 
     #[test]
@@ -273,6 +305,35 @@ mod tests {
 
         let output = fs::read_to_string(&output_path).unwrap();
         assert!(output.contains("args:--headless|--model|model-x|prompt|"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_keeps_prompt_last_and_headless_first() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("gemini-mock");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf '%s\\n' \"$@\"\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = GeminiBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration(
+                "final-prompt",
+                Some("model-y"),
+                None,
+                &output_path,
+                temp.path(),
+            )
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let args: Vec<&str> = output.lines().collect();
+        assert_eq!(args.first().copied(), Some("--headless"));
+        assert_eq!(args.last().copied(), Some("final-prompt"));
     }
 
     #[cfg(unix)]
