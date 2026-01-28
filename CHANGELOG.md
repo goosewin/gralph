@@ -14,6 +14,7 @@ CI=<status/link>; PR=<link if final PRD task>
 ### Added
 
 ### Fixed
+- WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.
 
 ### Verification
 - Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened

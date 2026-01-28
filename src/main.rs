@@ -2,9 +2,9 @@ mod cli;
 
 use clap::Parser;
 use cli::{
-    ASCII_BANNER, Cli, Command, ConfigArgs, ConfigCommand, InitArgs, LogsArgs, PrdArgs,
-    PrdCheckArgs, PrdCommand, PrdCreateArgs, ResumeArgs, RunLoopArgs, ServerArgs, StartArgs,
-    StopArgs, WorktreeCommand, WorktreeCreateArgs, WorktreeFinishArgs,
+    Cli, Command, ConfigArgs, ConfigCommand, InitArgs, LogsArgs, PrdArgs, PrdCheckArgs, PrdCommand,
+    PrdCreateArgs, ResumeArgs, RunLoopArgs, ServerArgs, StartArgs, StopArgs, WorktreeCommand,
+    WorktreeCreateArgs, WorktreeFinishArgs, ASCII_BANNER,
 };
 use gralph_rs::backend::backend_from_name;
 use gralph_rs::config::Config;
@@ -1320,7 +1320,7 @@ fn git_status_in_repo(
     }
 }
 
-fn ensure_git_clean(repo_root: &str) -> Result<(), CliError> {
+fn git_is_clean(repo_root: &str) -> Result<bool, CliError> {
     let output = ProcCommand::new("git")
         .arg("-C")
         .arg(repo_root)
@@ -1331,13 +1331,18 @@ fn ensure_git_clean(repo_root: &str) -> Result<(), CliError> {
     if !output.status.success() {
         return Err(CliError::Message("Unable to check git status".to_string()));
     }
-    if !output.stdout.is_empty() {
-        return Err(CliError::Message(
+    Ok(output.stdout.is_empty())
+}
+
+fn ensure_git_clean(repo_root: &str) -> Result<(), CliError> {
+    if git_is_clean(repo_root)? {
+        Ok(())
+    } else {
+        Err(CliError::Message(
             "Git working tree is dirty. Commit or stash changes before running worktree commands."
                 .to_string(),
-        ));
+        ))
     }
-    Ok(())
 }
 
 fn parse_bool_value(value: &str) -> Option<bool> {
@@ -1461,7 +1466,23 @@ fn maybe_create_auto_worktree(args: &mut RunLoopArgs, config: &Config) -> Result
         );
         return Ok(());
     }
-    ensure_git_clean(&repo_root)?;
+    let clean = match git_is_clean(&repo_root) {
+        Ok(value) => value,
+        Err(err) => {
+            println!(
+                "Auto worktree skipped for {}: unable to check git status ({}).",
+                target_display, err
+            );
+            return Ok(());
+        }
+    };
+    if !clean {
+        println!(
+            "Auto worktree skipped for {}: repository is dirty.",
+            target_display
+        );
+        return Ok(());
+    }
 
     let worktrees_dir = PathBuf::from(&repo_root).join(".worktrees");
     fs::create_dir_all(&worktrees_dir).map_err(CliError::Io)?;
