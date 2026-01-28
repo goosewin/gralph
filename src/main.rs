@@ -2304,6 +2304,29 @@ mod tests {
     }
 
     #[test]
+    fn resolve_init_context_files_uses_config_list_and_dedupes() {
+        let temp = tempfile::tempdir().unwrap();
+        let entries = resolve_init_context_files(
+            temp.path(),
+            Some("ARCHITECTURE.md, ,PROCESS.md,ARCHITECTURE.md"),
+        );
+
+        assert_eq!(entries, vec!["ARCHITECTURE.md", "PROCESS.md"]);
+    }
+
+    #[test]
+    fn resolve_init_context_files_falls_back_to_defaults() {
+        let temp = tempfile::tempdir().unwrap();
+        let entries = resolve_init_context_files(temp.path(), None);
+
+        let expected = default_context_files()
+            .iter()
+            .map(|value| value.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(entries, expected);
+    }
+
+    #[test]
     fn build_context_file_list_includes_config_user_and_defaults() {
         let temp = tempfile::tempdir().unwrap();
         write_file(&temp.path().join("README.md"), "readme");
@@ -2317,6 +2340,119 @@ mod tests {
         );
 
         assert_eq!(entries, vec!["README.md", "config/default.yaml", "src/main.rs"]);
+    }
+
+    #[test]
+    fn read_yaml_or_empty_returns_mapping_for_missing_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("missing.yaml");
+
+        let value = read_yaml_or_empty(&path).unwrap();
+
+        match value {
+            serde_yaml::Value::Mapping(map) => assert!(map.is_empty()),
+            other => panic!("expected mapping, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_yaml_or_empty_errors_on_invalid_yaml() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("broken.yaml");
+        write_file(&path, "defaults: [");
+
+        let err = read_yaml_or_empty(&path).unwrap_err();
+
+        match err {
+            CliError::Message(message) => assert!(message.contains("Failed to parse config")),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn set_yaml_value_sets_nested_keys_and_overwrites_non_mapping() {
+        let mut root = serde_yaml::Value::String("oops".to_string());
+
+        set_yaml_value(&mut root, "alpha.beta", "true");
+
+        let mapping = match root {
+            serde_yaml::Value::Mapping(map) => map,
+            other => panic!("expected mapping, got: {other:?}"),
+        };
+        let alpha = mapping
+            .get(&serde_yaml::Value::String("alpha".to_string()))
+            .unwrap();
+        let inner = match alpha {
+            serde_yaml::Value::Mapping(map) => map,
+            other => panic!("expected mapping, got: {other:?}"),
+        };
+        let beta_key = serde_yaml::Value::String("beta".to_string());
+        assert_eq!(inner.get(&beta_key), Some(&serde_yaml::Value::Bool(true)));
+    }
+
+    #[test]
+    fn parse_yaml_value_parses_bool_number_and_string() {
+        assert_eq!(parse_yaml_value("TRUE"), serde_yaml::Value::Bool(true));
+        assert_eq!(parse_yaml_value("false"), serde_yaml::Value::Bool(false));
+        match parse_yaml_value("42") {
+            serde_yaml::Value::Number(value) => assert_eq!(value.as_i64(), Some(42)),
+            other => panic!("expected number, got: {other:?}"),
+        }
+        match parse_yaml_value("-7") {
+            serde_yaml::Value::Number(value) => assert_eq!(value.as_i64(), Some(-7)),
+            other => panic!("expected number, got: {other:?}"),
+        }
+        assert_eq!(parse_yaml_value("1.5"), serde_yaml::Value::String("1.5".to_string()));
+        assert_eq!(
+            parse_yaml_value("maybe"),
+            serde_yaml::Value::String("maybe".to_string())
+        );
+    }
+
+    #[test]
+    fn ensure_mapping_replaces_non_mapping_value() {
+        let mut value = serde_yaml::Value::String("oops".to_string());
+
+        let mapping = ensure_mapping(&mut value);
+
+        assert!(mapping.is_empty());
+        assert!(matches!(value, serde_yaml::Value::Mapping(_)));
+    }
+
+    #[test]
+    fn is_markdown_path_detects_extensions() {
+        assert!(is_markdown_path(Path::new("README.md")));
+        assert!(is_markdown_path(Path::new("notes.markdown")));
+        assert!(!is_markdown_path(Path::new("README.MD")));
+        assert!(!is_markdown_path(Path::new("README")));
+    }
+
+    #[test]
+    fn format_display_path_returns_relative_when_possible() {
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path();
+        let nested = base.join("docs/README.md");
+        let expected = nested
+            .strip_prefix(base)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+
+        let display = format_display_path(&nested, base);
+
+        assert_eq!(display, expected);
+    }
+
+    #[test]
+    fn format_display_path_returns_full_when_outside_base() {
+        let temp = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        let base = temp.path();
+        let path = other.path().join("README.md");
+
+        let display = format_display_path(&path, base);
+
+        assert_eq!(display, path.to_string_lossy().to_string());
     }
 
     #[test]

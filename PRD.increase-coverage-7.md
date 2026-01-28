@@ -118,7 +118,7 @@ Add tests for CLI helpers, server endpoints, notification formatting, update/ins
   * Cover resolve_init_context_files, is_markdown_path, and format_display_path behavior.
   * `cargo test --workspace` passes.
 - **Dependencies** COV-1
-- [ ] COV-6 Expand CLI helper coverage in main without external dependencies
+- [x] COV-6 Expand CLI helper coverage in main without external dependencies
 ---
 
 ### Task COV-7
