@@ -567,6 +567,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_release_tag_reports_json_error() {
+        let result = parse_release_tag("not-json");
+        assert!(matches!(result, Err(UpdateError::Json(_))));
+    }
+
+    #[test]
     fn check_for_update_returns_none_when_latest_is_current() {
         let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", version::VERSION_TAG);
         let result = check_for_update(version::VERSION).expect("check");
@@ -652,6 +658,14 @@ mod tests {
     }
 
     #[test]
+    fn resolve_install_version_latest_rejects_invalid_override() {
+        let _lock = crate::test_support::env_lock();
+        let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "v1.2");
+        let result = resolve_install_version("latest");
+        assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
     fn detect_platform_reports_current_target() {
         if env::consts::OS == "windows" {
             let result = detect_platform();
@@ -713,6 +727,14 @@ mod tests {
         assert!(matches!(invalid_result, Err(UpdateError::CommandFailed(_))));
     }
 
+    #[test]
+    fn extract_archive_reports_missing_archive() {
+        let temp = tempdir().expect("tempdir");
+        let archive_path = temp.path().join("missing.tar.gz");
+        let result = extract_archive(&archive_path, temp.path());
+        assert!(matches!(result, Err(UpdateError::Io(_))));
+    }
+
     #[cfg(unix)]
     #[test]
     fn extract_archive_reports_failure_for_missing_target_dir() {
@@ -732,6 +754,18 @@ mod tests {
         let result = download_release(&url, &dest);
         handle.join().expect("server thread");
         assert!(matches!(result, Err(UpdateError::Http(_))));
+    }
+
+    #[test]
+    fn download_release_writes_response_body() {
+        let temp = tempdir().expect("tempdir");
+        let dest = temp.path().join("gralph.tar.gz");
+        let (url, handle) = start_status_server("200 OK", "fixture-bytes");
+        let result = download_release(&url, &dest);
+        handle.join().expect("server thread");
+        result.expect("download");
+        let contents = fs::read(&dest).expect("read");
+        assert_eq!(contents, b"fixture-bytes");
     }
 
     #[test]

@@ -248,7 +248,7 @@ Add tests for CLI helpers, server endpoints, notification formatting, update/ins
   * Cover extract_archive error paths and install_binary permission errors where supported.
   * `cargo test --workspace` passes.
 - **Dependencies** None
-- [ ] COV-16 Expand update workflow parsing and install error coverage
+- [x] COV-16 Expand update workflow parsing and install error coverage
 ---
 
 ## Success Criteria

@@ -345,12 +345,8 @@ fn normalize_segment(segment: &str) -> String {
 mod tests {
     use super::*;
     use std::fs;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
     fn env_guard() -> std::sync::MutexGuard<'static, ()> {
-        let guard = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+        let guard = crate::test_support::env_lock();
         clear_env_overrides();
         guard
     }
