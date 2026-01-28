@@ -154,6 +154,35 @@ fn spawn_reader<R: Read + Send + 'static>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::{OsStr, OsString};
+    use std::fs;
+
+    #[cfg(unix)]
+    use std::process::{Command, Stdio};
+
+    struct PathGuard {
+        original: Option<OsString>,
+    }
+
+    impl PathGuard {
+        fn set(value: Option<&OsStr>) -> Self {
+            let original = env::var_os("PATH");
+            match value {
+                Some(value) => env::set_var("PATH", value),
+                None => env::remove_var("PATH"),
+            }
+            Self { original }
+        }
+    }
+
+    impl Drop for PathGuard {
+        fn drop(&mut self) {
+            match self.original.as_ref() {
+                Some(value) => env::set_var("PATH", value),
+                None => env::remove_var("PATH"),
+            }
+        }
+    }
 
     #[test]
     fn backend_selection_returns_expected_type() {
@@ -187,5 +216,98 @@ mod tests {
             assert!(!models.is_empty(), "{} models should be non-empty", name);
             assert_eq!(models, expected_models, "{} models should be stable", name);
         }
+    }
+
+    #[test]
+    fn command_in_path_handles_missing_and_empty_path() {
+        let temp = tempfile::tempdir().unwrap();
+        let command_name = "gralph-test-command";
+        fs::write(temp.path().join(command_name), "stub").unwrap();
+
+        let _guard = PathGuard::set(None);
+        assert!(!command_in_path(command_name));
+
+        env::set_var("PATH", "");
+        assert!(!command_in_path(command_name));
+
+        env::set_var("PATH", temp.path());
+        assert!(command_in_path(command_name));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_returns_ok_on_success() {
+        let child = Command::new("sh")
+            .arg("-c")
+            .arg("printf 'stdout-line\\n'; printf 'stderr-line\\n' 1>&2")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert!(lines.iter().any(|line| line.contains("stdout-line")));
+        assert!(lines.iter().any(|line| line.contains("stderr-line")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_reports_non_zero_exit() {
+        let child = Command::new("sh")
+            .arg("-c")
+            .arg("printf 'stderr-line\\n' 1>&2; exit 2")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let result = stream_command_output(child, "stub", |_| Ok(()));
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message.contains("stub exited with")
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_errors_when_stdout_missing() {
+        let child = Command::new("sh")
+            .arg("-c")
+            .arg("exit 0")
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let result = stream_command_output(child, "stub", |_| Ok(()));
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message == "failed to capture stdout"
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_errors_when_stderr_missing() {
+        let child = Command::new("sh")
+            .arg("-c")
+            .arg("exit 0")
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let result = stream_command_output(child, "stub", |_| Ok(()));
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message == "failed to capture stderr"
+        ));
     }
 }

@@ -15,7 +15,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - PROMPT-1 Require lower-case conventional commits in the default prompt template.
 - VER-1 Add verifier command for tests and coverage gates.
 - DOC-1 Document verifier workflow, review gate, and commit conventions.
-- COV-1 Add PRD validation and sanitization edge case tests.
+- COV-1 Expand backend module command and stream coverage.
 - COV-2 Add config loader tests for parse errors and overrides.
 - COV-3 Add state store tests for invalid sessions, cleanup, and parsing.
 - COV-4 Add CLI parsing coverage for start, prd, server, config, and worktree.
