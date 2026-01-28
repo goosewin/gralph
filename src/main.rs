@@ -24,7 +24,7 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcCommand, Stdio};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 fn main() {
     let cli = Cli::parse();
@@ -68,6 +68,15 @@ const DEFAULT_STATIC_MAX_COMMENT_CHARS: usize = 600;
 const DEFAULT_STATIC_DUPLICATE_BLOCK_LINES: usize = 8;
 const DEFAULT_STATIC_DUPLICATE_MIN_ALNUM_LINES: usize = 4;
 const DEFAULT_STATIC_MAX_FILE_BYTES: u64 = 1_000_000;
+const DEFAULT_REVIEW_ENABLED: bool = true;
+const DEFAULT_REVIEW_REVIEWER: &str = "greptile";
+const DEFAULT_REVIEW_MIN_RATING: f64 = 8.0;
+const DEFAULT_REVIEW_MAX_ISSUES: usize = 0;
+const DEFAULT_REVIEW_POLL_SECONDS: u64 = 20;
+const DEFAULT_REVIEW_TIMEOUT_SECONDS: u64 = 1800;
+const DEFAULT_REVIEW_REQUIRE_APPROVAL: bool = false;
+const DEFAULT_REVIEW_REQUIRE_CHECKS: bool = true;
+const DEFAULT_REVIEW_MERGE_METHOD: &str = "merge";
 
 #[derive(Debug)]
 enum CliError {
@@ -904,7 +913,8 @@ fn cmd_verifier(args: VerifierArgs) -> Result<(), CliError> {
     println!("Coverage OK: {:.2}% (>= {:.2}%)", coverage, coverage_min);
 
     run_verifier_static_checks(&dir, &config)?;
-    run_verifier_pr_create(&dir, &config)?;
+    let pr_url = run_verifier_pr_create(&dir, &config)?;
+    run_verifier_review_gate(&dir, &config, pr_url.as_deref())?;
 
     Ok(())
 }
@@ -1156,7 +1166,7 @@ fn run_verifier_static_checks(dir: &Path, config: &Config) -> Result<(), CliErro
     )))
 }
 
-fn run_verifier_pr_create(dir: &Path, config: &Config) -> Result<(), CliError> {
+fn run_verifier_pr_create(dir: &Path, config: &Config) -> Result<Option<String>, CliError> {
     println!("\n==> PR creation");
 
     let repo_root_output = git_output_in_dir(dir, ["rev-parse", "--show-toplevel"])?;
@@ -1187,7 +1197,8 @@ fn run_verifier_pr_create(dir: &Path, config: &Config) -> Result<(), CliError> {
     ensure_gh_authenticated(&repo_root)?;
 
     let output = run_gh_pr_create(&repo_root, &template_path, branch, &base, &title)?;
-    if let Some(url) = extract_pr_url(&output) {
+    let pr_url = extract_pr_url(&output);
+    if let Some(url) = pr_url.as_deref() {
         println!("PR created: {}", url);
     } else if !output.trim().is_empty() {
         println!("{}", output.trim());
@@ -1195,6 +1206,684 @@ fn run_verifier_pr_create(dir: &Path, config: &Config) -> Result<(), CliError> {
         println!("PR created.");
     }
 
+    Ok(pr_url)
+}
+
+#[derive(Debug, Clone)]
+struct ReviewGateSettings {
+    enabled: bool,
+    reviewer: String,
+    min_rating: f64,
+    max_issues: usize,
+    poll_seconds: u64,
+    timeout_seconds: u64,
+    require_approval: bool,
+    require_checks: bool,
+    merge_method: MergeMethod,
+}
+
+#[derive(Debug)]
+struct ReviewerReview {
+    state: String,
+    body: String,
+    submitted_at: String,
+}
+
+#[derive(Debug)]
+struct CheckStatus {
+    name: String,
+    status: String,
+    conclusion: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum MergeMethod {
+    Merge,
+    Squash,
+    Rebase,
+}
+
+impl MergeMethod {
+    fn as_flag(self) -> &'static str {
+        match self {
+            MergeMethod::Merge => "--merge",
+            MergeMethod::Squash => "--squash",
+            MergeMethod::Rebase => "--rebase",
+        }
+    }
+}
+
+#[derive(Debug)]
+enum GateDecision {
+    Pending(String),
+    Failed(String),
+    Passed(String),
+}
+
+impl GateDecision {
+    fn is_passed(&self) -> bool {
+        matches!(self, GateDecision::Passed(_))
+    }
+
+    fn is_failed(&self) -> bool {
+        matches!(self, GateDecision::Failed(_))
+    }
+
+    fn summary(&self) -> &str {
+        match self {
+            GateDecision::Pending(message) => message,
+            GateDecision::Failed(message) => message,
+            GateDecision::Passed(message) => message,
+        }
+    }
+}
+
+fn run_verifier_review_gate(
+    dir: &Path,
+    config: &Config,
+    pr_url: Option<&str>,
+) -> Result<(), CliError> {
+    println!("\n==> Review gate");
+    let settings = resolve_review_gate_settings(config)?;
+    if !settings.enabled {
+        println!("Review gate skipped (disabled).");
+        return Ok(());
+    }
+
+    let repo_root_output = git_output_in_dir(dir, ["rev-parse", "--show-toplevel"])?;
+    let repo_root = PathBuf::from(repo_root_output.trim());
+    if repo_root.as_os_str().is_empty() {
+        return Err(CliError::Message(
+            "Unable to resolve git repository root.".to_string(),
+        ));
+    }
+
+    ensure_gh_authenticated(&repo_root)?;
+
+    if let Some(url) = pr_url {
+        println!("Review gate watching: {}", url);
+    }
+
+    let deadline = Instant::now() + Duration::from_secs(settings.timeout_seconds);
+    let mut last_status = String::new();
+
+    loop {
+        let pr_view = gh_pr_view_json(&repo_root)?;
+        let review_decision = evaluate_review_gate(&pr_view, &settings)?;
+        let check_decision = evaluate_check_gate(&pr_view, &settings)?;
+
+        if review_decision.is_failed() {
+            return Err(CliError::Message(review_decision.summary().to_string()));
+        }
+        if check_decision.is_failed() {
+            return Err(CliError::Message(check_decision.summary().to_string()));
+        }
+        if review_decision.is_passed() && check_decision.is_passed() {
+            run_gh_pr_merge(&repo_root, settings.merge_method)?;
+            println!("PR merged.");
+            return Ok(());
+        }
+
+        let status = format!(
+            "review: {} | checks: {}",
+            review_decision.summary(),
+            check_decision.summary()
+        );
+        if status != last_status {
+            println!("{}", status);
+            last_status = status;
+        }
+
+        if Instant::now() >= deadline {
+            return Err(CliError::Message(format!(
+                "Review gate timed out after {}s.",
+                settings.timeout_seconds
+            )));
+        }
+
+        thread::sleep(Duration::from_secs(settings.poll_seconds));
+    }
+}
+
+fn resolve_review_gate_settings(config: &Config) -> Result<ReviewGateSettings, CliError> {
+    let enabled =
+        resolve_review_gate_bool(config, "verifier.review.enabled", DEFAULT_REVIEW_ENABLED)?;
+    let reviewer = config
+        .get("verifier.review.reviewer")
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_REVIEW_REVIEWER.to_string());
+    let min_rating = resolve_review_gate_rating(
+        config.get("verifier.review.min_rating"),
+        DEFAULT_REVIEW_MIN_RATING,
+    )?;
+    let max_issues = resolve_review_gate_usize(
+        config.get("verifier.review.max_issues"),
+        "verifier.review.max_issues",
+        DEFAULT_REVIEW_MAX_ISSUES,
+        0,
+    )?;
+    let poll_seconds = resolve_review_gate_u64(
+        config.get("verifier.review.poll_seconds"),
+        "verifier.review.poll_seconds",
+        DEFAULT_REVIEW_POLL_SECONDS,
+        5,
+    )?;
+    let timeout_seconds = resolve_review_gate_u64(
+        config.get("verifier.review.timeout_seconds"),
+        "verifier.review.timeout_seconds",
+        DEFAULT_REVIEW_TIMEOUT_SECONDS,
+        30,
+    )?;
+    let require_approval = resolve_review_gate_bool(
+        config,
+        "verifier.review.require_approval",
+        DEFAULT_REVIEW_REQUIRE_APPROVAL,
+    )?;
+    let require_checks = resolve_review_gate_bool(
+        config,
+        "verifier.review.require_checks",
+        DEFAULT_REVIEW_REQUIRE_CHECKS,
+    )?;
+    let merge_method =
+        resolve_review_gate_merge_method(config.get("verifier.review.merge_method"))?;
+
+    Ok(ReviewGateSettings {
+        enabled,
+        reviewer,
+        min_rating,
+        max_issues,
+        poll_seconds,
+        timeout_seconds,
+        require_approval,
+        require_checks,
+        merge_method,
+    })
+}
+
+fn resolve_review_gate_bool(config: &Config, key: &str, default: bool) -> Result<bool, CliError> {
+    let Some(value) = config.get(key) else {
+        return Ok(default);
+    };
+    if value.trim().is_empty() {
+        return Ok(default);
+    }
+    parse_bool_value(&value)
+        .ok_or_else(|| CliError::Message(format!("Invalid {}: {}", key, value.trim())))
+}
+
+fn resolve_review_gate_u64(
+    value: Option<String>,
+    key: &str,
+    default: u64,
+    min: u64,
+) -> Result<u64, CliError> {
+    let Some(value) = value else {
+        return Ok(default);
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(default);
+    }
+    let parsed = trimmed
+        .parse::<u64>()
+        .map_err(|_| CliError::Message(format!("Invalid {}: {}", key, trimmed)))?;
+    if parsed < min {
+        return Err(CliError::Message(format!(
+            "Invalid {}: {} (minimum {})",
+            key, parsed, min
+        )));
+    }
+    Ok(parsed)
+}
+
+fn resolve_review_gate_usize(
+    value: Option<String>,
+    key: &str,
+    default: usize,
+    min: usize,
+) -> Result<usize, CliError> {
+    let Some(value) = value else {
+        return Ok(default);
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(default);
+    }
+    let parsed = trimmed
+        .parse::<usize>()
+        .map_err(|_| CliError::Message(format!("Invalid {}: {}", key, trimmed)))?;
+    if parsed < min {
+        return Err(CliError::Message(format!(
+            "Invalid {}: {} (minimum {})",
+            key, parsed, min
+        )));
+    }
+    Ok(parsed)
+}
+
+fn resolve_review_gate_rating(value: Option<String>, default: f64) -> Result<f64, CliError> {
+    let Some(value) = value else {
+        return Ok(default);
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(default);
+    }
+    let parsed = trimmed.parse::<f64>().map_err(|_| {
+        CliError::Message(format!("Invalid verifier.review.min_rating: {}", trimmed))
+    })?;
+    if !(0.0..=100.0).contains(&parsed) {
+        return Err(CliError::Message(format!(
+            "Invalid verifier.review.min_rating: {}",
+            parsed
+        )));
+    }
+    if parsed > 10.0 {
+        return Ok(parsed / 10.0);
+    }
+    Ok(parsed)
+}
+
+fn resolve_review_gate_merge_method(value: Option<String>) -> Result<MergeMethod, CliError> {
+    let method = value
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_REVIEW_MERGE_METHOD);
+    match method.to_ascii_lowercase().as_str() {
+        "merge" => Ok(MergeMethod::Merge),
+        "squash" => Ok(MergeMethod::Squash),
+        "rebase" => Ok(MergeMethod::Rebase),
+        _ => Err(CliError::Message(format!(
+            "Invalid verifier.review.merge_method: {}",
+            method
+        ))),
+    }
+}
+
+fn gh_pr_view_json(repo_root: &Path) -> Result<serde_json::Value, CliError> {
+    let output = ProcCommand::new("gh")
+        .arg("pr")
+        .arg("view")
+        .arg("--json")
+        .arg("url,number,reviews,reviewDecision,statusCheckRollup")
+        .current_dir(repo_root)
+        .output()
+        .map_err(map_gh_error)?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        let combined = format!("{}{}", stdout, stderr);
+        let trimmed = combined.trim();
+        return Err(CliError::Message(if trimmed.is_empty() {
+            "gh pr view failed.".to_string()
+        } else {
+            format!("gh pr view failed: {}", trimmed)
+        }));
+    }
+    serde_json::from_str(stdout.trim())
+        .map_err(|err| CliError::Message(format!("Unable to parse gh pr view output: {}", err)))
+}
+
+fn evaluate_review_gate(
+    pr_view: &serde_json::Value,
+    settings: &ReviewGateSettings,
+) -> Result<GateDecision, CliError> {
+    let reviews = pr_view
+        .get("reviews")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let review = find_reviewer_review(&reviews, &settings.reviewer);
+    let Some(review) = review else {
+        return Ok(GateDecision::Pending(format!(
+            "waiting for {} review",
+            settings.reviewer
+        )));
+    };
+
+    if review.state.eq_ignore_ascii_case("CHANGES_REQUESTED") {
+        return Ok(GateDecision::Failed(format!(
+            "{} requested changes",
+            settings.reviewer
+        )));
+    }
+
+    if settings.require_approval && !review.state.eq_ignore_ascii_case("APPROVED") {
+        return Ok(GateDecision::Pending(format!(
+            "waiting for {} approval",
+            settings.reviewer
+        )));
+    }
+
+    let rating = parse_review_rating(&review.body);
+    if let Some(rating) = rating {
+        if rating + f64::EPSILON < settings.min_rating {
+            return Ok(GateDecision::Failed(format!(
+                "{} rating {:.2} below {:.2}",
+                settings.reviewer, rating, settings.min_rating
+            )));
+        }
+    } else {
+        return Ok(GateDecision::Pending(format!(
+            "waiting for {} rating",
+            settings.reviewer
+        )));
+    }
+
+    if let Some(issue_count) = parse_review_issue_count(&review.body) {
+        if issue_count > settings.max_issues {
+            return Ok(GateDecision::Failed(format!(
+                "{} flagged {} issue(s)",
+                settings.reviewer, issue_count
+            )));
+        }
+    }
+
+    Ok(GateDecision::Passed(format!(
+        "{} review ok",
+        settings.reviewer
+    )))
+}
+
+fn evaluate_check_gate(
+    pr_view: &serde_json::Value,
+    settings: &ReviewGateSettings,
+) -> Result<GateDecision, CliError> {
+    if !settings.require_checks {
+        return Ok(GateDecision::Passed("checks skipped".to_string()));
+    }
+
+    let checks = extract_check_rollup(pr_view);
+    if checks.is_empty() {
+        return Ok(GateDecision::Passed("no checks".to_string()));
+    }
+
+    let mut pending = Vec::new();
+    let mut failed = Vec::new();
+
+    for check in checks {
+        let status = check.status.to_ascii_uppercase();
+        let conclusion = check.conclusion.to_ascii_uppercase();
+        if status.is_empty() || status == "PENDING" || status == "IN_PROGRESS" || status == "QUEUED"
+        {
+            pending.push(check.name);
+            continue;
+        }
+        if conclusion.is_empty() {
+            pending.push(check.name);
+            continue;
+        }
+        if matches!(
+            conclusion.as_str(),
+            "FAILURE" | "CANCELLED" | "TIMED_OUT" | "ACTION_REQUIRED" | "STALE"
+        ) {
+            failed.push(check.name);
+        }
+    }
+
+    if !failed.is_empty() {
+        return Ok(GateDecision::Failed(format!(
+            "checks failed: {}",
+            join_or_none(&failed)
+        )));
+    }
+    if !pending.is_empty() {
+        return Ok(GateDecision::Pending(format!(
+            "checks pending: {}",
+            join_or_none(&pending)
+        )));
+    }
+
+    Ok(GateDecision::Passed("checks ok".to_string()))
+}
+
+fn find_reviewer_review(reviews: &[serde_json::Value], reviewer: &str) -> Option<ReviewerReview> {
+    let mut latest: Option<ReviewerReview> = None;
+    for review in reviews {
+        let author = review
+            .get("author")
+            .and_then(|value| value.get("login"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("");
+        if !author.eq_ignore_ascii_case(reviewer) {
+            continue;
+        }
+        let state = review
+            .get("state")
+            .and_then(|value| value.as_str())
+            .unwrap_or("COMMENTED")
+            .to_string();
+        let body = review
+            .get("body")
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string();
+        let submitted_at = review
+            .get("submittedAt")
+            .or_else(|| review.get("createdAt"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string();
+        let candidate = ReviewerReview {
+            state,
+            body,
+            submitted_at: submitted_at.clone(),
+        };
+        let replace = latest
+            .as_ref()
+            .map(|existing| submitted_at >= existing.submitted_at)
+            .unwrap_or(true);
+        if replace {
+            latest = Some(candidate);
+        }
+    }
+    latest
+}
+
+fn parse_review_rating(body: &str) -> Option<f64> {
+    let rating_from_fraction = parse_fraction_rating(body);
+    if rating_from_fraction.is_some() {
+        return rating_from_fraction;
+    }
+    let lower = body.to_ascii_lowercase();
+    for line in lower.lines() {
+        if line.contains("rating") || line.contains("score") || line.contains("quality") {
+            if let Some(value) = parse_first_number(line) {
+                return Some(scale_rating_value(value, line));
+            }
+        }
+    }
+    None
+}
+
+fn scale_rating_value(value: f64, line: &str) -> f64 {
+    if line.contains('%') {
+        return value / 10.0;
+    }
+    if value <= 1.0 {
+        return value * 10.0;
+    }
+    if value > 10.0 {
+        return value / 10.0;
+    }
+    value
+}
+
+fn parse_fraction_rating(body: &str) -> Option<f64> {
+    let bytes = body.as_bytes();
+    for (idx, ch) in bytes.iter().enumerate() {
+        if *ch != b'/' {
+            continue;
+        }
+        let mut right = idx + 1;
+        while right < bytes.len() && bytes[right].is_ascii_whitespace() {
+            right += 1;
+        }
+        let Some((denom, _)) = parse_number_forward(bytes, right) else {
+            continue;
+        };
+        if denom <= 0.0 {
+            continue;
+        }
+        let mut left = idx;
+        while left > 0 && bytes[left - 1].is_ascii_whitespace() {
+            left -= 1;
+        }
+        let Some(numerator) = parse_number_backward(bytes, left) else {
+            continue;
+        };
+        if denom == 5.0 || denom == 10.0 || denom == 100.0 {
+            return Some(numerator * 10.0 / denom);
+        }
+    }
+    None
+}
+
+fn parse_review_issue_count(body: &str) -> Option<usize> {
+    let lower = body.to_ascii_lowercase();
+    if lower.contains("no issues") || lower.contains("no issue") {
+        return Some(0);
+    }
+    for line in lower.lines() {
+        if line.contains("issue") {
+            if let Some(value) = parse_first_usize(line) {
+                return Some(value);
+            }
+        }
+    }
+    None
+}
+
+fn parse_number_forward(bytes: &[u8], start: usize) -> Option<(f64, usize)> {
+    let mut end = start;
+    while end < bytes.len() && (bytes[end].is_ascii_digit() || bytes[end] == b'.') {
+        end += 1;
+    }
+    if end == start {
+        return None;
+    }
+    let value = std::str::from_utf8(&bytes[start..end])
+        .ok()?
+        .parse::<f64>()
+        .ok()?;
+    Some((value, end))
+}
+
+fn parse_number_backward(bytes: &[u8], end: usize) -> Option<f64> {
+    if end == 0 {
+        return None;
+    }
+    let mut start = end;
+    while start > 0 && (bytes[start - 1].is_ascii_digit() || bytes[start - 1] == b'.') {
+        start -= 1;
+    }
+    if start == end {
+        return None;
+    }
+    std::str::from_utf8(&bytes[start..end])
+        .ok()?
+        .parse::<f64>()
+        .ok()
+}
+
+fn parse_first_number(line: &str) -> Option<f64> {
+    let bytes = line.as_bytes();
+    let mut idx = 0;
+    while idx < bytes.len() {
+        if bytes[idx].is_ascii_digit() {
+            let (value, _) = parse_number_forward(bytes, idx)?;
+            return Some(value);
+        }
+        idx += 1;
+    }
+    None
+}
+
+fn parse_first_usize(line: &str) -> Option<usize> {
+    let bytes = line.as_bytes();
+    let mut idx = 0;
+    while idx < bytes.len() {
+        if bytes[idx].is_ascii_digit() {
+            let mut end = idx + 1;
+            while end < bytes.len() && bytes[end].is_ascii_digit() {
+                end += 1;
+            }
+            let value = std::str::from_utf8(&bytes[idx..end])
+                .ok()?
+                .parse::<usize>()
+                .ok()?;
+            return Some(value);
+        }
+        idx += 1;
+    }
+    None
+}
+
+fn extract_check_rollup(pr_view: &serde_json::Value) -> Vec<CheckStatus> {
+    let mut checks = Vec::new();
+    let Some(items) = pr_view
+        .get("statusCheckRollup")
+        .and_then(|value| value.as_array())
+    else {
+        return checks;
+    };
+
+    for item in items {
+        let name = item
+            .get("name")
+            .or_else(|| item.get("context"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+        let status = item
+            .get("status")
+            .or_else(|| item.get("state"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string();
+        let conclusion = item
+            .get("conclusion")
+            .or_else(|| item.get("result"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string();
+        checks.push(CheckStatus {
+            name,
+            status,
+            conclusion,
+        });
+    }
+    checks
+}
+
+fn run_gh_pr_merge(repo_root: &Path, method: MergeMethod) -> Result<(), CliError> {
+    println!("$ gh pr merge {}", method.as_flag());
+    let output = ProcCommand::new("gh")
+        .arg("pr")
+        .arg("merge")
+        .arg(method.as_flag())
+        .current_dir(repo_root)
+        .output()
+        .map_err(map_gh_error)?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        let combined = format!("{}{}", stdout, stderr);
+        let trimmed = combined.trim();
+        let message = if trimmed.is_empty() {
+            "gh pr merge failed.".to_string()
+        } else {
+            format!("gh pr merge failed: {}", trimmed)
+        };
+        return Err(CliError::Message(message));
+    }
+    if !stdout.trim().is_empty() {
+        println!("{}", stdout.trim());
+    }
+    if !stderr.trim().is_empty() {
+        eprintln!("{}", stderr.trim());
+    }
     Ok(())
 }
 

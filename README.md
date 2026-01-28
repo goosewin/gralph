@@ -69,6 +69,13 @@ so the stack is attached to the correct checkout and branch.
 3. Spawns AI to complete one task
 4. Repeats until all tasks done or max iterations hit
 
+## Verifier Pipeline
+
+`gralph verifier` runs tests, coverage, and static checks, creates a PR via `gh`,
+waits for review criteria (greptile by default), and merges only when reviews and
+checks meet thresholds. Configure the review gate under `verifier.review.*` and
+ensure `gh auth login` is complete.
+
 ## Context Files (Shared Memory)
 
 Gralph agents are stateless - each iteration starts fresh with no memory of previous runs. To prevent context loss and rework, maintain these files in your project root:

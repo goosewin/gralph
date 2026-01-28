@@ -21,9 +21,9 @@
      (confirm coverage >= 90%)
    - CI/CD preflight matches `.github/workflows/ci.yml`
    - Worktree is clean
-6) Use Graphite CLI (`gt`) for PR creation and stacking. Run `gt` inside the
-   active worktree so stacks map to the correct checkout and branch.
-7) Merge worktree back and remove it.
+6) Run `gralph verifier` to execute quality gates, create a PR via `gh`, and
+   wait for the configured review gate (greptile by default) plus green checks.
+7) Merge via `gh` after the review gate passes.
 
 ## Last PRD Todo Gate
 - Ensure you are on a new task branch/worktree; never finish the last PRD task
@@ -32,7 +32,7 @@
   `cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*`
 - Ensure CI/CD will pass (run the same checks as `.github/workflows/ci.yml` or
   confirm a green CI run).
-- Open a PR with Graphite CLI (`gt`) before merging the final task.
+- Open a PR with `gh` before merging the final task and ensure the review gate passes.
 
 ## Guardrails
 - Any task lacking Context Bundle or DoD is invalid.
@@ -40,5 +40,5 @@
 - New risks must be added to RISK_REGISTER.md with mitigation.
 - Rust CLI is the source of truth; do not reintroduce shell scripts.
 - Test coverage must remain >= 90%.
-- Final PRD task requires a PR and green CI before merge.
-- Use Graphite CLI (`gt`) for PRs and stacking.
+- Final PRD task requires a PR, review gate approval, and green CI before merge.
+- Use `gh` for PR creation, review checks, and merges.
