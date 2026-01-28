@@ -1,6 +1,11 @@
+use std::env;
 use std::error::Error;
 use std::fmt;
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
+use std::process::Child;
+use std::sync::mpsc;
+use std::thread;
 
 pub mod claude;
 pub mod codex;
@@ -72,6 +77,78 @@ impl Error for BackendError {
             _ => None,
         }
     }
+}
+
+pub(crate) fn command_in_path(command: &str) -> bool {
+    let Some(paths) = env::var_os("PATH") else {
+        return false;
+    };
+    env::split_paths(&paths).any(|dir| dir.join(command).is_file())
+}
+
+pub(crate) fn stream_command_output<F>(
+    mut child: Child,
+    backend_label: &str,
+    mut on_line: F,
+) -> Result<(), BackendError>
+where
+    F: FnMut(String) -> Result<(), BackendError>,
+{
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| BackendError::Command("failed to capture stdout".to_string()))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| BackendError::Command("failed to capture stderr".to_string()))?;
+
+    let (tx, rx) = mpsc::channel();
+    let stdout_handle = spawn_reader(stdout, tx.clone());
+    let stderr_handle = spawn_reader(stderr, tx);
+
+    for line in rx {
+        on_line(line)?;
+    }
+
+    let status = child.wait().map_err(|err| {
+        BackendError::Command(format!("failed to wait for {}: {}", backend_label, err))
+    })?;
+
+    let _ = stdout_handle.join();
+    let _ = stderr_handle.join();
+
+    if !status.success() {
+        return Err(BackendError::Command(format!(
+            "{} exited with {}",
+            backend_label, status
+        )));
+    }
+
+    Ok(())
+}
+
+fn spawn_reader<R: Read + Send + 'static>(
+    reader: R,
+    sender: mpsc::Sender<String>,
+) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        let mut reader = BufReader::new(reader);
+        let mut buffer = Vec::new();
+        loop {
+            buffer.clear();
+            match reader.read_until(b'\n', &mut buffer) {
+                Ok(0) => break,
+                Ok(_) => {
+                    let line = String::from_utf8_lossy(&buffer).to_string();
+                    if sender.send(line).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    })
 }
 
 #[cfg(test)]
