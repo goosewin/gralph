@@ -209,7 +209,7 @@ Tests verify existing behavior without changing production logic, CLI outputs, o
   * Verify is_task_block_end behavior with headings and separators only.
   * Verify is_task_header strictness for malformed headings.
 - **Dependencies** None
-- [ ] COV-29 Expand task parsing edge coverage
+- [x] COV-29 Expand task parsing edge coverage
 ---
 
 ### Task COV-30

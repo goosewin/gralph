@@ -42,6 +42,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-26 Expand PRD sanitization and stack summary coverage.
 - COV-27 Expand server auth, CORS, and session enrichment coverage.
 - COV-28 Expand state store normalization coverage.
+- COV-29 Expand task parsing edge coverage.
 
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.

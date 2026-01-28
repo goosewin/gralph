@@ -74,6 +74,16 @@ mod tests {
     }
 
     #[test]
+    fn task_blocks_from_contents_includes_last_block_without_separator() {
+        let contents = "### Task A\n- [ ] First\n---\n### Task B\n- [ ] Second";
+        let blocks = task_blocks_from_contents(contents);
+
+        assert_eq!(blocks.len(), 2);
+        assert!(blocks[1].contains("Task B"));
+        assert!(blocks[1].contains("- [ ] Second"));
+    }
+
+    #[test]
     fn is_task_header_accepts_leading_whitespace() {
         assert!(is_task_header("  ### Task COV-13"));
     }
@@ -90,5 +100,23 @@ mod tests {
         assert!(is_task_block_end("## Notes"));
         assert!(is_task_block_end("  ## Notes"));
         assert!(!is_task_block_end("### Task COV-13"));
+    }
+
+    #[test]
+    fn is_task_block_end_rejects_non_h2_or_separator_lines() {
+        assert!(!is_task_block_end("----"));
+        assert!(!is_task_block_end("# Notes"));
+        assert!(!is_task_block_end("##Notes"));
+        assert!(!is_task_block_end("### Notes"));
+        assert!(!is_task_block_end("- ---"));
+    }
+
+    #[test]
+    fn is_task_header_rejects_malformed_headings() {
+        assert!(!is_task_header("###Task COV-29"));
+        assert!(!is_task_header("## Task COV-29"));
+        assert!(!is_task_header("#### Task COV-29"));
+        assert!(!is_task_header("### Tasks COV-29"));
+        assert!(!is_task_header("### Task"));
     }
 }
