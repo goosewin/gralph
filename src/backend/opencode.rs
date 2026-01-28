@@ -125,6 +125,9 @@ mod tests {
     use super::*;
     use std::fs;
 
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
     #[test]
     fn parse_text_returns_raw_contents() {
         let temp = tempfile::tempdir().unwrap();
@@ -134,5 +137,76 @@ mod tests {
         let backend = OpenCodeBackend::new();
         let result = backend.parse_text(&path).unwrap();
         assert_eq!(result, "hello world\n");
+    }
+
+    #[test]
+    fn run_iteration_rejects_empty_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_path = temp.path().join("output.txt");
+        let backend = OpenCodeBackend::with_command("opencode".to_string());
+
+        let result = backend.run_iteration("   ", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::InvalidInput(message)) if message == "prompt is required"
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_sets_env_and_passes_model_variant() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("opencode-mock");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf 'env:%s\\n' \"$OPENCODE_EXPERIMENTAL_LSP_TOOL\"\nprintf 'args:'\nfor arg in \"$@\"; do\n  printf '%s|' \"$arg\"\ndone\nprintf '\\n'\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = OpenCodeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration(
+                "prompt",
+                Some("model-x"),
+                Some("variant-y"),
+                &output_path,
+                temp.path(),
+            )
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        assert!(output.contains("env:true"));
+        assert!(output.contains("args:run|--model|model-x|--variant|variant-y|prompt|"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_skips_empty_model_variant() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("opencode-mock");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf 'args:'\nfor arg in \"$@\"; do\n  printf '%s|' \"$arg\"\ndone\nprintf '\\n'\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = OpenCodeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration(
+                "prompt",
+                Some("  "),
+                Some("\t"),
+                &output_path,
+                temp.path(),
+            )
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        assert!(output.contains("args:run|prompt|"));
+        assert!(!output.contains("--model"));
+        assert!(!output.contains("--variant"));
     }
 }

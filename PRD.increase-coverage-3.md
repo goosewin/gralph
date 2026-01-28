@@ -74,7 +74,7 @@ Increase coverage without changing user-visible CLI behavior, error messages, or
   * Assert `--model` and `--variant` are passed only when non-empty.
   * Add a test that empty prompt returns `BackendError::InvalidInput`.
 - **Dependencies** None
-- [ ] COV-3 Cover OpenCode backend run_iteration argument and env handling
+- [x] COV-3 Cover OpenCode backend run_iteration argument and env handling
 ### Task COV-4
 
 - **ID** COV-4

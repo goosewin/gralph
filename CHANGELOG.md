@@ -17,7 +17,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - DOC-1 Document verifier workflow, review gate, and commit conventions.
 - COV-1 Expand backend module command and stream coverage.
 - COV-2 Add config loader tests for parse errors and overrides.
-- COV-3 Add state store tests for invalid sessions, cleanup, and parsing.
+- COV-3 Add OpenCode backend run_iteration argument and env coverage.
 - COV-4 Add CLI parsing coverage for start, prd, server, config, and worktree.
 - COV-7 Expand PRD validation and sanitization coverage.
 - COV-8 Expand state store edge case coverage.
