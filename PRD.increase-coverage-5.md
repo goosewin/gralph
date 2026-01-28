@@ -101,7 +101,7 @@ Add tests for backend adapters, server endpoints, notifications, update/install 
   * Create a temp task file and verify `enrich_session` reports `current_remaining` based on `task_file`.
   * Add a stop endpoint test that sets `tmux_session` and verifies the session status update path.
 - **Dependencies** None
-- [ ] COV-5 Expand server session enrichment and stop flow coverage
+- [x] COV-5 Expand server session enrichment and stop flow coverage
 ---
 
 ### Task COV-6

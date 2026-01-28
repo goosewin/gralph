@@ -454,6 +454,7 @@ mod tests {
     use super::*;
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
+    use std::fs;
     use tower::util::ServiceExt;
 
     fn store_for_test(dir: &std::path::Path) -> StateStore {
@@ -994,6 +995,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn stop_endpoint_marks_tmux_session_stopped() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+        store
+            .set_session(
+                "alpha",
+                &[("status", "running"), ("pid", "123"), ("tmux_session", "abc")],
+            )
+            .unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/stop/alpha")
+                    .method("POST")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let session = state.store.get_session("alpha").unwrap().unwrap();
+        assert_eq!(
+            session.get("status").and_then(|v| v.as_str()),
+            Some("stopped")
+        );
+    }
+
+    #[tokio::test]
     async fn stop_endpoint_unknown_session_returns_not_found() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path());
@@ -1091,5 +1134,22 @@ mod tests {
         assert_eq!(enriched["status"], "stale");
         assert_eq!(enriched["is_alive"], false);
         assert_eq!(enriched["current_remaining"], 0);
+    }
+
+    #[test]
+    fn enrich_session_uses_task_file_for_remaining() {
+        let temp = tempfile::tempdir().unwrap();
+        let task_path = temp.path().join("tasks.md");
+        fs::write(&task_path, "- [ ] First\n- [x] Done\n").unwrap();
+
+        let session = json!({
+            "name": "alpha",
+            "status": "running",
+            "pid": 0,
+            "dir": temp.path().to_string_lossy(),
+            "task_file": "tasks.md",
+        });
+        let enriched = enrich_session(session);
+        assert_eq!(enriched["current_remaining"], 1);
     }
 }
