@@ -129,7 +129,7 @@ Increase coverage without changing user-visible CLI behavior, error messages, or
   * Test `sanitize_session_name` and `session_name` fallback when names are empty or contain invalid chars.
   * Test `read_readme_context_files`, `build_context_file_list`, and `resolve_log_file` with temp dirs and minimal fixtures.
 - **Dependencies** None
-- [ ] COV-8 Increase main.rs helper and context list coverage
+- [x] COV-8 Increase main.rs helper and context list coverage
 ### Task COV-9
 
 - **ID** COV-9

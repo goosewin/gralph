@@ -1110,7 +1110,11 @@ const DEFAULT_SESSION_NAME: &str = "gralph";
 
 fn session_name(name: &Option<String>, dir: &Path) -> Result<String, CliError> {
     if let Some(name) = name {
-        return Ok(sanitize_session_name(name));
+        let sanitized = sanitize_session_name(name);
+        if sanitized.is_empty() {
+            return Ok(DEFAULT_SESSION_NAME.to_string());
+        }
+        return Ok(sanitized);
     }
     let canonical_name = dir.canonicalize().ok().and_then(|path| {
         path.file_name()
@@ -1969,6 +1973,7 @@ fn is_process_alive(pid: i64) -> bool {
 mod tests {
     use super::*;
     use clap::Parser;
+    use serde_json::json;
     use std::fs;
     use std::sync::Mutex;
 
@@ -2130,6 +2135,32 @@ mod tests {
     }
 
     #[test]
+    fn parse_bool_value_accepts_true_false_and_invalid() {
+        for value in ["true", "True", "1", "yes", "Y", "on", "  ON  "] {
+            assert_eq!(parse_bool_value(value), Some(true));
+        }
+        for value in ["false", "False", "0", "no", "N", "off", "  off  "] {
+            assert_eq!(parse_bool_value(value), Some(false));
+        }
+        for value in ["", "maybe", "truthy", "2"] {
+            assert_eq!(parse_bool_value(value), None);
+        }
+    }
+
+    #[test]
+    fn sanitize_session_name_replaces_invalid_chars() {
+        assert_eq!(sanitize_session_name("My Session@2026!"), "My-Session-2026-");
+        assert_eq!(sanitize_session_name("dev_env-1"), "dev_env-1");
+    }
+
+    #[test]
+    fn session_name_falls_back_for_empty_override() {
+        let temp = tempfile::tempdir().unwrap();
+        let resolved = session_name(&Some("".to_string()), temp.path()).unwrap();
+        assert_eq!(resolved, DEFAULT_SESSION_NAME);
+    }
+
+    #[test]
     fn init_is_idempotent_without_force() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -2212,6 +2243,56 @@ mod tests {
         let entries = resolve_init_context_files(temp.path(), Some(""));
 
         assert_eq!(entries, vec!["ARCHITECTURE.md", "PROCESS.md"]);
+    }
+
+    #[test]
+    fn read_readme_context_files_parses_section_and_dedupes() {
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join("README.md"),
+            "## Intro\n\nNothing here.\n\n## Context Files\n- `ARCHITECTURE.md` and `PROCESS.md`\n- `NOTES.txt`\n- `ARCHITECTURE.md`\n## Usage\n- `README.md`\n",
+        );
+
+        let entries = read_readme_context_files(temp.path());
+
+        assert_eq!(entries, vec!["ARCHITECTURE.md", "PROCESS.md"]);
+    }
+
+    #[test]
+    fn build_context_file_list_includes_config_user_and_defaults() {
+        let temp = tempfile::tempdir().unwrap();
+        write_file(&temp.path().join("README.md"), "readme");
+        write_file(&temp.path().join("config/default.yaml"), "defaults: {}\n");
+        write_file(&temp.path().join("src/main.rs"), "fn main() {}\n");
+
+        let entries = build_context_file_list(
+            temp.path(),
+            Some("config/default.yaml,README.md"),
+            Some("README.md,missing.md"),
+        );
+
+        assert_eq!(entries, vec!["README.md", "config/default.yaml", "src/main.rs"]);
+    }
+
+    #[test]
+    fn resolve_log_file_prefers_session_entry_or_dir_fallback() {
+        let temp = tempfile::tempdir().unwrap();
+        let log_path = temp.path().join("custom.log");
+        let session = json!({
+            "log_file": log_path.to_string_lossy().to_string(),
+            "dir": temp.path().to_string_lossy().to_string(),
+        });
+
+        let resolved = resolve_log_file("demo", &session).unwrap();
+        assert_eq!(resolved, log_path);
+
+        let session = json!({
+            "log_file": "",
+            "dir": temp.path().to_string_lossy().to_string(),
+        });
+
+        let resolved = resolve_log_file("demo", &session).unwrap();
+        assert_eq!(resolved, temp.path().join(".gralph").join("demo.log"));
     }
 
     #[test]
