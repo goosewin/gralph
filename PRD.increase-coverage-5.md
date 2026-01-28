@@ -185,7 +185,7 @@ Add tests for backend adapters, server endpoints, notifications, update/install 
   * Verify `parse_text` returns BackendError::Io with the missing path.
   * Simulate a read-only output directory and assert `run_iteration` returns BackendError::Io when creating the output file.
 - **Dependencies** None
-- [ ] COV-12 Expand Claude adapter error-path coverage
+- [x] COV-12 Expand Claude adapter error-path coverage
 ---
 
 ### Task COV-13
