@@ -235,7 +235,7 @@ Add tests for CLI helpers, server endpoints, notification formatting, update/ins
   * Add a test that confirms env_lock remains usable after a panic in a prior holder.
   * `cargo test --workspace` passes.
 - **Dependencies** None
-- [ ] COV-15 Expand test_support env_lock coverage for contention scenarios
+- [x] COV-15 Expand test_support env_lock coverage for contention scenarios
 ---
 
 ### Task COV-16
