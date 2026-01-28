@@ -183,7 +183,7 @@ Add tests for remaining modules (CLI helpers, server endpoints, notifications, b
   * Add tests for run_iteration ensuring prompt is last arg and output file contains stdout.
   * Add tests for parse_text with empty file and trailing whitespace.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-11 Expand OpenCode backend run_iteration tests
+- [x] COV-11 Expand OpenCode backend run_iteration tests
 ---
 
 ### Task COV-12

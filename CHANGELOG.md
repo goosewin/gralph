@@ -30,6 +30,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-10 Add property-based tests for task parsing invariants.
 - COV-10 Expand Claude backend parsing and install tests.
 - COV-11 Expand backend module error formatting coverage.
+- COV-11 Expand OpenCode backend run_iteration tests.
 - COV-12 Expand Claude adapter error-path coverage.
 - COV-13 Expand OpenCode adapter error-path coverage.
 - COV-14 Expand Gemini adapter error-path coverage.

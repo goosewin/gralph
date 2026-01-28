@@ -163,6 +163,13 @@ mod tests {
     }
 
     #[test]
+    fn command_accessor_returns_configured_value() {
+        let backend = OpenCodeBackend::with_command("custom-opencode");
+
+        assert_eq!(backend.command(), "custom-opencode");
+    }
+
+    #[test]
     fn parse_text_returns_raw_contents() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("opencode.txt");
@@ -171,6 +178,31 @@ mod tests {
         let backend = OpenCodeBackend::new();
         let result = backend.parse_text(&path).unwrap();
         assert_eq!(result, "hello world\n");
+    }
+
+    #[test]
+    fn parse_text_returns_empty_string_for_empty_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("empty.txt");
+        fs::write(&path, "").unwrap();
+
+        let backend = OpenCodeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn parse_text_preserves_trailing_whitespace() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("trailing.txt");
+        let contents = "line one  \nline two\n\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = OpenCodeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+
+        assert_eq!(result, contents);
     }
 
     #[test]
@@ -204,6 +236,29 @@ mod tests {
         assert!(!backend.check_installed());
 
         fs::write(temp.path().join(command_name), "stub").unwrap();
+        assert!(backend.check_installed());
+    }
+
+    #[test]
+    fn check_installed_uses_path_override() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        let command_name = "opencode-custom";
+        let backend = OpenCodeBackend::with_command(command_name.to_string());
+
+        {
+            let _guard = PathGuard::set(None);
+            assert!(!backend.check_installed());
+        }
+
+        fs::write(temp.path().join(command_name), "stub").unwrap();
+        let combined = env::join_paths([
+            temp.path(),
+            temp.path().join("missing").as_path(),
+        ])
+        .unwrap();
+        let _guard = PathGuard::set(Some(combined.as_os_str()));
+
         assert!(backend.check_installed());
     }
 
@@ -316,6 +371,44 @@ mod tests {
         assert!(output.contains("args:run|prompt|"));
         assert!(!output.contains("--model"));
         assert!(!output.contains("--variant"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_writes_stdout_and_keeps_prompt_last() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("opencode-args");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf 'stdout-line\\n'\nprintf 'args:'\nfor arg in \"$@\"; do\n  printf '%s|' \"$arg\"\ndone\nprintf '\\n'\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = OpenCodeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration(
+                "final-prompt",
+                Some("model-a"),
+                Some("variant-b"),
+                &output_path,
+                temp.path(),
+            )
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        assert!(output.contains("stdout-line"));
+
+        let args_line = output
+            .lines()
+            .find(|line| line.starts_with("args:"))
+            .expect("args line should be present");
+        let args: Vec<&str> = args_line
+            .trim_start_matches("args:")
+            .split('|')
+            .filter(|value| !value.is_empty())
+            .collect();
+        assert_eq!(args.last().copied(), Some("final-prompt"));
     }
 
     #[cfg(unix)]
