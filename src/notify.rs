@@ -768,6 +768,201 @@ mod tests {
     }
 
     #[test]
+    fn notify_complete_rejects_empty_inputs() {
+        let err = notify_complete(
+            "",
+            "https://example.com/webhook",
+            Some("repo"),
+            Some(1),
+            Some(5),
+            Some(3),
+        )
+        .expect_err("empty session name");
+        match err {
+            NotifyError::InvalidInput(message) => {
+                assert_eq!(message, "session name is required")
+            }
+            _ => panic!("expected invalid input"),
+        }
+
+        let err = notify_complete(
+            "session",
+            "  ",
+            Some("repo"),
+            Some(1),
+            Some(5),
+            Some(3),
+        )
+        .expect_err("empty webhook url");
+        match err {
+            NotifyError::InvalidInput(message) => {
+                assert_eq!(message, "webhook url is required")
+            }
+            _ => panic!("expected invalid input"),
+        }
+    }
+
+    #[test]
+    fn notify_failed_rejects_empty_inputs() {
+        let err = notify_failed(
+            "",
+            "https://example.com/webhook",
+            Some("error"),
+            Some("repo"),
+            Some(1),
+            Some(2),
+            Some(3),
+            Some(5),
+            Some(3),
+        )
+        .expect_err("empty session name");
+        match err {
+            NotifyError::InvalidInput(message) => {
+                assert_eq!(message, "session name is required")
+            }
+            _ => panic!("expected invalid input"),
+        }
+
+        let err = notify_failed(
+            "session",
+            "\t",
+            Some("error"),
+            Some("repo"),
+            Some(1),
+            Some(2),
+            Some(3),
+            Some(5),
+            Some(3),
+        )
+        .expect_err("empty webhook url");
+        match err {
+            NotifyError::InvalidInput(message) => {
+                assert_eq!(message, "webhook url is required")
+            }
+            _ => panic!("expected invalid input"),
+        }
+    }
+
+    #[test]
+    fn format_discord_failed_reason_mappings() {
+        let reasons = ["max_iterations", "error", "manual_stop", "timeout"];
+        for reason in reasons {
+            let payload = format_discord_failed(
+                "alpha",
+                "repo",
+                reason,
+                "2",
+                "5",
+                "1",
+                "4m 1s",
+                "2026-01-26T01:02:03Z",
+            )
+            .expect("discord payload");
+            let value: Value = serde_json::from_str(&payload).expect("json payload");
+            let embed = &value["embeds"][0];
+            let description = embed["description"].as_str().expect("description");
+
+            assert_eq!(description, format_failure_description("alpha", reason, "**"));
+            assert_eq!(embed["fields"][1]["name"], "Reason");
+            assert_eq!(embed["fields"][1]["value"], reason);
+        }
+    }
+
+    #[test]
+    fn format_slack_failed_reason_mappings() {
+        let reasons = ["max_iterations", "error", "manual_stop", "timeout"];
+        for reason in reasons {
+            let payload = format_slack_failed(
+                "beta",
+                "repo",
+                reason,
+                "2",
+                "5",
+                "1",
+                "4m 1s",
+                "2026-01-26T01:02:03Z",
+            )
+            .expect("slack payload");
+            let value: Value = serde_json::from_str(&payload).expect("json payload");
+            let attachment = &value["attachments"][0];
+            let blocks = attachment["blocks"].as_array().expect("blocks");
+            let description = blocks[1]["text"]["text"].as_str().expect("description");
+
+            assert_eq!(description, format_failure_description("beta", reason, "*"));
+            assert_eq!(blocks[2]["fields"][1]["text"], format!("*Reason:*\n{}", reason));
+        }
+    }
+
+    #[test]
+    fn format_generic_failed_reason_mappings() {
+        let cases = [
+            (
+                "max_iterations",
+                "Gralph loop 'gamma' failed: hit max iterations (2/5) with 1 tasks remaining",
+            ),
+            (
+                "error",
+                "Gralph loop 'gamma' failed due to an error after 2 iterations",
+            ),
+            (
+                "manual_stop",
+                "Gralph loop 'gamma' was manually stopped after 2 iterations with 1 tasks remaining",
+            ),
+            (
+                "timeout",
+                "Gralph loop 'gamma' failed: timeout after 2 iterations",
+            ),
+        ];
+
+        for (reason, expected) in cases {
+            let payload = format_generic_failed(
+                "gamma",
+                "repo",
+                reason,
+                "2",
+                "5",
+                "1",
+                "4m 1s",
+                "2026-01-26T01:02:03Z",
+            )
+            .expect("generic payload");
+            let value: Value = serde_json::from_str(&payload).expect("json payload");
+
+            assert_eq!(value["reason"], reason);
+            assert_eq!(value["message"], expected);
+        }
+    }
+
+    #[test]
+    fn format_duration_handles_none_and_units() {
+        assert_eq!(format_duration(None), "unknown");
+        assert_eq!(format_duration(Some(0)), "0s");
+        assert_eq!(format_duration(Some(65)), "1m 5s");
+        assert_eq!(format_duration(Some(3661)), "1h 1m 1s");
+    }
+
+    #[test]
+    fn send_webhook_rejects_empty_payload() {
+        let err = send_webhook("https://example.com", "", Some(5))
+            .expect_err("empty payload");
+        match err {
+            NotifyError::InvalidInput(message) => {
+                assert_eq!(message, "payload is required")
+            }
+            _ => panic!("expected invalid input"),
+        }
+
+        let err = send_webhook("https://example.com", "  ", Some(5))
+            .expect_err("whitespace payload");
+        match err {
+            NotifyError::InvalidInput(message) => {
+                assert_eq!(message, "payload is required")
+            }
+            _ => panic!("expected invalid input"),
+        }
+    }
+
+    #[test]
     fn send_webhook_posts_payload_and_headers() {
         let payload = "{\"hello\":\"world\"}";
         let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");

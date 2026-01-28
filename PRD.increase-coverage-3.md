@@ -140,7 +140,7 @@ Increase coverage without changing user-visible CLI behavior, error messages, or
   * Add tests for `format_discord_failed`, `format_slack_failed`, and `format_generic_failed` reason mappings.
   * Add tests for `format_duration` with None and hour/minute formatting plus `send_webhook` empty payload errors.
 - **Dependencies** None
-- [ ] COV-9 Cover notify validation and failure formatting paths
+- [x] COV-9 Cover notify validation and failure formatting paths
 ### Task COV-10
 
 - **ID** COV-10

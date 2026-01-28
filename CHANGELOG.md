@@ -22,7 +22,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-5 Add Codex backend run_iteration flag validation tests.
 - COV-7 Expand core loop helpers and logging coverage.
 - COV-8 Expand state store edge case coverage.
-- COV-9 Expand update module parsing coverage.
+- COV-9 Add notify validation and failure formatting tests.
 - COV-10 Expand verifier parsing and static check coverage.
 - COV-11 Verify coverage and record changelog.
 
