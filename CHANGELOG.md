@@ -20,6 +20,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.
 - REF-1 Consolidate shared backend execution helpers.
 - REF-3 Centralize config merge precedence and normalize override lookup.
+- REF-4 Centralize server auth and error responses.
 
 ### Verification
 - Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened

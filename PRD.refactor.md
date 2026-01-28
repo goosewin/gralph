@@ -87,7 +87,7 @@ Preserve file locking, atomic writes, and error handling semantics across state,
   * Auth failure responses are centralized and consistent.
   * Server tests pass with identical response payloads.
 - **Dependencies** None
-- [ ] REF-4 Refactor server handler flow for shared auth and error responses
+- [x] REF-4 Refactor server handler flow for shared auth and error responses
 ---
 
 ### Task REF-5

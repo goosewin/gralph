@@ -159,9 +159,9 @@ async fn status_handler(State(state): State<Arc<AppState>>, headers: HeaderMap) 
     let sessions = match state.store.list_sessions() {
         Ok(list) => list,
         Err(error) => {
-            return json_response(
+            return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                json!({"error": format!("{}", error)}),
+                format!("{}", error),
                 cors_origin,
             );
         }
@@ -181,14 +181,14 @@ async fn status_name_handler(
     }
     match state.store.get_session(&name) {
         Ok(Some(session)) => json_response(StatusCode::OK, enrich_session(session), cors_origin),
-        Ok(None) => json_response(
+        Ok(None) => error_response(
             StatusCode::NOT_FOUND,
-            json!({"error": format!("Session not found: {}", name)}),
+            format!("Session not found: {}", name),
             cors_origin,
         ),
-        Err(error) => json_response(
+        Err(error) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
-            json!({"error": format!("{}", error)}),
+            format!("{}", error),
             cors_origin,
         ),
     }
@@ -206,16 +206,16 @@ async fn stop_handler(
     let session = match state.store.get_session(&name) {
         Ok(Some(session)) => session,
         Ok(None) => {
-            return json_response(
+            return error_response(
                 StatusCode::NOT_FOUND,
-                json!({"error": format!("Session not found: {}", name)}),
+                format!("Session not found: {}", name),
                 cors_origin,
             );
         }
         Err(error) => {
-            return json_response(
+            return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                json!({"error": format!("{}", error)}),
+                format!("{}", error),
                 cors_origin,
             );
         }
@@ -240,9 +240,9 @@ async fn fallback_handler(
     if let Some(response) = check_auth(&headers, &state, cors_origin.as_deref()) {
         return response;
     }
-    json_response(
+    error_response(
         StatusCode::NOT_FOUND,
-        json!({"error": format!("Unknown endpoint: {} {}", method, uri.path())}),
+        format!("Unknown endpoint: {} {}", method, uri.path()),
         cors_origin,
     )
 }
@@ -257,39 +257,19 @@ fn check_auth(
     };
     let header = match headers.get(axum::http::header::AUTHORIZATION) {
         Some(value) => value,
-        None => {
-            return Some(json_response(
-                StatusCode::UNAUTHORIZED,
-                json!({"error": "Invalid or missing Bearer token"}),
-                cors_origin.map(|value| value.to_string()),
-            ));
-        }
+        None => return Some(unauthorized_response(cors_origin)),
     };
     let header = match header.to_str() {
         Ok(value) => value,
-        Err(_) => {
-            return Some(json_response(
-                StatusCode::UNAUTHORIZED,
-                json!({"error": "Invalid or missing Bearer token"}),
-                cors_origin.map(|value| value.to_string()),
-            ));
-        }
+        Err(_) => return Some(unauthorized_response(cors_origin)),
     };
     let Some(token) = header.strip_prefix("Bearer ") else {
-        return Some(json_response(
-            StatusCode::UNAUTHORIZED,
-            json!({"error": "Invalid or missing Bearer token"}),
-            cors_origin.map(|value| value.to_string()),
-        ));
+        return Some(unauthorized_response(cors_origin));
     };
     if token == expected {
         None
     } else {
-        Some(json_response(
-            StatusCode::UNAUTHORIZED,
-            json!({"error": "Invalid or missing Bearer token"}),
-            cors_origin.map(|value| value.to_string()),
-        ))
+        Some(unauthorized_response(cors_origin))
     }
 }
 
@@ -374,6 +354,18 @@ fn json_response(status: StatusCode, body: Value, cors_origin: Option<String>) -
     *response.status_mut() = status;
     apply_cors(&mut response, cors_origin);
     response
+}
+
+fn error_response(status: StatusCode, message: String, cors_origin: Option<String>) -> Response {
+    json_response(status, json!({"error": message}), cors_origin)
+}
+
+fn unauthorized_response(cors_origin: Option<&str>) -> Response {
+    json_response(
+        StatusCode::UNAUTHORIZED,
+        json!({"error": "Invalid or missing Bearer token"}),
+        cors_origin.map(|value| value.to_string()),
+    )
 }
 
 fn resolve_cors_origin(headers: &HeaderMap, config: &ServerConfig) -> Option<String> {
