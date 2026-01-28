@@ -180,6 +180,7 @@ fn extract_result_text(value: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use std::fs;
 
     #[cfg(unix)]
@@ -195,6 +196,77 @@ mod tests {
         let backend = ClaudeBackend::new();
         let result = backend.parse_text(&path).unwrap();
         assert_eq!(result, "done");
+    }
+
+    #[test]
+    fn extract_assistant_texts_filters_by_role_and_content() {
+        let assistant = json!({
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "first"},
+                    {"type": "image", "source": "ignored"},
+                    {"type": "text", "text": "second"}
+                ]
+            }
+        });
+        let user = json!({
+            "type": "user",
+            "message": {"content": [{"type": "text", "text": "nope"}]}
+        });
+
+        assert_eq!(
+            extract_assistant_texts(&assistant),
+            vec!["first".to_string(), "second".to_string()]
+        );
+        assert!(extract_assistant_texts(&user).is_empty());
+    }
+
+    #[test]
+    fn extract_result_text_requires_result_type() {
+        let result = json!({"type": "result", "result": "done"});
+        let assistant = json!({"type": "assistant", "result": "ignored"});
+
+        assert_eq!(extract_result_text(&result), Some("done".to_string()));
+        assert_eq!(extract_result_text(&assistant), None);
+    }
+
+    #[test]
+    fn parse_text_returns_last_result_when_present() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{\"type\":\"result\",\"result\":\"first\"}\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\n{\"type\":\"result\",\"result\":\"second\"}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, "second");
+    }
+
+    #[test]
+    fn parse_text_returns_raw_contents_without_result() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hi\"}]}}\nnot-json\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, contents);
+    }
+
+    #[test]
+    fn run_iteration_rejects_empty_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_path = temp.path().join("output.json");
+        let backend = ClaudeBackend::with_command("claude".to_string());
+
+        let result = backend.run_iteration("   ", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::InvalidInput(message)) if message == "prompt is required"
+        ));
     }
 
     #[cfg(unix)]

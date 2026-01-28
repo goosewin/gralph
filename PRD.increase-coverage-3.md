@@ -63,7 +63,7 @@ Increase coverage without changing user-visible CLI behavior, error messages, or
   * Test `parse_text` returning the last result when present and raw contents when no result exists.
   * Add a `run_iteration` test asserting empty prompt returns `BackendError::InvalidInput`.
 - **Dependencies** None
-- [ ] COV-2 Extend Claude backend parsing and input validation coverage
+- [x] COV-2 Extend Claude backend parsing and input validation coverage
 ### Task COV-3
 
 - **ID** COV-3
