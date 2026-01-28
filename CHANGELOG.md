@@ -15,7 +15,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - PROMPT-1 Require lower-case conventional commits in the default prompt template.
 - VER-1 Add verifier command for tests and coverage gates.
 - DOC-1 Document verifier workflow, review gate, and commit conventions.
-- COV-1 Expand backend module command and stream coverage.
+- COV-1 Expand core loop error-path and prompt rendering coverage.
 - COV-2 Add config loader tests for parse errors and overrides.
 - COV-3 Add OpenCode backend run_iteration argument and env coverage.
 - COV-4 Add Gemini backend run_iteration flag validation tests.

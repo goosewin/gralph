@@ -264,12 +264,12 @@ pub fn check_completion(
     }
 
     let promise_line = last_non_empty_line(result).unwrap_or_default();
-    let expected = format!("<promise>{}</promise>", completion_marker);
-    if promise_line.trim() != expected {
+    if is_negated_promise(&promise_line) {
         return Ok(false);
     }
 
-    if is_negated_promise(&promise_line) {
+    let expected = format!("<promise>{}</promise>", completion_marker);
+    if promise_line.trim() != expected {
         return Ok(false);
     }
 
@@ -926,6 +926,54 @@ mod tests {
         }
     }
 
+    struct StubBackend {
+        output: String,
+        parsed: Option<String>,
+    }
+
+    impl StubBackend {
+        fn new(output: &str, parsed: Option<&str>) -> Self {
+            Self {
+                output: output.to_string(),
+                parsed: parsed.map(ToString::to_string),
+            }
+        }
+    }
+
+    impl Backend for StubBackend {
+        fn check_installed(&self) -> bool {
+            true
+        }
+
+        fn run_iteration(
+            &self,
+            _prompt: &str,
+            _model: Option<&str>,
+            _variant: Option<&str>,
+            output_file: &Path,
+            _working_dir: &Path,
+        ) -> Result<(), BackendError> {
+            fs::write(output_file, &self.output).map_err(|source| BackendError::Io {
+                path: output_file.to_path_buf(),
+                source,
+            })
+        }
+
+        fn parse_text(&self, response_file: &Path) -> Result<String, BackendError> {
+            if let Some(parsed) = self.parsed.clone() {
+                return Ok(parsed);
+            }
+            fs::read_to_string(response_file).map_err(|source| BackendError::Io {
+                path: response_file.to_path_buf(),
+                source,
+            })
+        }
+
+        fn get_models(&self) -> Vec<String> {
+            Vec::new()
+        }
+    }
+
     struct UninstalledBackend;
 
     impl Backend for UninstalledBackend {
@@ -1052,6 +1100,26 @@ mod tests {
         let raw = "README.md,  ARCHITECTURE.md ,";
         let normalized = normalize_context_files(raw);
         assert_eq!(normalized, "README.md\nARCHITECTURE.md");
+    }
+
+    #[test]
+    fn render_prompt_template_includes_context_files_section() {
+        let template = "Header\n{context_files_section}Footer";
+        let rendered = render_prompt_template(
+            template,
+            "PRD.md",
+            "COMPLETE",
+            1,
+            3,
+            Some("Block"),
+            Some("ARCHITECTURE.md\nPROCESS.md"),
+        );
+
+        assert!(rendered.contains(
+            "Context Files (read these first):\nARCHITECTURE.md\nPROCESS.md\n"
+        ));
+        assert!(rendered.contains("Header"));
+        assert!(rendered.contains("Footer"));
     }
 
     #[test]
@@ -1308,6 +1376,61 @@ mod tests {
         assert!(matches!(
             result,
             Err(CoreError::InvalidInput(message)) if message.contains("backend is not installed")
+        ));
+    }
+
+    #[test]
+    fn run_iteration_rejects_empty_output_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [ ] Task\n").unwrap();
+
+        let backend = StubBackend::new("", None);
+        let result = run_iteration(
+            &backend,
+            temp.path(),
+            "PRD.md",
+            1,
+            1,
+            "COMPLETE",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message)) if message.contains("backend produced no output")
+        ));
+    }
+
+    #[test]
+    fn run_iteration_rejects_empty_parsed_result() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [ ] Task\n").unwrap();
+
+        let backend = StubBackend::new("{\"ok\":true}", Some("   "));
+        let result = run_iteration(
+            &backend,
+            temp.path(),
+            "PRD.md",
+            1,
+            1,
+            "COMPLETE",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message))
+                if message.contains("backend returned no parsed result")
         ));
     }
 
