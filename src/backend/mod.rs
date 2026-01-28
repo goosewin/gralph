@@ -200,7 +200,10 @@ mod tests {
         for name in cases {
             assert!(backend_from_name(name).is_ok(), "{} should resolve", name);
         }
-        let err = backend_from_name("unknown").unwrap_err();
+        let err = match backend_from_name("unknown") {
+            Ok(_) => panic!("expected unknown backend error"),
+            Err(err) => err,
+        };
         assert_eq!(err, "Unknown backend: unknown");
     }
 
@@ -264,6 +267,7 @@ mod tests {
 
     #[test]
     fn command_in_path_handles_missing_and_empty_path() {
+        let _lock = crate::test_support::env_lock();
         let dir_temp = tempfile::tempdir().unwrap();
         let file_temp = tempfile::tempdir().unwrap();
         let command_name = "gralph-test-command";
@@ -292,7 +296,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn stream_command_output_returns_ok_on_success() {
-        let child = Command::new("sh")
+        let child = Command::new("/bin/sh")
             .arg("-c")
             .arg("printf 'stdout-line\\n'; printf 'stderr-line\\n' 1>&2")
             .stdout(Stdio::piped())
@@ -314,7 +318,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn stream_command_output_propagates_on_line_error() {
-        let child = Command::new("sh")
+        let child = Command::new("/bin/sh")
             .arg("-c")
             .arg("printf 'stdout-line\\n'")
             .stdout(Stdio::piped())
@@ -335,7 +339,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn stream_command_output_reports_non_zero_exit() {
-        let child = Command::new("sh")
+        let child = Command::new("/bin/sh")
             .arg("-c")
             .arg("printf 'stderr-line\\n' 1>&2; exit 2")
             .stdout(Stdio::piped())
@@ -354,7 +358,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn stream_command_output_errors_when_stdout_missing() {
-        let child = Command::new("sh")
+        let child = Command::new("/bin/sh")
             .arg("-c")
             .arg("exit 0")
             .stderr(Stdio::piped())
@@ -372,7 +376,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn stream_command_output_errors_when_stderr_missing() {
-        let child = Command::new("sh")
+        let child = Command::new("/bin/sh")
             .arg("-c")
             .arg("exit 0")
             .stdout(Stdio::piped())

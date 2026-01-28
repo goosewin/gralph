@@ -163,6 +163,7 @@ mod tests {
 
     #[test]
     fn check_installed_reflects_path_entries() {
+        let _lock = crate::test_support::env_lock();
         let temp = tempfile::tempdir().unwrap();
         let command_name = "gemini-stub";
 

@@ -1304,6 +1304,7 @@ fn validate_task_id(id: &str) -> Result<(), CliError> {
     let prefix = parts.next().unwrap_or("");
     let number = parts.next().unwrap_or("");
     let valid = !prefix.is_empty()
+        && !number.is_empty()
         && number.chars().all(|c| c.is_ascii_digit())
         && prefix.chars().all(|c| c.is_ascii_alphabetic())
         && parts.next().is_none();

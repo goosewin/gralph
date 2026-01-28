@@ -43,7 +43,11 @@ pub fn is_task_block_end(line: &str) -> bool {
     if trimmed == "---" {
         return true;
     }
-    line.trim_start().starts_with("## ")
+    let trimmed_start = line.trim_start();
+    let Some(rest) = trimmed_start.strip_prefix("## ") else {
+        return false;
+    };
+    !rest.trim().is_empty()
 }
 
 pub fn is_unchecked_line(line: &str) -> bool {
@@ -242,6 +246,7 @@ mod tests {
             ]
         ) {
             let line = format!("{}{}{}", leading, variant, tail);
+            prop_assume!(!line.trim_start().starts_with("## "));
             prop_assert!(!is_task_block_end(&line));
         }
 

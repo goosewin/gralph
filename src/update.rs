@@ -301,7 +301,18 @@ fn download_release(url: &str, dest: &Path) -> Result<(), UpdateError> {
 }
 
 fn extract_archive(archive_path: &Path, target_dir: &Path) -> Result<(), UpdateError> {
-    let output = Command::new("tar")
+    let metadata = fs::metadata(archive_path).map_err(UpdateError::Io)?;
+    if metadata.len() == 0 {
+        return Err(UpdateError::CommandFailed(
+            "Failed to extract archive: archive is empty".to_string(),
+        ));
+    }
+    let mut cmd = Command::new("tar");
+    let path_env = env::var_os("PATH");
+    if path_env.as_ref().map_or(true, |value| value.is_empty()) {
+        cmd.env("PATH", "/usr/bin:/bin");
+    }
+    let output = cmd
         .arg("-xzf")
         .arg(archive_path)
         .arg("-C")
@@ -626,6 +637,7 @@ mod tests {
 
     #[test]
     fn resolve_in_path_finds_binary() {
+        let _lock = crate::test_support::env_lock();
         let temp = tempdir().expect("tempdir");
         let bin_path = temp.path().join("gralph");
         fs::write(&bin_path, "binary").expect("write");
@@ -636,6 +648,7 @@ mod tests {
 
     #[test]
     fn resolve_in_path_handles_missing_and_empty_path() {
+        let _lock = crate::test_support::env_lock();
         {
             let _guard = PathGuard::set(None);
             assert!(resolve_in_path("gralph").is_none());

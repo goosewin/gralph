@@ -533,6 +533,7 @@ mod tests {
     fn list_sessions_handles_non_object_values() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path(), Duration::from_secs(1));
+        store.init_state().unwrap();
 
         let mut sessions = BTreeMap::new();
         sessions.insert("alpha".to_string(), Value::String("oops".to_string()));

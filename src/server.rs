@@ -1,7 +1,7 @@
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, options, post};
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde_json::{Map, Value, json};
 use std::env;
@@ -130,7 +130,6 @@ fn build_router(state: Arc<AppState>) -> Router {
             get(status_name_handler).options(options_handler),
         )
         .route("/stop/:name", post(stop_handler).options(options_handler))
-        .route("/*path", options(options_handler))
         .fallback(fallback_handler)
         .with_state(state)
 }
@@ -240,6 +239,11 @@ async fn fallback_handler(
     headers: HeaderMap,
 ) -> Response {
     let cors_origin = resolve_cors_origin(&headers, &state.config);
+    if method == Method::OPTIONS {
+        let mut response = StatusCode::NO_CONTENT.into_response();
+        apply_cors(&mut response, cors_origin);
+        return response;
+    }
     if let Some(response) = check_auth(&headers, &state, cors_origin.as_deref()) {
         return response;
     }
