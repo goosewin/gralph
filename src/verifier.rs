@@ -1965,6 +1965,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_percent_from_line_handles_simple_percent() {
+        let value = parse_percent_from_line("coverage results: 99% (123/124)").unwrap();
+        assert!((value - 99.0).abs() < 1e-6);
+    }
+
+    #[test]
     fn extract_coverage_percent_prefers_results_line() {
         let output = "Line Coverage: 70.1%\nCoverage Results: 91.2%\nCoverage: 92.0%";
         assert_eq!(extract_coverage_percent(output), Some(91.2));
@@ -1974,6 +1980,18 @@ mod tests {
     fn extract_coverage_percent_falls_back_to_last_match() {
         let output = "Line Coverage: 70.1%\nTotal coverage: 72.0%";
         assert_eq!(extract_coverage_percent(output), Some(72.0));
+    }
+
+    #[test]
+    fn extract_coverage_percent_reads_line_coverage() {
+        let output = "line coverage: 64.3%";
+        assert_eq!(extract_coverage_percent(output), Some(64.3));
+    }
+
+    #[test]
+    fn extract_coverage_percent_reads_generic_coverage() {
+        let output = "coverage: 83.7%";
+        assert_eq!(extract_coverage_percent(output), Some(83.7));
     }
 
     #[test]
@@ -2020,6 +2038,33 @@ mod tests {
     }
 
     #[test]
+    fn evaluate_review_gate_waits_for_reviewer() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "reviews": []
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Pending(message) if message.contains("waiting")));
+    }
+
+    #[test]
+    fn evaluate_review_gate_fails_on_changes_requested() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "CHANGES_REQUESTED",
+                    "body": "Rating: 9/10",
+                    "submittedAt": "2024-01-04T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Failed(message) if message.contains("requested")));
+    }
+
+    #[test]
     fn evaluate_review_gate_fails_on_low_rating() {
         let settings = base_review_settings();
         let pr_view = json!({
@@ -2054,6 +2099,34 @@ mod tests {
     }
 
     #[test]
+    fn evaluate_review_gate_fails_on_issue_budget() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "APPROVED",
+                    "body": "Rating: 9/10\nIssues: 2",
+                    "submittedAt": "2024-01-05T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Failed(message) if message.contains("issue")));
+    }
+
+    #[test]
+    fn resolve_review_gate_merge_method_rejects_invalid_value() {
+        let err = resolve_review_gate_merge_method(Some("fast-forward".to_string())).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("merge_method"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn evaluate_check_gate_reports_pending_checks() {
         let settings = base_review_settings();
         let pr_view = json!({
@@ -2067,6 +2140,23 @@ mod tests {
         });
         let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
         assert!(matches!(decision, GateDecision::Pending(message) if message.contains("checks pending")));
+    }
+
+    #[test]
+    fn evaluate_check_gate_skips_when_disabled() {
+        let mut settings = base_review_settings();
+        settings.require_checks = false;
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "COMPLETED",
+                    "conclusion": "FAILURE"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(message) if message.contains("skipped")));
     }
 
     #[test]
@@ -2094,6 +2184,22 @@ mod tests {
                     "name": "ci",
                     "status": "COMPLETED",
                     "conclusion": "SUCCESS"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(_)));
+    }
+
+    #[test]
+    fn evaluate_check_gate_reads_state_and_result_fields() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "context": "ci",
+                    "state": "COMPLETED",
+                    "result": "SUCCESS"
                 }
             ]
         });

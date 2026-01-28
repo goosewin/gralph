@@ -77,7 +77,7 @@ Add tests for backend adapters, server endpoints, notifications, update/install 
   * Cover `extract_coverage_percent` with lines that include "coverage results", "line coverage", and generic "coverage".
   * Validate `evaluate_review_gate`, `evaluate_check_gate`, and `resolve_review_gate_merge_method` with synthetic JSON and invalid values without invoking gh.
 - **Dependencies** None
-- [ ] COV-3 Expand verifier parsing and gate evaluation coverage
+- [x] COV-3 Expand verifier parsing and gate evaluation coverage
 ---
 
 ### Task COV-4
