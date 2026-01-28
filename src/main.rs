@@ -2169,10 +2169,24 @@ mod tests {
     }
 
     #[test]
+    fn sanitize_session_name_handles_empty_and_whitespace() {
+        assert_eq!(sanitize_session_name(""), "");
+        assert_eq!(sanitize_session_name("   "), "---");
+        assert_eq!(sanitize_session_name("\t"), "-");
+    }
+
+    #[test]
     fn session_name_uses_explicit_name_and_sanitizes() {
         let temp = tempfile::tempdir().unwrap();
         let resolved = session_name(&Some("My Session@2026!".to_string()), temp.path()).unwrap();
         assert_eq!(resolved, "My-Session-2026-");
+    }
+
+    #[test]
+    fn session_name_uses_whitespace_override() {
+        let temp = tempfile::tempdir().unwrap();
+        let resolved = session_name(&Some("   ".to_string()), temp.path()).unwrap();
+        assert_eq!(resolved, "---");
     }
 
     #[test]
@@ -2330,6 +2344,18 @@ mod tests {
     fn resolve_log_file_falls_back_when_missing_log_file() {
         let temp = tempfile::tempdir().unwrap();
         let session = json!({
+            "dir": temp.path().to_string_lossy().to_string(),
+        });
+
+        let resolved = resolve_log_file("demo", &session).unwrap();
+        assert_eq!(resolved, temp.path().join(".gralph").join("demo.log"));
+    }
+
+    #[test]
+    fn resolve_log_file_falls_back_for_whitespace_log_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let session = json!({
+            "log_file": "   ",
             "dir": temp.path().to_string_lossy().to_string(),
         });
 

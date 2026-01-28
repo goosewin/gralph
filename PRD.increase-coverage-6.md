@@ -118,7 +118,7 @@ Add tests for remaining modules (CLI helpers, server endpoints, notifications, b
   * Add tests for parse_bool_value accepted and rejected variants and for resolve_auto_worktree using a temp config.
   * Add tests for resolve_log_file fallback when session metadata omits log_file.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-6 Expand CLI helper coverage in main
+- [x] COV-6 Expand CLI helper coverage in main
 ---
 
 ### Task COV-7
