@@ -415,6 +415,7 @@ mod tests {
     use super::*;
     use std::env;
     use std::path::Path;
+    use std::process::Command;
     use std::sync::{Arc, Mutex};
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -597,6 +598,36 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
+    fn cleanup_stale_skips_live_pid() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        store.init_state().unwrap();
+
+        let mut child = Command::new("sleep").arg("2").spawn().unwrap();
+        let pid = child.id() as i64;
+        let pid_value = pid.to_string();
+        store
+            .set_session(
+                "alive-session",
+                &[("status", "running"), ("pid", &pid_value)],
+            )
+            .unwrap();
+
+        assert!(is_process_alive(pid));
+        let cleaned = store.cleanup_stale(CleanupMode::Mark).unwrap();
+        assert!(cleaned.is_empty());
+
+        let session = store.get_session("alive-session").unwrap().unwrap();
+        assert_eq!(
+            session.get("status").and_then(|v| v.as_str()),
+            Some("running")
+        );
+
+        let _ = child.wait();
+    }
+
+    #[test]
     fn cleanup_stale_removes_dead_sessions() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path(), Duration::from_secs(1));
@@ -687,6 +718,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_value_handles_negative_and_mixed_strings() {
+        assert_eq!(parse_value("-5"), Value::String("-5".to_string()));
+        assert_eq!(parse_value("12-3"), Value::String("12-3".to_string()));
+    }
+
+    #[test]
     fn default_state_dir_uses_home_env() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -759,6 +796,13 @@ mod tests {
 
     #[test]
     fn validate_state_content_rejects_empty_payloads() {
+        let err = validate_state_content("").unwrap_err();
+        match err {
+            StateError::InvalidState(message) => {
+                assert!(message.contains("empty state"));
+            }
+            other => panic!("expected InvalidState, got {other:?}"),
+        }
         let err = validate_state_content("   ").unwrap_err();
         match err {
             StateError::InvalidState(message) => {

@@ -18,7 +18,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-1 Expand core loop error-path and prompt rendering coverage.
 - COV-2 Expand PRD validation and sanitization coverage.
 - COV-3 Add OpenCode backend run_iteration argument and env coverage.
-- COV-4 Add Gemini backend run_iteration flag validation tests.
+- COV-4 Expand state store edge-case coverage.
 - COV-5 Add Codex backend run_iteration flag validation tests.
 - COV-7 Expand core loop helpers and logging coverage.
 - COV-8 Expand state store edge case coverage.

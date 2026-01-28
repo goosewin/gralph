@@ -89,7 +89,7 @@ Add tests for backend adapters, server endpoints, notifications, update/install 
   * Spawn a short-lived child process and verify `cleanup_stale` does not mark sessions with live pids as stale.
   * Add edge-case tests for `parse_value` (negative and mixed strings) and `validate_state_content` (empty content rejection).
 - **Dependencies** None
-- [ ] COV-4 Expand state store edge-case coverage
+- [x] COV-4 Expand state store edge-case coverage
 ---
 
 ### Task COV-5
