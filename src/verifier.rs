@@ -1971,6 +1971,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_percent_from_line_ignores_empty_tokens() {
+        let value = parse_percent_from_line("Coverage % 55% line 66%").unwrap();
+        assert!((value - 66.0).abs() < 1e-6);
+    }
+
+    #[test]
     fn extract_coverage_percent_prefers_results_line() {
         let output = "Line Coverage: 70.1%\nCoverage Results: 91.2%\nCoverage: 92.0%";
         assert_eq!(extract_coverage_percent(output), Some(91.2));
@@ -1995,6 +2001,12 @@ mod tests {
     }
 
     #[test]
+    fn extract_coverage_percent_uses_fallback_when_results_missing() {
+        let output = "Coverage Results: pending\nLine Coverage: 70.1%\nTotal coverage: 72.0%";
+        assert_eq!(extract_coverage_percent(output), Some(72.0));
+    }
+
+    #[test]
     fn parse_review_rating_accepts_fraction_and_percent() {
         let fraction = parse_review_rating("Rating: 8/10").unwrap();
         assert!((fraction - 8.0).abs() < 1e-6);
@@ -2009,6 +2021,14 @@ mod tests {
     }
 
     #[test]
+    fn parse_review_rating_reads_rating_text_values() {
+        let rating = parse_review_rating("Overall rating: 9").unwrap();
+        assert!((rating - 9.0).abs() < 1e-6);
+        let scaled = parse_review_rating("Score: 12").unwrap();
+        assert!((scaled - 1.2).abs() < 1e-6);
+    }
+
+    #[test]
     fn parse_review_issue_count_handles_zero_and_number() {
         assert_eq!(parse_review_issue_count("No issues found."), Some(0));
         assert_eq!(parse_review_issue_count("Issues: 3 blocking"), Some(3));
@@ -2017,6 +2037,13 @@ mod tests {
     #[test]
     fn parse_review_issue_count_returns_none_without_issue_line() {
         assert_eq!(parse_review_issue_count("Looks good overall."), None);
+    }
+
+    #[test]
+    fn parse_review_issue_count_handles_fraction_and_percent_formats() {
+        assert_eq!(parse_review_issue_count("Issues: 2/10 (minor)"), Some(2));
+        assert_eq!(parse_review_issue_count("Issue rate: 20%"), Some(20));
+        assert_eq!(parse_review_issue_count("Issue count: 3 remaining"), Some(3));
     }
 
     #[test]
@@ -2215,6 +2242,15 @@ mod tests {
     }
 
     #[test]
+    fn wildcard_match_handles_empty_and_suffix() {
+        assert!(wildcard_match("*", ""));
+        assert!(wildcard_match("src/*", "src/"));
+        assert!(wildcard_match("*.md", "readme.md"));
+        assert!(!wildcard_match("*.md", "readme.md.bak"));
+        assert!(!wildcard_match("src/main.rs", "src/main.rs.bak"));
+    }
+
+    #[test]
     fn path_matches_any_strips_double_star_prefix() {
         let patterns = vec!["**/docs/*.md".to_string(), "README.md".to_string()];
         assert!(path_matches_any("docs/readme.md", &patterns));
@@ -2377,5 +2413,29 @@ mod tests {
         let ignore = vec!["**/target/**".to_string()];
         assert!(path_is_ignored("target", true, &ignore));
         assert!(path_is_ignored("target/debug/app", false, &ignore));
+    }
+
+    #[test]
+    fn collect_static_check_files_respects_allow_and_ignore_patterns() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join("target/debug")).unwrap();
+        fs::create_dir_all(root.join("docs")).unwrap();
+        fs::write(root.join("src/main.rs"), "fn main() {}\n").unwrap();
+        fs::write(root.join("src/ignore.txt"), "ignored\n").unwrap();
+        fs::write(root.join("target/debug/app.rs"), "fn main() {}\n").unwrap();
+        fs::write(root.join("docs/readme.md"), "docs\n").unwrap();
+
+        let mut settings = base_static_settings();
+        settings.allow_patterns = vec!["**/*.rs".to_string(), "docs/*.md".to_string()];
+        settings.ignore_patterns = vec!["**/target/**".to_string()];
+
+        let files = collect_static_check_files(root, &settings).unwrap();
+        let rel: Vec<String> = files
+            .iter()
+            .map(|path| normalize_relative_path(root, path))
+            .collect();
+        assert_eq!(rel, vec!["docs/readme.md", "src/main.rs"]);
     }
 }

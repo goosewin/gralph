@@ -92,7 +92,7 @@ Add tests for remaining modules (CLI helpers, server endpoints, notifications, b
   * Add tests for parse_review_rating and parse_review_issue_count covering fraction, percent, and rating text formats.
   * Add tests for wildcard_match and static check file selection edge cases.
 - **Dependencies** None
-- [ ] COV-4 Expand verifier parsing and gate evaluation tests
+- [x] COV-4 Expand verifier parsing and gate evaluation tests
 ---
 
 ### Task COV-5
