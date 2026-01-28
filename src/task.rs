@@ -72,6 +72,10 @@ mod tests {
         string_regex(r"[A-Za-z0-9][A-Za-z0-9 .,]{0,20}").unwrap()
     }
 
+    fn noise_line_strategy() -> impl Strategy<Value = String> {
+        string_regex(r"@[A-Za-z0-9]{1,8}").unwrap()
+    }
+
     #[test]
     fn task_blocks_from_contents_returns_empty_when_no_blocks_exist() {
         let contents = "## Overview\n- [ ] Not a task block\n---\n";
@@ -102,8 +106,26 @@ mod tests {
     }
 
     #[test]
+    fn task_blocks_from_contents_handles_adjacent_blocks_and_trailing_sections() {
+        let contents = "### Task A\n- [ ] First\n### Task B\n- [ ] Second\n## Trailing\n- [ ] Not a task";
+        let blocks = task_blocks_from_contents(contents);
+
+        assert_eq!(blocks.len(), 2);
+        assert!(blocks[0].contains("### Task A"));
+        assert!(!blocks[0].contains("### Task B"));
+        assert!(blocks[1].contains("### Task B"));
+        assert!(blocks[1].contains("- [ ] Second"));
+        assert!(!blocks[1].contains("Trailing"));
+    }
+
+    #[test]
     fn is_task_header_accepts_leading_whitespace() {
         assert!(is_task_header("  ### Task COV-13"));
+    }
+
+    #[test]
+    fn is_task_header_accepts_trailing_space_without_id() {
+        assert!(is_task_header("### Task "));
     }
 
     #[test]
@@ -118,6 +140,12 @@ mod tests {
         assert!(is_task_block_end("## Notes"));
         assert!(is_task_block_end("  ## Notes"));
         assert!(!is_task_block_end("### Task COV-13"));
+    }
+
+    #[test]
+    fn is_task_block_end_rejects_empty_h2_headings() {
+        assert!(!is_task_block_end("## "));
+        assert!(!is_task_block_end("  ##    "));
     }
 
     #[test]
@@ -189,6 +217,52 @@ mod tests {
 
             let blocks_out = task_blocks_from_contents(&contents);
             prop_assert_eq!(blocks_out, expected_blocks);
+        }
+
+        #[test]
+        fn prop_task_blocks_from_contents_excludes_stray_lines(
+            prefix in prop::collection::vec(noise_line_strategy(), 0..3),
+            body in prop::collection::vec(safe_line_strategy(), 0..4),
+            suffix in prop::collection::vec(noise_line_strategy(), 0..3),
+            end_with_separator in any::<bool>(),
+            id in task_id_strategy()
+        ) {
+            let mut contents = String::new();
+            if !prefix.is_empty() {
+                contents.push_str(&prefix.join("\n"));
+                contents.push('\n');
+            }
+
+            let header = format!("### Task {}", id);
+            contents.push_str(&header);
+
+            let mut expected = header;
+            for line in &body {
+                contents.push('\n');
+                contents.push_str(line);
+                expected.push('\n');
+                expected.push_str(line);
+            }
+
+            contents.push('\n');
+            if end_with_separator {
+                contents.push_str("---");
+            } else {
+                contents.push_str("## End");
+            }
+
+            if !suffix.is_empty() {
+                contents.push('\n');
+                contents.push_str(&suffix.join("\n"));
+            }
+
+            let blocks_out = task_blocks_from_contents(&contents);
+            prop_assert_eq!(blocks_out, vec![expected.clone()]);
+
+            let block = &blocks_out[0];
+            for line in prefix.iter().chain(suffix.iter()) {
+                prop_assert!(!block.contains(line));
+            }
         }
 
         #[test]

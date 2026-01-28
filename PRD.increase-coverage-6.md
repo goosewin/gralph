@@ -235,7 +235,7 @@ Add tests for remaining modules (CLI helpers, server endpoints, notifications, b
   * Add tests for task_blocks_from_contents with adjacent task blocks and trailing sections.
   * Extend property-based tests to assert no stray lines are included in blocks.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-15 Expand task parsing edge-case tests
+- [x] COV-15 Expand task parsing edge-case tests
 ---
 
 ### Task COV-16
