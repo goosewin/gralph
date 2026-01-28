@@ -77,6 +77,7 @@ const DEFAULT_REVIEW_TIMEOUT_SECONDS: u64 = 1800;
 const DEFAULT_REVIEW_REQUIRE_APPROVAL: bool = false;
 const DEFAULT_REVIEW_REQUIRE_CHECKS: bool = true;
 const DEFAULT_REVIEW_MERGE_METHOD: &str = "merge";
+const DEFAULT_VERIFIER_AUTO_RUN: bool = true;
 
 #[derive(Debug)]
 enum CliError {
@@ -881,26 +882,42 @@ fn cmd_verifier(args: VerifierArgs) -> Result<(), CliError> {
     }
 
     let config = Config::load(Some(&dir)).map_err(|err| CliError::Message(err.to_string()))?;
-    let test_command = resolve_verifier_command(
-        args.test_command,
+    run_verifier_pipeline(
+        &dir,
         &config,
+        args.test_command,
+        args.coverage_command,
+        args.coverage_min,
+    )
+}
+
+fn run_verifier_pipeline(
+    dir: &Path,
+    config: &Config,
+    test_command: Option<String>,
+    coverage_command: Option<String>,
+    coverage_min: Option<f64>,
+) -> Result<(), CliError> {
+    let test_command = resolve_verifier_command(
+        test_command,
+        config,
         "verifier.test_command",
         DEFAULT_TEST_COMMAND,
     )?;
     let coverage_command = resolve_verifier_command(
-        args.coverage_command,
-        &config,
+        coverage_command,
+        config,
         "verifier.coverage_command",
         DEFAULT_COVERAGE_COMMAND,
     )?;
-    let coverage_min = resolve_verifier_coverage_min(args.coverage_min, &config)?;
+    let coverage_min = resolve_verifier_coverage_min(coverage_min, config)?;
 
     println!("Verifier running in {}", dir.display());
 
-    run_verifier_command("Tests", &dir, &test_command)?;
+    run_verifier_command("Tests", dir, &test_command)?;
     println!("Tests OK.");
 
-    let coverage_output = run_verifier_command("Coverage", &dir, &coverage_command)?;
+    let coverage_output = run_verifier_command("Coverage", dir, &coverage_command)?;
     let coverage = extract_coverage_percent(&coverage_output).ok_or_else(|| {
         CliError::Message("Coverage output missing percentage value.".to_string())
     })?;
@@ -912,9 +929,9 @@ fn cmd_verifier(args: VerifierArgs) -> Result<(), CliError> {
     }
     println!("Coverage OK: {:.2}% (>= {:.2}%)", coverage, coverage_min);
 
-    run_verifier_static_checks(&dir, &config)?;
-    let pr_url = run_verifier_pr_create(&dir, &config)?;
-    run_verifier_review_gate(&dir, &config, pr_url.as_deref())?;
+    run_verifier_static_checks(dir, config)?;
+    let pr_url = run_verifier_pr_create(dir, config)?;
+    run_verifier_review_gate(dir, config, pr_url.as_deref())?;
 
     Ok(())
 }
@@ -2815,6 +2832,25 @@ fn run_loop_with_state(args: RunLoopArgs) -> Result<(), CliError> {
         )
         .map_err(|err| CliError::Message(err.to_string()))?;
 
+    if outcome.status == LoopStatus::Complete && resolve_verifier_auto_run(&config) {
+        store
+            .set_session(
+                &args.name,
+                &[("status", "verifying"), ("last_task_count", "0")],
+            )
+            .map_err(|err| CliError::Message(err.to_string()))?;
+        if let Err(err) = run_verifier_pipeline(&args.dir, &config, None, None, None) {
+            let _ = store.set_session(&args.name, &[("status", "failed")]);
+            return Err(err);
+        }
+        store
+            .set_session(
+                &args.name,
+                &[("status", "verified"), ("last_task_count", "0")],
+            )
+            .map_err(|err| CliError::Message(err.to_string()))?;
+    }
+
     notify_if_configured(&config, &args, &outcome, max_iterations)?;
     Ok(())
 }
@@ -3190,6 +3226,14 @@ fn resolve_auto_worktree(config: &Config, no_worktree: bool) -> bool {
         .as_deref()
         .and_then(parse_bool_value)
         .unwrap_or(true)
+}
+
+fn resolve_verifier_auto_run(config: &Config) -> bool {
+    config
+        .get("verifier.auto_run")
+        .as_deref()
+        .and_then(parse_bool_value)
+        .unwrap_or(DEFAULT_VERIFIER_AUTO_RUN)
 }
 
 fn worktree_timestamp_slug() -> String {
