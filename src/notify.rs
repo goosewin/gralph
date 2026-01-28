@@ -794,6 +794,38 @@ mod tests {
     }
 
     #[test]
+    fn emphasized_session_wraps_marker() {
+        assert_eq!(emphasized_session("alpha", "**"), "**alpha**");
+        assert_eq!(emphasized_session("beta", "*"), "*beta*");
+    }
+
+    #[test]
+    fn format_complete_description_emphasizes_session() {
+        let description = format_complete_description("alpha", "**");
+        assert_eq!(
+            description,
+            "Session **alpha** has finished all tasks successfully."
+        );
+    }
+
+    #[test]
+    fn format_failure_description_maps_known_reasons() {
+        let cases = [
+            (
+                "max_iterations",
+                "Session **alpha** hit maximum iterations limit.",
+            ),
+            ("error", "Session **alpha** encountered an error."),
+            ("manual_stop", "Session **alpha** was manually stopped."),
+        ];
+
+        for (reason, expected) in cases {
+            let description = format_failure_description("alpha", reason, "**");
+            assert_eq!(description, expected);
+        }
+    }
+
+    #[test]
     fn build_generic_payload_optional_fields() {
         let payload = build_generic_payload(
             "complete",
@@ -1010,6 +1042,30 @@ mod tests {
     }
 
     #[test]
+    fn format_discord_failed_manual_stop_payload() {
+        let payload = format_discord_failed(
+            "alpha",
+            "repo",
+            "manual_stop",
+            "2",
+            "5",
+            "1",
+            "4m 1s",
+            "2026-01-26T01:02:03Z",
+        )
+        .expect("discord payload");
+        let value: Value = serde_json::from_str(&payload).expect("json payload");
+        let embed = &value["embeds"][0];
+
+        assert_eq!(
+            embed["description"],
+            "Session **alpha** was manually stopped."
+        );
+        assert_eq!(embed["fields"][1]["name"], "Reason");
+        assert_eq!(embed["fields"][1]["value"], "manual_stop");
+    }
+
+    #[test]
     fn format_discord_failed_unknown_reason_message() {
         let payload = format_discord_failed(
             "alpha",
@@ -1058,6 +1114,51 @@ mod tests {
     }
 
     #[test]
+    fn format_slack_failed_manual_stop_payload() {
+        let payload = format_slack_failed(
+            "beta",
+            "repo",
+            "manual_stop",
+            "2",
+            "5",
+            "1",
+            "4m 1s",
+            "2026-01-26T01:02:03Z",
+        )
+        .expect("slack payload");
+        let value: Value = serde_json::from_str(&payload).expect("json payload");
+        let attachment = &value["attachments"][0];
+        let blocks = attachment["blocks"].as_array().expect("blocks");
+
+        assert_eq!(
+            blocks[1]["text"]["text"],
+            "Session *beta* was manually stopped."
+        );
+        assert_eq!(blocks[2]["fields"][1]["text"], "*Reason:*\nmanual_stop");
+    }
+
+    #[test]
+    fn format_slack_failed_unknown_reason_payload() {
+        let payload = format_slack_failed(
+            "beta",
+            "repo",
+            "timeout",
+            "2",
+            "5",
+            "1",
+            "4m 1s",
+            "2026-01-26T01:02:03Z",
+        )
+        .expect("slack payload");
+        let value: Value = serde_json::from_str(&payload).expect("json payload");
+        let attachment = &value["attachments"][0];
+        let blocks = attachment["blocks"].as_array().expect("blocks");
+
+        assert_eq!(blocks[1]["text"]["text"], "Session *beta* failed: timeout");
+        assert_eq!(blocks[2]["fields"][1]["text"], "*Reason:*\ntimeout");
+    }
+
+    #[test]
     fn format_generic_failed_reason_mappings() {
         let cases = [
             (
@@ -1095,6 +1196,8 @@ mod tests {
             assert_eq!(value["event"], "failed");
             assert_eq!(value["status"], "failure");
             assert_eq!(value["reason"], reason);
+            assert_eq!(value["max_iterations"], "5");
+            assert_eq!(value["remaining_tasks"], "1");
             assert_eq!(value["message"], expected);
         }
     }
@@ -1112,12 +1215,6 @@ mod tests {
     fn format_failure_description_handles_unknown_reason() {
         let description = format_failure_description("alpha", "timeout", "**");
         assert_eq!(description, "Session **alpha** failed: timeout");
-    }
-
-    #[test]
-    fn format_failure_description_handles_manual_stop() {
-        let description = format_failure_description("alpha", "manual_stop", "**");
-        assert_eq!(description, "Session **alpha** was manually stopped.");
     }
 
     #[test]

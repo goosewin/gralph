@@ -30,7 +30,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-5 Add config path edge-case and key existence tests.
 - COV-6 Expand CLI helper coverage in main.
 - COV-7 Expand server auth and CORS error-path coverage.
-- COV-8 Add notification manual-stop formatting and input validation tests.
+- COV-8 Expand notification formatting helper and payload coverage.
 - COV-9 Expand backend module utility coverage.
 - COV-9 Add notify validation and failure formatting tests.
 - COV-10 Add property-based tests for task parsing invariants.

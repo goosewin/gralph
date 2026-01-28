@@ -122,7 +122,7 @@ Increase coverage in supporting modules and backend adapters (`src/main.rs`, `sr
   * Add tests for emphasized_session and format_complete_description, and for format_failure_description mappings (max_iterations, error, manual_stop).
   * Add tests for discord/slack/generic payloads using manual_stop and unknown failure reasons to ensure message and fields align.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-8 Expand notification formatting coverage
+- [x] COV-8 Expand notification formatting coverage
 ### Task COV-9
 
 - **ID** COV-9
