@@ -220,6 +220,156 @@ pub fn send_webhook(
     }
 }
 
+const CLI_LABEL: &str = "Gralph CLI";
+
+fn emphasized_session(session_name: &str, marker: &str) -> String {
+    format!("{marker}{session_name}{marker}")
+}
+
+fn format_complete_description(session_name: &str, marker: &str) -> String {
+    format!(
+        "Session {} has finished all tasks successfully.",
+        emphasized_session(session_name, marker)
+    )
+}
+
+fn format_failure_description(session_name: &str, failure_reason: &str, marker: &str) -> String {
+    let emphasized = emphasized_session(session_name, marker);
+    match failure_reason {
+        "max_iterations" => format!("Session {} hit maximum iterations limit.", emphasized),
+        "error" => format!("Session {} encountered an error.", emphasized),
+        "manual_stop" => format!("Session {} was manually stopped.", emphasized),
+        _ => format!("Session {} failed: {}", emphasized, failure_reason),
+    }
+}
+
+fn to_pretty_json(payload: serde_json::Value) -> Result<String, NotifyError> {
+    Ok(serde_json::to_string_pretty(&payload)?)
+}
+
+fn discord_footer() -> serde_json::Value {
+    json!({
+        "text": CLI_LABEL
+    })
+}
+
+fn discord_field(name: &str, value: impl Into<String>, inline: bool) -> serde_json::Value {
+    let value = value.into();
+    json!({
+        "name": name,
+        "value": value,
+        "inline": inline
+    })
+}
+
+fn discord_embed(
+    title: &str,
+    description: String,
+    color: u32,
+    fields: Vec<serde_json::Value>,
+    timestamp: &str,
+) -> serde_json::Value {
+    json!({
+        "title": title,
+        "description": description,
+        "color": color,
+        "fields": fields,
+        "footer": discord_footer(),
+        "timestamp": timestamp
+    })
+}
+
+fn slack_header(text: &str) -> serde_json::Value {
+    json!({
+        "type": "header",
+        "text": {
+            "type": "plain_text",
+            "text": text,
+            "emoji": true
+        }
+    })
+}
+
+fn slack_section_text(text: String) -> serde_json::Value {
+    json!({
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": text
+        }
+    })
+}
+
+fn slack_fields_block(fields: Vec<serde_json::Value>) -> serde_json::Value {
+    json!({
+        "type": "section",
+        "fields": fields
+    })
+}
+
+fn slack_field(label: &str, value: impl AsRef<str>) -> serde_json::Value {
+    let value = value.as_ref();
+    json!({
+        "type": "mrkdwn",
+        "text": format!("*{}:*\n{}", label, value)
+    })
+}
+
+fn slack_project_field(project_dir: &str) -> serde_json::Value {
+    slack_field("Project", format!("`{}`", project_dir))
+}
+
+fn slack_context(timestamp: &str) -> serde_json::Value {
+    json!({
+        "type": "context",
+        "elements": [{
+            "type": "mrkdwn",
+            "text": format!("{} • {}", CLI_LABEL, timestamp)
+        }]
+    })
+}
+
+fn slack_attachment(color: &str, blocks: Vec<serde_json::Value>) -> serde_json::Value {
+    json!({
+        "color": color,
+        "blocks": blocks
+    })
+}
+
+fn build_generic_payload(
+    event: &str,
+    status: &str,
+    session_name: &str,
+    project_dir: &str,
+    reason: Option<&str>,
+    iterations: &str,
+    max_iterations: Option<&str>,
+    remaining_tasks: Option<&str>,
+    duration_str: &str,
+    timestamp: &str,
+    message: String,
+) -> serde_json::Value {
+    let mut payload = serde_json::Map::new();
+    payload.insert("event".to_string(), json!(event));
+    payload.insert("status".to_string(), json!(status));
+    payload.insert("session".to_string(), json!(session_name));
+    payload.insert("project".to_string(), json!(project_dir));
+    if let Some(reason) = reason {
+        payload.insert("reason".to_string(), json!(reason));
+    }
+    payload.insert("iterations".to_string(), json!(iterations));
+    if let Some(max_iterations) = max_iterations {
+        payload.insert("max_iterations".to_string(), json!(max_iterations));
+    }
+    if let Some(remaining_tasks) = remaining_tasks {
+        payload.insert("remaining_tasks".to_string(), json!(remaining_tasks));
+    }
+    payload.insert("duration".to_string(), json!(duration_str));
+    payload.insert("timestamp".to_string(), json!(timestamp));
+    payload.insert("message".to_string(), json!(message));
+    serde_json::Value::Object(payload)
+}
+
 fn format_discord_complete(
     session_name: &str,
     project_dir: &str,
@@ -227,35 +377,22 @@ fn format_discord_complete(
     duration_str: &str,
     timestamp: &str,
 ) -> Result<String, NotifyError> {
+    let fields = vec![
+        discord_field("Project", format!("`{}`", project_dir), false),
+        discord_field("Iterations", iterations, true),
+        discord_field("Duration", duration_str, true),
+    ];
+    let embed = discord_embed(
+        "✅ Gralph Complete",
+        format_complete_description(session_name, "**"),
+        5763719,
+        fields,
+        timestamp,
+    );
     let payload = json!({
-        "embeds": [{
-            "title": "✅ Gralph Complete",
-            "description": format!("Session **{}** has finished all tasks successfully.", session_name),
-            "color": 5763719,
-            "fields": [
-                {
-                    "name": "Project",
-                    "value": format!("`{}`", project_dir),
-                    "inline": false
-                },
-                {
-                    "name": "Iterations",
-                    "value": iterations,
-                    "inline": true
-                },
-                {
-                    "name": "Duration",
-                    "value": duration_str,
-                    "inline": true
-                }
-            ],
-            "footer": {
-                "text": "Gralph CLI"
-            },
-            "timestamp": timestamp
-        }]
+        "embeds": [embed]
     });
-    Ok(serde_json::to_string_pretty(&payload)?)
+    to_pretty_json(payload)
 }
 
 fn format_slack_complete(
@@ -265,53 +402,21 @@ fn format_slack_complete(
     duration_str: &str,
     timestamp: &str,
 ) -> Result<String, NotifyError> {
+    let fields = vec![
+        slack_project_field(project_dir),
+        slack_field("Iterations", iterations),
+        slack_field("Duration", duration_str),
+    ];
+    let blocks = vec![
+        slack_header("✅ Gralph Complete"),
+        slack_section_text(format_complete_description(session_name, "*")),
+        slack_fields_block(fields),
+        slack_context(timestamp),
+    ];
     let payload = json!({
-        "attachments": [{
-            "color": "#57F287",
-            "blocks": [
-                {
-                    "type": "header",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "✅ Gralph Complete",
-                        "emoji": true
-                    }
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": format!("Session *{}* has finished all tasks successfully.", session_name)
-                    }
-                },
-                {
-                    "type": "section",
-                    "fields": [
-                        {
-                            "type": "mrkdwn",
-                            "text": format!("*Project:*\n`{}`", project_dir)
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": format!("*Iterations:*\n{}", iterations)
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": format!("*Duration:*\n{}", duration_str)
-                        }
-                    ]
-                },
-                {
-                    "type": "context",
-                    "elements": [{
-                        "type": "mrkdwn",
-                        "text": format!("Gralph CLI • {}", timestamp)
-                    }]
-                }
-            ]
-        }]
+        "attachments": [slack_attachment("#57F287", blocks)]
     });
-    Ok(serde_json::to_string_pretty(&payload)?)
+    to_pretty_json(payload)
 }
 
 fn format_slack_failed(
@@ -324,68 +429,24 @@ fn format_slack_failed(
     duration_str: &str,
     timestamp: &str,
 ) -> Result<String, NotifyError> {
-    let description = match failure_reason {
-        "max_iterations" => format!("Session *{}* hit maximum iterations limit.", session_name),
-        "error" => format!("Session *{}* encountered an error.", session_name),
-        "manual_stop" => format!("Session *{}* was manually stopped.", session_name),
-        _ => format!("Session *{}* failed: {}", session_name, failure_reason),
-    };
-
+    let description = format_failure_description(session_name, failure_reason, "*");
+    let fields = vec![
+        slack_project_field(project_dir),
+        slack_field("Reason", failure_reason),
+        slack_field("Iterations", format!("{}/{}", iterations, max_iterations)),
+        slack_field("Remaining Tasks", remaining_tasks),
+        slack_field("Duration", duration_str),
+    ];
+    let blocks = vec![
+        slack_header("❌ Gralph Failed"),
+        slack_section_text(description),
+        slack_fields_block(fields),
+        slack_context(timestamp),
+    ];
     let payload = json!({
-        "attachments": [{
-            "color": "#ED4245",
-            "blocks": [
-                {
-                    "type": "header",
-                    "text": {
-                        "type": "plain_text",
-                        "text": "❌ Gralph Failed",
-                        "emoji": true
-                    }
-                },
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": description
-                    }
-                },
-                {
-                    "type": "section",
-                    "fields": [
-                        {
-                            "type": "mrkdwn",
-                            "text": format!("*Project:*\n`{}`", project_dir)
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": format!("*Reason:*\n{}", failure_reason)
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": format!("*Iterations:*\n{}/{}", iterations, max_iterations)
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": format!("*Remaining Tasks:*\n{}", remaining_tasks)
-                        },
-                        {
-                            "type": "mrkdwn",
-                            "text": format!("*Duration:*\n{}", duration_str)
-                        }
-                    ]
-                },
-                {
-                    "type": "context",
-                    "elements": [{
-                        "type": "mrkdwn",
-                        "text": format!("Gralph CLI • {}", timestamp)
-                    }]
-                }
-            ]
-        }]
+        "attachments": [slack_attachment("#ED4245", blocks)]
     });
-    Ok(serde_json::to_string_pretty(&payload)?)
+    to_pretty_json(payload)
 }
 
 fn format_discord_failed(
@@ -398,52 +459,25 @@ fn format_discord_failed(
     duration_str: &str,
     timestamp: &str,
 ) -> Result<String, NotifyError> {
-    let description = match failure_reason {
-        "max_iterations" => format!("Session **{}** hit maximum iterations limit.", session_name),
-        "error" => format!("Session **{}** encountered an error.", session_name),
-        "manual_stop" => format!("Session **{}** was manually stopped.", session_name),
-        _ => format!("Session **{}** failed: {}", session_name, failure_reason),
-    };
-
+    let description = format_failure_description(session_name, failure_reason, "**");
+    let fields = vec![
+        discord_field("Project", format!("`{}`", project_dir), false),
+        discord_field("Reason", failure_reason, true),
+        discord_field("Iterations", format!("{}/{}", iterations, max_iterations), true),
+        discord_field("Remaining Tasks", remaining_tasks, true),
+        discord_field("Duration", duration_str, true),
+    ];
+    let embed = discord_embed(
+        "❌ Gralph Failed",
+        description,
+        15548997,
+        fields,
+        timestamp,
+    );
     let payload = json!({
-        "embeds": [{
-            "title": "❌ Gralph Failed",
-            "description": description,
-            "color": 15548997,
-            "fields": [
-                {
-                    "name": "Project",
-                    "value": format!("`{}`", project_dir),
-                    "inline": false
-                },
-                {
-                    "name": "Reason",
-                    "value": failure_reason,
-                    "inline": true
-                },
-                {
-                    "name": "Iterations",
-                    "value": format!("{}/{}", iterations, max_iterations),
-                    "inline": true
-                },
-                {
-                    "name": "Remaining Tasks",
-                    "value": remaining_tasks,
-                    "inline": true
-                },
-                {
-                    "name": "Duration",
-                    "value": duration_str,
-                    "inline": true
-                }
-            ],
-            "footer": {
-                "text": "Gralph CLI"
-            },
-            "timestamp": timestamp
-        }]
+        "embeds": [embed]
     });
-    Ok(serde_json::to_string_pretty(&payload)?)
+    to_pretty_json(payload)
 }
 
 fn format_generic_complete(
@@ -457,17 +491,20 @@ fn format_generic_complete(
         "Gralph loop '{}' completed successfully after {} iterations ({})",
         session_name, iterations, duration_str
     );
-    let payload = json!({
-        "event": "complete",
-        "status": "success",
-        "session": session_name,
-        "project": project_dir,
-        "iterations": iterations,
-        "duration": duration_str,
-        "timestamp": timestamp,
-        "message": message
-    });
-    Ok(serde_json::to_string_pretty(&payload)?)
+    let payload = build_generic_payload(
+        "complete",
+        "success",
+        session_name,
+        project_dir,
+        None,
+        iterations,
+        None,
+        None,
+        duration_str,
+        timestamp,
+        message,
+    );
+    to_pretty_json(payload)
 }
 
 fn format_generic_failed(
@@ -498,20 +535,20 @@ fn format_generic_failed(
             session_name, failure_reason, iterations
         ),
     };
-    let payload = json!({
-        "event": "failed",
-        "status": "failure",
-        "session": session_name,
-        "project": project_dir,
-        "reason": failure_reason,
-        "iterations": iterations,
-        "max_iterations": max_iterations,
-        "remaining_tasks": remaining_tasks,
-        "duration": duration_str,
-        "timestamp": timestamp,
-        "message": message
-    });
-    Ok(serde_json::to_string_pretty(&payload)?)
+    let payload = build_generic_payload(
+        "failed",
+        "failure",
+        session_name,
+        project_dir,
+        Some(failure_reason),
+        iterations,
+        Some(max_iterations),
+        Some(remaining_tasks),
+        duration_str,
+        timestamp,
+        message,
+    );
+    to_pretty_json(payload)
 }
 
 fn format_duration(duration_secs: Option<u64>) -> String {

@@ -21,6 +21,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - REF-1 Consolidate shared backend execution helpers.
 - REF-3 Centralize config merge precedence and normalize override lookup.
 - REF-4 Centralize server auth and error responses.
+- REF-5 Reduce duplication in notification payload formatting.
 
 ### Verification
 - Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened

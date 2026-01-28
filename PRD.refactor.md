@@ -99,7 +99,7 @@ Preserve file locking, atomic writes, and error handling semantics across state,
   * Discord, Slack, and generic payloads remain byte-for-byte equivalent where possible.
   * Notification tests pass without updates to expected payloads.
 - **Dependencies** None
-- [ ] REF-5 Reduce duplication in notification payload formatting
+- [x] REF-5 Reduce duplication in notification payload formatting
 ---
 
 ### Task REF-6
