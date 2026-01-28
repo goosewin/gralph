@@ -1422,6 +1422,20 @@ mod tests {
     }
 
     #[test]
+    fn prd_detect_stack_records_cargo_evidence() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("Cargo.toml"), "[package]\nname = \"demo\"\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+
+        assert!(detection.ids.contains(&"Rust".to_string()));
+        assert!(detection.languages.contains(&"Rust".to_string()));
+        assert!(detection.tools.contains(&"Cargo".to_string()));
+        assert!(detection.evidence.contains(&"Cargo.toml".to_string()));
+    }
+
+    #[test]
     fn prd_sanitize_generated_file_filters_open_questions_and_context() {
         let temp = tempdir().unwrap();
         let base = temp.path();
@@ -1449,6 +1463,28 @@ mod tests {
         assert!(sanitized.contains("- [ ] D-7 Keep first"));
         assert!(sanitized.contains("- D-7 Drop checkbox"));
         assert!(sanitized.contains("- Outside checkbox"));
+    }
+
+    #[test]
+    fn prd_sanitize_generated_file_removes_open_questions_case_insensitive() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("context.md"), "ok").unwrap();
+
+        let prd = base.join("prd.md");
+        fs::write(
+            &prd,
+            "# PRD\n\n## OPEN QUESTIONS\n- Should be removed\n\n### Task D-7X\n- **ID** D-7X\n- **Context Bundle** `docs/context.md`\n- **DoD** Sanitize output.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] D-7X Task\n",
+        )
+        .unwrap();
+
+        prd_sanitize_generated_file(&prd, Some(base), None).unwrap();
+        let sanitized = fs::read_to_string(&prd).unwrap();
+
+        assert!(!sanitized.contains("OPEN QUESTIONS"));
+        assert!(!sanitized.contains("Should be removed"));
     }
 
     #[test]
@@ -1636,6 +1672,23 @@ mod tests {
     }
 
     #[test]
+    fn extract_context_entries_handles_mixed_backtick_entries() {
+        let block = "### Task X-1B\n- **ID** X-1B\n- **Context Bundle** `README.md`, notes `docs/alpha.md`\n  and `docs/beta.md`, plus `docs/gamma.md`\n- **DoD** Confirm parsing.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] X-1B Task\n";
+
+        let entries = extract_context_entries(block);
+
+        assert_eq!(
+            entries,
+            vec![
+                "README.md".to_string(),
+                "docs/alpha.md".to_string(),
+                "docs/beta.md".to_string(),
+                "docs/gamma.md".to_string()
+            ]
+        );
+    }
+
+    #[test]
     fn extract_context_entries_stops_at_next_field() {
         let block = "### Task X-1A\n- **ID** X-1A\n- **Context Bundle** `README.md`,\n  `docs/alpha.md`\n  `docs/beta.md`\n- **DoD** Reference `docs/ignored.md`\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] X-1A Task\n";
 
@@ -1777,6 +1830,27 @@ mod tests {
 
         assert!(sanitized.contains("- **Context Bundle**"));
         assert!(!sanitized.contains("docs/context.md"));
+    }
+
+    #[test]
+    fn sanitize_task_block_falls_back_to_allowed_context_when_entries_invalid() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("allowed.md"), "ok").unwrap();
+        fs::write(docs.join("blocked.md"), "ok").unwrap();
+
+        let allowed = base.join("allowed.txt");
+        fs::write(&allowed, "docs/allowed.md\n").unwrap();
+
+        let block = "### Task V-4\n- **ID** V-4\n- **Context Bundle** `docs/blocked.md`, `missing.md`\n- **DoD** Validate sanitize.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] V-4 Task\n";
+
+        let sanitized = sanitize_task_block(block, Some(base), Some(&allowed));
+
+        assert!(sanitized.contains("- **Context Bundle** `docs/allowed.md`"));
+        assert!(!sanitized.contains("docs/blocked.md"));
+        assert!(!sanitized.contains("missing.md"));
     }
 
     #[test]

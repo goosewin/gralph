@@ -66,7 +66,7 @@ Add tests for remaining modules (CLI helpers, server endpoints, notifications, b
   * Add tests for sanitize_task_block fallback when context entries are invalid, including allowed list behavior.
   * Add tests for prd_detect_stack with Cargo.toml presence and for open questions detection case behavior.
 - **Dependencies** None
-- [ ] COV-2 Expand PRD validation and sanitization tests
+- [x] COV-2 Expand PRD validation and sanitization tests
 ---
 
 ### Task COV-3
