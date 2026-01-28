@@ -137,7 +137,7 @@ Add tests for backend adapters, server endpoints, notifications, update/install 
   * Verify `notify_complete` and `notify_failed` use "unknown" defaults when iterations or duration are missing.
   * Cover `format_generic_failed` mappings for known and custom reasons in the generated payload.
 - **Dependencies** None
-- [ ] COV-8 Expand notification formatting and defaults coverage
+- [x] COV-8 Expand notification formatting and defaults coverage
 ---
 
 ### Task COV-9

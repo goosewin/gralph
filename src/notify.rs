@@ -852,6 +852,69 @@ mod tests {
     }
 
     #[test]
+    fn notify_complete_defaults_unknown_when_optional_missing() {
+        let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
+
+        notify_complete(
+            "session",
+            &format!("{}/complete", base),
+            Some("repo"),
+            None,
+            None,
+            Some(5),
+        )
+        .expect("notify complete");
+
+        let request = captured.lock().unwrap().clone().expect("captured request");
+        let value: Value = serde_json::from_str(&request.body).expect("json payload");
+
+        assert_eq!(value["event"], "complete");
+        assert_eq!(value["status"], "success");
+        assert_eq!(value["session"], "session");
+        assert_eq!(value["project"], "repo");
+        assert_eq!(value["iterations"], "unknown");
+        assert_eq!(value["duration"], "unknown");
+        assert!(value["message"].as_str().unwrap().contains("unknown"));
+
+        handle.join().expect("server thread");
+    }
+
+    #[test]
+    fn notify_failed_defaults_unknown_when_optional_missing() {
+        let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
+
+        notify_failed(
+            "session",
+            &format!("{}/failed", base),
+            Some("error"),
+            Some("repo"),
+            None,
+            None,
+            None,
+            None,
+            Some(5),
+        )
+        .expect("notify failed");
+
+        let request = captured.lock().unwrap().clone().expect("captured request");
+        let value: Value = serde_json::from_str(&request.body).expect("json payload");
+
+        assert_eq!(value["event"], "failed");
+        assert_eq!(value["status"], "failure");
+        assert_eq!(value["reason"], "error");
+        assert_eq!(value["iterations"], "unknown");
+        assert_eq!(value["max_iterations"], "unknown");
+        assert_eq!(value["remaining_tasks"], "unknown");
+        assert_eq!(value["duration"], "unknown");
+        assert_eq!(
+            value["message"],
+            "Gralph loop 'session' failed due to an error after unknown iterations"
+        );
+
+        handle.join().expect("server thread");
+    }
+
+    #[test]
     fn format_discord_failed_reason_mappings() {
         let reasons = ["max_iterations", "error", "manual_stop", "timeout"];
         for reason in reasons {
@@ -936,6 +999,8 @@ mod tests {
             .expect("generic payload");
             let value: Value = serde_json::from_str(&payload).expect("json payload");
 
+            assert_eq!(value["event"], "failed");
+            assert_eq!(value["status"], "failure");
             assert_eq!(value["reason"], reason);
             assert_eq!(value["message"], expected);
         }
