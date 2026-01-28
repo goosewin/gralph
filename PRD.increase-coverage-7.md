@@ -92,7 +92,7 @@ Add tests for CLI helpers, server endpoints, notification formatting, update/ins
   * Add tests for review gate parsing, merge method resolution, and check rollup evaluation.
   * `cargo test --workspace` passes.
 - **Dependencies** None
-- [ ] COV-4 Expand verifier parsing, static checks, and review gate coverage
+- [x] COV-4 Expand verifier parsing, static checks, and review gate coverage
 ---
 
 ### Task COV-5

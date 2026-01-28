@@ -1977,6 +1977,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_percent_from_line_returns_none_when_missing() {
+        assert_eq!(parse_percent_from_line("Coverage: pending"), None);
+        assert_eq!(parse_percent_from_line("no percent here"), None);
+    }
+
+    #[test]
     fn extract_coverage_percent_prefers_results_line() {
         let output = "Line Coverage: 70.1%\nCoverage Results: 91.2%\nCoverage: 92.0%";
         assert_eq!(extract_coverage_percent(output), Some(91.2));
@@ -2004,6 +2010,12 @@ mod tests {
     fn extract_coverage_percent_uses_fallback_when_results_missing() {
         let output = "Coverage Results: pending\nLine Coverage: 70.1%\nTotal coverage: 72.0%";
         assert_eq!(extract_coverage_percent(output), Some(72.0));
+    }
+
+    #[test]
+    fn extract_coverage_percent_returns_none_without_percent() {
+        let output = "Coverage Results: pending\nNo coverage data";
+        assert_eq!(extract_coverage_percent(output), None);
     }
 
     #[test]
@@ -2154,6 +2166,41 @@ mod tests {
     }
 
     #[test]
+    fn resolve_review_gate_merge_method_accepts_case_and_whitespace() {
+        let method = resolve_review_gate_merge_method(Some("  ReBase ".to_string())).unwrap();
+        assert!(matches!(method, MergeMethod::Rebase));
+    }
+
+    #[test]
+    fn resolve_review_gate_settings_reads_config_values() {
+        let config = load_project_config(
+            "verifier:\n  review:\n    enabled: false\n    reviewer: reviewer-bot\n    min_rating: 92\n    max_issues: 2\n    poll_seconds: 15\n    timeout_seconds: 90\n    require_approval: true\n    require_checks: false\n    merge_method: squash\n",
+        );
+        let settings = resolve_review_gate_settings(&config).unwrap();
+        assert!(!settings.enabled);
+        assert_eq!(settings.reviewer, "reviewer-bot");
+        assert!((settings.min_rating - 9.2).abs() < 1e-6);
+        assert_eq!(settings.max_issues, 2);
+        assert_eq!(settings.poll_seconds, 15);
+        assert_eq!(settings.timeout_seconds, 90);
+        assert!(settings.require_approval);
+        assert!(!settings.require_checks);
+        assert!(matches!(settings.merge_method, MergeMethod::Squash));
+    }
+
+    #[test]
+    fn resolve_review_gate_settings_rejects_invalid_bool() {
+        let config = load_project_config("verifier:\n  review:\n    require_checks: maybe\n");
+        let err = resolve_review_gate_settings(&config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("require_checks"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn evaluate_check_gate_reports_pending_checks() {
         let settings = base_review_settings();
         let pr_view = json!({
@@ -2167,6 +2214,14 @@ mod tests {
         });
         let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
         assert!(matches!(decision, GateDecision::Pending(message) if message.contains("checks pending")));
+    }
+
+    #[test]
+    fn evaluate_check_gate_reports_no_checks_when_empty() {
+        let settings = base_review_settings();
+        let pr_view = json!({});
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(message) if message.contains("no checks")));
     }
 
     #[test]
