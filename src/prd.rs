@@ -1322,4 +1322,122 @@ mod tests {
         assert!(sanitized.contains("- D-7 Drop checkbox"));
         assert!(sanitized.contains("- Outside checkbox"));
     }
+
+    #[test]
+    fn has_open_questions_section_detects_heading() {
+        let contents = "# PRD\n\n## Open Questions\n- Remove these\n";
+        assert!(has_open_questions_section(contents));
+    }
+
+    #[test]
+    fn has_open_questions_section_ignores_non_matching_heading() {
+        let contents = "# PRD\n\n## Open questions\n- Lowercase\n";
+        assert!(!has_open_questions_section(contents));
+    }
+
+    #[test]
+    fn validate_stray_unchecked_reports_line_number() {
+        let contents = "# PRD\n\n### Task D-8\n- **ID** D-8\n- **Context Bundle** `README.md`\n- **DoD** Confirm stray validation.\n- **Checklist**\n  * Done.\n- **Dependencies** None\n- [ ] D-8 Task\n## Notes\n- [ ] Stray unchecked\n";
+        let task_file = Path::new("prd.md");
+
+        let errors = validate_stray_unchecked(contents, task_file).unwrap();
+        assert!(errors
+            .iter()
+            .any(|line| line.contains("Unchecked task line outside task block")
+                && line.contains("line 12")));
+    }
+
+    #[test]
+    fn prd_validate_file_rejects_absolute_context_outside_repo() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let outside = tempdir().unwrap();
+        let outside_file = outside.path().join("outside.md");
+        fs::write(&outside_file, "ok").unwrap();
+
+        let prd = base.join("prd.md");
+        let contents = format!(
+            "# PRD\n\n### Task D-9\n- **ID** D-9\n- **Context Bundle** `{}`\n- **DoD** Guard context.\n- **Checklist**\n  * Check absolute paths.\n- **Dependencies** None\n- [ ] D-9 Guard\n",
+            outside_file.display()
+        );
+        fs::write(&prd, contents).unwrap();
+
+        let err = prd_validate_file(&prd, false, None).unwrap_err();
+        assert!(err
+            .messages
+            .iter()
+            .any(|line| line.contains("Context Bundle path outside repo")));
+    }
+
+    #[test]
+    fn prd_validate_file_rejects_absolute_context_missing_inside_repo() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let missing = base.join("missing.md");
+
+        let prd = base.join("prd.md");
+        let contents = format!(
+            "# PRD\n\n### Task D-10\n- **ID** D-10\n- **Context Bundle** `{}`\n- **DoD** Guard context.\n- **Checklist**\n  * Check absolute paths.\n- **Dependencies** None\n- [ ] D-10 Guard\n",
+            missing.display()
+        );
+        fs::write(&prd, contents).unwrap();
+
+        let err = prd_validate_file(&prd, false, None).unwrap_err();
+        assert!(err
+            .messages
+            .iter()
+            .any(|line| line.contains("Context Bundle path not found")));
+        assert!(!err
+            .messages
+            .iter()
+            .any(|line| line.contains("Context Bundle path outside repo")));
+    }
+
+    #[test]
+    fn prd_sanitize_generated_file_falls_back_to_readme_when_allowed_context_empty() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("README.md"), "readme").unwrap();
+
+        let allowed = base.join("allowed.txt");
+        fs::write(&allowed, "\n").unwrap();
+
+        let prd = base.join("prd.md");
+        fs::write(
+            &prd,
+            "# PRD\n\n### Task D-11\n- **ID** D-11\n- **Context Bundle** `missing.md`\n- **DoD** Sanitize output.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] D-11 Task\n",
+        )
+        .unwrap();
+
+        prd_sanitize_generated_file(&prd, Some(base), Some(&allowed)).unwrap();
+        let sanitized = fs::read_to_string(&prd).unwrap();
+
+        assert!(sanitized.contains("- **Context Bundle** `README.md`"));
+    }
+
+    #[test]
+    fn prd_sanitize_generated_file_uses_allowed_fallback_when_context_filtered() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("allowed.md"), "ok").unwrap();
+        fs::write(docs.join("blocked.md"), "ok").unwrap();
+
+        let allowed = base.join("allowed.txt");
+        fs::write(&allowed, "docs/allowed.md\n").unwrap();
+
+        let prd = base.join("prd.md");
+        fs::write(
+            &prd,
+            "# PRD\n\n### Task D-12\n- **ID** D-12\n- **Context Bundle** `docs/blocked.md`\n- **DoD** Sanitize output.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] D-12 Task\n",
+        )
+        .unwrap();
+
+        prd_sanitize_generated_file(&prd, Some(base), Some(&allowed)).unwrap();
+        let sanitized = fs::read_to_string(&prd).unwrap();
+
+        assert!(sanitized.contains("- **Context Bundle** `docs/allowed.md`"));
+        assert!(!sanitized.contains("docs/blocked.md"));
+    }
 }
