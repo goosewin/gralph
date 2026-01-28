@@ -1240,6 +1240,25 @@ mod tests {
     }
 
     #[test]
+    fn validate_task_block_reports_missing_required_field() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("context.md"), "ok").unwrap();
+
+        let block = "### Task V-1\n- **ID** V-1\n- **Context Bundle** `docs/context.md`\n- **Checklist**\n  * Missing DoD.\n- **Dependencies** None\n- [ ] V-1 Task\n";
+
+        let errors = validate_task_block(block, Path::new("prd.md"), false, Some(base));
+
+        assert!(
+            errors
+                .iter()
+                .any(|line| line.contains("Missing required field: DoD"))
+        );
+    }
+
+    #[test]
     fn prd_validate_file_reports_missing_context_bundle_field() {
         let temp = tempdir().unwrap();
         let base = temp.path();
@@ -1277,6 +1296,25 @@ mod tests {
         let err = prd_validate_file(&prd, false, None).unwrap_err();
         assert!(
             err.messages
+                .iter()
+                .any(|line| line.contains("Multiple unchecked task lines"))
+        );
+    }
+
+    #[test]
+    fn validate_task_block_reports_multiple_unchecked_lines() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("context.md"), "ok").unwrap();
+
+        let block = "### Task V-2\n- **ID** V-2\n- **Context Bundle** `docs/context.md`\n- **DoD** Validate output.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] V-2 Task\n- [ ] V-2 Extra\n";
+
+        let errors = validate_task_block(block, Path::new("prd.md"), false, Some(base));
+
+        assert!(
+            errors
                 .iter()
                 .any(|line| line.contains("Multiple unchecked task lines"))
         );
@@ -1657,6 +1695,21 @@ mod tests {
     }
 
     #[test]
+    fn context_entry_exists_requires_base_dir_for_relative_paths() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        let rel = "docs/context.md";
+        let abs = docs.join("context.md");
+        fs::write(&abs, "ok").unwrap();
+
+        assert!(context_entry_exists(rel, Some(base)));
+        assert!(!context_entry_exists(rel, None));
+        assert!(context_entry_exists(abs.to_string_lossy().as_ref(), Some(base)));
+    }
+
+    #[test]
     fn sanitize_task_block_rebuilds_context_and_dedupes_unchecked_lines() {
         let temp = tempdir().unwrap();
         let base = temp.path();
@@ -1705,6 +1758,35 @@ mod tests {
         assert!(sanitized.contains("- [ ] X-3 Keep"));
         assert!(sanitized.contains("- X-3 Drop"));
         assert!(!sanitized.contains("- [ ] X-3 Drop"));
+    }
+
+    #[test]
+    fn sanitize_task_block_removes_context_not_in_allowed_list_without_fallback() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("context.md"), "ok").unwrap();
+
+        let allowed = base.join("allowed.txt");
+        fs::write(&allowed, "docs/other.md\n").unwrap();
+
+        let block = "### Task V-3\n- **ID** V-3\n- **Context Bundle** `docs/context.md`\n- **DoD** Validate sanitize.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] V-3 Task\n";
+
+        let sanitized = sanitize_task_block(block, Some(base), Some(&allowed));
+
+        assert!(sanitized.contains("- **Context Bundle**"));
+        assert!(!sanitized.contains("docs/context.md"));
+    }
+
+    #[test]
+    fn remove_unchecked_checkbox_strips_marker_and_preserves_checked() {
+        assert_eq!(
+            remove_unchecked_checkbox("  - [ ] Do the thing"),
+            "  - Do the thing"
+        );
+        assert_eq!(remove_unchecked_checkbox("- [x] Done"), "- [x] Done");
+        assert_eq!(remove_unchecked_checkbox("- Task"), "- Task");
     }
 
     #[test]

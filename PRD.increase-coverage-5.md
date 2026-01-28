@@ -65,7 +65,7 @@ Add tests for backend adapters, server endpoints, notifications, update/install 
   * Add validation tests that exercise `has_open_questions_section`, `validate_stray_unchecked`, and missing field errors.
   * Add sanitization tests for `sanitize_task_block`, `context_entry_exists`, and `remove_unchecked_checkbox` with allowed context lists.
 - **Dependencies** None
-- [ ] COV-2 Expand PRD validation and sanitization coverage
+- [x] COV-2 Expand PRD validation and sanitization coverage
 ---
 
 ### Task COV-3
