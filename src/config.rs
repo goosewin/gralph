@@ -427,6 +427,25 @@ mod tests {
     }
 
     #[test]
+    fn lookup_mapping_value_normalizes_case_and_hyphens() {
+        let mut map = Mapping::new();
+        map.insert(
+            Value::String("max_iterations".to_string()),
+            Value::String("10".to_string()),
+        );
+        map.insert(
+            Value::String("Log-Level".to_string()),
+            Value::String("info".to_string()),
+        );
+
+        let max_value = lookup_mapping_value(&map, "Max-Iterations").and_then(Value::as_str);
+        assert_eq!(max_value, Some("10"));
+
+        let log_value = lookup_mapping_value(&map, "log_level").and_then(Value::as_str);
+        assert_eq!(log_value, Some("info"));
+    }
+
+    #[test]
     fn normalized_env_override_precedes_legacy_hyphenated() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -446,12 +465,40 @@ mod tests {
     }
 
     #[test]
+    fn legacy_hyphenated_env_override_is_resolved() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(&default_path, "defaults:\n  auto_worktree: false\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_DEFAULTS_AUTO-WORKTREE", "true");
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("defaults.auto-worktree").as_deref(), Some("true"));
+
+        remove_env("GRALPH_DEFAULTS_AUTO-WORKTREE");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
     fn value_to_string_renders_sequences_and_tagged_values() {
         let sequence: Value = serde_yaml::from_str("[one, 2, true]").unwrap();
         assert_eq!(value_to_string(&sequence).as_deref(), Some("one,2,true"));
 
         let tagged: Value = serde_yaml::from_str("!tagged false").unwrap();
         assert_eq!(value_to_string(&tagged).as_deref(), Some("false"));
+    }
+
+    #[test]
+    fn value_to_string_handles_null_and_mixed_sequence() {
+        assert_eq!(value_to_string(&Value::Null).as_deref(), Some(""));
+
+        let sequence: Value = serde_yaml::from_str("[null, hello, 5, false]").unwrap();
+        assert_eq!(
+            value_to_string(&sequence).as_deref(),
+            Some(",hello,5,false")
+        );
     }
 
     #[test]
@@ -600,6 +647,26 @@ mod tests {
         assert_eq!(config.get("defaults.max_iterations").as_deref(), Some("99"));
 
         remove_env("GRALPH_CONFIG_DIR");
+    }
+
+    #[test]
+    fn config_paths_skips_missing_project_dir() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("global.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 1\n");
+        write_file(&global_path, "defaults:\n  backend: claude\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let missing_project = temp.path().join("missing-project");
+        let paths = config_paths(Some(&missing_project));
+        assert_eq!(paths, vec![default_path.clone(), global_path.clone()]);
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
     }
 
     #[test]

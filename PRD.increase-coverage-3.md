@@ -107,7 +107,7 @@ Increase coverage without changing user-visible CLI behavior, error messages, or
   * Test `value_to_string` for `Value::Null` and sequences with mixed types.
   * Add tests for legacy hyphenated env overrides and `config_paths` behavior with missing project dirs.
 - **Dependencies** None
-- [ ] COV-6 Increase config normalization and env override coverage
+- [x] COV-6 Increase config normalization and env override coverage
 ### Task COV-7
 
 - **ID** COV-7
