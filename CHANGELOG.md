@@ -33,6 +33,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-8 Expand notification formatting helper and payload coverage.
 - COV-9 Expand backend module utility coverage.
 - COV-9 Add notify validation and failure formatting tests.
+- COV-9 Cover update version env and archive PATH error cases.
 - COV-10 Add property-based tests for task parsing invariants.
 - COV-10 Expand Claude backend parsing and install tests.
 - COV-10 Expand Claude backend parsing fallback coverage.

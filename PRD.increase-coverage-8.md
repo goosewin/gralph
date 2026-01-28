@@ -132,7 +132,7 @@ Increase coverage in supporting modules and backend adapters (`src/main.rs`, `sr
   * Add tests for resolve_install_version when GRALPH_VERSION is set to a concrete version and when GRALPH_TEST_LATEST_TAG is blank.
   * Add tests for download_release non-200 responses and extract_archive behavior with empty PATH or missing tar binary.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-9 Expand update workflow error-path coverage
+- [x] COV-9 Expand update workflow error-path coverage
 ### Task COV-10
 
 - **ID** COV-10

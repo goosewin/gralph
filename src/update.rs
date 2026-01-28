@@ -645,6 +645,15 @@ mod tests {
     }
 
     #[test]
+    fn resolve_install_version_uses_gralph_version_env() {
+        let _lock = crate::test_support::env_lock();
+        let _guard = EnvGuard::set("GRALPH_VERSION", "v3.4.5");
+        let raw = env::var("GRALPH_VERSION").expect("env set");
+        let resolved = resolve_install_version(&raw).expect("resolved");
+        assert_eq!(resolved, "3.4.5");
+    }
+
+    #[test]
     fn resolve_install_version_rejects_invalid_version() {
         let result = resolve_install_version("1.2");
         assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
@@ -727,6 +736,18 @@ mod tests {
         assert!(matches!(invalid_result, Err(UpdateError::CommandFailed(_))));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn extract_archive_uses_fallback_path_when_env_empty() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempdir().expect("tempdir");
+        let archive_path = temp.path().join("gralph.tar.gz");
+        fs::write(&archive_path, "not a tar").expect("write invalid");
+        let _guard = PathGuard::set(Some(OsStr::new("")));
+        let result = extract_archive(&archive_path, temp.path());
+        assert!(matches!(result, Err(UpdateError::CommandFailed(_))));
+    }
+
     #[test]
     fn extract_archive_reports_missing_archive() {
         let temp = tempdir().expect("tempdir");
@@ -744,6 +765,25 @@ mod tests {
         let missing_target = temp.path().join("missing");
         let result = extract_archive(&archive_path, &missing_target);
         assert!(matches!(result, Err(UpdateError::CommandFailed(_))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_archive_reports_missing_tar_binary() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempdir().expect("tempdir");
+        let archive_path = temp.path().join("gralph.tar.gz");
+        fs::write(&archive_path, "not a tar").expect("write invalid");
+        let empty_path = temp.path().join("bin");
+        fs::create_dir_all(&empty_path).expect("create empty path");
+        let _guard = PathGuard::set(Some(empty_path.as_os_str()));
+        let result = extract_archive(&archive_path, temp.path());
+        match result {
+            Err(UpdateError::Io(err)) => {
+                assert_eq!(err.kind(), std::io::ErrorKind::NotFound);
+            }
+            other => panic!("expected missing tar error, got {other:?}"),
+        }
     }
 
     #[test]
