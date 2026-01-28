@@ -236,7 +236,7 @@ Tests verify existing behavior without changing production logic, CLI outputs, o
   * Cover evaluate_review_gate and evaluate_check_gate for pending, failed, and passed cases.
   * Cover static checks for TODO markers, verbose comment limits, and wildcard path matching.
 - **Dependencies** None
-- [ ] COV-31 Expand verifier parsing and static check coverage
+- [x] COV-31 Expand verifier parsing and static check coverage
 ---
 
 ## Success Criteria

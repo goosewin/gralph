@@ -1874,6 +1874,23 @@ mod tests {
         }
     }
 
+    fn base_static_settings() -> StaticCheckSettings {
+        StaticCheckSettings {
+            enabled: true,
+            check_todo: true,
+            check_comments: true,
+            check_duplicates: false,
+            allow_patterns: Vec::new(),
+            ignore_patterns: Vec::new(),
+            todo_markers: vec!["TODO".to_string()],
+            max_comment_lines: DEFAULT_STATIC_MAX_COMMENT_LINES,
+            max_comment_chars: DEFAULT_STATIC_MAX_COMMENT_CHARS,
+            duplicate_block_lines: DEFAULT_STATIC_DUPLICATE_BLOCK_LINES,
+            duplicate_min_alnum_lines: DEFAULT_STATIC_DUPLICATE_MIN_ALNUM_LINES,
+            max_file_bytes: DEFAULT_STATIC_MAX_FILE_BYTES,
+        }
+    }
+
     #[test]
     fn resolve_verifier_command_rejects_empty_default() {
         let config = load_project_config("verifier:\n  test_command: \"\"\n");
@@ -2110,6 +2127,17 @@ mod tests {
     }
 
     #[test]
+    fn check_todo_markers_reports_violation() {
+        let settings = base_static_settings();
+        let lines = vec!["clean".to_string(), "// TODO: follow up".to_string()];
+        let mut violations = Vec::new();
+        check_todo_markers(Path::new("src/main.rs"), &lines, &settings, &mut violations);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].line, 2);
+        assert!(violations[0].message.contains("TODO"));
+    }
+
+    #[test]
     fn comment_style_for_path_handles_known_extensions() {
         let rust_style = comment_style_for_path(Path::new("lib.rs")).unwrap();
         assert!(rust_style.line_prefixes.contains(&"//"));
@@ -2130,6 +2158,34 @@ mod tests {
         );
         assert_eq!(comment_text_len("*/ trailing", &style), "trailing".len());
         assert_eq!(comment_text_len("* continued", &style), "continued".len());
+    }
+
+    #[test]
+    fn check_verbose_comments_flags_excessive_blocks() {
+        let mut settings = base_static_settings();
+        settings.max_comment_lines = 1;
+        settings.max_comment_chars = 10;
+        let lines = vec![
+            "// short".to_string(),
+            "// this is too long".to_string(),
+            "let x = 1;".to_string(),
+        ];
+        let mut violations = Vec::new();
+        check_verbose_comments(Path::new("src/lib.rs"), &lines, &settings, &mut violations);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].line, 1);
+        assert!(violations[0].message.contains("Verbose comment block"));
+    }
+
+    #[test]
+    fn check_verbose_comments_allows_short_blocks() {
+        let mut settings = base_static_settings();
+        settings.max_comment_lines = 2;
+        settings.max_comment_chars = 50;
+        let lines = vec!["// ok".to_string(), "let y = 2;".to_string()];
+        let mut violations = Vec::new();
+        check_verbose_comments(Path::new("src/lib.rs"), &lines, &settings, &mut violations);
+        assert!(violations.is_empty());
     }
 
     #[test]
