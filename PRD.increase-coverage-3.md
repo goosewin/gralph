@@ -162,7 +162,7 @@ Increase coverage without changing user-visible CLI behavior, error messages, or
   * Test `resolve_cors_origin` for open mode, localhost origins, and host-specific matches.
   * Test `options_handler` and `root_handler` include CORS headers and return OK with valid auth.
 - **Dependencies** None
-- [ ] COV-11 Expand server config and CORS handler coverage
+- [x] COV-11 Expand server config and CORS handler coverage
 ### Task COV-12
 
 - **ID** COV-12

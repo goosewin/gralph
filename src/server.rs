@@ -465,6 +465,109 @@ mod tests {
         )
     }
 
+    #[test]
+    fn server_config_validate_rejects_port_zero() {
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("token".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+
+        let err = config.validate().unwrap_err();
+        match err {
+            ServerError::InvalidConfig(message) => {
+                assert!(message.contains("port must be between 1 and 65535"));
+            }
+            other => panic!("expected InvalidConfig, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn server_config_validate_requires_token_for_non_localhost() {
+        let config = ServerConfig {
+            host: "0.0.0.0".to_string(),
+            port: 8080,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+
+        let err = config.validate().unwrap_err();
+        match err {
+            ServerError::InvalidConfig(message) => {
+                assert!(message.contains("token required"));
+                assert!(message.contains("0.0.0.0"));
+            }
+            other => panic!("expected InvalidConfig, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn server_config_validate_allows_open_mode_without_token() {
+        let config = ServerConfig {
+            host: "0.0.0.0".to_string(),
+            port: 8080,
+            token: None,
+            open: true,
+            max_body_bytes: 4096,
+        };
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn resolve_cors_origin_allows_open_mode() {
+        let config = ServerConfig {
+            host: "0.0.0.0".to_string(),
+            port: 8080,
+            token: None,
+            open: true,
+            max_body_bytes: 4096,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(axum::http::header::ORIGIN, "https://example.com".parse().unwrap());
+
+        assert_eq!(resolve_cors_origin(&headers, &config), Some("*".to_string()));
+    }
+
+    #[test]
+    fn resolve_cors_origin_allows_localhost_origins() {
+        let config = ServerConfig {
+            host: "0.0.0.0".to_string(),
+            port: 8080,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(axum::http::header::ORIGIN, "http://localhost".parse().unwrap());
+
+        assert_eq!(
+            resolve_cors_origin(&headers, &config),
+            Some("http://localhost".to_string())
+        );
+    }
+
+    #[test]
+    fn resolve_cors_origin_allows_host_match() {
+        let config = ServerConfig {
+            host: "example.com".to_string(),
+            port: 8080,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(axum::http::header::ORIGIN, "http://example.com".parse().unwrap());
+
+        assert_eq!(
+            resolve_cors_origin(&headers, &config),
+            Some("http://example.com".to_string())
+        );
+    }
+
     #[tokio::test]
     async fn auth_required_for_status_endpoint() {
         let temp = tempfile::tempdir().unwrap();
@@ -591,6 +694,93 @@ mod tests {
                 .and_then(|value| value.to_str().ok()),
             Some("Authorization, Content-Type")
         );
+    }
+
+    #[tokio::test]
+    async fn options_handler_includes_cors_headers() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/status")
+                    .method("OPTIONS")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer secret")
+                    .header(axum::http::header::ORIGIN, "http://localhost")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        let headers = response.headers();
+        assert_eq!(
+            headers
+                .get(axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .and_then(|value| value.to_str().ok()),
+            Some("http://localhost")
+        );
+        assert_eq!(
+            headers
+                .get(axum::http::header::ACCESS_CONTROL_ALLOW_METHODS)
+                .and_then(|value| value.to_str().ok()),
+            Some("GET, POST, OPTIONS")
+        );
+    }
+
+    #[tokio::test]
+    async fn root_handler_returns_ok_with_cors_headers() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/")
+                    .method("GET")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer secret")
+                    .header(axum::http::header::ORIGIN, "http://localhost")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let headers = response.headers();
+        assert_eq!(
+            headers
+                .get(axum::http::header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .and_then(|value| value.to_str().ok()),
+            Some("http://localhost")
+        );
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["status"], "ok");
     }
 
     #[tokio::test]
