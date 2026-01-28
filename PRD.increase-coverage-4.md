@@ -183,7 +183,7 @@ Tests verify existing behavior without changing production logic, CLI outputs, o
   * Cover resolve_cors_origin returning None for untrusted origins when open is false.
   * Cover enrich_session converting running sessions to stale when pid is dead and fallback_handler 404 path.
 - **Dependencies** None
-- [ ] COV-27 Expand server auth, CORS, and session enrichment coverage
+- [x] COV-27 Expand server auth, CORS, and session enrichment coverage
 ---
 
 ### Task COV-28
