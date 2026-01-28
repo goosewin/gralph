@@ -3,8 +3,8 @@ mod cli;
 use clap::Parser;
 use cli::{
     Cli, Command, ConfigArgs, ConfigCommand, InitArgs, LogsArgs, PrdArgs, PrdCheckArgs, PrdCommand,
-    PrdCreateArgs, ResumeArgs, RunLoopArgs, ServerArgs, StartArgs, StopArgs, WorktreeCommand,
-    WorktreeCreateArgs, WorktreeFinishArgs, ASCII_BANNER,
+    PrdCreateArgs, ResumeArgs, RunLoopArgs, ServerArgs, StartArgs, StopArgs, VerifierArgs,
+    WorktreeCommand, WorktreeCreateArgs, WorktreeFinishArgs, ASCII_BANNER,
 };
 use gralph_rs::backend::backend_from_name;
 use gralph_rs::config::Config;
@@ -51,11 +51,16 @@ fn dispatch(command: Command) -> Result<(), CliError> {
         Command::Worktree(args) => cmd_worktree(args),
         Command::Backends => cmd_backends(),
         Command::Config(args) => cmd_config(args),
+        Command::Verifier(args) => cmd_verifier(args),
         Command::Server(args) => cmd_server(args),
         Command::Version => cmd_version(),
         Command::Update => cmd_update(),
     }
 }
+
+const DEFAULT_TEST_COMMAND: &str = "cargo test --workspace";
+const DEFAULT_COVERAGE_COMMAND: &str = "cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*";
+const DEFAULT_COVERAGE_MIN: f64 = 90.0;
 
 #[derive(Debug)]
 enum CliError {
@@ -846,6 +851,193 @@ fn cmd_config_list() -> Result<(), CliError> {
         println!("{}={}", key, value);
     }
     Ok(())
+}
+
+fn cmd_verifier(args: VerifierArgs) -> Result<(), CliError> {
+    let dir = args
+        .dir
+        .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    if !dir.is_dir() {
+        return Err(CliError::Message(format!(
+            "Directory does not exist: {}",
+            dir.display()
+        )));
+    }
+
+    let config = Config::load(Some(&dir)).map_err(|err| CliError::Message(err.to_string()))?;
+    let test_command = resolve_verifier_command(
+        args.test_command,
+        &config,
+        "verifier.test_command",
+        DEFAULT_TEST_COMMAND,
+    )?;
+    let coverage_command = resolve_verifier_command(
+        args.coverage_command,
+        &config,
+        "verifier.coverage_command",
+        DEFAULT_COVERAGE_COMMAND,
+    )?;
+    let coverage_min = resolve_verifier_coverage_min(args.coverage_min, &config)?;
+
+    println!("Verifier running in {}", dir.display());
+
+    run_verifier_command("Tests", &dir, &test_command)?;
+    println!("Tests OK.");
+
+    let coverage_output = run_verifier_command("Coverage", &dir, &coverage_command)?;
+    let coverage = extract_coverage_percent(&coverage_output).ok_or_else(|| {
+        CliError::Message("Coverage output missing percentage value.".to_string())
+    })?;
+    if coverage + f64::EPSILON < coverage_min {
+        return Err(CliError::Message(format!(
+            "Coverage {:.2}% below required {:.2}%.",
+            coverage, coverage_min
+        )));
+    }
+    println!("Coverage OK: {:.2}% (>= {:.2}%)", coverage, coverage_min);
+
+    Ok(())
+}
+
+fn resolve_verifier_command(
+    arg_value: Option<String>,
+    config: &Config,
+    key: &str,
+    default: &str,
+) -> Result<String, CliError> {
+    let from_args = arg_value.filter(|value| !value.trim().is_empty());
+    let from_config = config.get(key).filter(|value| !value.trim().is_empty());
+    let command = from_args
+        .or(from_config)
+        .unwrap_or_else(|| default.to_string());
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        return Err(CliError::Message(format!(
+            "Verifier command for {} is empty.",
+            key
+        )));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn resolve_verifier_coverage_min(arg_value: Option<f64>, config: &Config) -> Result<f64, CliError> {
+    if let Some(value) = arg_value {
+        return validate_coverage_min(value);
+    }
+    if let Some(value) = config.get("verifier.coverage_min") {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Ok(DEFAULT_COVERAGE_MIN);
+        }
+        let parsed = trimmed.parse::<f64>().map_err(|_| {
+            CliError::Message(format!("Invalid verifier.coverage_min: {}", trimmed))
+        })?;
+        return validate_coverage_min(parsed);
+    }
+    Ok(DEFAULT_COVERAGE_MIN)
+}
+
+fn validate_coverage_min(value: f64) -> Result<f64, CliError> {
+    if !(0.0..=100.0).contains(&value) {
+        return Err(CliError::Message(format!(
+            "Coverage minimum must be between 0 and 100: {}",
+            value
+        )));
+    }
+    Ok(value)
+}
+
+fn run_verifier_command(label: &str, dir: &Path, command: &str) -> Result<String, CliError> {
+    let (program, args) = parse_verifier_command(command)?;
+    println!("\n==> {}", label);
+    println!("$ {}", command);
+
+    let output = ProcCommand::new(program)
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .map_err(CliError::Io)?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    if !stdout.is_empty() {
+        print!("{}", stdout);
+        io::stdout().flush().map_err(CliError::Io)?;
+    }
+    if !stderr.is_empty() {
+        eprint!("{}", stderr);
+    }
+
+    if !output.status.success() {
+        return Err(CliError::Message(format!(
+            "{} failed with status {}.",
+            label, output.status
+        )));
+    }
+
+    Ok(format!("{}{}", stdout, stderr))
+}
+
+fn parse_verifier_command(command: &str) -> Result<(String, Vec<String>), CliError> {
+    let parts: Vec<&str> = command.split_whitespace().collect();
+    if parts.is_empty() {
+        return Err(CliError::Message(
+            "Verifier command cannot be empty.".to_string(),
+        ));
+    }
+    let program = parts[0].to_string();
+    let args = parts[1..].iter().map(|part| (*part).to_string()).collect();
+    Ok((program, args))
+}
+
+fn extract_coverage_percent(output: &str) -> Option<f64> {
+    let mut fallback = None;
+    for line in output.lines() {
+        let lower = line.to_ascii_lowercase();
+        if lower.contains("coverage results") {
+            if let Some(value) = parse_percent_from_line(line) {
+                return Some(value);
+            }
+        }
+        if lower.contains("line coverage") {
+            if let Some(value) = parse_percent_from_line(line) {
+                fallback = Some(value);
+            }
+            continue;
+        }
+        if lower.contains("coverage") {
+            if let Some(value) = parse_percent_from_line(line) {
+                fallback = Some(value);
+            }
+        }
+    }
+    fallback
+}
+
+fn parse_percent_from_line(line: &str) -> Option<f64> {
+    let bytes = line.as_bytes();
+    let mut found = None;
+    for (idx, ch) in bytes.iter().enumerate() {
+        if *ch != b'%' {
+            continue;
+        }
+        let mut start = idx;
+        while start > 0 {
+            let c = bytes[start - 1];
+            if c.is_ascii_digit() || c == b'.' {
+                start -= 1;
+            } else {
+                break;
+            }
+        }
+        if start == idx {
+            continue;
+        }
+        if let Ok(value) = line[start..idx].parse::<f64>() {
+            found = Some(value);
+        }
+    }
+    found
 }
 
 fn cmd_server(args: ServerArgs) -> Result<(), CliError> {

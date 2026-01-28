@@ -4,7 +4,7 @@ This document captures the high-level structure of gralph. It is a living summar
 
 ## Modules
 
-`src/main.rs` is the Rust CLI entrypoint. It wires clap subcommands to Rust modules, manages session state updates, and coordinates backend execution.
+`src/main.rs` is the Rust CLI entrypoint. It wires clap subcommands to Rust modules, manages session state updates, coordinates backend execution, and runs the verifier quality gates.
 `src/lib.rs` holds shared types and helpers used by the Rust modules.
 `src/cli.rs` defines the clap command tree and options; `build.rs` generates bash/zsh completions during build.
 

@@ -57,6 +57,7 @@ EXAMPLES:
   gralph init --dir .
   gralph worktree create C-1
   gralph worktree finish C-1
+  gralph verifier --dir .
   gralph server --host 0.0.0.0 --port 8080
 "#;
 
@@ -96,6 +97,8 @@ pub enum Command {
     Backends,
     #[command(about = "Manage configuration")]
     Config(ConfigArgs),
+    #[command(about = "Run verifier quality gates")]
+    Verifier(VerifierArgs),
     #[command(about = "Start status API server")]
     Server(ServerArgs),
     #[command(about = "Show version")]
@@ -280,6 +283,21 @@ pub struct WorktreeCreateArgs {
 pub struct WorktreeFinishArgs {
     #[arg(value_name = "ID", help = "Task ID (e.g. C-1)")]
     pub id: String,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct VerifierArgs {
+    #[arg(
+        value_name = "DIR",
+        help = "Project directory to verify (default: current)"
+    )]
+    pub dir: Option<PathBuf>,
+    #[arg(long, help = "Override test command")]
+    pub test_command: Option<String>,
+    #[arg(long, help = "Override coverage command")]
+    pub coverage_command: Option<String>,
+    #[arg(long, help = "Minimum coverage percent (default: 90)")]
+    pub coverage_min: Option<f64>,
 }
 
 #[derive(Args, Debug)]
