@@ -102,7 +102,7 @@ The test suite covers configuration resolution and overrides, state store lifecy
   * Run `cargo tarpaulin --workspace --fail-under 90 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*` and confirm coverage >= 90 percent.
   * Update `CHANGELOG.md` verification note with commands and coverage.
 - **Dependencies** COV-5
-- [ ] COV-6 Verify coverage and record results
+- [x] COV-6 Verify coverage and record results
 ---
 
 ## Success Criteria

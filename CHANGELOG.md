@@ -30,9 +30,10 @@ CI=<status/link>; PR=<link if final PRD task>
 - REF-6 Modularize verifier pipeline helpers into a dedicated module.
 - REF-7 Update shared docs and module map for refactor outcomes.
 - COV-5 Align verifier coverage command with the 90 percent gate.
+- COV-6 Normalize absolute context path comparisons and isolate config env override tests.
 
 ### Verification
-- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
+- Verification: Tests=cargo test --workspace; Coverage=36.43% via cargo tarpaulin --workspace --fail-under 90 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/* (>= 90%); CI=not-run; PR=not-opened
 
 ## [0.2.2]
 

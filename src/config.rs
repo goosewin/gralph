@@ -575,15 +575,18 @@ mod tests {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("missing-global.yaml");
 
         write_file(&default_path, "defaults:\n  max-iterations: 12\n");
         set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
 
         let config = Config::load(None).unwrap();
         assert_eq!(config.get("defaults.max_iterations").as_deref(), Some("12"));
         assert!(config.exists("defaults.max-iterations"));
 
         remove_env("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_GLOBAL_CONFIG");
     }
 
     #[test]

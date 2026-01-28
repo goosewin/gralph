@@ -687,6 +687,21 @@ fn resolve_base_dir(task_file: &Path, base_dir_override: Option<&Path>) -> Optio
     })
 }
 
+fn canonicalize_for_compare(path: &Path) -> PathBuf {
+    if let Ok(canonical) = path.canonicalize() {
+        return canonical;
+    }
+    if let Some(parent) = path.parent() {
+        if let Ok(canonical_parent) = parent.canonicalize() {
+            if let Some(file_name) = path.file_name() {
+                return canonical_parent.join(file_name);
+            }
+            return canonical_parent;
+        }
+    }
+    path.to_path_buf()
+}
+
 fn has_open_questions_section(contents: &str) -> bool {
     for line in contents.lines() {
         let trimmed = line.trim_start();
@@ -784,6 +799,7 @@ fn validate_task_block(
                 task_label
             ));
         } else {
+            let base_compare = base_dir.map(canonicalize_for_compare);
             for entry in context_entries {
                 let resolved = if Path::new(&entry).is_absolute() {
                     PathBuf::from(&entry)
@@ -792,10 +808,15 @@ fn validate_task_block(
                 } else {
                     PathBuf::from(&entry)
                 };
+                let compare_path = if Path::new(&entry).is_absolute() {
+                    canonicalize_for_compare(&resolved)
+                } else {
+                    resolved.clone()
+                };
 
                 if Path::new(&entry).is_absolute() {
-                    if let Some(base) = base_dir {
-                        if !resolved.starts_with(base) {
+                    if let Some(base) = base_compare.as_ref() {
+                        if !compare_path.starts_with(base) {
                             errors.push(format!(
                                 "PRD validation error: {}: {}: Context Bundle path outside repo: {}",
                                 task_file.display(),
