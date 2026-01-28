@@ -2093,6 +2093,72 @@ mod tests {
     }
 
     #[test]
+    fn cmd_config_set_writes_nested_keys_and_preserves_mappings() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("config.yaml");
+
+        write_file(
+            &config_path,
+            "defaults:\n  backend: claude\nlogging:\n  format:\n    color: true\n",
+        );
+        set_env("GRALPH_PROJECT_CONFIG_NAME", &config_path);
+
+        let args = cli::ConfigSetArgs {
+            key: "logging.level".to_string(),
+            value: "info".to_string(),
+        };
+        cmd_config_set(args).unwrap();
+
+        let args = cli::ConfigSetArgs {
+            key: "notifications.webhook".to_string(),
+            value: "https://example.test".to_string(),
+        };
+        cmd_config_set(args).unwrap();
+
+        let contents = fs::read_to_string(&config_path).unwrap();
+        let yaml: serde_yaml::Value = serde_yaml::from_str(&contents).unwrap();
+        let root = yaml.as_mapping().unwrap();
+
+        let defaults = root
+            .get(&serde_yaml::Value::String("defaults".to_string()))
+            .unwrap();
+        let defaults_map = defaults.as_mapping().unwrap();
+        assert_eq!(
+            defaults_map.get(&serde_yaml::Value::String("backend".to_string())),
+            Some(&serde_yaml::Value::String("claude".to_string()))
+        );
+
+        let logging = root
+            .get(&serde_yaml::Value::String("logging".to_string()))
+            .unwrap();
+        let logging_map = logging.as_mapping().unwrap();
+        assert_eq!(
+            logging_map.get(&serde_yaml::Value::String("level".to_string())),
+            Some(&serde_yaml::Value::String("info".to_string()))
+        );
+        let format = logging_map
+            .get(&serde_yaml::Value::String("format".to_string()))
+            .unwrap();
+        let format_map = format.as_mapping().unwrap();
+        assert_eq!(
+            format_map.get(&serde_yaml::Value::String("color".to_string())),
+            Some(&serde_yaml::Value::Bool(true))
+        );
+
+        let notifications = root
+            .get(&serde_yaml::Value::String("notifications".to_string()))
+            .unwrap();
+        let notifications_map = notifications.as_mapping().unwrap();
+        assert_eq!(
+            notifications_map.get(&serde_yaml::Value::String("webhook".to_string())),
+            Some(&serde_yaml::Value::String("https://example.test".to_string()))
+        );
+
+        clear_env_overrides();
+    }
+
+    #[test]
     fn invalid_prd_path_handles_extensions_and_force() {
         let output_md = PathBuf::from("PRD.generated.md");
         let invalid_md = invalid_prd_path(&output_md, false);
@@ -2304,6 +2370,19 @@ mod tests {
     }
 
     #[test]
+    fn read_readme_context_files_skips_non_md_and_spaced_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join("README.md"),
+            "## Context Files\n- `ARCHITECTURE.md`\n- `NOTES.txt`\n- `Team Notes.md`\n- `PROCESS.md`\n",
+        );
+
+        let entries = read_readme_context_files(temp.path());
+
+        assert_eq!(entries, vec!["ARCHITECTURE.md", "PROCESS.md"]);
+    }
+
+    #[test]
     fn resolve_init_context_files_uses_config_list_and_dedupes() {
         let temp = tempfile::tempdir().unwrap();
         let entries = resolve_init_context_files(
@@ -2497,6 +2576,21 @@ mod tests {
 
         let resolved = resolve_log_file("demo", &session).unwrap();
         assert_eq!(resolved, temp.path().join(".gralph").join("demo.log"));
+    }
+
+    #[test]
+    fn resolve_log_file_errors_when_missing_dir() {
+        let session = json!({
+            "log_file": "",
+        });
+
+        let err = resolve_log_file("demo", &session).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Missing dir for session demo"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
     }
 
     #[test]

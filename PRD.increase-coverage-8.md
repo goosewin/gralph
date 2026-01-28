@@ -102,7 +102,7 @@ Increase coverage in supporting modules and backend adapters (`src/main.rs`, `sr
   * Add tests for cmd_config_set writing nested keys and preserving mappings, and for resolve_prd_output when output exists without force.
   * Add tests for resolve_log_file when session data is missing dir, and for read_readme_context_files skipping non-md or spaced entries.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-6 Expand CLI helper coverage in main
+- [x] COV-6 Expand CLI helper coverage in main
 ### Task COV-7
 
 - **ID** COV-7
