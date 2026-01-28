@@ -926,6 +926,33 @@ mod tests {
         }
     }
 
+    struct UninstalledBackend;
+
+    impl Backend for UninstalledBackend {
+        fn check_installed(&self) -> bool {
+            false
+        }
+
+        fn run_iteration(
+            &self,
+            _prompt: &str,
+            _model: Option<&str>,
+            _variant: Option<&str>,
+            _output_file: &Path,
+            _working_dir: &Path,
+        ) -> Result<(), BackendError> {
+            panic!("backend should not run when uninstalled");
+        }
+
+        fn parse_text(&self, _response_file: &Path) -> Result<String, BackendError> {
+            panic!("backend should not parse when uninstalled");
+        }
+
+        fn get_models(&self) -> Vec<String> {
+            Vec::new()
+        }
+    }
+
     #[test]
     fn count_remaining_tasks_ignores_outside_blocks() {
         let temp = tempfile::tempdir().unwrap();
@@ -982,6 +1009,29 @@ mod tests {
         let result = "<promise>COMPLETE</promise>\n";
         let complete = check_completion(&path, result, "COMPLETE").unwrap();
         assert!(!complete);
+    }
+
+    #[test]
+    fn check_completion_returns_false_on_empty_result() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [x] Done\n").unwrap();
+
+        let complete = check_completion(&path, "  \n", "COMPLETE").unwrap();
+        assert!(!complete);
+    }
+
+    #[test]
+    fn check_completion_errors_when_task_file_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("missing.md");
+
+        let result = check_completion(&path, "<promise>COMPLETE</promise>", "COMPLETE");
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message))
+                if message.contains("task file does not exist")
+        ));
     }
 
     #[test]
@@ -1127,6 +1177,138 @@ mod tests {
         let prompt = backend.prompt.borrow().clone().unwrap();
         assert!(prompt.contains("- [ ] Solo task"));
         assert!(!prompt.contains("No task block available."));
+    }
+
+    #[test]
+    fn run_iteration_rejects_empty_project_dir() {
+        let backend = TestBackend::new();
+        let result = run_iteration(
+            &backend,
+            Path::new(""),
+            "PRD.md",
+            1,
+            1,
+            "COMPLETE",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message))
+                if message.contains("project_dir is required")
+        ));
+    }
+
+    #[test]
+    fn run_iteration_rejects_iteration_zero() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [ ] Task\n").unwrap();
+
+        let backend = TestBackend::new();
+        let result = run_iteration(
+            &backend,
+            temp.path(),
+            "PRD.md",
+            0,
+            1,
+            "COMPLETE",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message))
+                if message.contains("iteration number is required")
+        ));
+    }
+
+    #[test]
+    fn run_iteration_rejects_max_iterations_zero() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [ ] Task\n").unwrap();
+
+        let backend = TestBackend::new();
+        let result = run_iteration(
+            &backend,
+            temp.path(),
+            "PRD.md",
+            1,
+            0,
+            "COMPLETE",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message))
+                if message.contains("max_iterations is required")
+        ));
+    }
+
+    #[test]
+    fn run_iteration_rejects_missing_task_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let backend = TestBackend::new();
+        let result = run_iteration(
+            &backend,
+            temp.path(),
+            "missing.md",
+            1,
+            1,
+            "COMPLETE",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message))
+                if message.contains("task file does not exist")
+        ));
+    }
+
+    #[test]
+    fn run_iteration_rejects_uninstalled_backend() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [ ] Task\n").unwrap();
+
+        let backend = UninstalledBackend;
+        let result = run_iteration(
+            &backend,
+            temp.path(),
+            "PRD.md",
+            1,
+            1,
+            "COMPLETE",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message)) if message.contains("backend is not installed")
+        ));
     }
 
     #[test]

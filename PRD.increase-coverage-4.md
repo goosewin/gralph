@@ -131,7 +131,7 @@ Tests verify existing behavior without changing production logic, CLI outputs, o
   * Cover backend not installed path returning CoreError::InvalidInput.
   * Cover check_completion error when task file is missing and false on empty result.
 - **Dependencies** None
-- [ ] COV-23 Expand core loop validation and completion coverage
+- [x] COV-23 Expand core loop validation and completion coverage
 ---
 
 ### Task COV-24
