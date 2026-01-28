@@ -83,7 +83,12 @@ pub(crate) fn command_in_path(command: &str) -> bool {
     let Some(paths) = env::var_os("PATH") else {
         return false;
     };
-    env::split_paths(&paths).any(|dir| dir.join(command).is_file())
+    env::split_paths(&paths).any(|dir| {
+        if !dir.is_absolute() || !dir.is_dir() {
+            return false;
+        }
+        dir.join(command).is_file()
+    })
 }
 
 pub(crate) fn stream_command_output<F>(
@@ -156,7 +161,7 @@ mod tests {
     use super::*;
     use std::ffi::{OsStr, OsString};
     use std::fs;
-    use std::io;
+    use std::io::{self, Cursor};
 
     #[cfg(unix)]
     use std::process::{Command, Stdio};
@@ -325,6 +330,29 @@ mod tests {
         assert!(command_in_path(command_name));
     }
 
+    #[test]
+    fn command_in_path_ignores_relative_path_entries() {
+        let _lock = crate::test_support::env_lock();
+        let command_name = "gralph-relative-command";
+        let cwd = env::current_dir().unwrap();
+        let command_dir = tempfile::tempdir_in(&cwd).unwrap();
+        let command_path = command_dir.path().join(command_name);
+        fs::write(&command_path, "stub").unwrap();
+        let relative_dir = command_dir.path().strip_prefix(&cwd).unwrap();
+
+        let _guard = PathGuard::set(None);
+        unsafe {
+            env::set_var("PATH", relative_dir);
+        }
+        assert!(!command_in_path(command_name));
+
+        let combined = env::join_paths([relative_dir, command_dir.path()]).unwrap();
+        unsafe {
+            env::set_var("PATH", &combined);
+        }
+        assert!(command_in_path(command_name));
+    }
+
     #[cfg(unix)]
     #[test]
     fn stream_command_output_returns_ok_on_success() {
@@ -345,6 +373,38 @@ mod tests {
         assert!(result.is_ok());
         assert!(lines.iter().any(|line| line.contains("stdout-line")));
         assert!(lines.iter().any(|line| line.contains("stderr-line")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_reads_trailing_line_without_newline() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("printf 'first-line\\nsecond-line'")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert_eq!(lines, vec!["first-line\n", "second-line"]);
+    }
+
+    #[test]
+    fn spawn_reader_exits_when_receiver_closed() {
+        let reader = Cursor::new(b"first-line\nsecond-line\n".to_vec());
+        let (tx, rx) = mpsc::channel();
+        drop(rx);
+
+        let handle = spawn_reader(reader, tx);
+
+        assert!(handle.join().is_ok());
     }
 
     #[cfg(unix)]

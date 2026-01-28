@@ -142,7 +142,7 @@ Increase coverage in supporting modules and backend adapters (`src/main.rs`, `sr
   * Add tests for spawn_reader/stream_command_output with trailing lines without newline and for early channel closure.
   * Add tests for command_in_path with PATH entries that are files or relative paths to ensure only directories are scanned.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-10 Expand backend helper coverage
+- [x] COV-10 Expand backend helper coverage
 ### Task COV-11
 
 - **ID** COV-11
