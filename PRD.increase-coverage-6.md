@@ -222,7 +222,7 @@ Add tests for remaining modules (CLI helpers, server endpoints, notifications, b
   * Add tests for download_release error handling using a local server with non-200 responses.
   * Add tests for install_binary path creation and PermissionDenied messaging with GRALPH_INSTALL_DIR.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-14 Expand update and install error-path coverage
+- [x] COV-14 Expand update and install error-path coverage
 ---
 
 ### Task COV-15

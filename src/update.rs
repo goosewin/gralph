@@ -479,6 +479,27 @@ mod tests {
         (format!("http://{}", addr), handle)
     }
 
+    fn start_status_server(
+        status: &'static str,
+        response_body: &'static str,
+    ) -> (String, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind status listener");
+        let addr = listener.local_addr().expect("local addr");
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept connection");
+            let mut buffer = [0u8; 512];
+            let _ = stream.read(&mut buffer);
+            let response = format!(
+                "HTTP/1.1 {}\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n{}",
+                status,
+                response_body.len(),
+                response_body
+            );
+            let _ = stream.write_all(response.as_bytes());
+        });
+        (format!("http://{}", addr), handle)
+    }
+
     #[test]
     fn parse_version_accepts_v_prefix() {
         let version = Version::parse(version::VERSION_TAG).expect("version parsed");
@@ -553,12 +574,31 @@ mod tests {
     }
 
     #[test]
+    fn release_url_prefers_test_override() {
+        let _lock = crate::test_support::env_lock();
+        let _guard = EnvGuard::set("GRALPH_TEST_RELEASE_URL", "  http://localhost/test ");
+        let resolved = release_url();
+        assert_eq!(resolved, "http://localhost/test");
+    }
+
+    #[test]
     fn fetch_latest_release_tag_reports_missing_tag_from_local_server() {
         let (url, handle) = start_release_server(r#"{ "name": "release" }"#);
         let _guard = EnvGuard::set("GRALPH_TEST_RELEASE_URL", &url);
         let result = fetch_latest_release_tag();
         handle.join().expect("server thread");
         assert!(matches!(result, Err(UpdateError::MissingTag)));
+    }
+
+    #[test]
+    fn resolve_install_version_fetches_latest_from_test_release_url() {
+        let _lock = crate::test_support::env_lock();
+        let (url, handle) = start_release_server(r#"{ "tag_name": "v9.8.7" }"#);
+        let _url_guard = EnvGuard::set("GRALPH_TEST_RELEASE_URL", &url);
+        let _tag_guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "");
+        let resolved = resolve_install_version("latest").expect("resolved");
+        handle.join().expect("server thread");
+        assert_eq!(resolved, "9.8.7");
     }
 
     #[test]
@@ -685,6 +725,16 @@ mod tests {
     }
 
     #[test]
+    fn download_release_reports_http_failure() {
+        let temp = tempdir().expect("tempdir");
+        let dest = temp.path().join("gralph.tar.gz");
+        let (url, handle) = start_status_server("404 Not Found", "missing");
+        let result = download_release(&url, &dest);
+        handle.join().expect("server thread");
+        assert!(matches!(result, Err(UpdateError::Http(_))));
+    }
+
+    #[test]
     fn install_binary_copies_to_install_dir() {
         let temp = tempdir().expect("tempdir");
         let source = temp.path().join("gralph");
@@ -693,6 +743,25 @@ mod tests {
         install_binary(&source, &install_dir).expect("install");
         let target = install_dir.join("gralph");
         assert!(target.is_file());
+    }
+
+    #[test]
+    fn install_binary_creates_nested_install_dir() {
+        let temp = tempdir().expect("tempdir");
+        let source = temp.path().join("gralph");
+        fs::write(&source, "binary").expect("write");
+        let install_dir = temp.path().join("nested/install/path");
+        install_binary(&source, &install_dir).expect("install");
+        let target = install_dir.join("gralph");
+        assert!(target.is_file());
+        assert!(install_dir.is_dir());
+    }
+
+    #[test]
+    fn permission_denied_message_mentions_install_dir_env() {
+        let message = UpdateError::PermissionDenied("/restricted".to_string()).to_string();
+        assert!(message.contains("/restricted"));
+        assert!(message.contains("GRALPH_INSTALL_DIR"));
     }
 
     #[cfg(unix)]
