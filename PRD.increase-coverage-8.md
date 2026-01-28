@@ -72,7 +72,7 @@ Increase coverage in supporting modules and backend adapters (`src/main.rs`, `sr
   * Add tests for prd_validate_file with base_dir_override and absolute context paths inside/outside the repo, plus allowed_context filtering.
   * Add property-based tests for extract_context_entries and sanitize_task_block to ensure a single unchecked line and valid fallback context.
 - **Dependencies** None
-- [ ] COV-3 Expand PRD validation and sanitization coverage
+- [x] COV-3 Expand PRD validation and sanitization coverage
 ### Task COV-4
 
 - **ID** COV-4

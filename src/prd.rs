@@ -1630,6 +1630,52 @@ mod tests {
     }
 
     #[test]
+    fn prd_validate_file_accepts_absolute_context_with_base_dir_override() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let repo_root = base.join("repo");
+        let docs = repo_root.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        let context = docs.join("context.md");
+        fs::write(&context, "ok").unwrap();
+
+        let prd_dir = base.join("tasks");
+        fs::create_dir_all(&prd_dir).unwrap();
+        let prd = prd_dir.join("prd.md");
+        let contents = format!(
+            "# PRD\n\n### Task D-10A\n- **ID** D-10A\n- **Context Bundle** `{}`\n- **DoD** Guard context.\n- **Checklist**\n  * Check base override.\n- **Dependencies** None\n- [ ] D-10A Guard\n",
+            context.display()
+        );
+        fs::write(&prd, contents).unwrap();
+
+        assert!(prd_validate_file(&prd, false, Some(&repo_root)).is_ok());
+    }
+
+    #[test]
+    fn prd_validate_file_rejects_absolute_context_outside_base_dir_override() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let repo_root = base.join("repo");
+        fs::create_dir_all(&repo_root).unwrap();
+        let outside = base.join("outside.md");
+        fs::write(&outside, "ok").unwrap();
+
+        let prd = base.join("prd.md");
+        let contents = format!(
+            "# PRD\n\n### Task D-10B\n- **ID** D-10B\n- **Context Bundle** `{}`\n- **DoD** Guard context.\n- **Checklist**\n  * Check base override.\n- **Dependencies** None\n- [ ] D-10B Guard\n",
+            outside.display()
+        );
+        fs::write(&prd, contents).unwrap();
+
+        let err = prd_validate_file(&prd, false, Some(&repo_root)).unwrap_err();
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| line.contains("Context Bundle path outside repo"))
+        );
+    }
+
+    #[test]
     fn prd_sanitize_generated_file_falls_back_to_readme_when_allowed_context_empty() {
         let temp = tempdir().unwrap();
         let base = temp.path();
@@ -1760,6 +1806,45 @@ mod tests {
         }
 
         #[test]
+        fn prop_extract_context_entries_ignores_other_fields(
+            entries in prop::collection::vec(context_entry_strategy(), 0..4),
+            noise in prop::collection::vec(context_entry_strategy(), 0..4)
+        ) {
+            let mut block = String::from("### Task P-CTX\n- **ID** P-CTX\n");
+            if entries.is_empty() {
+                block.push_str("- **Context Bundle**\n");
+            } else {
+                block.push_str("- **Context Bundle** ");
+                for (index, entry) in entries.iter().enumerate() {
+                    if index > 0 {
+                        block.push_str(", ");
+                    }
+                    block.push('`');
+                    block.push_str(entry);
+                    block.push('`');
+                }
+                block.push('\n');
+            }
+            if noise.is_empty() {
+                block.push_str("- **DoD** Example\n");
+            } else {
+                block.push_str("- **DoD** Example ");
+                for entry in &noise {
+                    block.push('`');
+                    block.push_str(entry);
+                    block.push('`');
+                    block.push(' ');
+                }
+                block.push('\n');
+            }
+            block.push_str("- **Checklist**\n  * Work `ignored.md`\n- **Dependencies** None\n- [ ] P-CTX Task\n");
+
+            let extracted = extract_context_entries(&block);
+
+            prop_assert_eq!(extracted, entries);
+        }
+
+        #[test]
         fn prop_validate_task_block_unchecked_invariants(
             unchecked_count in 0usize..4
         ) {
@@ -1796,6 +1881,52 @@ mod tests {
                     prop_assert!(multiple_unchecked);
                 }
             }
+        }
+
+        #[test]
+        fn prop_sanitize_task_block_single_unchecked_and_fallback_context(
+            unchecked_count in 1usize..5,
+            invalid_entries in prop::collection::vec(context_entry_strategy(), 0..4)
+        ) {
+            let temp = tempdir().unwrap();
+            let base = temp.path();
+            let docs = base.join("docs");
+            fs::create_dir_all(&docs).unwrap();
+            fs::write(docs.join("allowed.md"), "ok").unwrap();
+
+            let allowed_entry = "docs/allowed.md";
+            let allowed = base.join("allowed.txt");
+            fs::write(&allowed, format!("{}\n", allowed_entry)).unwrap();
+
+            prop_assume!(!invalid_entries.iter().any(|entry| entry == allowed_entry));
+
+            let mut block = String::from("### Task P-3\n- **ID** P-3\n- **Context Bundle** ");
+            if invalid_entries.is_empty() {
+                block.push_str("`missing.md`\n");
+            } else {
+                for (index, entry) in invalid_entries.iter().enumerate() {
+                    if index > 0 {
+                        block.push_str(", ");
+                    }
+                    block.push('`');
+                    block.push_str(entry);
+                    block.push('`');
+                }
+                block.push('\n');
+            }
+            block.push_str("- **DoD** Example.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n");
+            for index in 0..unchecked_count {
+                block.push_str(&format!("- [ ] P-3 Task {}\n", index));
+            }
+
+            let sanitized = sanitize_task_block(&block, Some(base), Some(&allowed));
+            let unchecked_lines = sanitized
+                .lines()
+                .filter(|line| is_unchecked_line(line))
+                .count();
+
+            prop_assert_eq!(unchecked_lines, 1);
+            prop_assert!(sanitized.contains("- **Context Bundle** `docs/allowed.md`"));
         }
     }
 
