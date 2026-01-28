@@ -170,7 +170,7 @@ Add tests for remaining modules (CLI helpers, server endpoints, notifications, b
   * Add tests for parse_text when no result type is present, returning raw contents.
   * Add tests for extract_assistant_texts with missing content and non-text items.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-10 Expand Claude backend parsing and install tests
+- [x] COV-10 Expand Claude backend parsing and install tests
 ---
 
 ### Task COV-11

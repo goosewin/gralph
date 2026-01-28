@@ -28,6 +28,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-9 Expand backend module utility coverage.
 - COV-9 Add notify validation and failure formatting tests.
 - COV-10 Add property-based tests for task parsing invariants.
+- COV-10 Expand Claude backend parsing and install tests.
 - COV-11 Expand backend module error formatting coverage.
 - COV-12 Expand Claude adapter error-path coverage.
 - COV-13 Expand OpenCode adapter error-path coverage.

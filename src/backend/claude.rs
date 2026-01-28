@@ -41,7 +41,8 @@ impl Backend for ClaudeBackend {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .status()
-            .is_ok()
+            .map(|status| status.success())
+            .unwrap_or(false)
     }
 
     fn run_iteration(
@@ -313,6 +314,36 @@ mod tests {
             result,
             Err(BackendError::InvalidInput(message)) if message == "prompt is required"
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn check_installed_returns_true_when_command_succeeds() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("claude-ok");
+        let script = "#!/bin/sh\nexit 0\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
+        assert!(backend.check_installed());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn check_installed_returns_false_when_command_fails() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("claude-fail");
+        let script = "#!/bin/sh\nexit 2\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
+        assert!(!backend.check_installed());
     }
 
     #[cfg(unix)]
