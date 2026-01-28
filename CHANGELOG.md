@@ -32,6 +32,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-16 Add verifier static check and duplicate detection tests.
 - COV-17 Expand Claude backend parsing and failure path coverage.
 - COV-18 Expand Codex backend installation and error coverage.
+- COV-19 Expand Gemini backend command and error coverage.
 
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.

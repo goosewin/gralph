@@ -78,7 +78,7 @@ Tests verify existing behavior without changing production logic, CLI outputs, o
   * Verify run_iteration includes --headless and --model only when non-empty.
   * Assert run_iteration returns BackendError::Command on spawn failure.
 - **Dependencies** None
-- [ ] COV-19 Expand Gemini backend command and error coverage
+- [x] COV-19 Expand Gemini backend command and error coverage
 ---
 
 ### Task COV-20
