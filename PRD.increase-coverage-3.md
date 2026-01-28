@@ -96,7 +96,7 @@ Increase coverage without changing user-visible CLI behavior, error messages, or
   * Assert `--model` is included only when non-empty.
   * Add a test that empty prompt returns `BackendError::InvalidInput`.
 - **Dependencies** None
-- [ ] COV-5 Cover Codex backend run_iteration flags and validation
+- [x] COV-5 Cover Codex backend run_iteration flags and validation
 ### Task COV-6
 
 - **ID** COV-6

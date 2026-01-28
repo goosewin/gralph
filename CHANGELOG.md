@@ -19,6 +19,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-2 Add config loader tests for parse errors and overrides.
 - COV-3 Add OpenCode backend run_iteration argument and env coverage.
 - COV-4 Add Gemini backend run_iteration flag validation tests.
+- COV-5 Add Codex backend run_iteration flag validation tests.
 - COV-7 Expand PRD validation and sanitization coverage.
 - COV-8 Expand state store edge case coverage.
 - COV-9 Expand update module parsing coverage.
