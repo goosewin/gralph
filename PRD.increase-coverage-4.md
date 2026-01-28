@@ -196,7 +196,7 @@ Tests verify existing behavior without changing production logic, CLI outputs, o
   * Cover list_sessions handling non-object session values in state.json.
   * Cover parse_value behavior for numeric strings with leading zeros and mixed inputs.
 - **Dependencies** None
-- [ ] COV-28 Expand state store normalization coverage
+- [x] COV-28 Expand state store normalization coverage
 ---
 
 ### Task COV-29

@@ -510,6 +510,73 @@ mod tests {
     }
 
     #[test]
+    fn set_session_skips_empty_field_keys() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+
+        store
+            .set_session(
+                "alpha",
+                &[("", "ignore"), (" ", "skip"), ("status", "running")],
+            )
+            .unwrap();
+
+        let session = store.get_session("alpha").unwrap().unwrap();
+        let map = session.as_object().unwrap();
+        assert_eq!(map.get("status").and_then(|v| v.as_str()), Some("running"));
+        assert!(!map.contains_key(""));
+        assert!(!map.contains_key(" "));
+    }
+
+    #[test]
+    fn list_sessions_handles_non_object_values() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+
+        let mut sessions = BTreeMap::new();
+        sessions.insert("alpha".to_string(), Value::String("oops".to_string()));
+        sessions.insert("beta".to_string(), Value::Number(5.into()));
+        sessions.insert(
+            "gamma".to_string(),
+            Value::Object(Map::from_iter([(
+                "status".to_string(),
+                Value::String("running".to_string()),
+            )])),
+        );
+        let state = StateData { sessions };
+        store.write_state(&state).unwrap();
+
+        let listed = store.list_sessions().unwrap();
+        assert_eq!(listed.len(), 3);
+
+        let mut alpha_seen = false;
+        let mut beta_seen = false;
+        let mut gamma_seen = false;
+
+        for session in listed {
+            let map = session.as_object().unwrap();
+            let name = map.get("name").and_then(|v| v.as_str()).unwrap();
+            match name {
+                "alpha" => {
+                    alpha_seen = true;
+                    assert_eq!(map.len(), 1);
+                }
+                "beta" => {
+                    beta_seen = true;
+                    assert_eq!(map.len(), 1);
+                }
+                "gamma" => {
+                    gamma_seen = true;
+                    assert_eq!(map.get("status").and_then(|v| v.as_str()), Some("running"));
+                }
+                other => panic!("unexpected session {other}"),
+            }
+        }
+
+        assert!(alpha_seen && beta_seen && gamma_seen);
+    }
+
+    #[test]
     fn cleanup_stale_marks_dead_sessions() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path(), Duration::from_secs(1));
@@ -611,6 +678,12 @@ mod tests {
         assert_eq!(parse_value("42").as_i64(), Some(42));
         assert_eq!(parse_value("007").as_i64(), Some(7));
         assert_eq!(parse_value("12ab"), Value::String("12ab".to_string()));
+    }
+
+    #[test]
+    fn parse_value_handles_leading_zeros_and_mixed_input() {
+        assert_eq!(parse_value("00012").as_i64(), Some(12));
+        assert_eq!(parse_value("007bond"), Value::String("007bond".to_string()));
     }
 
     #[test]
