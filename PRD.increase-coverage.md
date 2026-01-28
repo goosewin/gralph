@@ -91,7 +91,7 @@ The test suite covers configuration resolution and overrides, state store lifecy
   * `verifier.coverage_command` uses `--fail-under 90` with the current excludes.
   * `verifier.coverage_min` remains 90.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-5 Align default coverage command with 90 percent gate
+- [x] COV-5 Align default coverage command with 90 percent gate
 ### Task COV-6
 
 - **ID** COV-6

@@ -29,6 +29,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - REF-5 Reduce duplication in notification payload formatting.
 - REF-6 Modularize verifier pipeline helpers into a dedicated module.
 - REF-7 Update shared docs and module map for refactor outcomes.
+- COV-5 Align verifier coverage command with the 90 percent gate.
 
 ### Verification
 - Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
