@@ -65,7 +65,7 @@ Tests verify existing behavior without changing production logic, CLI outputs, o
   * Assert parse_text returns BackendError::Io on missing file.
   * Verify run_iteration returns BackendError::Command when command is missing or exits non-zero.
 - **Dependencies** None
-- [ ] COV-18 Expand Codex backend installation and error coverage
+- [x] COV-18 Expand Codex backend installation and error coverage
 ---
 
 ### Task COV-19

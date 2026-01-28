@@ -111,10 +111,44 @@ impl Backend for CodexBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+    use std::ffi::{OsStr, OsString};
     use std::fs;
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+
+    struct PathGuard {
+        original: Option<OsString>,
+    }
+
+    impl PathGuard {
+        fn set(value: Option<&OsStr>) -> Self {
+            let original = env::var_os("PATH");
+            match value {
+                Some(value) => unsafe {
+                    env::set_var("PATH", value);
+                },
+                None => unsafe {
+                    env::remove_var("PATH");
+                },
+            }
+            Self { original }
+        }
+    }
+
+    impl Drop for PathGuard {
+        fn drop(&mut self) {
+            match self.original.as_ref() {
+                Some(value) => unsafe {
+                    env::set_var("PATH", value);
+                },
+                None => unsafe {
+                    env::remove_var("PATH");
+                },
+            }
+        }
+    }
 
     #[test]
     fn parse_text_returns_raw_contents() {
@@ -128,6 +162,33 @@ mod tests {
     }
 
     #[test]
+    fn check_installed_reflects_path_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        let command_name = "codex-stub";
+        let _guard = PathGuard::set(Some(temp.path().as_os_str()));
+        let backend = CodexBackend::with_command(command_name.to_string());
+
+        assert!(!backend.check_installed());
+
+        fs::write(temp.path().join(command_name), "stub").unwrap();
+        assert!(backend.check_installed());
+    }
+
+    #[test]
+    fn parse_text_returns_io_error_for_missing_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let missing_path = temp.path().join("missing.txt");
+        let backend = CodexBackend::new();
+
+        let result = backend.parse_text(&missing_path);
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path, .. }) if path == missing_path
+        ));
+    }
+
+    #[test]
     fn run_iteration_rejects_empty_prompt() {
         let temp = tempfile::tempdir().unwrap();
         let output_path = temp.path().join("output.txt");
@@ -138,6 +199,42 @@ mod tests {
         assert!(matches!(
             result,
             Err(BackendError::InvalidInput(message)) if message == "prompt is required"
+        ));
+    }
+
+    #[test]
+    fn run_iteration_reports_missing_command() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_path = temp.path().join("output.txt");
+        let missing_command = temp.path().join("missing-codex");
+        let backend = CodexBackend::with_command(missing_command.to_string_lossy().to_string());
+
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message.contains("failed to spawn codex")
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_reports_non_zero_exit() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("codex-fail");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf 'boom\\n'\nexit 2\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = CodexBackend::with_command(script_path.to_string_lossy().to_string());
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message.contains("codex exited with")
         ));
     }
 
