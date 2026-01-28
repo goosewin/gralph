@@ -80,7 +80,9 @@ impl Config {
         if resolve_env_override(key, &normalized).is_some() {
             return true;
         }
-        lookup_value(&self.merged, &normalized).is_some()
+        lookup_value(&self.merged, &normalized)
+            .and_then(value_to_string)
+            .is_some()
     }
 
     pub fn list(&self) -> Vec<(String, String)> {
@@ -423,6 +425,18 @@ mod tests {
     }
 
     #[test]
+    fn normalize_key_preserves_empty_segments() {
+        assert_eq!(
+            normalize_key("defaults..backend"),
+            Some("defaults..backend".to_string())
+        );
+        assert_eq!(
+            normalize_key("defaults. .backend"),
+            Some("defaults..backend".to_string())
+        );
+    }
+
+    #[test]
     fn lookup_mapping_value_normalizes_case_and_hyphens() {
         let mut map = Mapping::new();
         map.insert(
@@ -454,6 +468,14 @@ mod tests {
         let nested_value =
             lookup_value(&value, "DeFaUlts.Sub-Section.Mixed-Key").and_then(Value::as_i64);
         assert_eq!(nested_value, Some(12));
+    }
+
+    #[test]
+    fn lookup_value_returns_none_for_empty_segments() {
+        let value: Value = serde_yaml::from_str("defaults:\n  backend: claude\n").unwrap();
+
+        assert!(lookup_value(&value, "defaults..backend").is_none());
+        assert!(lookup_value(&value, "defaults. .backend").is_none());
     }
 
     #[test]
@@ -793,6 +815,28 @@ mod tests {
     }
 
     #[test]
+    fn config_paths_skips_project_when_project_dir_is_file() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("global.yaml");
+        let project_file = temp.path().join("project-file");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 1\n");
+        write_file(&global_path, "defaults:\n  backend: claude\n");
+        write_file(&project_file, "not-a-dir");
+
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let paths = config_paths(Some(&project_file));
+        assert_eq!(paths, vec![default_path.clone(), global_path.clone()]);
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
     fn key_to_env_normalizes_dots_and_hyphens() {
         assert_eq!(
             key_to_env("defaults.max-Iterations"),
@@ -832,6 +876,30 @@ mod tests {
 
         let paths = config_paths(Some(&project_dir));
         assert_eq!(paths, vec![default_path.clone(), global_path.clone(), project_path.clone()]);
+
+        remove_env("GRALPH_PROJECT_CONFIG_NAME");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn config_paths_skip_missing_custom_project_config() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("global.yaml");
+        let project_dir = temp.path().join("project");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 1\n");
+        write_file(&global_path, "defaults:\n  backend: claude\n");
+        fs::create_dir_all(&project_dir).unwrap();
+
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+        set_env("GRALPH_PROJECT_CONFIG_NAME", "custom.yaml");
+
+        let paths = config_paths(Some(&project_dir));
+        assert_eq!(paths, vec![default_path.clone(), global_path.clone()]);
 
         remove_env("GRALPH_PROJECT_CONFIG_NAME");
         remove_env("GRALPH_GLOBAL_CONFIG");
@@ -967,6 +1035,26 @@ mod tests {
         assert!(config.exists("test.flags"));
 
         remove_env("GRALPH_TEST_FLAGS");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn exists_returns_false_for_invalid_or_mapping_keys() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(
+            &default_path,
+            "defaults:\n  max_iterations: 5\nlogging:\n  level: info\n",
+        );
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+
+        let config = Config::load(None).unwrap();
+        assert!(!config.exists(" "));
+        assert!(!config.exists("defaults."));
+        assert!(!config.exists("defaults"));
+
         remove_env("GRALPH_DEFAULT_CONFIG");
     }
 }

@@ -92,7 +92,7 @@ Increase coverage in supporting modules and backend adapters (`src/main.rs`, `sr
   * Add tests for config_paths when project_dir is a file or missing, and for custom project config names that do not exist.
   * Add tests for normalize_key/lookup_value with empty segments and for exists() returning false on invalid keys or mapping-only values.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-5 Expand config path and lookup coverage
+- [x] COV-5 Expand config path and lookup coverage
 ### Task COV-6
 
 - **ID** COV-6
