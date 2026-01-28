@@ -1433,6 +1433,15 @@ fn create_worktree_at(repo_root: &str, branch: &str, worktree_path: &Path) -> Re
 }
 
 fn maybe_create_auto_worktree(args: &mut RunLoopArgs, config: &Config) -> Result<(), CliError> {
+    let timestamp = worktree_timestamp_slug();
+    maybe_create_auto_worktree_with_timestamp(args, config, &timestamp)
+}
+
+fn maybe_create_auto_worktree_with_timestamp(
+    args: &mut RunLoopArgs,
+    config: &Config,
+    timestamp: &str,
+) -> Result<(), CliError> {
     if !resolve_auto_worktree(config, args.no_worktree) {
         return Ok(());
     }
@@ -1499,8 +1508,7 @@ fn maybe_create_auto_worktree(args: &mut RunLoopArgs, config: &Config) -> Result
         .unwrap_or_else(|_| Path::new(""))
         .to_path_buf();
 
-    let timestamp = worktree_timestamp_slug();
-    let base_branch = auto_worktree_branch_name(&args.name, &timestamp);
+    let base_branch = auto_worktree_branch_name(&args.name, timestamp);
     let branch = ensure_unique_worktree_branch(&repo_root, &worktrees_dir, &base_branch);
     let worktree_path = worktrees_dir.join(&branch);
 
@@ -2252,7 +2260,7 @@ mod tests {
     }
 
     #[test]
-    fn auto_worktree_errors_on_dirty_repo() {
+    fn auto_worktree_skips_dirty_repo() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
@@ -2260,14 +2268,37 @@ mod tests {
         write_file(&temp.path().join("README.md"), "dirty");
         let config = Config::load(Some(temp.path())).unwrap();
         let mut args = run_loop_args(temp.path().to_path_buf());
+        let original = args.dir.clone();
 
-        let err = maybe_create_auto_worktree(&mut args, &config).unwrap_err();
-        match err {
-            CliError::Message(message) => {
-                assert!(message.contains("Git working tree is dirty"));
-            }
-            _ => panic!("unexpected error type"),
-        }
+        maybe_create_auto_worktree(&mut args, &config).unwrap();
+
+        assert_eq!(args.dir, original);
+        assert!(!args.no_worktree);
+        assert!(!temp.path().join(".worktrees").exists());
+    }
+
+    #[test]
+    fn auto_worktree_creates_worktree_for_clean_repo() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let config = Config::load(Some(temp.path())).unwrap();
+        let mut args = run_loop_args(temp.path().to_path_buf());
+
+        maybe_create_auto_worktree(&mut args, &config).unwrap();
+
+        let worktrees_dir = temp.path().join(".worktrees");
+        let mut entries: Vec<PathBuf> = fs::read_dir(&worktrees_dir)
+            .unwrap()
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .collect();
+        assert_eq!(entries.len(), 1);
+        let worktree_path = entries.remove(0);
+        let expected = fs::canonicalize(&worktree_path).unwrap();
+        let actual = fs::canonicalize(&args.dir).unwrap();
+        assert_eq!(actual, expected);
+        assert!(args.no_worktree);
     }
 
     #[test]
@@ -2290,6 +2321,33 @@ mod tests {
         assert_eq!(entries.len(), 1);
         let worktree_path = entries.remove(0);
         let expected = fs::canonicalize(worktree_path.join("nested")).unwrap();
+        let actual = fs::canonicalize(&args.dir).unwrap();
+        assert_eq!(actual, expected);
+        assert!(args.no_worktree);
+    }
+
+    #[test]
+    fn auto_worktree_handles_branch_and_path_collisions() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let config = Config::load(Some(temp.path())).unwrap();
+        let mut args = run_loop_args(temp.path().to_path_buf());
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let timestamp = "20260126-120000";
+        let base_branch = auto_worktree_branch_name(&args.name, timestamp);
+        git_status_ok(temp.path(), &["branch", base_branch.as_str()]);
+        fs::create_dir_all(worktrees_dir.join(&base_branch)).unwrap();
+        fs::create_dir_all(worktrees_dir.join(format!("{}-2", base_branch))).unwrap();
+
+        maybe_create_auto_worktree_with_timestamp(&mut args, &config, timestamp).unwrap();
+
+        let expected_branch = format!("{}-3", base_branch);
+        let expected_path = worktrees_dir.join(&expected_branch);
+        let expected = fs::canonicalize(&expected_path).unwrap();
         let actual = fs::canonicalize(&args.dir).unwrap();
         assert_eq!(actual, expected);
         assert!(args.no_worktree);
