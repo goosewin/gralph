@@ -25,7 +25,10 @@ or max iterations. Each iteration builds the prompt, invokes the backend,
 parses the result, checks for completion promises, and updates optional
 state callbacks with remaining task counts. On completion or failure, the
 loop records duration, writes final status to logs, and optionally sends
-notifications.
+notifications. When completion succeeds and `verifier.auto_run` is true,
+the verifier pipeline runs in the active worktree to execute tests,
+coverage, and static checks, open a PR via `gh`, wait for the configured
+review gate, and merge after approvals.
 
 ## Storage
 
@@ -40,4 +43,5 @@ coverage checks are required before merge; coverage must remain at or
 above 90%. CI runs `cargo test --workspace` and
 `cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs
 src/core.rs src/notify.rs src/server.rs src/backend/*`. Release and smoke
-workflows assume CI is green.
+workflows assume CI is green. The verifier mirrors these gates, adds static
+checks, and enforces the review gate before merge.

@@ -184,3 +184,27 @@ merging the final task.
 - Allow direct-to-main completion with manual verification.
 - Enforce only tests without a coverage threshold.
 - Skip the PR requirement for small changes.
+
+## D-009 Verifier Pipeline and Review Gate
+- Date: 2026-01-27
+- Status: Accepted
+
+### Context
+Loop completion needs a consistent verification and PR flow so tests, coverage,
+and review gates are enforced without ad-hoc manual steps.
+
+### Decision
+Run a verifier pipeline after loop completion (configurable via
+`verifier.auto_run`) that executes tests, coverage, and static checks, creates a
+PR via `gh` using the repo template, waits for the configured review gate, and
+merges only after approvals.
+
+### Rationale
+- Aligns loop completion with PROCESS quality gates and CI expectations.
+- Standardizes PR creation and review gating across iterations.
+- Reduces manual steps and inconsistent verification behavior.
+
+### Alternatives
+- Require manual test and PR steps after loop completion.
+- Skip review gates and rely on CI status alone.
+- Allow auto-merge without a PR for small changes.

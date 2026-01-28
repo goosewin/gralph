@@ -14,6 +14,7 @@ CI=<status/link>; PR=<link if final PRD task>
 ### Added
 - PROMPT-1 Require lower-case conventional commits in the default prompt template.
 - VER-1 Add verifier command for tests and coverage gates.
+- DOC-1 Document verifier workflow, review gate, and commit conventions.
 
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.

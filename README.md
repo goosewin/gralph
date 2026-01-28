@@ -38,6 +38,7 @@ irm https://raw.githubusercontent.com/goosewin/gralph/main/install.ps1 | iex
 gralph start .                    # Start loop in current directory
 gralph start . --backend opencode # Use different backend
 gralph start . --no-worktree      # Skip auto worktree creation
+gralph verifier                   # Run verifier pipeline
 gralph init .                     # Scaffold shared context files
 gralph status                     # Check all running loops
 gralph logs myapp --follow        # Watch logs
@@ -73,8 +74,14 @@ so the stack is attached to the correct checkout and branch.
 
 `gralph verifier` runs tests, coverage, and static checks, creates a PR via `gh`,
 waits for review criteria (greptile by default), and merges only when reviews and
-checks meet thresholds. Configure the review gate under `verifier.review.*` and
-ensure `gh auth login` is complete.
+checks meet thresholds. When `verifier.auto_run` is true, it runs automatically
+after loop completion; otherwise run `gralph verifier` manually. Configure the
+review gate under `verifier.review.*` and ensure `gh auth login` is complete.
+
+## Commit Conventions
+
+Use lower-case conventional commits for all loop work and verifier-generated
+commits (for example: `feat: add verifier pipeline`, `fix: handle dirty repo`).
 
 ## Context Files (Shared Memory)
 

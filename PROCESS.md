@@ -21,9 +21,12 @@
      (confirm coverage >= 90%)
    - CI/CD preflight matches `.github/workflows/ci.yml`
    - Worktree is clean
-6) Run `gralph verifier` to execute quality gates, create a PR via `gh`, and
-   wait for the configured review gate (greptile by default) plus green checks.
-7) Merge via `gh` after the review gate passes.
+6) On loop completion, `gralph` runs `gralph verifier` automatically unless
+   `verifier.auto_run` is false. The verifier runs tests, coverage, and static
+   checks, creates a PR via `gh` (using the repo template), and waits for the
+   configured review gate (greptile by default) plus green checks.
+   - If auto-run is disabled, run `gralph verifier` manually in the worktree.
+7) Verifier merges the PR via `gh` after the review gate passes.
 
 ## Last PRD Todo Gate
 - Ensure you are on a new task branch/worktree; never finish the last PRD task
@@ -42,3 +45,4 @@
 - Test coverage must remain >= 90%.
 - Final PRD task requires a PR, review gate approval, and green CI before merge.
 - Use `gh` for PR creation, review checks, and merges.
+- Commit messages must be lower-case conventional commits (for example: `feat: add verifier pipeline`).
