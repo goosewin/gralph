@@ -98,7 +98,7 @@ Add tests that cover update version parsing and verifier parsing/gate logic with
   * Update `CHANGELOG.md` with new COV entries and verification note.
   * Run `cargo test --workspace` and `cargo tarpaulin --workspace --fail-under 90 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*`.
 - **Dependencies** COV-7, COV-8, COV-9, COV-10
-- [ ] COV-11 Verify coverage and record changelog
+- [x] COV-11 Verify coverage and record changelog
 ---
 
 ## Success Criteria

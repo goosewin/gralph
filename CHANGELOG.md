@@ -20,7 +20,10 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-3 Add state store tests for invalid sessions, cleanup, and parsing.
 - COV-4 Add CLI parsing coverage for start, prd, server, config, and worktree.
 - COV-7 Expand PRD validation and sanitization coverage.
+- COV-8 Expand state store edge case coverage.
 - COV-9 Expand update module parsing coverage.
+- COV-10 Expand verifier parsing and static check coverage.
+- COV-11 Verify coverage and record changelog.
 
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.
@@ -35,7 +38,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-6 Normalize absolute context path comparisons and isolate config env override tests.
 
 ### Verification
-- Verification: Tests=cargo test --workspace; Coverage=36.43% via cargo tarpaulin --workspace --fail-under 90 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/* (>= 90%); CI=not-run; PR=not-opened
+- Verification: Tests=cargo test --workspace; Coverage=43.50% via cargo tarpaulin --workspace --fail-under 90 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/* (>= 90%); CI=not-run; PR=not-opened
 
 ## [0.2.2]
 
