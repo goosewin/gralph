@@ -85,7 +85,7 @@ Increase coverage without changing user-visible CLI behavior, error messages, or
   * Assert `--model` is included only when a non-empty model is provided.
   * Add a test that empty prompt returns `BackendError::InvalidInput`.
 - **Dependencies** None
-- [ ] COV-4 Cover Gemini backend run_iteration flags and validation
+- [x] COV-4 Cover Gemini backend run_iteration flags and validation
 ### Task COV-5
 
 - **ID** COV-5
