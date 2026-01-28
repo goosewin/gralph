@@ -465,6 +465,60 @@ mod tests {
     }
 
     #[test]
+    fn default_config_path_prefers_env_override() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let override_path = temp.path().join("override.yaml");
+        let config_dir = temp.path().join("config-root");
+        let installed_default = config_dir.join("config").join("default.yaml");
+
+        write_file(&override_path, "defaults:\n  backend: gemini\n");
+        write_file(&installed_default, "defaults:\n  backend: claude\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &override_path);
+        set_env("GRALPH_CONFIG_DIR", &config_dir);
+
+        let resolved = default_config_path();
+        assert_eq!(resolved, override_path);
+
+        remove_env("GRALPH_CONFIG_DIR");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn default_config_path_prefers_installed_default() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config_dir = temp.path().join("config-root");
+        let installed_default = config_dir.join("config").join("default.yaml");
+
+        write_file(&installed_default, "defaults:\n  backend: claude\n");
+        set_env("GRALPH_CONFIG_DIR", &config_dir);
+
+        let resolved = default_config_path();
+        assert_eq!(resolved, installed_default);
+
+        remove_env("GRALPH_CONFIG_DIR");
+    }
+
+    #[test]
+    fn default_config_path_uses_manifest_default_when_installed_missing() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config_dir = temp.path().join("config-root");
+        let manifest_default = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("config")
+            .join("default.yaml");
+
+        set_env("GRALPH_CONFIG_DIR", &config_dir);
+
+        let resolved = default_config_path();
+        assert_eq!(resolved, manifest_default);
+        assert!(manifest_default.exists());
+
+        remove_env("GRALPH_CONFIG_DIR");
+    }
+
+    #[test]
     fn legacy_hyphenated_env_override_is_resolved() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -682,6 +736,27 @@ mod tests {
 
         remove_env("GRALPH_GLOBAL_CONFIG");
         remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn key_to_env_normalizes_dots_and_hyphens() {
+        assert_eq!(
+            key_to_env("defaults.max-Iterations"),
+            "DEFAULTS_MAX_ITERATIONS"
+        );
+    }
+
+    #[test]
+    fn key_to_env_legacy_preserves_hyphens() {
+        assert_eq!(
+            key_to_env_legacy("defaults.max-Iterations"),
+            "DEFAULTS_MAX-ITERATIONS"
+        );
+    }
+
+    #[test]
+    fn normalize_segment_trims_case_and_hyphens() {
+        assert_eq!(normalize_segment(" Max-Iterations "), "max_iterations");
     }
 
     #[test]

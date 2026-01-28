@@ -113,7 +113,7 @@ Add tests for backend adapters, server endpoints, notifications, update/install 
   * Validate `default_config_path` resolution order for env override, installed default, and manifest default.
   * Add unit tests for `key_to_env`, `key_to_env_legacy`, and `normalize_segment` with hyphen and case variants.
 - **Dependencies** None
-- [ ] COV-6 Expand config path and key normalization coverage
+- [x] COV-6 Expand config path and key normalization coverage
 ---
 
 ### Task COV-7
