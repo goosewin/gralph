@@ -19,6 +19,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-2 Add config loader tests for parse errors and overrides.
 - COV-3 Add state store tests for invalid sessions, cleanup, and parsing.
 - COV-4 Add CLI parsing coverage for start, prd, server, config, and worktree.
+- COV-7 Expand PRD validation and sanitization coverage.
 
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.

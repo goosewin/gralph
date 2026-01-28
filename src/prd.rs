@@ -90,6 +90,14 @@ pub fn prd_validate_file(
         }
     };
 
+    if contents.trim().is_empty() {
+        errors.push(format!(
+            "PRD validation error: {}: Task file is empty",
+            task_file.display()
+        ));
+        return Err(PrdValidationError { messages: errors });
+    }
+
     if has_open_questions_section(&contents) {
         errors.push(format!(
             "PRD validation error: {}: Open Questions section is not allowed",
@@ -1191,6 +1199,21 @@ mod tests {
     }
 
     #[test]
+    fn prd_validate_file_rejects_empty_task_file() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+
+        let prd = base.join("prd.md");
+        fs::write(&prd, "").unwrap();
+
+        let err = prd_validate_file(&prd, false, None).unwrap_err();
+        assert!(err
+            .messages
+            .iter()
+            .any(|line| line.contains("Task file is empty")));
+    }
+
+    #[test]
     fn prd_validate_file_reports_missing_field() {
         let temp = tempdir().unwrap();
         let base = temp.path();
@@ -1211,6 +1234,24 @@ mod tests {
                 .iter()
                 .any(|line| line.contains("Missing required field: DoD"))
         );
+    }
+
+    #[test]
+    fn prd_validate_file_reports_missing_context_bundle_field() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+
+        let prd = base.join("prd.md");
+        fs::write(
+            &prd,
+            "# PRD\n\n### Task D-2A\n- **ID** D-2A\n- **DoD** Provide details.\n- **Checklist**\n  * Missing context bundle.\n- **Dependencies** None\n- [ ] D-2A Missing context\n",
+        )
+        .unwrap();
+
+        let err = prd_validate_file(&prd, false, None).unwrap_err();
+        assert!(err.messages.iter().any(|line| {
+            line.contains("Missing required field: Context Bundle")
+        }));
     }
 
     #[test]
@@ -1280,6 +1321,28 @@ mod tests {
     }
 
     #[test]
+    fn prd_validate_file_rejects_open_questions_section() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("context.md"), "ok").unwrap();
+
+        let prd = base.join("prd.md");
+        fs::write(
+            &prd,
+            "# PRD\n\n## Open Questions\n- Should be removed\n\n### Task D-5A\n- **ID** D-5A\n- **Context Bundle** `docs/context.md`\n- **DoD** Reject open questions.\n- **Checklist**\n  * Validation fails.\n- **Dependencies** None\n- [ ] D-5A Reject open questions\n",
+        )
+        .unwrap();
+
+        let err = prd_validate_file(&prd, false, None).unwrap_err();
+        assert!(err
+            .messages
+            .iter()
+            .any(|line| line.contains("Open Questions section is not allowed")));
+    }
+
+    #[test]
     fn prd_validate_file_allows_missing_context_when_flagged() {
         let temp = tempdir().unwrap();
         let base = temp.path();
@@ -1342,6 +1405,53 @@ mod tests {
         assert!(sanitized.contains("- [ ] D-7 Keep first"));
         assert!(sanitized.contains("- D-7 Drop checkbox"));
         assert!(sanitized.contains("- Outside checkbox"));
+    }
+
+    #[test]
+    fn prd_sanitize_generated_file_filters_context_by_allowed_list_and_relativizes() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("allowed.md"), "ok").unwrap();
+        fs::write(docs.join("blocked.md"), "ok").unwrap();
+
+        let allowed = base.join("allowed.txt");
+        fs::write(&allowed, "docs/allowed.md\n").unwrap();
+
+        let allowed_abs = docs.join("allowed.md");
+        let prd = base.join("prd.md");
+        let contents = format!(
+            "# PRD\n\n### Task D-7A\n- **ID** D-7A\n- **Context Bundle** `{}`, `docs/blocked.md`\n- **DoD** Sanitize output.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] D-7A Task\n",
+            allowed_abs.display()
+        );
+        fs::write(&prd, contents).unwrap();
+
+        prd_sanitize_generated_file(&prd, Some(base), Some(&allowed)).unwrap();
+        let sanitized = fs::read_to_string(&prd).unwrap();
+
+        assert!(sanitized.contains("- **Context Bundle** `docs/allowed.md`"));
+        assert!(!sanitized.contains("docs/blocked.md"));
+        assert!(!sanitized.contains(base.to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn prd_sanitize_generated_file_falls_back_to_readme_without_allowed_context_file() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("README.md"), "readme").unwrap();
+
+        let prd = base.join("prd.md");
+        fs::write(
+            &prd,
+            "# PRD\n\n### Task D-7B\n- **ID** D-7B\n- **Context Bundle** `missing.md`\n- **DoD** Sanitize output.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] D-7B Task\n",
+        )
+        .unwrap();
+
+        prd_sanitize_generated_file(&prd, Some(base), None).unwrap();
+        let sanitized = fs::read_to_string(&prd).unwrap();
+
+        assert!(sanitized.contains("- **Context Bundle** `README.md`"));
     }
 
     #[test]
