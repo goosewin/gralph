@@ -18,6 +18,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-1 Expand core loop validation, prompt template fallback, and raw output logging coverage.
 - COV-2 Expand state store lock acquisition and io error-path coverage.
 - COV-2 Expand PRD validation and sanitization coverage.
+- COV-2 Expand state store env override coverage.
 - COV-3 Add OpenCode backend run_iteration argument and env coverage.
 - COV-3 Expand state store edge-case coverage.
 - COV-3 Expand PRD validation and sanitization coverage.

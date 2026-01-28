@@ -426,6 +426,32 @@ mod tests {
         ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner())
     }
 
+    struct EnvSnapshot {
+        keys: Vec<&'static str>,
+        values: Vec<Option<std::ffi::OsString>>,
+    }
+
+    impl EnvSnapshot {
+        fn new(keys: &[&'static str]) -> Self {
+            let values = keys.iter().map(|key| env::var_os(key)).collect();
+            Self {
+                keys: keys.to_vec(),
+                values,
+            }
+        }
+    }
+
+    impl Drop for EnvSnapshot {
+        fn drop(&mut self) {
+            for (key, original) in self.keys.iter().zip(self.values.iter()) {
+                match original {
+                    Some(value) => set_env(key, value),
+                    None => remove_env(key),
+                }
+            }
+        }
+    }
+
     fn set_env(key: &str, value: impl AsRef<std::ffi::OsStr>) {
         unsafe {
             env::set_var(key, value);
@@ -866,6 +892,43 @@ mod tests {
             Some(value) => set_env("HOME", value),
             None => remove_env("HOME"),
         }
+    }
+
+    #[test]
+    fn new_from_env_reads_override_paths_and_timeout() {
+        let _guard = env_guard();
+        let _snapshot = EnvSnapshot::new(&[
+            "GRALPH_STATE_DIR",
+            "GRALPH_STATE_FILE",
+            "GRALPH_LOCK_FILE",
+            "GRALPH_LOCK_TIMEOUT",
+        ]);
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = temp.path().join("state-root");
+        let state_file = temp.path().join("state.json");
+        let lock_file = temp.path().join("state.lock");
+
+        set_env("GRALPH_STATE_DIR", state_dir.as_os_str());
+        set_env("GRALPH_STATE_FILE", state_file.as_os_str());
+        set_env("GRALPH_LOCK_FILE", lock_file.as_os_str());
+        set_env("GRALPH_LOCK_TIMEOUT", "42");
+
+        let store = StateStore::new_from_env();
+        assert_eq!(store.state_dir, state_dir);
+        assert_eq!(store.state_file, state_file);
+        assert_eq!(store.lock_file, lock_file);
+        assert_eq!(store.lock_timeout, Duration::from_secs(42));
+    }
+
+    #[test]
+    fn new_from_env_invalid_timeout_uses_default() {
+        let _guard = env_guard();
+        let _snapshot = EnvSnapshot::new(&["GRALPH_LOCK_TIMEOUT"]);
+
+        set_env("GRALPH_LOCK_TIMEOUT", "not-a-number");
+
+        let store = StateStore::new_from_env();
+        assert_eq!(store.lock_timeout, Duration::from_secs(10));
     }
 
     #[test]

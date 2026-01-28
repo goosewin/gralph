@@ -62,7 +62,7 @@ Increase coverage in supporting modules and backend adapters (`src/main.rs`, `sr
   * Add tests for StateStore::new_from_env reading GRALPH_STATE_DIR/FILE/LOCK/TIMEOUT and handling invalid timeout values.
   * Add tests for cleanup_stale updates when running sessions have dead PIDs, confirming Mark vs Remove outcomes.
 - **Dependencies** None
-- [ ] COV-2 Expand state store env and cleanup coverage
+- [x] COV-2 Expand state store env and cleanup coverage
 ### Task COV-3
 
 - **ID** COV-3
