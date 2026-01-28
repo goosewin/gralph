@@ -15,7 +15,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - PROMPT-1 Require lower-case conventional commits in the default prompt template.
 - VER-1 Add verifier command for tests and coverage gates.
 - DOC-1 Document verifier workflow, review gate, and commit conventions.
-- COV-1 Expand core loop error-path and prompt rendering coverage.
+- COV-1 Expand core loop error-path, prompt rendering, and log helper coverage.
 - COV-2 Expand PRD validation and sanitization coverage.
 - COV-3 Add OpenCode backend run_iteration argument and env coverage.
 - COV-3 Expand state store edge-case coverage.
@@ -73,7 +73,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-6 Normalize absolute context path comparisons and isolate config env override tests.
 
 ### Verification
-- Verification: Tests=cargo test --workspace; Coverage=43.50% via cargo tarpaulin --workspace --fail-under 90 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/* (>= 90%); CI=not-run; PR=not-opened
+- Verification: Tests=cargo test --workspace; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
 
 ## [0.2.2]
 

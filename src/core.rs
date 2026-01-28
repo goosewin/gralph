@@ -1216,6 +1216,66 @@ mod tests {
     }
 
     #[test]
+    fn log_message_creates_parent_and_appends() {
+        let temp = tempfile::tempdir().unwrap();
+        let log_path = temp.path().join("logs").join("loop.log");
+
+        log_message(Some(&log_path), "first").unwrap();
+        log_message(Some(&log_path), "second").unwrap();
+
+        let contents = fs::read_to_string(&log_path).unwrap();
+        assert!(contents.contains("first"));
+        assert!(contents.contains("second"));
+    }
+
+    #[test]
+    fn log_message_errors_when_path_is_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir_path = temp.path().join("logs");
+        fs::create_dir_all(&dir_path).unwrap();
+
+        let result = log_message(Some(&dir_path), "message");
+        assert!(matches!(result, Err(CoreError::Io { .. })));
+    }
+
+    #[test]
+    fn raw_log_path_rewrites_log_extension() {
+        let path = Path::new("/tmp/session.log");
+        let raw = raw_log_path(path);
+        assert!(raw.to_string_lossy().ends_with("session.raw.log"));
+    }
+
+    #[test]
+    fn raw_log_path_appends_extension_when_missing() {
+        let path = Path::new("/tmp/session");
+        let raw = raw_log_path(path);
+        assert!(raw.to_string_lossy().ends_with("session.raw.log"));
+    }
+
+    #[test]
+    fn copy_if_exists_skips_missing_source() {
+        let temp = tempfile::tempdir().unwrap();
+        let from = temp.path().join("missing.txt");
+        let to = temp.path().join("target.txt");
+
+        copy_if_exists(&from, &to).unwrap();
+        assert!(!to.exists());
+    }
+
+    #[test]
+    fn copy_if_exists_copies_source_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let from = temp.path().join("source.txt");
+        let to = temp.path().join("target.txt");
+        fs::write(&from, "data").unwrap();
+
+        copy_if_exists(&from, &to).unwrap();
+
+        let contents = fs::read_to_string(&to).unwrap();
+        assert_eq!(contents, "data");
+    }
+
+    #[test]
     fn cleanup_old_logs_removes_only_old_log_files() {
         let temp = tempfile::tempdir().unwrap();
         let log_dir = temp.path().join(".gralph");
@@ -1240,6 +1300,44 @@ mod tests {
         assert!(!old_log.exists());
         assert!(recent_log.exists());
         assert!(keep_txt.exists());
+    }
+
+    #[test]
+    fn cleanup_old_logs_respects_retention_days_from_config() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let log_dir = temp.path().join(".gralph");
+        fs::create_dir_all(&log_dir).unwrap();
+
+        let config_path = temp.path().join("config.yaml");
+        fs::write(&config_path, "logging:\n  retain_days: 1\n").unwrap();
+        set_env("GRALPH_DEFAULT_CONFIG", &config_path);
+        let global_path = temp.path().join("missing-global.yaml");
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+
+        let old_log = log_dir.join("old.log");
+        let recent_log = log_dir.join("recent.log");
+        fs::write(&old_log, "old").unwrap();
+        fs::write(&recent_log, "recent").unwrap();
+
+        let old_time = SystemTime::now()
+            .checked_sub(Duration::from_secs(2 * 86400))
+            .unwrap();
+        let recent_time = SystemTime::now()
+            .checked_sub(Duration::from_secs(12 * 3600))
+            .unwrap();
+        set_modified(&old_log, old_time);
+        set_modified(&recent_log, recent_time);
+
+        cleanup_old_logs(&log_dir, Some(&config)).unwrap();
+
+        assert!(!old_log.exists());
+        assert!(recent_log.exists());
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
     }
 
     #[test]
