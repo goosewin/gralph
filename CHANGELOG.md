@@ -24,6 +24,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-4 Expand verifier parsing and gate evaluation tests.
 - COV-5 Add Codex backend run_iteration flag validation tests.
 - COV-5 Expand config normalization and override tests.
+- COV-5 Cover config env override conflicts and empty values.
 - COV-6 Expand CLI helper coverage in main.
 - COV-7 Expand server auth and CORS error-path coverage.
 - COV-8 Expand notification formatting and HTTP error coverage.

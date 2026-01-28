@@ -105,7 +105,7 @@ Add tests for CLI helpers, server endpoints, notification formatting, update/ins
   * Cover value_to_string for tagged and mixed sequences and lookup_value for mixed-case keys.
   * `cargo test --workspace` passes.
 - **Dependencies** None
-- [ ] COV-5 Expand config normalization and env override coverage
+- [x] COV-5 Expand config normalization and env override coverage
 ---
 
 ### Task COV-6

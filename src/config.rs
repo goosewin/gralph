@@ -560,6 +560,12 @@ mod tests {
     }
 
     #[test]
+    fn value_to_string_handles_tagged_mixed_sequences() {
+        let sequence: Value = serde_yaml::from_str("[!tagged 2, null, ok]").unwrap();
+        assert_eq!(value_to_string(&sequence).as_deref(), Some("2,,ok"));
+    }
+
+    #[test]
     fn value_to_string_handles_null_and_mixed_sequence() {
         assert_eq!(value_to_string(&Value::Null).as_deref(), Some(""));
 
@@ -678,6 +684,30 @@ mod tests {
         remove_env("GRALPH_DEFAULTS_MAX-ITERATIONS");
         remove_env("GRALPH_DEFAULTS_MAX_ITERATIONS");
         remove_env("GRALPH_MAX_ITERATIONS");
+    }
+
+    #[test]
+    fn legacy_env_override_precedes_compat_when_both_set() {
+        let _guard = env_guard();
+        set_env("GRALPH_MAX_ITERATIONS", "legacy");
+        set_env("GRALPH_DEFAULTS_MAX-ITERATIONS", "compat");
+
+        let value = resolve_env_override("defaults.max-iterations", "defaults.max_iterations");
+        assert_eq!(value.as_deref(), Some("legacy"));
+
+        remove_env("GRALPH_DEFAULTS_MAX-ITERATIONS");
+        remove_env("GRALPH_MAX_ITERATIONS");
+    }
+
+    #[test]
+    fn resolve_env_override_keeps_empty_values() {
+        let _guard = env_guard();
+        set_env("GRALPH_DEFAULTS_TASK_FILE", "");
+
+        let value = resolve_env_override("defaults.task_file", "defaults.task_file");
+        assert_eq!(value.as_deref(), Some(""));
+
+        remove_env("GRALPH_DEFAULTS_TASK_FILE");
     }
 
     #[test]
