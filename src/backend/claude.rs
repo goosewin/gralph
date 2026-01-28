@@ -223,6 +223,26 @@ mod tests {
     }
 
     #[test]
+    fn extract_assistant_texts_handles_missing_or_non_text_content() {
+        let missing_content = json!({
+            "type": "assistant",
+            "message": {}
+        });
+        let non_array_content = json!({
+            "type": "assistant",
+            "message": {"content": "nope"}
+        });
+        let non_text_only = json!({
+            "type": "assistant",
+            "message": {"content": [{"type": "image", "source": "ignored"}]}
+        });
+
+        assert!(extract_assistant_texts(&missing_content).is_empty());
+        assert!(extract_assistant_texts(&non_array_content).is_empty());
+        assert!(extract_assistant_texts(&non_text_only).is_empty());
+    }
+
+    #[test]
     fn extract_result_text_requires_result_type() {
         let result = json!({"type": "result", "result": "done"});
         let assistant = json!({"type": "assistant", "result": "ignored"});
@@ -241,6 +261,18 @@ mod tests {
         let backend = ClaudeBackend::new();
         let result = backend.parse_text(&path).unwrap();
         assert_eq!(result, "second");
+    }
+
+    #[test]
+    fn parse_text_returns_result_when_not_last() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{\"type\":\"result\",\"result\":\"first\"}\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\ntrailing\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, "first");
     }
 
     #[test]
@@ -289,5 +321,84 @@ mod tests {
         let output = fs::read_to_string(&output_path).unwrap();
         assert!(output.contains("\"type\":\"assistant\""));
         assert!(output.contains("\"type\":\"result\""));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_includes_model_flag_when_set() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("claude-mock");
+        let output_path = temp.path().join("output.json");
+        let script = r#"#!/bin/sh
+printf '{"type":"result","result":"'
+for arg in "$@"; do
+  printf '%s|' "$arg"
+done
+printf '"}\n'
+"#;
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("prompt", Some("model-x"), None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let value: Value = serde_json::from_str(output.trim()).unwrap();
+        let result = value.get("result").and_then(|value| value.as_str()).unwrap();
+        assert!(result.contains("--model|model-x|"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_skips_empty_model_flag() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("claude-mock");
+        let output_path = temp.path().join("output.json");
+        let script = r#"#!/bin/sh
+printf '{"type":"result","result":"'
+for arg in "$@"; do
+  printf '%s|' "$arg"
+done
+printf '"}\n'
+"#;
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("prompt", Some("  "), None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let value: Value = serde_json::from_str(output.trim()).unwrap();
+        let result = value.get("result").and_then(|value| value.as_str()).unwrap();
+        assert!(!result.contains("--model"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_propagates_non_zero_exit() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("claude-mock");
+        let output_path = temp.path().join("output.json");
+        let script = "#!/bin/sh\nexit 2\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message.contains("claude exited with")
+        ));
     }
 }

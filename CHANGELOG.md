@@ -30,6 +30,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-14 Expand update helper edge-case coverage.
 - COV-15 Add verifier command parsing and review gate tests.
 - COV-16 Add verifier static check and duplicate detection tests.
+- COV-17 Expand Claude backend parsing and failure path coverage.
 
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.
