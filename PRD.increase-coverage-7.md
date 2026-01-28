@@ -157,7 +157,7 @@ Add tests for CLI helpers, server endpoints, notification formatting, update/ins
   * Cover command_in_path behavior with empty PATH and mixed entries.
   * `cargo test --workspace` passes.
 - **Dependencies** None
-- [ ] COV-9 Expand backend module utility coverage
+- [x] COV-9 Expand backend module utility coverage
 ---
 
 ### Task COV-10
