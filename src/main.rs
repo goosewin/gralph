@@ -61,6 +61,8 @@ fn dispatch(command: Command) -> Result<(), CliError> {
 const DEFAULT_TEST_COMMAND: &str = "cargo test --workspace";
 const DEFAULT_COVERAGE_COMMAND: &str = "cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*";
 const DEFAULT_COVERAGE_MIN: f64 = 90.0;
+const DEFAULT_PR_BASE: &str = "main";
+const DEFAULT_PR_TITLE: &str = "chore: verifier run";
 const DEFAULT_STATIC_MAX_COMMENT_LINES: usize = 12;
 const DEFAULT_STATIC_MAX_COMMENT_CHARS: usize = 600;
 const DEFAULT_STATIC_DUPLICATE_BLOCK_LINES: usize = 8;
@@ -902,6 +904,7 @@ fn cmd_verifier(args: VerifierArgs) -> Result<(), CliError> {
     println!("Coverage OK: {:.2}% (>= {:.2}%)", coverage, coverage_min);
 
     run_verifier_static_checks(&dir, &config)?;
+    run_verifier_pr_create(&dir, &config)?;
 
     Ok(())
 }
@@ -1151,6 +1154,188 @@ fn run_verifier_static_checks(dir: &Path, config: &Config) -> Result<(), CliErro
         "Static checks failed with {} issue(s).",
         violations.len()
     )))
+}
+
+fn run_verifier_pr_create(dir: &Path, config: &Config) -> Result<(), CliError> {
+    println!("\n==> PR creation");
+
+    let repo_root_output = git_output_in_dir(dir, ["rev-parse", "--show-toplevel"])?;
+    let repo_root = PathBuf::from(repo_root_output.trim());
+    if repo_root.as_os_str().is_empty() {
+        return Err(CliError::Message(
+            "Unable to resolve git repository root.".to_string(),
+        ));
+    }
+
+    let branch_output = git_output_in_dir(dir, ["rev-parse", "--abbrev-ref", "HEAD"])?;
+    let branch = branch_output.trim();
+    if branch.is_empty() {
+        return Err(CliError::Message(
+            "Unable to determine current branch.".to_string(),
+        ));
+    }
+    if branch == "HEAD" {
+        return Err(CliError::Message(
+            "Cannot create PR from detached HEAD.".to_string(),
+        ));
+    }
+
+    let template_path = resolve_pr_template_path(&repo_root)?;
+    let base = resolve_verifier_pr_base(config, &repo_root)?;
+    let title = resolve_verifier_pr_title(config)?;
+
+    ensure_gh_authenticated(&repo_root)?;
+
+    let output = run_gh_pr_create(&repo_root, &template_path, branch, &base, &title)?;
+    if let Some(url) = extract_pr_url(&output) {
+        println!("PR created: {}", url);
+    } else if !output.trim().is_empty() {
+        println!("{}", output.trim());
+    } else {
+        println!("PR created.");
+    }
+
+    Ok(())
+}
+
+fn resolve_verifier_pr_base(config: &Config, repo_root: &Path) -> Result<String, CliError> {
+    let from_config = config
+        .get("verifier.pr.base")
+        .filter(|value| !value.trim().is_empty());
+    if let Some(value) = from_config {
+        return Ok(value.trim().to_string());
+    }
+    if let Some(value) = detect_default_base_branch(repo_root) {
+        return Ok(value);
+    }
+    Ok(DEFAULT_PR_BASE.to_string())
+}
+
+fn detect_default_base_branch(repo_root: &Path) -> Option<String> {
+    let output = git_output_in_dir(
+        repo_root,
+        ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+    )
+    .ok()?;
+    let trimmed = output.trim();
+    if let Some(stripped) = trimmed.strip_prefix("origin/") {
+        if !stripped.is_empty() {
+            return Some(stripped.to_string());
+        }
+    }
+    None
+}
+
+fn resolve_verifier_pr_title(config: &Config) -> Result<String, CliError> {
+    let title = config
+        .get("verifier.pr.title")
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_PR_TITLE.to_string());
+    Ok(title.trim().to_string())
+}
+
+fn resolve_pr_template_path(repo_root: &Path) -> Result<PathBuf, CliError> {
+    let candidates = [
+        repo_root.join(".github").join("pull_request_template.md"),
+        repo_root.join(".github").join("PULL_REQUEST_TEMPLATE.md"),
+        repo_root.join("pull_request_template.md"),
+        repo_root.join("PULL_REQUEST_TEMPLATE.md"),
+    ];
+    for path in candidates {
+        if path.is_file() {
+            return Ok(path);
+        }
+    }
+    Err(CliError::Message(
+        "PR template not found in repository.".to_string(),
+    ))
+}
+
+fn ensure_gh_authenticated(dir: &Path) -> Result<(), CliError> {
+    let output = ProcCommand::new("gh")
+        .arg("auth")
+        .arg("status")
+        .current_dir(dir)
+        .output()
+        .map_err(map_gh_error)?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{}{}", stdout, stderr);
+    let trimmed = combined.trim();
+    if trimmed.is_empty() {
+        Err(CliError::Message(
+            "gh auth status failed. Run `gh auth login`.".to_string(),
+        ))
+    } else {
+        Err(CliError::Message(format!(
+            "gh auth status failed: {}. Run `gh auth login`.",
+            trimmed
+        )))
+    }
+}
+
+fn run_gh_pr_create(
+    repo_root: &Path,
+    template_path: &Path,
+    head: &str,
+    base: &str,
+    title: &str,
+) -> Result<String, CliError> {
+    println!(
+        "$ gh pr create --base {} --head {} --title {} --body-file {}",
+        base,
+        head,
+        title,
+        template_path.display()
+    );
+    let output = ProcCommand::new("gh")
+        .arg("pr")
+        .arg("create")
+        .arg("--base")
+        .arg(base)
+        .arg("--head")
+        .arg(head)
+        .arg("--title")
+        .arg(title)
+        .arg("--body-file")
+        .arg(template_path)
+        .current_dir(repo_root)
+        .output()
+        .map_err(map_gh_error)?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        let combined = format!("{}{}", stdout, stderr);
+        let trimmed = combined.trim();
+        let message = if trimmed.is_empty() {
+            "gh pr create failed.".to_string()
+        } else {
+            format!("gh pr create failed: {}", trimmed)
+        };
+        return Err(CliError::Message(message));
+    }
+    Ok(format!("{}{}", stdout, stderr))
+}
+
+fn map_gh_error(err: io::Error) -> CliError {
+    if err.kind() == io::ErrorKind::NotFound {
+        CliError::Message("gh CLI not found. Install from https://cli.github.com/.".to_string())
+    } else {
+        CliError::Io(err)
+    }
+}
+
+fn extract_pr_url(output: &str) -> Option<String> {
+    for token in output.split_whitespace() {
+        if token.starts_with("https://") || token.starts_with("http://") {
+            let trimmed = token.trim_matches(|c: char| c == ')' || c == ',' || c == ';');
+            return Some(trimmed.to_string());
+        }
+    }
+    None
 }
 
 fn resolve_static_check_settings(config: &Config) -> Result<StaticCheckSettings, CliError> {

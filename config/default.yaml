@@ -18,6 +18,9 @@ verifier:
   test_command: cargo test --workspace
   coverage_command: cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*
   coverage_min: 90
+  pr:
+    base: main
+    title: "chore: verifier run"
 
 # Claude Code backend settings
 claude:
