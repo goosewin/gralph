@@ -221,7 +221,7 @@ Add tests for backend adapters, server endpoints, notifications, update/install 
   * Simulate an unwritable output path and assert `run_iteration` returns BackendError::Io.
   * Add PATH guard cases that unset or empty PATH and verify `check_installed` returns false.
 - **Dependencies** None
-- [ ] COV-15 Expand Codex adapter error-path coverage
+- [x] COV-15 Expand Codex adapter error-path coverage
 ---
 
 ## Success Criteria

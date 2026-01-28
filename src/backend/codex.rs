@@ -166,9 +166,20 @@ mod tests {
         let _lock = crate::test_support::env_lock();
         let temp = tempfile::tempdir().unwrap();
         let command_name = "codex-stub";
+        {
+            let _guard = PathGuard::set(None);
+            let backend = CodexBackend::with_command(command_name.to_string());
+            assert!(!backend.check_installed());
+        }
+
+        {
+            let _guard = PathGuard::set(Some(OsStr::new("")));
+            let backend = CodexBackend::with_command(command_name.to_string());
+            assert!(!backend.check_installed());
+        }
+
         let _guard = PathGuard::set(Some(temp.path().as_os_str()));
         let backend = CodexBackend::with_command(command_name.to_string());
-
         assert!(!backend.check_installed());
 
         fs::write(temp.path().join(command_name), "stub").unwrap();
@@ -216,6 +227,30 @@ mod tests {
             result,
             Err(BackendError::Command(message)) if message.contains("failed to spawn codex")
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_returns_io_when_output_dir_is_read_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_dir = temp.path().join("readonly");
+        fs::create_dir(&output_dir).unwrap();
+        let mut permissions = fs::metadata(&output_dir).unwrap().permissions();
+        permissions.set_mode(0o555);
+        fs::set_permissions(&output_dir, permissions).unwrap();
+
+        let output_path = output_dir.join("output.txt");
+        let backend = CodexBackend::with_command("codex".to_string());
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path, .. }) if path == output_path
+        ));
+
+        let mut permissions = fs::metadata(&output_dir).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&output_dir, permissions).unwrap();
     }
 
     #[cfg(unix)]

@@ -29,6 +29,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-12 Expand Claude adapter error-path coverage.
 - COV-13 Expand OpenCode adapter error-path coverage.
 - COV-14 Expand Gemini adapter error-path coverage.
+- COV-15 Expand Codex adapter error-path coverage.
 - COV-15 Add verifier command parsing and review gate tests.
 - COV-16 Add verifier static check and duplicate detection tests.
 - COV-17 Expand Claude backend parsing and failure path coverage.
