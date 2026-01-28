@@ -1598,6 +1598,23 @@ mod tests {
     }
 
     #[test]
+    fn extract_context_entries_stops_at_next_field() {
+        let block = "### Task X-1A\n- **ID** X-1A\n- **Context Bundle** `README.md`,\n  `docs/alpha.md`\n  `docs/beta.md`\n- **DoD** Reference `docs/ignored.md`\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] X-1A Task\n";
+
+        let entries = extract_context_entries(block);
+
+        assert_eq!(
+            entries,
+            vec![
+                "README.md".to_string(),
+                "docs/alpha.md".to_string(),
+                "docs/beta.md".to_string()
+            ]
+        );
+        assert!(!entries.iter().any(|entry| entry == "docs/ignored.md"));
+    }
+
+    #[test]
     fn context_bundle_indent_detects_indentation() {
         let indent = context_bundle_indent("  - **Context Bundle** `README.md`").unwrap();
         assert_eq!(indent, "  ");
@@ -1661,5 +1678,45 @@ mod tests {
         assert!(!sanitized.contains("- [ ] X-2 Drop"));
         assert!(!sanitized.contains("missing.md"));
         assert!(!sanitized.contains("docs/blocked.md"));
+    }
+
+    #[test]
+    fn sanitize_task_block_filters_absolute_context_and_collapses_unchecked() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("allowed.md"), "ok").unwrap();
+        fs::write(docs.join("blocked.md"), "ok").unwrap();
+
+        let allowed = base.join("allowed.txt");
+        fs::write(&allowed, "docs/allowed.md\n").unwrap();
+
+        let allowed_abs = docs.join("allowed.md");
+        let block = format!(
+            "### Task X-3\n- **ID** X-3\n- **Context Bundle** `{}`, `docs/blocked.md`\n- **DoD** Confirm sanitize.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] X-3 Keep\n- [ ] X-3 Drop\n",
+            allowed_abs.display()
+        );
+
+        let sanitized = sanitize_task_block(&block, Some(base), Some(&allowed));
+
+        assert!(sanitized.contains("- **Context Bundle** `docs/allowed.md`"));
+        assert!(!sanitized.contains("docs/blocked.md"));
+        assert!(sanitized.contains("- [ ] X-3 Keep"));
+        assert!(sanitized.contains("- X-3 Drop"));
+        assert!(!sanitized.contains("- [ ] X-3 Drop"));
+    }
+
+    #[test]
+    fn prd_format_stack_summary_includes_stack_focus_line() {
+        let detection = StackDetection {
+            ids: vec!["Rust".to_string(), "Node.js".to_string()],
+            selected_ids: vec!["Rust".to_string()],
+            ..StackDetection::default()
+        };
+
+        let summary = prd_format_stack_summary(&detection, 2);
+
+        assert!(summary.contains("- Stack focus: Rust"));
     }
 }

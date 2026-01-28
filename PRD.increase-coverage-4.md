@@ -170,7 +170,7 @@ Tests verify existing behavior without changing production logic, CLI outputs, o
   * Cover extract_context_entries across multiline Context Bundle sections.
   * Cover context_display_path for absolute paths inside repo and prd_format_stack_summary stack focus line.
 - **Dependencies** None
-- [ ] COV-26 Expand PRD sanitization and stack summary coverage
+- [x] COV-26 Expand PRD sanitization and stack summary coverage
 ---
 
 ### Task COV-27
