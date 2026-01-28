@@ -13,6 +13,10 @@ This document captures the high-level structure of gralph. It is a living summar
 `src/server.rs` implements the HTTP status server, CORS handling, and bearer auth.
 `src/config.rs` loads default/global/project YAML config with env overrides.
 `src/prd.rs` provides PRD validation, sanitization, and stack detection utilities.
+`src/task.rs` centralizes task block parsing helpers shared by core and PRD validation.
+`src/verifier.rs` implements the verifier pipeline helpers for tests, coverage, static checks, PR creation, and review gating.
+`src/update.rs` handles release update checks and installs.
+`src/version.rs` defines the CLI version constants.
 
 `src/backend` defines the backend trait and CLI-backed implementations (`backend/mod.rs` plus `backend/claude.rs`, `backend/opencode.rs`, `backend/gemini.rs`, `backend/codex.rs`).
 `src/notify.rs` formats and sends webhook notifications via reqwest.

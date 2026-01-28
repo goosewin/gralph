@@ -19,9 +19,12 @@ CI=<status/link>; PR=<link if final PRD task>
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.
 - REF-1 Consolidate shared backend execution helpers.
+- REF-2 Unify task block parsing helpers across core and PRD validation.
 - REF-3 Centralize config merge precedence and normalize override lookup.
 - REF-4 Centralize server auth and error responses.
 - REF-5 Reduce duplication in notification payload formatting.
+- REF-6 Modularize verifier pipeline helpers into a dedicated module.
+- REF-7 Update shared docs and module map for refactor outcomes.
 
 ### Verification
 - Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened

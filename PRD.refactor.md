@@ -123,7 +123,7 @@ Preserve file locking, atomic writes, and error handling semantics across state,
   * ARCHITECTURE.md is updated with any module boundary changes.
   * CHANGELOG.md includes refactor task IDs and verification note.
 - **Dependencies** REF-1, REF-2, REF-3, REF-4, REF-5, REF-6
-- [ ] REF-7 Update shared docs and changelog for refactor outcomes
+- [x] REF-7 Update shared docs and changelog for refactor outcomes
 ---
 
 ## Success Criteria
