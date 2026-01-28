@@ -1180,7 +1180,13 @@ fn is_heading(line: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+    use proptest::string::string_regex;
     use tempfile::tempdir;
+
+    fn context_entry_strategy() -> impl Strategy<Value = String> {
+        string_regex(r"[A-Za-z0-9_./-]{1,16}").unwrap()
+    }
 
     #[test]
     fn prd_validate_file_accepts_valid() {
@@ -1535,6 +1541,22 @@ mod tests {
     }
 
     #[test]
+    fn sanitize_task_block_keeps_relative_context_with_base_dir() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("keep.md"), "ok").unwrap();
+
+        let block = "### Task X-2A\n- **ID** X-2A\n- **Context Bundle** `docs/keep.md`\n- **DoD** Confirm sanitize.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] X-2A Task\n";
+
+        let sanitized = sanitize_task_block(block, Some(base), None);
+
+        assert!(sanitized.contains("- **Context Bundle** `docs/keep.md`"));
+        assert!(sanitized.contains("- [ ] X-2A Task"));
+    }
+
+    #[test]
     fn has_open_questions_section_detects_heading() {
         let contents = "# PRD\n\n## Open Questions\n- Remove these\n";
         assert!(has_open_questions_section(contents));
@@ -1705,6 +1727,78 @@ mod tests {
         assert!(!entries.iter().any(|entry| entry == "docs/ignored.md"));
     }
 
+    proptest! {
+        #[test]
+        fn prop_extract_context_entries_round_trip(
+            entries in prop::collection::vec(context_entry_strategy(), 0..6)
+        ) {
+            let mut block = String::from("### Task P-1\n- **ID** P-1\n");
+            if entries.is_empty() {
+                block.push_str("- **Context Bundle**\n");
+            } else {
+                block.push_str("- **Context Bundle** ");
+                for (index, entry) in entries.iter().enumerate() {
+                    if index > 0 {
+                        if index % 2 == 0 {
+                            block.push('\n');
+                            block.push_str("  ");
+                        } else {
+                            block.push_str(", ");
+                        }
+                    }
+                    block.push('`');
+                    block.push_str(entry);
+                    block.push('`');
+                }
+                block.push('\n');
+            }
+            block.push_str("- **DoD** Example\n- **Checklist**\n  * Work\n- **Dependencies** None\n- [ ] P-1 Task\n");
+
+            let extracted = extract_context_entries(&block);
+
+            prop_assert_eq!(extracted, entries);
+        }
+
+        #[test]
+        fn prop_validate_task_block_unchecked_invariants(
+            unchecked_count in 0usize..4
+        ) {
+            let temp = tempdir().unwrap();
+            let base = temp.path();
+            fs::write(base.join("context.md"), "ok").unwrap();
+
+            let mut block = String::from(
+                "### Task P-2\n- **ID** P-2\n- **Context Bundle** `context.md`\n- **DoD** Example.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n"
+            );
+            for index in 0..unchecked_count {
+                block.push_str(&format!("- [ ] P-2 Task {}\n", index));
+            }
+
+            let errors = validate_task_block(&block, Path::new("prd.md"), false, Some(base));
+            let missing_unchecked = errors
+                .iter()
+                .any(|line| line.contains("Missing unchecked task line"));
+            let multiple_unchecked = errors
+                .iter()
+                .any(|line| line.contains("Multiple unchecked task lines"));
+
+            match unchecked_count {
+                0 => {
+                    prop_assert!(missing_unchecked);
+                    prop_assert!(!multiple_unchecked);
+                }
+                1 => {
+                    prop_assert!(!missing_unchecked);
+                    prop_assert!(!multiple_unchecked);
+                }
+                _ => {
+                    prop_assert!(!missing_unchecked);
+                    prop_assert!(multiple_unchecked);
+                }
+            }
+        }
+    }
+
     #[test]
     fn context_bundle_indent_detects_indentation() {
         let indent = context_bundle_indent("  - **Context Bundle** `README.md`").unwrap();
@@ -1745,6 +1839,20 @@ mod tests {
             outside_abs.to_string_lossy()
         );
         assert_eq!(context_display_path(outside_rel, Some(base)), outside_rel);
+    }
+
+    #[test]
+    fn context_display_path_keeps_absolute_without_base_dir() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        let abs = docs.join("abs.md");
+        fs::write(&abs, "ok").unwrap();
+
+        let display = context_display_path(abs.to_string_lossy().as_ref(), None);
+
+        assert_eq!(display, abs.to_string_lossy());
     }
 
     #[test]

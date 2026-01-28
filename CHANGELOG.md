@@ -20,6 +20,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-2 Expand PRD validation and sanitization coverage.
 - COV-3 Add OpenCode backend run_iteration argument and env coverage.
 - COV-3 Expand state store edge-case coverage.
+- COV-3 Expand PRD validation and sanitization coverage.
 - COV-4 Expand verifier parsing and gate evaluation tests.
 - COV-5 Add Codex backend run_iteration flag validation tests.
 - COV-5 Expand config normalization and override tests.

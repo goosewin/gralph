@@ -79,7 +79,7 @@ Add tests for CLI helpers, server endpoints, notification formatting, update/ins
   * Add property-based tests for extract_context_entries and task block validation invariants.
   * `cargo test --workspace` passes.
 - **Dependencies** None
-- [ ] COV-3 Expand PRD validation and sanitization coverage
+- [x] COV-3 Expand PRD validation and sanitization coverage
 ---
 
 ### Task COV-4
