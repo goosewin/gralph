@@ -82,7 +82,7 @@ Increase coverage in supporting modules and backend adapters (`src/main.rs`, `sr
   * Add tests for resolve_verifier_pr_base (origin/HEAD present vs missing) and resolve_pr_template_path error handling.
   * Add tests for static check helpers (normalize_pattern, path_is_allowed/ignored, read_text_file size and utf8) and gate parsing edge cases.
 - **Dependencies** None
-- [ ] COV-4 Expand verifier helper coverage
+- [x] COV-4 Expand verifier helper coverage
 ### Task COV-5
 
 - **ID** COV-5

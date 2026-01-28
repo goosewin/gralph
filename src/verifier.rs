@@ -1852,6 +1852,7 @@ mod tests {
     use serde_json::json;
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::process::Command;
 
     fn load_project_config(contents: &str) -> Config {
         let temp = tempfile::tempdir().unwrap();
@@ -1889,6 +1890,49 @@ mod tests {
             duplicate_min_alnum_lines: DEFAULT_STATIC_DUPLICATE_MIN_ALNUM_LINES,
             max_file_bytes: DEFAULT_STATIC_MAX_FILE_BYTES,
         }
+    }
+
+    fn run_git(repo: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}{}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn init_git_repo(branch: &str) -> tempfile::TempDir {
+        let temp = tempfile::tempdir().unwrap();
+        run_git(temp.path(), &["init"]);
+        run_git(temp.path(), &["checkout", "-b", branch]);
+        fs::write(temp.path().join("README.md"), "init\n").unwrap();
+        run_git(temp.path(), &["add", "."]);
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(temp.path())
+            .arg("-c")
+            .arg("user.name=Test")
+            .arg("-c")
+            .arg("user.email=test@example.com")
+            .arg("commit")
+            .arg("-m")
+            .arg("init")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git commit failed: {}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        temp
     }
 
     #[test]
@@ -1934,6 +1978,46 @@ mod tests {
         let config = load_project_config("verifier:\n  coverage_min: \"\"\n");
         let value = resolve_verifier_coverage_min(None, &config).unwrap();
         assert!((value - DEFAULT_COVERAGE_MIN).abs() < 1e-6);
+    }
+
+    #[test]
+    fn resolve_verifier_pr_base_uses_origin_head_when_present() {
+        let config = load_project_config("verifier:\n  pr:\n    base: \"\"\n");
+        let repo = init_git_repo("develop");
+        run_git(
+            repo.path(),
+            &["update-ref", "refs/remotes/origin/develop", "HEAD"],
+        );
+        run_git(
+            repo.path(),
+            &[
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/develop",
+            ],
+        );
+        let base = resolve_verifier_pr_base(&config, repo.path()).unwrap();
+        assert_eq!(base, "develop");
+    }
+
+    #[test]
+    fn resolve_verifier_pr_base_defaults_without_origin_head() {
+        let config = load_project_config("verifier:\n  pr:\n    base: \"\"\n");
+        let repo = init_git_repo("feature");
+        let base = resolve_verifier_pr_base(&config, repo.path()).unwrap();
+        assert_eq!(base, DEFAULT_PR_BASE);
+    }
+
+    #[test]
+    fn resolve_pr_template_path_errors_when_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let err = resolve_pr_template_path(temp.path()).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("PR template not found"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
     }
 
     #[test]
@@ -2201,6 +2285,44 @@ mod tests {
     }
 
     #[test]
+    fn resolve_review_gate_rating_rejects_out_of_range() {
+        let err =
+            resolve_review_gate_rating(Some("101".to_string()), DEFAULT_REVIEW_MIN_RATING)
+                .unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("min_rating"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_review_gate_u64_rejects_below_minimum() {
+        let err = resolve_review_gate_u64(
+            Some("4".to_string()),
+            "verifier.review.poll_seconds",
+            DEFAULT_REVIEW_POLL_SECONDS,
+            5,
+        )
+        .unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("minimum"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_review_gate_bool_defaults_on_empty_value() {
+        let config = load_project_config("verifier:\n  review:\n    require_checks: \"\"\n");
+        let value = resolve_review_gate_bool(&config, "verifier.review.require_checks", true)
+            .unwrap();
+        assert!(value);
+    }
+
+    #[test]
     fn evaluate_check_gate_reports_pending_checks() {
         let settings = base_review_settings();
         let pr_view = json!({
@@ -2312,6 +2434,12 @@ mod tests {
         assert!(path_matches_any("root/docs/readme.md", &patterns));
         assert!(path_matches_any("README.md", &patterns));
         assert!(!path_matches_any("docs/readme.txt", &patterns));
+    }
+
+    #[test]
+    fn normalize_pattern_trims_prefixes_and_separators() {
+        assert_eq!(normalize_pattern(" ./docs\\guide.md "), "docs/guide.md");
+        assert_eq!(normalize_pattern("/src/main.rs"), "src/main.rs");
     }
 
     #[test]
@@ -2464,10 +2592,34 @@ mod tests {
     }
 
     #[test]
+    fn path_is_allowed_allows_when_patterns_empty() {
+        assert!(path_is_allowed("README.md", &[]));
+    }
+
+    #[test]
     fn path_is_ignored_matches_directory_patterns() {
         let ignore = vec!["**/target/**".to_string()];
         assert!(path_is_ignored("target", true, &ignore));
         assert!(path_is_ignored("target/debug/app", false, &ignore));
+    }
+
+    #[test]
+    fn path_is_ignored_matches_directory_slash_pattern() {
+        let ignore = vec!["logs/".to_string()];
+        assert!(path_is_ignored("logs", true, &ignore));
+        assert!(!path_is_ignored("logs", false, &ignore));
+    }
+
+    #[test]
+    fn read_text_file_returns_none_for_large_or_invalid_utf8() {
+        let temp = tempfile::tempdir().unwrap();
+        let oversized = temp.path().join("big.txt");
+        fs::write(&oversized, vec![b'a'; 5]).unwrap();
+        assert!(read_text_file(&oversized, 4).unwrap().is_none());
+
+        let invalid = temp.path().join("bad.bin");
+        fs::write(&invalid, vec![0xff, 0xfe]).unwrap();
+        assert!(read_text_file(&invalid, 10).unwrap().is_none());
     }
 
     #[test]
