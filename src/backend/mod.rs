@@ -168,8 +168,12 @@ mod tests {
         fn set(value: Option<&OsStr>) -> Self {
             let original = env::var_os("PATH");
             match value {
-                Some(value) => env::set_var("PATH", value),
-                None => env::remove_var("PATH"),
+                Some(value) => unsafe {
+                    env::set_var("PATH", value);
+                },
+                None => unsafe {
+                    env::remove_var("PATH");
+                },
             }
             Self { original }
         }
@@ -178,8 +182,12 @@ mod tests {
     impl Drop for PathGuard {
         fn drop(&mut self) {
             match self.original.as_ref() {
-                Some(value) => env::set_var("PATH", value),
-                None => env::remove_var("PATH"),
+                Some(value) => unsafe {
+                    env::set_var("PATH", value);
+                },
+                None => unsafe {
+                    env::remove_var("PATH");
+                },
             }
         }
     }
@@ -191,7 +199,8 @@ mod tests {
         for name in cases {
             assert!(backend_from_name(name).is_ok(), "{} should resolve", name);
         }
-        assert!(backend_from_name("unknown").is_err());
+        let err = backend_from_name("unknown").unwrap_err();
+        assert_eq!(err, "Unknown backend: unknown");
     }
 
     #[test]
@@ -220,17 +229,28 @@ mod tests {
 
     #[test]
     fn command_in_path_handles_missing_and_empty_path() {
-        let temp = tempfile::tempdir().unwrap();
+        let dir_temp = tempfile::tempdir().unwrap();
+        let file_temp = tempfile::tempdir().unwrap();
         let command_name = "gralph-test-command";
-        fs::write(temp.path().join(command_name), "stub").unwrap();
+        fs::create_dir(dir_temp.path().join(command_name)).unwrap();
+        fs::write(file_temp.path().join(command_name), "stub").unwrap();
 
         let _guard = PathGuard::set(None);
         assert!(!command_in_path(command_name));
 
-        env::set_var("PATH", "");
+        unsafe {
+            env::set_var("PATH", "");
+        }
         assert!(!command_in_path(command_name));
 
-        env::set_var("PATH", temp.path());
+        unsafe {
+            env::set_var("PATH", dir_temp.path());
+        }
+        assert!(!command_in_path(command_name));
+
+        unsafe {
+            env::set_var("PATH", file_temp.path());
+        }
         assert!(command_in_path(command_name));
     }
 
@@ -254,6 +274,27 @@ mod tests {
         assert!(result.is_ok());
         assert!(lines.iter().any(|line| line.contains("stdout-line")));
         assert!(lines.iter().any(|line| line.contains("stderr-line")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_propagates_on_line_error() {
+        let child = Command::new("sh")
+            .arg("-c")
+            .arg("printf 'stdout-line\\n'")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let result = stream_command_output(child, "stub", |_| {
+            Err(BackendError::Command("line failed".to_string()))
+        });
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message == "line failed"
+        ));
     }
 
     #[cfg(unix)]

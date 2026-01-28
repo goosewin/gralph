@@ -104,7 +104,7 @@ Tests verify existing behavior without changing production logic, CLI outputs, o
   * Cover command_in_path behavior with empty PATH and non-file entries.
   * Validate backend_from_name returns the expected error string for unknown backends.
 - **Dependencies** None
-- [ ] COV-21 Expand backend module utility coverage
+- [x] COV-21 Expand backend module utility coverage
 ---
 
 ### Task COV-22
