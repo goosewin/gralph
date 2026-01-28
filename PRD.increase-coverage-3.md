@@ -217,7 +217,7 @@ Increase coverage without changing user-visible CLI behavior, error messages, or
   * Test `line_contains_marker`, `comment_style_for_path`, and `comment_text_len` boundary cases.
   * Test `split_nonempty_blocks`, `block_is_substantive`, and `find_duplicate_blocks` for duplicate detection outputs.
 - **Dependencies** None
-- [ ] COV-16 Cover verifier static check and duplicate detection helpers
+- [x] COV-16 Cover verifier static check and duplicate detection helpers
 ---
 
 ## Success Criteria

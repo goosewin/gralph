@@ -1851,6 +1851,7 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::fs;
+    use std::path::{Path, PathBuf};
 
     fn load_project_config(contents: &str) -> Config {
         let temp = tempfile::tempdir().unwrap();
@@ -2084,9 +2085,128 @@ mod tests {
     }
 
     #[test]
+    fn wildcard_match_supports_simple_globs() {
+        assert!(wildcard_match("src/*.rs", "src/main.rs"));
+        assert!(!wildcard_match("src/*.rs", "src/main.ts"));
+        assert!(wildcard_match("docs/*.md", "docs/readme.md"));
+    }
+
+    #[test]
+    fn path_matches_any_strips_double_star_prefix() {
+        let patterns = vec!["**/docs/*.md".to_string(), "README.md".to_string()];
+        assert!(path_matches_any("docs/readme.md", &patterns));
+        assert!(path_matches_any("root/docs/readme.md", &patterns));
+        assert!(path_matches_any("README.md", &patterns));
+        assert!(!path_matches_any("docs/readme.txt", &patterns));
+    }
+
+    #[test]
+    fn line_contains_marker_respects_boundaries() {
+        let markers = vec!["TODO".to_string(), "FIXME".to_string()];
+        assert_eq!(line_contains_marker("todo: fix", &markers), Some("TODO".to_string()));
+        assert_eq!(line_contains_marker("METHODODO", &markers), None);
+        assert_eq!(line_contains_marker("TODO_", &markers), None);
+        assert_eq!(line_contains_marker("FIXME.", &markers), Some("FIXME".to_string()));
+    }
+
+    #[test]
+    fn comment_style_for_path_handles_known_extensions() {
+        let rust_style = comment_style_for_path(Path::new("lib.rs")).unwrap();
+        assert!(rust_style.line_prefixes.contains(&"//"));
+        assert_eq!(rust_style.block_start, Some("/*"));
+        let sql_style = comment_style_for_path(Path::new("query.sql")).unwrap();
+        assert!(sql_style.line_prefixes.contains(&"--"));
+        assert_eq!(sql_style.block_end, Some("*/"));
+        assert!(comment_style_for_path(Path::new("README.md")).is_none());
+    }
+
+    #[test]
+    fn comment_text_len_handles_prefixes_and_blocks() {
+        let style = comment_style_for_path(Path::new("lib.rs")).unwrap();
+        assert_eq!(comment_text_len("// comment", &style), "comment".len());
+        assert_eq!(
+            comment_text_len("/* comment */", &style),
+            "comment */".len()
+        );
+        assert_eq!(comment_text_len("*/ trailing", &style), "trailing".len());
+        assert_eq!(comment_text_len("* continued", &style), "continued".len());
+    }
+
+    #[test]
+    fn split_nonempty_blocks_tracks_start_lines() {
+        let lines = vec![
+            "".to_string(),
+            "alpha".to_string(),
+            "beta".to_string(),
+            "".to_string(),
+            " ".to_string(),
+            "gamma".to_string(),
+        ];
+        let blocks = split_nonempty_blocks(&lines);
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[0].0, 2);
+        assert_eq!(blocks[0].1, vec!["alpha".to_string(), "beta".to_string()]);
+        assert_eq!(blocks[1].0, 6);
+        assert_eq!(blocks[1].1, vec!["gamma".to_string()]);
+    }
+
+    #[test]
+    fn block_is_substantive_counts_alnum_lines() {
+        let non_alnum = vec!["--".to_string(), "   ".to_string(), "##".to_string()];
+        assert!(!block_is_substantive(&non_alnum, 1));
+        let some_alnum = vec!["--".to_string(), "alpha".to_string(), "123".to_string()];
+        assert!(block_is_substantive(&some_alnum, 2));
+        assert!(!block_is_substantive(&some_alnum, 3));
+    }
+
+    #[test]
+    fn find_duplicate_blocks_reports_duplicate_locations() {
+        let settings = StaticCheckSettings {
+            enabled: true,
+            check_todo: false,
+            check_comments: false,
+            check_duplicates: true,
+            allow_patterns: Vec::new(),
+            ignore_patterns: Vec::new(),
+            todo_markers: Vec::new(),
+            max_comment_lines: DEFAULT_STATIC_MAX_COMMENT_LINES,
+            max_comment_chars: DEFAULT_STATIC_MAX_COMMENT_CHARS,
+            duplicate_block_lines: 2,
+            duplicate_min_alnum_lines: 1,
+            max_file_bytes: DEFAULT_STATIC_MAX_FILE_BYTES,
+        };
+        let first = FileSnapshot {
+            path: PathBuf::from("src/alpha.rs"),
+            lines: vec![
+                "let a = 1;".to_string(),
+                "let b = 2;".to_string(),
+                "".to_string(),
+                "unique".to_string(),
+            ],
+        };
+        let second = FileSnapshot {
+            path: PathBuf::from("src/beta.rs"),
+            lines: vec![
+                "let   a    =   1;".to_string(),
+                "let   b =   2;".to_string(),
+                "".to_string(),
+                "other".to_string(),
+            ],
+        };
+        let violations = find_duplicate_blocks(&[first, second], &settings);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].path, PathBuf::from("src/beta.rs"));
+        assert_eq!(violations[0].line, 1);
+        assert!(violations[0]
+            .message
+            .contains("Duplicate block matches"));
+    }
+
+    #[test]
     fn path_is_allowed_respects_allow_patterns() {
-        let allow = vec!["**/*.rs".to_string()];
+        let allow = vec!["**/*.rs".to_string(), "docs/**".to_string()];
         assert!(path_is_allowed("src/main.rs", &allow));
+        assert!(path_is_allowed("docs/guide.md", &allow));
         assert!(!path_is_allowed("README.md", &allow));
     }
 
