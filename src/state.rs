@@ -413,8 +413,27 @@ fn is_process_alive(pid: i64) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
     use std::path::Path;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn env_guard() -> std::sync::MutexGuard<'static, ()> {
+        ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner())
+    }
+
+    fn set_env(key: &str, value: impl AsRef<std::ffi::OsStr>) {
+        unsafe {
+            env::set_var(key, value);
+        }
+    }
+
+    fn remove_env(key: &str) {
+        unsafe {
+            env::remove_var(key);
+        }
+    }
 
     fn store_for_test(dir: &Path, timeout: Duration) -> StateStore {
         let state_dir = dir.join("state");
@@ -526,6 +545,31 @@ mod tests {
     }
 
     #[test]
+    fn cleanup_stale_skips_non_running_or_invalid_pid() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        store.init_state().unwrap();
+
+        store
+            .set_session("idle", &[("status", "complete"), ("pid", "999999")])
+            .unwrap();
+        store
+            .set_session("missing-pid", &[("status", "running"), ("pid", "0")])
+            .unwrap();
+
+        let cleaned = store.cleanup_stale(CleanupMode::Remove).unwrap();
+        assert!(cleaned.is_empty());
+
+        let idle = store.get_session("idle").unwrap().unwrap();
+        assert_eq!(idle.get("status").and_then(|v| v.as_str()), Some("complete"));
+        assert_eq!(idle.get("pid").and_then(|v| v.as_i64()), Some(999999));
+
+        let missing_pid = store.get_session("missing-pid").unwrap().unwrap();
+        assert_eq!(missing_pid.get("status").and_then(|v| v.as_str()), Some("running"));
+        assert_eq!(missing_pid.get("pid").and_then(|v| v.as_i64()), Some(0));
+    }
+
+    #[test]
     fn invalid_session_names_are_rejected() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path(), Duration::from_secs(1));
@@ -561,10 +605,43 @@ mod tests {
 
     #[test]
     fn parse_value_handles_bool_and_numeric() {
+        assert_eq!(parse_value(""), Value::String(String::new()));
         assert_eq!(parse_value("true"), Value::Bool(true));
         assert_eq!(parse_value("false"), Value::Bool(false));
         assert_eq!(parse_value("42").as_i64(), Some(42));
         assert_eq!(parse_value("007").as_i64(), Some(7));
+        assert_eq!(parse_value("12ab"), Value::String("12ab".to_string()));
+    }
+
+    #[test]
+    fn default_state_dir_uses_home_env() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let original = env::var_os("HOME");
+        set_env("HOME", temp.path());
+
+        let resolved = default_state_dir();
+        assert_eq!(resolved, temp.path().join(".config").join("gralph"));
+
+        match original {
+            Some(value) => set_env("HOME", value),
+            None => remove_env("HOME"),
+        }
+    }
+
+    #[test]
+    fn default_state_dir_falls_back_when_home_missing() {
+        let _guard = env_guard();
+        let original = env::var_os("HOME");
+        remove_env("HOME");
+
+        let resolved = default_state_dir();
+        assert_eq!(resolved, PathBuf::from(".").join(".config").join("gralph"));
+
+        match original {
+            Some(value) => set_env("HOME", value),
+            None => remove_env("HOME"),
+        }
     }
 
     #[test]

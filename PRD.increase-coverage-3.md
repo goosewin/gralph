@@ -173,7 +173,7 @@ Increase coverage without changing user-visible CLI behavior, error messages, or
   * Test `cleanup_stale` does not modify sessions that are not running or have pid <= 0.
   * Test `default_state_dir` uses HOME when set and falls back when missing.
 - **Dependencies** None
-- [ ] COV-12 Increase state helper and cleanup coverage
+- [x] COV-12 Increase state helper and cleanup coverage
 ### Task COV-13
 
 - **ID** COV-13
