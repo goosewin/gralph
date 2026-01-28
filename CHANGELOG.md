@@ -12,6 +12,7 @@ CI=<status/link>; PR=<link if final PRD task>
 ## [Unreleased]
 
 ### Added
+- PROMPT-1 Require lower-case conventional commits in the default prompt template.
 
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.
