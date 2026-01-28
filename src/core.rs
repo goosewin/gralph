@@ -1027,12 +1027,34 @@ mod tests {
     }
 
     #[test]
+    fn check_completion_uses_last_non_empty_line() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [x] Done\n").unwrap();
+
+        let result = "<promise>COMPLETE</promise>\nStill working\n";
+        let complete = check_completion(&path, result, "COMPLETE").unwrap();
+        assert!(!complete);
+    }
+
+    #[test]
     fn check_completion_rejects_negated_promise_line() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("PRD.md");
         fs::write(&path, "- [x] Done\n").unwrap();
 
         let result = "Cannot <promise>COMPLETE</promise>\n";
+        let complete = check_completion(&path, result, "COMPLETE").unwrap();
+        assert!(!complete);
+    }
+
+    #[test]
+    fn check_completion_rejects_negated_promise_phrase() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [x] Done\n").unwrap();
+
+        let result = "We will not <promise>COMPLETE</promise>\n";
         let complete = check_completion(&path, result, "COMPLETE").unwrap();
         assert!(!complete);
     }
