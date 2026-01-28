@@ -111,7 +111,7 @@ Preserve file locking, atomic writes, and error handling semantics across state,
   * CLI command dispatch remains unchanged.
   * Verifier pipeline outputs and error messages remain stable.
 - **Dependencies** None
-- [ ] REF-6 Modularize verifier pipeline logic out of main.rs
+- [x] REF-6 Modularize verifier pipeline logic out of main.rs
 ---
 
 ### Task REF-7
