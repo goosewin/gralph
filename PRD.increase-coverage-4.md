@@ -144,7 +144,7 @@ Tests verify existing behavior without changing production logic, CLI outputs, o
   * Cover validate_task_id rejecting invalid formats and accepting valid ones.
   * Cover parse_bool_value for accepted, rejected, and mixed-case inputs, plus resolve_log_file fallback behavior.
 - **Dependencies** None
-- [ ] COV-24 Expand main CLI helper coverage
+- [x] COV-24 Expand main CLI helper coverage
 ---
 
 ### Task COV-25

@@ -2148,6 +2148,20 @@ mod tests {
     }
 
     #[test]
+    fn validate_task_id_accepts_valid_formats() {
+        for value in ["A-1", "COV-24", "cov-2", "Build-99"] {
+            assert!(validate_task_id(value).is_ok(), "expected valid: {value}");
+        }
+    }
+
+    #[test]
+    fn validate_task_id_rejects_invalid_formats() {
+        for value in ["", "A", "A-", "-1", "1-2", "A-1b", "A-1-2", "A_1"] {
+            assert!(validate_task_id(value).is_err(), "expected invalid: {value}");
+        }
+    }
+
+    #[test]
     fn sanitize_session_name_replaces_invalid_chars() {
         assert_eq!(sanitize_session_name("My Session@2026!"), "My-Session-2026-");
         assert_eq!(sanitize_session_name("dev_env-1"), "dev_env-1");

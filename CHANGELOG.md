@@ -37,6 +37,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-21 Expand backend module utility coverage.
 - COV-22 Expand config loader and override coverage.
 - COV-23 Expand core loop validation and completion coverage.
+- COV-24 Expand main CLI helper coverage.
 
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.
