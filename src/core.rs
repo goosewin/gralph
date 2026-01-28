@@ -798,7 +798,34 @@ fn create_temp_file(prefix: &str) -> Result<PathBuf, CoreError> {
 mod tests {
     use super::*;
     use std::cell::RefCell;
+    use std::env;
     use std::fs;
+    use std::fs::OpenOptions;
+    use std::sync::Mutex;
+    use std::time::{Duration, SystemTime};
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn env_guard() -> std::sync::MutexGuard<'static, ()> {
+        ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner())
+    }
+
+    fn set_env(key: &str, value: impl AsRef<std::ffi::OsStr>) {
+        unsafe {
+            env::set_var(key, value);
+        }
+    }
+
+    fn remove_env(key: &str) {
+        unsafe {
+            env::remove_var(key);
+        }
+    }
+
+    fn set_modified(path: &Path, time: SystemTime) {
+        let file = OpenOptions::new().write(true).open(path).unwrap();
+        file.set_modified(time).unwrap();
+    }
 
     struct TestBackend {
         prompt: RefCell<Option<String>>,
@@ -925,6 +952,39 @@ mod tests {
     }
 
     #[test]
+    fn check_completion_rejects_negated_promise_line() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [x] Done\n").unwrap();
+
+        let result = "Cannot <promise>COMPLETE</promise>\n";
+        let complete = check_completion(&path, result, "COMPLETE").unwrap();
+        assert!(!complete);
+    }
+
+    #[test]
+    fn check_completion_rejects_mismatched_marker() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [x] Done\n").unwrap();
+
+        let result = "<promise>DONE</promise>\n";
+        let complete = check_completion(&path, result, "COMPLETE").unwrap();
+        assert!(!complete);
+    }
+
+    #[test]
+    fn check_completion_rejects_remaining_tasks() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [ ] Task\n").unwrap();
+
+        let result = "<promise>COMPLETE</promise>\n";
+        let complete = check_completion(&path, result, "COMPLETE").unwrap();
+        assert!(!complete);
+    }
+
+    #[test]
     fn get_task_blocks_extracts_blocks() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("PRD.md");
@@ -942,6 +1002,52 @@ mod tests {
         let raw = "README.md,  ARCHITECTURE.md ,";
         let normalized = normalize_context_files(raw);
         assert_eq!(normalized, "README.md\nARCHITECTURE.md");
+    }
+
+    #[test]
+    fn resolve_prompt_template_prefers_explicit_template() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path();
+        let gralph_dir = project_dir.join(".gralph");
+        fs::create_dir_all(&gralph_dir).unwrap();
+        let project_path = gralph_dir.join("prompt-template.txt");
+        fs::write(&project_path, "project").unwrap();
+
+        let env_path = project_dir.join("env-template.txt");
+        fs::write(&env_path, "env").unwrap();
+        set_env("GRALPH_PROMPT_TEMPLATE_FILE", &env_path);
+
+        let resolved = resolve_prompt_template(project_dir, Some("explicit template")).unwrap();
+        assert_eq!(resolved, "explicit template");
+
+        remove_env("GRALPH_PROMPT_TEMPLATE_FILE");
+    }
+
+    #[test]
+    fn resolve_prompt_template_respects_env_then_project_then_default() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path();
+        let gralph_dir = project_dir.join(".gralph");
+        fs::create_dir_all(&gralph_dir).unwrap();
+        let project_path = gralph_dir.join("prompt-template.txt");
+        fs::write(&project_path, "project").unwrap();
+
+        let env_path = project_dir.join("env-template.txt");
+        fs::write(&env_path, "env").unwrap();
+        set_env("GRALPH_PROMPT_TEMPLATE_FILE", &env_path);
+
+        let resolved = resolve_prompt_template(project_dir, None).unwrap();
+        assert_eq!(resolved, "env");
+
+        remove_env("GRALPH_PROMPT_TEMPLATE_FILE");
+        let resolved = resolve_prompt_template(project_dir, None).unwrap();
+        assert_eq!(resolved, "project");
+
+        fs::remove_file(&project_path).unwrap();
+        let resolved = resolve_prompt_template(project_dir, None).unwrap();
+        assert_eq!(resolved, DEFAULT_PROMPT_TEMPLATE);
     }
 
     #[test]
@@ -967,6 +1073,33 @@ mod tests {
 
         let block = get_next_unchecked_task_block(&path).unwrap();
         assert!(block.is_none());
+    }
+
+    #[test]
+    fn cleanup_old_logs_removes_only_old_log_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let log_dir = temp.path().join(".gralph");
+        fs::create_dir_all(&log_dir).unwrap();
+
+        let old_log = log_dir.join("old.log");
+        let recent_log = log_dir.join("recent.log");
+        let keep_txt = log_dir.join("keep.txt");
+
+        fs::write(&old_log, "old").unwrap();
+        fs::write(&recent_log, "recent").unwrap();
+        fs::write(&keep_txt, "keep").unwrap();
+
+        let old_time = SystemTime::now()
+            .checked_sub(Duration::from_secs(9 * 86400))
+            .unwrap();
+        set_modified(&old_log, old_time);
+        set_modified(&keep_txt, old_time);
+
+        cleanup_old_logs(&log_dir, None).unwrap();
+
+        assert!(!old_log.exists());
+        assert!(recent_log.exists());
+        assert!(keep_txt.exists());
     }
 
     #[test]

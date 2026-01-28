@@ -118,7 +118,7 @@ Increase coverage without changing user-visible CLI behavior, error messages, or
   * Test `resolve_prompt_template` precedence for explicit template, env file, .gralph file, and default.
   * Test `cleanup_old_logs` removes only old .log files and preserves non-log files.
 - **Dependencies** None
-- [ ] COV-7 Expand core loop helpers and logging coverage
+- [x] COV-7 Expand core loop helpers and logging coverage
 ### Task COV-8
 
 - **ID** COV-8
