@@ -30,6 +30,8 @@ impl OpenCodeBackend {
     }
 }
 
+const OPENCODE_LSP_ENV: &str = "OPENCODE_EXPERIMENTAL_LSP_TOOL";
+
 impl Default for OpenCodeBackend {
     fn default() -> Self {
         Self::new()
@@ -61,6 +63,7 @@ impl Backend for OpenCodeBackend {
 
         let mut cmd = Command::new(&self.command);
         cmd.current_dir(working_dir);
+        cmd.env(OPENCODE_LSP_ENV, "true");
         cmd.arg("run");
         if let Some(model) = model {
             if !model.trim().is_empty() {

@@ -347,7 +347,7 @@ fn acquire_lock(file: &File, timeout: Duration) -> Result<(), StateError> {
                 return Err(StateError::Io {
                     path: PathBuf::from("state.lock"),
                     source: err,
-                })
+                });
             }
         }
     }

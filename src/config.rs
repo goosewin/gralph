@@ -460,12 +460,14 @@ mod tests {
 
         let config = Config::load(None).unwrap();
         let list = config.list();
-        assert!(list
-            .iter()
-            .any(|(key, value)| key == "defaults.max_iterations" && value == "5"));
-        assert!(list
-            .iter()
-            .any(|(key, value)| key == "logging.level" && value == "info"));
+        assert!(
+            list.iter()
+                .any(|(key, value)| key == "defaults.max_iterations" && value == "5")
+        );
+        assert!(
+            list.iter()
+                .any(|(key, value)| key == "logging.level" && value == "info")
+        );
 
         remove_env("GRALPH_GLOBAL_CONFIG");
         remove_env("GRALPH_DEFAULT_CONFIG");

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {
+    "cargofmt": {},
+    "rustfmt": {
+      "disabled": true
+    },
+    "prettier": {
+      "command": ["prettier", "--write", "$FILE"],
+      "extensions": [
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".html",
+        ".css",
+        ".md",
+        ".json",
+        ".yaml",
+        ".yml"
+      ]
+    }
+  }
+}
