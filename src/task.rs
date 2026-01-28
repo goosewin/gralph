@@ -76,6 +76,14 @@ mod tests {
         string_regex(r"@[A-Za-z0-9]{1,8}").unwrap()
     }
 
+    fn malformed_checkbox_prefix_strategy() -> impl Strategy<Value = String> {
+        (0usize..=2, 0usize..=2)
+            .prop_filter("exclude valid spacing", |(outer, inner)| {
+                !(*outer == 1 && *inner == 1)
+            })
+            .prop_map(|(outer, inner)| format!("-{}[{}]", " ".repeat(outer), " ".repeat(inner)))
+    }
+
     #[test]
     fn task_blocks_from_contents_returns_empty_when_no_blocks_exist() {
         let contents = "## Overview\n- [ ] Not a task block\n---\n";
@@ -168,6 +176,75 @@ mod tests {
 
     proptest! {
         #[test]
+        fn prop_task_blocks_from_contents_terminates_on_separator(
+            header_leading in whitespace_strategy(),
+            separator_leading in whitespace_strategy(),
+            separator_trailing in whitespace_strategy(),
+            id in task_id_strategy(),
+            body in prop::collection::vec(safe_line_strategy(), 0..4),
+            suffix in prop::collection::vec(safe_line_strategy(), 0..3)
+        ) {
+            let header = format!("{}### Task {}", header_leading, id);
+            let mut contents = header.clone();
+            let mut expected = header;
+
+            for line in body {
+                contents.push('\n');
+                contents.push_str(&line);
+                expected.push('\n');
+                expected.push_str(&line);
+            }
+
+            contents.push('\n');
+            contents.push_str(&format!("{}---{}", separator_leading, separator_trailing));
+
+            if !suffix.is_empty() {
+                contents.push('\n');
+                contents.push_str(&suffix.join("\n"));
+            }
+
+            let blocks_out = task_blocks_from_contents(&contents);
+            prop_assert_eq!(blocks_out.len(), 1);
+            prop_assert_eq!(&blocks_out[0], &expected);
+            prop_assert!(!blocks_out[0].lines().any(|line| line.trim() == "---"));
+        }
+
+        #[test]
+        fn prop_task_blocks_from_contents_terminates_on_h2_heading(
+            header_leading in whitespace_strategy(),
+            heading_leading in whitespace_strategy(),
+            id in task_id_strategy(),
+            body in prop::collection::vec(safe_line_strategy(), 0..4),
+            title in string_regex(r"[A-Za-z0-9][A-Za-z0-9 ]{0,12}").unwrap(),
+            suffix in prop::collection::vec(safe_line_strategy(), 0..3)
+        ) {
+            let header = format!("{}### Task {}", header_leading, id);
+            let heading = format!("{}## {}", heading_leading, title);
+            let mut contents = header.clone();
+            let mut expected = header;
+
+            for line in body {
+                contents.push('\n');
+                contents.push_str(&line);
+                expected.push('\n');
+                expected.push_str(&line);
+            }
+
+            contents.push('\n');
+            contents.push_str(&heading);
+
+            if !suffix.is_empty() {
+                contents.push('\n');
+                contents.push_str(&suffix.join("\n"));
+            }
+
+            let blocks_out = task_blocks_from_contents(&contents);
+            prop_assert_eq!(blocks_out.len(), 1);
+            prop_assert_eq!(&blocks_out[0], &expected);
+            prop_assert!(!blocks_out[0].contains(&heading));
+        }
+
+        #[test]
         fn prop_task_blocks_from_contents_round_trip(
             prefix in prop::collection::vec(safe_line_strategy(), 0..3),
             blocks in prop::collection::vec(
@@ -257,9 +334,10 @@ mod tests {
             }
 
             let blocks_out = task_blocks_from_contents(&contents);
-            prop_assert_eq!(blocks_out, vec![expected.clone()]);
+            prop_assert_eq!(blocks_out.len(), 1);
 
             let block = &blocks_out[0];
+            prop_assert_eq!(block, &expected);
             for line in prefix.iter().chain(suffix.iter()) {
                 prop_assert!(!block.contains(line));
             }
@@ -346,6 +424,16 @@ mod tests {
             ]
         ) {
             let line = format!("{}{}{}", leading, variant, tail);
+            prop_assert!(!is_unchecked_line(&line));
+        }
+
+        #[test]
+        fn prop_is_unchecked_line_rejects_spacing_variants(
+            leading in whitespace_strategy(),
+            prefix in malformed_checkbox_prefix_strategy(),
+            tail in string_regex(r"[^\n]{0,12}").unwrap()
+        ) {
+            let line = format!("{}{}{}", leading, prefix, tail);
             prop_assert!(!is_unchecked_line(&line));
         }
     }

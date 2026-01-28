@@ -42,6 +42,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-13 Expand Codex backend command and error coverage.
 - COV-14 Expand Gemini adapter error-path coverage.
 - COV-14 Expand update/install error-path coverage.
+- COV-14 Add property-based tests for task block termination and unchecked parsing.
 - COV-15 Expand Codex adapter error-path coverage.
 - COV-15 Add verifier command parsing and review gate tests.
 - COV-15 Expand task parsing edge-case tests.

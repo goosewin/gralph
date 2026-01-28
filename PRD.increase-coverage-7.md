@@ -222,7 +222,7 @@ Add tests for CLI helpers, server endpoints, notification formatting, update/ins
   * Add proptest cases for unchecked line detection with whitespace and malformed prefixes.
   * `cargo test --workspace` passes.
 - **Dependencies** COV-1
-- [ ] COV-14 Expand task parsing invariants with property-based tests
+- [x] COV-14 Expand task parsing invariants with property-based tests
 ---
 
 ### Task COV-15
