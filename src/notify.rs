@@ -776,6 +776,76 @@ mod tests {
     }
 
     #[test]
+    fn format_generic_complete_message_assembly() {
+        let payload = format_generic_complete(
+            "alpha",
+            "/srv/demo",
+            "3",
+            "5s",
+            "2026-01-26T15:16:17Z",
+        )
+        .expect("generic payload");
+        let value: Value = serde_json::from_str(&payload).expect("json payload");
+
+        assert_eq!(
+            value["message"],
+            "Gralph loop 'alpha' completed successfully after 3 iterations (5s)"
+        );
+    }
+
+    #[test]
+    fn build_generic_payload_optional_fields() {
+        let payload = build_generic_payload(
+            "complete",
+            "success",
+            "session",
+            "repo",
+            None,
+            "1",
+            None,
+            None,
+            "4s",
+            "2026-01-26T15:16:17Z",
+            "custom message".to_string(),
+        );
+        let object = payload.as_object().expect("payload object");
+
+        assert!(!object.contains_key("reason"));
+        assert!(!object.contains_key("max_iterations"));
+        assert!(!object.contains_key("remaining_tasks"));
+        assert_eq!(object.get("message").and_then(Value::as_str), Some("custom message"));
+
+        let payload = build_generic_payload(
+            "failed",
+            "failure",
+            "session",
+            "repo",
+            Some("timeout"),
+            "2",
+            Some("5"),
+            Some("1"),
+            "4s",
+            "2026-01-26T15:16:17Z",
+            "failure message".to_string(),
+        );
+        let object = payload.as_object().expect("payload object");
+
+        assert_eq!(object.get("reason").and_then(Value::as_str), Some("timeout"));
+        assert_eq!(
+            object.get("max_iterations").and_then(Value::as_str),
+            Some("5")
+        );
+        assert_eq!(
+            object.get("remaining_tasks").and_then(Value::as_str),
+            Some("1")
+        );
+        assert_eq!(
+            object.get("message").and_then(Value::as_str),
+            Some("failure message")
+        );
+    }
+
+    #[test]
     fn notify_complete_rejects_empty_inputs() {
         let err = notify_complete(
             "",
@@ -940,6 +1010,29 @@ mod tests {
     }
 
     #[test]
+    fn format_discord_failed_unknown_reason_message() {
+        let payload = format_discord_failed(
+            "alpha",
+            "repo",
+            "mystery",
+            "2",
+            "5",
+            "1",
+            "4m 1s",
+            "2026-01-26T01:02:03Z",
+        )
+        .expect("discord payload");
+        let value: Value = serde_json::from_str(&payload).expect("json payload");
+        let embed = &value["embeds"][0];
+
+        assert_eq!(
+            embed["description"],
+            "Session **alpha** failed: mystery"
+        );
+        assert_eq!(embed["fields"][1]["value"], "mystery");
+    }
+
+    #[test]
     fn format_slack_failed_reason_mappings() {
         let reasons = ["max_iterations", "error", "manual_stop", "timeout"];
         for reason in reasons {
@@ -1040,6 +1133,12 @@ mod tests {
             }
             _ => panic!("expected invalid input"),
         }
+    }
+
+    #[test]
+    fn send_webhook_handles_invalid_url() {
+        let err = send_webhook("not a url", "{}", Some(5)).expect_err("invalid url");
+        assert!(matches!(err, NotifyError::Http(_)));
     }
 
     #[test]

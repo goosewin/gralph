@@ -144,7 +144,7 @@ Add tests for remaining modules (CLI helpers, server endpoints, notifications, b
   * Add tests for format_failure_description and format_*_failed outputs for unknown reasons.
   * Add tests for send_webhook error handling on invalid URL or non-success status.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-8 Expand notification formatting and HTTP error tests
+- [x] COV-8 Expand notification formatting and HTTP error tests
 ---
 
 ### Task COV-9
