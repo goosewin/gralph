@@ -683,11 +683,19 @@ mod tests {
             WebhookType::Discord
         );
         assert_eq!(
+            detect_webhook_type("HTTPS://DISCORD.COM/API/WEBHOOKS/123"),
+            WebhookType::Discord
+        );
+        assert_eq!(
             detect_webhook_type("https://discordapp.com/api/webhooks/123"),
             WebhookType::Discord
         );
         assert_eq!(
             detect_webhook_type("https://hooks.slack.com/services/123"),
+            WebhookType::Slack
+        );
+        assert_eq!(
+            detect_webhook_type("https://Hooks.Slack.com/services/123"),
             WebhookType::Slack
         );
         assert_eq!(
@@ -938,7 +946,14 @@ mod tests {
         assert_eq!(format_duration(None), "unknown");
         assert_eq!(format_duration(Some(0)), "0s");
         assert_eq!(format_duration(Some(65)), "1m 5s");
+        assert_eq!(format_duration(Some(3600)), "1h 0m 0s");
         assert_eq!(format_duration(Some(3661)), "1h 1m 1s");
+    }
+
+    #[test]
+    fn format_failure_description_handles_unknown_reason() {
+        let description = format_failure_description("alpha", "timeout", "**");
+        assert_eq!(description, "Session **alpha** failed: timeout");
     }
 
     #[test]
@@ -978,6 +993,18 @@ mod tests {
         );
         assert_eq!(request.body, payload);
 
+        handle.join().expect("server thread");
+    }
+
+    #[test]
+    fn send_webhook_defaults_timeout_when_zero() {
+        let payload = "{}";
+        let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
+
+        send_webhook(&format!("{}/default", base), payload, Some(0))
+            .expect("send webhook");
+
+        assert!(captured.lock().unwrap().is_some());
         handle.join().expect("server thread");
     }
 

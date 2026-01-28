@@ -157,7 +157,7 @@ Tests verify existing behavior without changing production logic, CLI outputs, o
   * Cover detect_webhook_type with uppercase or mixed-case URLs.
   * Add stub HTTP server test for send_webhook timeout default and non-2xx status handling.
 - **Dependencies** None
-- [ ] COV-25 Expand notification formatting and HTTP error coverage
+- [x] COV-25 Expand notification formatting and HTTP error coverage
 ---
 
 ### Task COV-26
