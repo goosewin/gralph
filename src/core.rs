@@ -1,5 +1,6 @@
 use crate::backend::{Backend, BackendError};
 use crate::config::Config;
+use crate::task::{is_task_header, is_unchecked_line, task_blocks_from_contents};
 use std::error::Error;
 use std::fmt;
 use std::fs::{self, OpenOptions};
@@ -227,10 +228,8 @@ pub fn count_remaining_tasks(task_file: &Path) -> usize {
 
     if contents.lines().any(is_task_header) {
         let mut count = 0;
-        if let Ok(blocks) = get_task_blocks_from_contents(&contents) {
-            for block in blocks {
-                count += block.lines().filter(|line| is_unchecked_line(line)).count();
-            }
+        for block in task_blocks_from_contents(&contents) {
+            count += block.lines().filter(|line| is_unchecked_line(line)).count();
         }
         count
     } else {
@@ -528,7 +527,7 @@ pub fn get_next_unchecked_task_block(task_file: &Path) -> Result<Option<String>,
         path: task_file.to_path_buf(),
         source,
     })?;
-    let blocks = get_task_blocks_from_contents(&contents)?;
+    let blocks = task_blocks_from_contents(&contents);
     for block in blocks {
         if block.lines().any(|line| is_unchecked_line(line)) {
             return Ok(Some(block));
@@ -545,7 +544,7 @@ pub fn get_task_blocks(task_file: &Path) -> Result<Vec<String>, CoreError> {
         path: task_file.to_path_buf(),
         source,
     })?;
-    get_task_blocks_from_contents(&contents)
+    Ok(task_blocks_from_contents(&contents))
 }
 
 pub fn normalize_context_files(raw: &str) -> String {
@@ -590,61 +589,6 @@ pub fn render_prompt_template(
         .replace("{task_block}", task_block)
         .replace("{context_files}", context_files.unwrap_or(""))
         .replace("{context_files_section}", &context_files_section)
-}
-
-fn get_task_blocks_from_contents(contents: &str) -> Result<Vec<String>, CoreError> {
-    let mut blocks = Vec::new();
-    let mut in_block = false;
-    let mut block = String::new();
-
-    for line in contents.lines() {
-        if is_task_header(line) {
-            if in_block {
-                blocks.push(block.clone());
-                block.clear();
-            }
-            in_block = true;
-            block.push_str(line);
-            continue;
-        }
-
-        if in_block && is_task_block_end(line) {
-            blocks.push(block.clone());
-            block.clear();
-            in_block = false;
-            continue;
-        }
-
-        if in_block {
-            block.push('\n');
-            block.push_str(line);
-        }
-    }
-
-    if in_block && !block.is_empty() {
-        blocks.push(block);
-    }
-
-    Ok(blocks)
-}
-
-fn is_task_header(line: &str) -> bool {
-    let trimmed = line.trim_start();
-    trimmed.starts_with("### Task ")
-}
-
-fn is_task_block_end(line: &str) -> bool {
-    let trimmed = line.trim();
-    if trimmed == "---" {
-        return true;
-    }
-    let trimmed_start = line.trim_start();
-    trimmed_start.starts_with("## ")
-}
-
-fn is_unchecked_line(line: &str) -> bool {
-    let trimmed = line.trim_start();
-    trimmed.starts_with("- [ ]")
 }
 
 fn first_unchecked_line(task_file: &Path) -> Result<Option<String>, CoreError> {

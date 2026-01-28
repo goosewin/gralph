@@ -63,7 +63,7 @@ Preserve file locking, atomic writes, and error handling semantics across state,
   * Shared parsing utilities replace duplicated logic.
   * Core and PRD tests remain green with identical semantics.
 - **Dependencies** None
-- [ ] REF-2 Unify task block parsing utilities across core and PRD
+- [x] REF-2 Unify task block parsing utilities across core and PRD
 ---
 
 ### Task REF-3

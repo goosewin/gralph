@@ -5,5 +5,6 @@ pub mod notify;
 pub mod prd;
 pub mod server;
 pub mod state;
+pub mod task;
 pub mod update;
 pub mod version;
