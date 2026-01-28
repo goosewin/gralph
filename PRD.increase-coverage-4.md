@@ -222,7 +222,7 @@ Tests verify existing behavior without changing production logic, CLI outputs, o
   * Cover extract_archive failure handling with invalid or empty tar input.
   * Cover resolve_install_version and normalize_version error paths with invalid versions.
 - **Dependencies** None
-- [ ] COV-30 Expand update parsing and extraction coverage
+- [x] COV-30 Expand update parsing and extraction coverage
 ---
 
 ### Task COV-31

@@ -472,6 +472,14 @@ mod tests {
     }
 
     #[test]
+    fn parse_release_tag_rejects_non_string_tag() {
+        let numeric = parse_release_tag(r#"{ "tag_name": 42 }"#);
+        assert!(matches!(numeric, Err(UpdateError::MissingTag)));
+        let null_value = parse_release_tag(r#"{ "tag_name": null }"#);
+        assert!(matches!(null_value, Err(UpdateError::MissingTag)));
+    }
+
+    #[test]
     fn parse_release_tag_accepts_valid_tag() {
         let body = format!(r#"{{ "tag_name": "{}" }}"#, version::VERSION_TAG);
         let tag = parse_release_tag(&body).expect("tag parsed");
@@ -528,6 +536,12 @@ mod tests {
     }
 
     #[test]
+    fn resolve_install_version_rejects_invalid_version() {
+        let result = resolve_install_version("1.2");
+        assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
     fn resolve_install_version_latest_uses_override() {
         let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "v2.0.0");
         let resolved = resolve_install_version("latest").expect("resolved");
@@ -578,6 +592,20 @@ mod tests {
             let _guard = PathGuard::set(Some(OsStr::new("")));
             assert!(resolve_in_path("gralph").is_none());
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_archive_rejects_invalid_or_empty_input() {
+        let temp = tempdir().expect("tempdir");
+        let archive_path = temp.path().join("gralph.tar.gz");
+        fs::write(&archive_path, "").expect("write empty");
+        let empty_result = extract_archive(&archive_path, temp.path());
+        assert!(matches!(empty_result, Err(UpdateError::CommandFailed(_))));
+
+        fs::write(&archive_path, "not a tar").expect("write invalid");
+        let invalid_result = extract_archive(&archive_path, temp.path());
+        assert!(matches!(invalid_result, Err(UpdateError::CommandFailed(_))));
     }
 
     #[test]
