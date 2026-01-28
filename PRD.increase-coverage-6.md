@@ -157,7 +157,7 @@ Add tests for remaining modules (CLI helpers, server endpoints, notifications, b
   * Add tests for stream_command_output with empty stdout/stderr but successful exit.
   * Add tests for command_in_path with PATH entries that are directories and files.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-9 Expand backend module utility coverage
+- [x] COV-9 Expand backend module utility coverage
 ---
 
 ### Task COV-10

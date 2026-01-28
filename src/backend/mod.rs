@@ -266,6 +266,14 @@ mod tests {
     }
 
     #[test]
+    fn backend_error_display_and_source_for_invalid_input() {
+        let error = BackendError::InvalidInput("missing prompt".to_string());
+
+        assert_eq!(error.to_string(), "backend input error: missing prompt");
+        assert!(error.source().is_none());
+    }
+
+    #[test]
     fn command_in_path_handles_missing_and_empty_path() {
         let _lock = crate::test_support::env_lock();
         let dir_temp = tempfile::tempdir().unwrap();
@@ -293,6 +301,30 @@ mod tests {
         assert!(command_in_path(command_name));
     }
 
+    #[test]
+    fn command_in_path_ignores_file_entries_and_uses_directory_entries() {
+        let _lock = crate::test_support::env_lock();
+        let command_name = "gralph-path-command";
+        let command_dir = tempfile::tempdir().unwrap();
+        let file_entry_dir = tempfile::tempdir().unwrap();
+        let file_entry = file_entry_dir.path().join("not-a-dir");
+        let command_path = command_dir.path().join(command_name);
+        fs::write(&file_entry, "stub").unwrap();
+        fs::write(&command_path, "stub").unwrap();
+
+        let _guard = PathGuard::set(None);
+        unsafe {
+            env::set_var("PATH", &file_entry);
+        }
+        assert!(!command_in_path(command_name));
+
+        let combined = env::join_paths([file_entry.as_path(), command_dir.path()]).unwrap();
+        unsafe {
+            env::set_var("PATH", &combined);
+        }
+        assert!(command_in_path(command_name));
+    }
+
     #[cfg(unix)]
     #[test]
     fn stream_command_output_returns_ok_on_success() {
@@ -313,6 +345,27 @@ mod tests {
         assert!(result.is_ok());
         assert!(lines.iter().any(|line| line.contains("stdout-line")));
         assert!(lines.iter().any(|line| line.contains("stderr-line")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_handles_empty_output_on_success() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("exit 0")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert!(lines.is_empty());
     }
 
     #[cfg(unix)]
