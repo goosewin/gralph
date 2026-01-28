@@ -363,4 +363,25 @@ mod tests {
         assert!(output.contains("args:--headless|prompt|"));
         assert!(!output.contains("--model"));
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_reports_non_zero_exit() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("gemini-fail");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf 'boom\\n'\nexit 3\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = GeminiBackend::with_command(script_path.to_string_lossy().to_string());
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message.contains("gemini exited with")
+        ));
+    }
 }

@@ -36,7 +36,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-11 Expand backend module error formatting coverage.
 - COV-11 Expand OpenCode backend run_iteration tests.
 - COV-11 Expand OpenCode backend command ordering and env coverage.
-- COV-12 Expand Gemini backend command tests.
+- COV-12 Expand Gemini backend command and error coverage.
 - COV-12 Expand Claude adapter error-path coverage.
 - COV-13 Expand OpenCode adapter error-path coverage.
 - COV-13 Expand Codex backend command tests.

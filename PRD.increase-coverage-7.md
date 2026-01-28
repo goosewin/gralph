@@ -196,7 +196,7 @@ Add tests for CLI helpers, server endpoints, notification formatting, update/ins
   * Cover run_iteration error paths and parse_text IO errors.
   * `cargo test --workspace` passes.
 - **Dependencies** None
-- [ ] COV-12 Expand Gemini backend command and error coverage
+- [x] COV-12 Expand Gemini backend command and error coverage
 ---
 
 ### Task COV-13
