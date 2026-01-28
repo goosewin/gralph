@@ -79,7 +79,7 @@ Add tests for remaining modules (CLI helpers, server endpoints, notifications, b
   * Add tests for cleanup_stale when session values are non-object or missing fields.
   * Add tests for parse_value with negative numbers and mixed alphanumeric inputs.
 - **Dependencies** None
-- [ ] COV-3 Expand state store edge-case coverage
+- [x] COV-3 Expand state store edge-case coverage
 ---
 
 ### Task COV-4

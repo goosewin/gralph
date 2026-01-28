@@ -669,6 +669,55 @@ mod tests {
     }
 
     #[test]
+    fn cleanup_stale_skips_non_object_and_missing_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        store.init_state().unwrap();
+
+        let mut sessions = BTreeMap::new();
+        sessions.insert("stringy".to_string(), Value::String("oops".to_string()));
+        sessions.insert("numbery".to_string(), Value::Number(5.into()));
+        sessions.insert("missing-fields".to_string(), Value::Object(Map::new()));
+        sessions.insert(
+            "missing-pid".to_string(),
+            Value::Object(Map::from_iter([(
+                "status".to_string(),
+                Value::String("running".to_string()),
+            )])),
+        );
+        sessions.insert(
+            "missing-status".to_string(),
+            Value::Object(Map::from_iter([("pid".to_string(), Value::Number(12.into()))])),
+        );
+        let state = StateData { sessions };
+        store.write_state(&state).unwrap();
+
+        let cleaned = store.cleanup_stale(CleanupMode::Mark).unwrap();
+        assert!(cleaned.is_empty());
+
+        let reloaded = store.read_state().unwrap();
+        assert!(matches!(
+            reloaded.sessions.get("stringy"),
+            Some(Value::String(_))
+        ));
+        assert!(matches!(
+            reloaded.sessions.get("numbery"),
+            Some(Value::Number(_))
+        ));
+        let missing_fields = reloaded.sessions.get("missing-fields").unwrap();
+        assert!(missing_fields.as_object().unwrap().is_empty());
+        let missing_pid = reloaded.sessions.get("missing-pid").unwrap();
+        assert_eq!(
+            missing_pid
+                .get("status")
+                .and_then(|value| value.as_str()),
+            Some("running")
+        );
+        let missing_status = reloaded.sessions.get("missing-status").unwrap();
+        assert_eq!(missing_status.get("pid").and_then(|value| value.as_i64()), Some(12));
+    }
+
+    #[test]
     fn invalid_session_names_are_rejected() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path(), Duration::from_secs(1));
@@ -722,6 +771,13 @@ mod tests {
     fn parse_value_handles_negative_and_mixed_strings() {
         assert_eq!(parse_value("-5"), Value::String("-5".to_string()));
         assert_eq!(parse_value("12-3"), Value::String("12-3".to_string()));
+    }
+
+    #[test]
+    fn parse_value_handles_negative_numbers_and_alphanumeric() {
+        assert_eq!(parse_value("-42"), Value::String("-42".to_string()));
+        assert_eq!(parse_value("42x"), Value::String("42x".to_string()));
+        assert_eq!(parse_value("x42"), Value::String("x42".to_string()));
     }
 
     #[test]
@@ -790,6 +846,28 @@ mod tests {
         match err {
             StateError::Io { path, .. } => {
                 assert_eq!(path, store.lock_file);
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn lock_path_missing_parent_returns_io_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = temp.path().join("state");
+        let state_file = state_dir.join("state.json");
+        let lock_file = temp.path().join("missing").join("state.lock");
+        let store = StateStore::with_paths(
+            state_dir,
+            state_file,
+            lock_file.clone(),
+            Duration::from_millis(100),
+        );
+
+        let err = store.get_session("alpha").unwrap_err();
+        match err {
+            StateError::Io { path, .. } => {
+                assert_eq!(path, lock_file);
             }
             other => panic!("expected Io, got {other:?}"),
         }
