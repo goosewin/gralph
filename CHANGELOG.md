@@ -17,6 +17,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - DOC-1 Document verifier workflow, review gate, and commit conventions.
 - COV-1 Add PRD validation and sanitization edge case tests.
 - COV-2 Add config loader tests for parse errors and overrides.
+- COV-3 Add state store tests for invalid sessions, cleanup, and parsing.
 
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.

@@ -71,7 +71,7 @@ The test suite covers configuration resolution and overrides, state store lifecy
   * Add tests for invalid session names in get/set/delete and for delete of missing session.
   * Add tests for `cleanup_stale` with `CleanupMode::Remove` and for `parse_value` bool and numeric cases.
 - **Dependencies** None
-- [ ] COV-3 Expand state store error-path coverage
+- [x] COV-3 Expand state store error-path coverage
 ### Task COV-4
 
 - **ID** COV-4

@@ -506,6 +506,63 @@ mod tests {
     }
 
     #[test]
+    fn cleanup_stale_removes_dead_sessions() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        store.init_state().unwrap();
+
+        store
+            .set_session("stale-remove", &[("status", "running"), ("pid", "999999")])
+            .unwrap();
+
+        let cleaned = store.cleanup_stale(CleanupMode::Remove).unwrap();
+        assert_eq!(cleaned, vec!["stale-remove".to_string()]);
+        assert!(store.get_session("stale-remove").unwrap().is_none());
+    }
+
+    #[test]
+    fn invalid_session_names_are_rejected() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+
+        assert!(matches!(
+            store.get_session(" "),
+            Err(StateError::InvalidSessionName)
+        ));
+        assert!(matches!(
+            store.set_session(" ", &[("status", "running")]),
+            Err(StateError::InvalidSessionName)
+        ));
+        assert!(matches!(
+            store.delete_session("\t"),
+            Err(StateError::InvalidSessionName)
+        ));
+    }
+
+    #[test]
+    fn delete_missing_session_returns_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        store.init_state().unwrap();
+
+        let err = store.delete_session("missing").unwrap_err();
+        match err {
+            StateError::InvalidState(message) => {
+                assert!(message.contains("missing"));
+            }
+            other => panic!("expected InvalidState, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_value_handles_bool_and_numeric() {
+        assert_eq!(parse_value("true"), Value::Bool(true));
+        assert_eq!(parse_value("false"), Value::Bool(false));
+        assert_eq!(parse_value("42").as_i64(), Some(42));
+        assert_eq!(parse_value("007").as_i64(), Some(7));
+    }
+
+    #[test]
     fn init_state_recovers_from_corrupted_json() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path(), Duration::from_secs(1));
