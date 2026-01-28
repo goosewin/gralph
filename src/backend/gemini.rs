@@ -162,6 +162,20 @@ mod tests {
     }
 
     #[test]
+    fn parse_text_returns_io_error_for_missing_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("missing.txt");
+
+        let backend = GeminiBackend::new();
+        let result = backend.parse_text(&path);
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path: error_path, .. }) if error_path == path
+        ));
+    }
+
+    #[test]
     fn check_installed_reflects_path_entries() {
         let _lock = crate::test_support::env_lock();
         let temp = tempfile::tempdir().unwrap();
@@ -208,6 +222,30 @@ mod tests {
             result,
             Err(BackendError::Command(message)) if message.contains("failed to spawn gemini")
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_returns_io_when_output_dir_is_read_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_dir = temp.path().join("readonly");
+        fs::create_dir(&output_dir).unwrap();
+        let mut permissions = fs::metadata(&output_dir).unwrap().permissions();
+        permissions.set_mode(0o555);
+        fs::set_permissions(&output_dir, permissions).unwrap();
+
+        let output_path = output_dir.join("output.txt");
+        let backend = GeminiBackend::with_command("gemini".to_string());
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path, .. }) if path == output_path
+        ));
+
+        let mut permissions = fs::metadata(&output_dir).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&output_dir, permissions).unwrap();
     }
 
     #[cfg(unix)]

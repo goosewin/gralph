@@ -209,7 +209,7 @@ Add tests for backend adapters, server endpoints, notifications, update/install 
   * Validate `parse_text` propagates BackendError::Io for missing response files.
   * Simulate an unwritable output path and assert `run_iteration` returns BackendError::Io.
 - **Dependencies** None
-- [ ] COV-14 Expand Gemini adapter error-path coverage
+- [x] COV-14 Expand Gemini adapter error-path coverage
 ---
 
 ### Task COV-15
