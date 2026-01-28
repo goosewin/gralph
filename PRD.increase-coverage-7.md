@@ -209,7 +209,7 @@ Add tests for CLI helpers, server endpoints, notification formatting, update/ins
   * Cover run_iteration spawn failures and parse_text IO errors.
   * `cargo test --workspace` passes.
 - **Dependencies** None
-- [ ] COV-13 Expand Codex backend command and error coverage
+- [x] COV-13 Expand Codex backend command and error coverage
 ---
 
 ### Task COV-14

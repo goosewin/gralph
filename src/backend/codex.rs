@@ -220,6 +220,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_text_returns_io_error_for_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir_path = temp.path().join("codex-dir");
+        fs::create_dir(&dir_path).unwrap();
+        let backend = CodexBackend::new();
+
+        let result = backend.parse_text(&dir_path);
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path, .. }) if path == dir_path
+        ));
+    }
+
+    #[test]
     fn run_iteration_rejects_empty_prompt() {
         let temp = tempfile::tempdir().unwrap();
         let output_path = temp.path().join("output.txt");
@@ -318,6 +333,28 @@ mod tests {
 
         let output = fs::read_to_string(&output_path).unwrap();
         assert!(output.contains("args:--quiet|--auto-approve|--model|model-x|prompt|"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_includes_quiet_auto_approve_without_model() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("codex-mock");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf 'args:'\nfor arg in \"$@\"; do\n  printf '%s|' \"$arg\"\ndone\nprintf '\\n'\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = CodexBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("prompt", None, None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        assert!(output.contains("args:--quiet|--auto-approve|prompt|"));
+        assert!(!output.contains("--model"));
     }
 
     #[cfg(unix)]
