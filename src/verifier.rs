@@ -1849,6 +1849,96 @@ fn format_static_violation_path(root: &Path, path: &Path, line: usize) -> String
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+    use std::fs;
+
+    fn load_project_config(contents: &str) -> Config {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join(".gralph.yaml");
+        fs::write(&path, contents).unwrap();
+        Config::load(Some(temp.path())).unwrap()
+    }
+
+    fn base_review_settings() -> ReviewGateSettings {
+        ReviewGateSettings {
+            enabled: true,
+            reviewer: "greptile".to_string(),
+            min_rating: 8.0,
+            max_issues: 0,
+            poll_seconds: 20,
+            timeout_seconds: 60,
+            require_approval: false,
+            require_checks: true,
+            merge_method: MergeMethod::Merge,
+        }
+    }
+
+    #[test]
+    fn resolve_verifier_command_rejects_empty_default() {
+        let config = load_project_config("verifier:\n  test_command: \"\"\n");
+        let err = resolve_verifier_command(None, &config, "verifier.test_command", " ")
+            .unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("empty"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_verifier_command_prefers_arg_value() {
+        let config = Config::load(None).unwrap();
+        let command = resolve_verifier_command(
+            Some("custom --flag".to_string()),
+            &config,
+            "verifier.test_command",
+            DEFAULT_TEST_COMMAND,
+        )
+        .unwrap();
+        assert_eq!(command, "custom --flag");
+    }
+
+    #[test]
+    fn resolve_verifier_coverage_min_rejects_out_of_range() {
+        let config = Config::load(None).unwrap();
+        let err = resolve_verifier_coverage_min(Some(120.0), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("between 0 and 100"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_verifier_coverage_min_defaults_on_empty_config() {
+        let config = load_project_config("verifier:\n  coverage_min: \"\"\n");
+        let value = resolve_verifier_coverage_min(None, &config).unwrap();
+        assert!((value - DEFAULT_COVERAGE_MIN).abs() < 1e-6);
+    }
+
+    #[test]
+    fn parse_verifier_command_rejects_empty_input() {
+        let err = parse_verifier_command("  ").unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("cannot be empty"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_verifier_command_rejects_invalid_shell_words() {
+        let err = parse_verifier_command("cargo test \"unterminated").unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Failed to parse command"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
 
     #[test]
     fn parse_percent_from_line_returns_last_percent() {
@@ -1877,9 +1967,120 @@ mod tests {
     }
 
     #[test]
+    fn parse_review_rating_scales_low_values() {
+        let rating = parse_review_rating("Score: 0.8").unwrap();
+        assert!((rating - 8.0).abs() < 1e-6);
+    }
+
+    #[test]
     fn parse_review_issue_count_handles_zero_and_number() {
         assert_eq!(parse_review_issue_count("No issues found."), Some(0));
         assert_eq!(parse_review_issue_count("Issues: 3 blocking"), Some(3));
+    }
+
+    #[test]
+    fn parse_review_issue_count_returns_none_without_issue_line() {
+        assert_eq!(parse_review_issue_count("Looks good overall."), None);
+    }
+
+    #[test]
+    fn evaluate_review_gate_waits_for_required_approval() {
+        let mut settings = base_review_settings();
+        settings.require_approval = true;
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "COMMENTED",
+                    "body": "Rating: 9/10",
+                    "submittedAt": "2024-01-02T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Pending(message) if message.contains("approval")));
+    }
+
+    #[test]
+    fn evaluate_review_gate_fails_on_low_rating() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "APPROVED",
+                    "body": "Rating: 6/10",
+                    "submittedAt": "2024-01-02T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Failed(message) if message.contains("rating")));
+    }
+
+    #[test]
+    fn evaluate_review_gate_passes_with_rating_and_issue_budget() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "APPROVED",
+                    "body": "Rating: 9/10\nIssues: 0",
+                    "submittedAt": "2024-01-03T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(_)));
+    }
+
+    #[test]
+    fn evaluate_check_gate_reports_pending_checks() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "IN_PROGRESS",
+                    "conclusion": ""
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Pending(message) if message.contains("checks pending")));
+    }
+
+    #[test]
+    fn evaluate_check_gate_reports_failed_checks() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "COMPLETED",
+                    "conclusion": "FAILURE"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Failed(message) if message.contains("checks failed")));
+    }
+
+    #[test]
+    fn evaluate_check_gate_passes_successful_checks() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "COMPLETED",
+                    "conclusion": "SUCCESS"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(_)));
     }
 
     #[test]

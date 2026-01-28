@@ -206,7 +206,7 @@ Increase coverage without changing user-visible CLI behavior, error messages, or
   * Test `evaluate_review_gate` with sample PR JSON for pending, failed, and passed outcomes.
   * Test `evaluate_check_gate` and review parsing helpers (`parse_review_rating`, `parse_review_issue_count`).
 - **Dependencies** None
-- [ ] COV-15 Cover verifier command parsing and review gate logic
+- [x] COV-15 Cover verifier command parsing and review gate logic
 ### Task COV-16
 
 - **ID** COV-16

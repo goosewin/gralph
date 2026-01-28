@@ -28,6 +28,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-12 Expand state helper and cleanup edge case coverage.
 - COV-13 Expand task parsing edge-case coverage.
 - COV-14 Expand update helper edge-case coverage.
+- COV-15 Add verifier command parsing and review gate tests.
 
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.
