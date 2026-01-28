@@ -458,8 +458,50 @@ mod tests {
     use super::*;
     use axum::body::{Body, to_bytes};
     use axum::http::Request;
+    use std::env;
     use std::fs;
+    use std::sync::Mutex;
     use tower::util::ServiceExt;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn env_guard() -> std::sync::MutexGuard<'static, ()> {
+        ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner())
+    }
+
+    struct EnvSnapshot {
+        keys: Vec<&'static str>,
+        values: Vec<Option<std::ffi::OsString>>,
+    }
+
+    impl EnvSnapshot {
+        fn new(keys: &[&'static str]) -> Self {
+            let values = keys.iter().map(|key| env::var_os(key)).collect();
+            Self {
+                keys: keys.to_vec(),
+                values,
+            }
+        }
+    }
+
+    impl Drop for EnvSnapshot {
+        fn drop(&mut self) {
+            for (key, original) in self.keys.iter().zip(self.values.iter()) {
+                match original {
+                    Some(value) => set_env(key, value),
+                    None => remove_env(key),
+                }
+            }
+        }
+    }
+
+    fn set_env(key: &str, value: impl AsRef<std::ffi::OsStr>) {
+        env::set_var(key, value);
+    }
+
+    fn remove_env(key: &str) {
+        env::remove_var(key);
+    }
 
     fn store_for_test(dir: &std::path::Path) -> StateStore {
         let state_dir = dir.join("state");
@@ -492,6 +534,50 @@ mod tests {
                 .and_then(|value| value.to_str().ok()),
             Some("Authorization, Content-Type")
         );
+    }
+
+    #[test]
+    fn server_config_from_env_defaults_when_port_invalid() {
+        let _guard = env_guard();
+        let _snapshot = EnvSnapshot::new(&[
+            "GRALPH_SERVER_HOST",
+            "GRALPH_SERVER_PORT",
+            "GRALPH_SERVER_TOKEN",
+            "GRALPH_SERVER_OPEN",
+            "GRALPH_SERVER_MAX_BODY_BYTES",
+        ]);
+
+        set_env("GRALPH_SERVER_HOST", "127.0.0.1");
+        set_env("GRALPH_SERVER_PORT", "not-a-number");
+        set_env("GRALPH_SERVER_TOKEN", "");
+        set_env("GRALPH_SERVER_OPEN", "true");
+        set_env("GRALPH_SERVER_MAX_BODY_BYTES", "9000");
+
+        let config = ServerConfig::from_env();
+        assert_eq!(config.host, "127.0.0.1");
+        assert_eq!(config.port, 8080);
+        assert_eq!(config.token, None);
+        assert!(config.open);
+        assert_eq!(config.max_body_bytes, 9000);
+    }
+
+    #[test]
+    fn server_config_addr_rejects_invalid_host() {
+        let config = ServerConfig {
+            host: "bad host".to_string(),
+            port: 8080,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+
+        let err = config.addr().unwrap_err();
+        match err {
+            ServerError::InvalidConfig(message) => {
+                assert!(message.contains("invalid server address"));
+            }
+            other => panic!("expected InvalidConfig, got {other:?}"),
+        }
     }
 
     #[test]
@@ -784,6 +870,32 @@ mod tests {
         assert_eq!(body["error"], "Invalid or missing Bearer token");
     }
 
+    #[test]
+    fn check_auth_allows_valid_bearer_token() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let state = AppState {
+            config: ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 0,
+                token: Some("secret".to_string()),
+                open: false,
+                max_body_bytes: 4096,
+            },
+            store,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            "Bearer secret".parse().unwrap(),
+        );
+
+        let response = check_auth(&headers, &state, None);
+        assert!(response.is_none());
+    }
+
     #[tokio::test]
     async fn status_endpoint_allows_requests_when_token_disabled() {
         let temp = tempfile::tempdir().unwrap();
@@ -1029,6 +1141,31 @@ mod tests {
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["status"], "ok");
+    }
+
+    #[test]
+    fn apply_cors_allows_open_origin_without_vary() {
+        let mut response = StatusCode::NO_CONTENT.into_response();
+        apply_cors(&mut response, Some("*".to_string()));
+
+        let headers = response.headers();
+        assert_cors_headers(headers, "*");
+        assert!(headers.get(axum::http::header::VARY).is_none());
+    }
+
+    #[test]
+    fn apply_cors_sets_vary_for_specific_origin() {
+        let mut response = StatusCode::NO_CONTENT.into_response();
+        apply_cors(&mut response, Some("http://example.com".to_string()));
+
+        let headers = response.headers();
+        assert_cors_headers(headers, "http://example.com");
+        assert_eq!(
+            headers
+                .get(axum::http::header::VARY)
+                .and_then(|value| value.to_str().ok()),
+            Some("Origin")
+        );
     }
 
     #[tokio::test]

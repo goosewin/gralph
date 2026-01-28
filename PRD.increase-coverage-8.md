@@ -112,7 +112,7 @@ Increase coverage in supporting modules and backend adapters (`src/main.rs`, `sr
   * Add tests for ServerConfig::from_env and ServerConfig::addr failures on invalid host/port inputs.
   * Add tests for check_auth success with valid Bearer token and apply_cors behavior for open mode and explicit host.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-7 Expand server config and auth coverage
+- [x] COV-7 Expand server config and auth coverage
 ### Task COV-8
 
 - **ID** COV-8
