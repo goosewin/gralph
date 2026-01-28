@@ -61,7 +61,7 @@ The test suite covers configuration resolution and overrides, state store lifecy
   * Add a test for invalid YAML parse error propagation from `Config::load`.
   * Add tests for `normalize_key`, env override precedence, and `value_to_string` handling of sequences and tagged values.
 - **Dependencies** None
-- [ ] COV-2 Expand config loader and override coverage
+- [x] COV-2 Expand config loader and override coverage
 ### Task COV-3
 
 - **ID** COV-3

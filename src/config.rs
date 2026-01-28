@@ -398,6 +398,73 @@ mod tests {
     }
 
     #[test]
+    fn load_propagates_parse_error() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: [\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+
+        let err = Config::load(None).unwrap_err();
+        match err {
+            ConfigError::Parse { path, .. } => {
+                assert_eq!(path, default_path);
+            }
+            other => panic!("expected parse error, got {other:?}"),
+        }
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn normalize_key_trims_and_standardizes_segments() {
+        assert_eq!(
+            normalize_key(" Defaults.Max-Iterations "),
+            Some("defaults.max_iterations".to_string())
+        );
+        assert_eq!(normalize_key("  "), None);
+    }
+
+    #[test]
+    fn normalized_env_override_precedes_legacy_hyphenated() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 10\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_DEFAULTS_MAX_ITERATIONS", "42");
+        set_env("GRALPH_DEFAULTS_MAX-ITERATIONS", "24");
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(
+            config.get("defaults.max-iterations").as_deref(),
+            Some("42")
+        );
+
+        remove_env("GRALPH_DEFAULTS_MAX-ITERATIONS");
+        remove_env("GRALPH_DEFAULTS_MAX_ITERATIONS");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn value_to_string_renders_sequences_and_tagged_values() {
+        let sequence: Value = serde_yaml::from_str("[one, 2, true]").unwrap();
+        assert_eq!(value_to_string(&sequence).as_deref(), Some("one,2,true"));
+
+        let tagged: Value = serde_yaml::from_str("!tagged false").unwrap();
+        assert_eq!(value_to_string(&tagged).as_deref(), Some("false"));
+    }
+
+    #[test]
+    fn value_to_string_returns_none_for_map_values() {
+        let mapping: Value = serde_yaml::from_str("key: value").unwrap();
+        assert!(matches!(mapping, Value::Mapping(_)));
+        assert!(value_to_string(&mapping).is_none());
+    }
+
+    #[test]
     fn merge_precedence_default_global_project() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
