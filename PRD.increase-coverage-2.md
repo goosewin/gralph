@@ -88,7 +88,7 @@ Add tests that cover update version parsing and verifier parsing/gate logic with
   * Add tests for coverage percent extraction and percent parsing from representative output lines.
   * Add tests for review gate parsing helpers and static check path matching logic.
 - **Dependencies** None
-- [ ] COV-10 Expand verifier parsing and static check coverage
+- [x] COV-10 Expand verifier parsing and static check coverage
 ### Task COV-11
 
 - **ID** COV-11

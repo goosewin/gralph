@@ -1845,3 +1845,54 @@ fn format_static_violation_path(root: &Path, path: &Path, line: usize) -> String
     let rel = path.strip_prefix(root).unwrap_or(path);
     format!("{}:{}", rel.display(), line)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_percent_from_line_returns_last_percent() {
+        let value = parse_percent_from_line("Coverage 55.1% (line 88.2%)").unwrap();
+        assert!((value - 88.2).abs() < 1e-6);
+    }
+
+    #[test]
+    fn extract_coverage_percent_prefers_results_line() {
+        let output = "Line Coverage: 70.1%\nCoverage Results: 91.2%\nCoverage: 92.0%";
+        assert_eq!(extract_coverage_percent(output), Some(91.2));
+    }
+
+    #[test]
+    fn extract_coverage_percent_falls_back_to_last_match() {
+        let output = "Line Coverage: 70.1%\nTotal coverage: 72.0%";
+        assert_eq!(extract_coverage_percent(output), Some(72.0));
+    }
+
+    #[test]
+    fn parse_review_rating_accepts_fraction_and_percent() {
+        let fraction = parse_review_rating("Rating: 8/10").unwrap();
+        assert!((fraction - 8.0).abs() < 1e-6);
+        let percent = parse_review_rating("Quality score: 92%").unwrap();
+        assert!((percent - 9.2).abs() < 1e-6);
+    }
+
+    #[test]
+    fn parse_review_issue_count_handles_zero_and_number() {
+        assert_eq!(parse_review_issue_count("No issues found."), Some(0));
+        assert_eq!(parse_review_issue_count("Issues: 3 blocking"), Some(3));
+    }
+
+    #[test]
+    fn path_is_allowed_respects_allow_patterns() {
+        let allow = vec!["**/*.rs".to_string()];
+        assert!(path_is_allowed("src/main.rs", &allow));
+        assert!(!path_is_allowed("README.md", &allow));
+    }
+
+    #[test]
+    fn path_is_ignored_matches_directory_patterns() {
+        let ignore = vec!["**/target/**".to_string()];
+        assert!(path_is_ignored("target", true, &ignore));
+        assert!(path_is_ignored("target/debug/app", false, &ignore));
+    }
+}
