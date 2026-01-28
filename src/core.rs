@@ -1071,6 +1071,17 @@ mod tests {
     }
 
     #[test]
+    fn check_completion_rejects_malformed_promise_line() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [x] Done\n").unwrap();
+
+        let result = "<promise>COMPLETE</promis>\n";
+        let complete = check_completion(&path, result, "COMPLETE").unwrap();
+        assert!(!complete);
+    }
+
+    #[test]
     fn check_completion_rejects_remaining_tasks() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("PRD.md");
@@ -1160,6 +1171,26 @@ mod tests {
 
         let resolved = resolve_prompt_template(project_dir, Some("explicit template")).unwrap();
         assert_eq!(resolved, "explicit template");
+
+        remove_env("GRALPH_PROMPT_TEMPLATE_FILE");
+    }
+
+    #[test]
+    fn resolve_prompt_template_ignores_empty_explicit_template() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path();
+        let gralph_dir = project_dir.join(".gralph");
+        fs::create_dir_all(&gralph_dir).unwrap();
+        let project_path = gralph_dir.join("prompt-template.txt");
+        fs::write(&project_path, "project").unwrap();
+
+        let env_path = project_dir.join("env-template.txt");
+        fs::write(&env_path, "env").unwrap();
+        set_env("GRALPH_PROMPT_TEMPLATE_FILE", &env_path);
+
+        let resolved = resolve_prompt_template(project_dir, Some("  ")).unwrap();
+        assert_eq!(resolved, "env");
 
         remove_env("GRALPH_PROMPT_TEMPLATE_FILE");
     }
@@ -1527,6 +1558,44 @@ mod tests {
     }
 
     #[test]
+    fn run_iteration_logs_raw_output_when_backend_output_empty() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [ ] Task\n").unwrap();
+
+        let log_path = temp.path().join("loop.log");
+        let raw_path = raw_log_path(&log_path);
+
+        let backend = StubBackend::new("", None);
+        let result = run_iteration(
+            &backend,
+            temp.path(),
+            "PRD.md",
+            1,
+            1,
+            "COMPLETE",
+            None,
+            None,
+            Some(&log_path),
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message)) if message.contains("backend produced no output")
+        ));
+
+        let log_contents = fs::read_to_string(&log_path).unwrap();
+        assert!(log_contents.contains("Error: backend produced no JSON output."));
+        assert!(log_contents.contains(&format!(
+            "Raw output saved to: {}",
+            raw_path.display()
+        )));
+        assert!(raw_path.exists());
+    }
+
+    #[test]
     fn run_iteration_rejects_empty_parsed_result() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("PRD.md");
@@ -1551,6 +1620,54 @@ mod tests {
             result,
             Err(CoreError::InvalidInput(message))
                 if message.contains("backend returned no parsed result")
+        ));
+    }
+
+    #[test]
+    fn run_loop_rejects_empty_project_dir() {
+        let backend = LoopBackend::success("ok");
+        let result = run_loop(
+            &backend,
+            Path::new(""),
+            Some("PRD.md"),
+            Some(1),
+            Some("COMPLETE"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message)) if message.contains("project_dir is required")
+        ));
+    }
+
+    #[test]
+    fn run_loop_rejects_missing_task_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let backend = LoopBackend::success("ok");
+        let result = run_loop(
+            &backend,
+            temp.path(),
+            Some("missing.md"),
+            Some(1),
+            Some("COMPLETE"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message))
+                if message.contains("task file does not exist")
         ));
     }
 
