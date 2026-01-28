@@ -195,7 +195,7 @@ Increase coverage without changing user-visible CLI behavior, error messages, or
   * Test `resolve_in_path` with PATH unset/empty and `install_binary` permission denied (cfg unix).
   * Add a test-only override (env var or injected hook) to exercise `resolve_install_version("latest")` without network.
 - **Dependencies** None
-- [ ] COV-14 Cover update helper edge cases without network access
+- [x] COV-14 Cover update helper edge cases without network access
 ### Task COV-15
 
 - **ID** COV-15

@@ -221,10 +221,27 @@ fn parse_release_tag(body: &str) -> Result<String, UpdateError> {
 
 fn resolve_install_version(raw: &str) -> Result<String, UpdateError> {
     if raw.trim().eq_ignore_ascii_case("latest") {
+        if let Some(tag) = latest_release_override() {
+            return normalize_version(&tag);
+        }
         let tag = fetch_latest_release_tag()?;
         return normalize_version(&tag);
     }
     normalize_version(raw)
+}
+
+fn latest_release_override() -> Option<String> {
+    #[cfg(test)]
+    {
+        env::var("GRALPH_TEST_LATEST_TAG")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    }
+    #[cfg(not(test))]
+    {
+        None
+    }
 }
 
 fn normalize_version(raw: &str) -> Result<String, UpdateError> {
@@ -351,8 +368,69 @@ impl Drop for TempDir {
 mod tests {
     use super::*;
     use crate::version;
+    use std::ffi::{OsStr, OsString};
     use std::fs;
     use tempfile::tempdir;
+
+    struct EnvGuard {
+        key: &'static str,
+        original: Option<OsString>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let original = env::var_os(key);
+            unsafe {
+                env::set_var(key, value);
+            }
+            Self { key, original }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match self.original.as_ref() {
+                Some(value) => unsafe {
+                    env::set_var(self.key, value);
+                },
+                None => unsafe {
+                    env::remove_var(self.key);
+                },
+            }
+        }
+    }
+
+    struct PathGuard {
+        original: Option<OsString>,
+    }
+
+    impl PathGuard {
+        fn set(value: Option<&OsStr>) -> Self {
+            let original = env::var_os("PATH");
+            match value {
+                Some(value) => unsafe {
+                    env::set_var("PATH", value);
+                },
+                None => unsafe {
+                    env::remove_var("PATH");
+                },
+            }
+            Self { original }
+        }
+    }
+
+    impl Drop for PathGuard {
+        fn drop(&mut self) {
+            match self.original.as_ref() {
+                Some(value) => unsafe {
+                    env::set_var("PATH", value);
+                },
+                None => unsafe {
+                    env::remove_var("PATH");
+                },
+            }
+        }
+    }
 
     #[test]
     fn parse_version_accepts_v_prefix() {
@@ -401,6 +479,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_release_tag_trims_whitespace() {
+        let tag = parse_release_tag(r#"{ "tag_name": " v1.2.3 " }"#).expect("tag parsed");
+        assert_eq!(tag, "v1.2.3");
+    }
+
+    #[test]
+    fn parse_release_tag_rejects_blank_tag() {
+        let result = parse_release_tag(r#"{ "tag_name": "   " }"#);
+        assert!(matches!(result, Err(UpdateError::MissingTag)));
+    }
+
+    #[test]
     fn detect_newer_version() {
         let latest = Version::parse(version::VERSION).expect("latest parsed");
         let current = Version::parse("0.2.0").expect("current parsed");
@@ -420,6 +510,12 @@ mod tests {
     }
 
     #[test]
+    fn normalize_version_accepts_v_prefix() {
+        let version = normalize_version("v1.2.3").expect("normalized");
+        assert_eq!(version, "1.2.3");
+    }
+
+    #[test]
     fn normalize_version_rejects_invalid_input() {
         let result = normalize_version("1.2");
         assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
@@ -429,6 +525,13 @@ mod tests {
     fn resolve_install_version_accepts_concrete_version() {
         let resolved = resolve_install_version("v1.2.3").expect("resolved");
         assert_eq!(resolved, "1.2.3");
+    }
+
+    #[test]
+    fn resolve_install_version_latest_uses_override() {
+        let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "v2.0.0");
+        let resolved = resolve_install_version("latest").expect("resolved");
+        assert_eq!(resolved, "2.0.0");
     }
 
     #[test]
@@ -460,17 +563,21 @@ mod tests {
         let temp = tempdir().expect("tempdir");
         let bin_path = temp.path().join("gralph");
         fs::write(&bin_path, "binary").expect("write");
-        let original_path = env::var_os("PATH");
-        unsafe {
-            env::set_var("PATH", temp.path());
-        }
+        let _guard = PathGuard::set(Some(temp.path().as_os_str()));
         let resolved = resolve_in_path("gralph");
-        if let Some(value) = original_path {
-            unsafe {
-                env::set_var("PATH", value);
-            }
-        }
         assert_eq!(resolved.as_deref(), Some(bin_path.as_path()));
+    }
+
+    #[test]
+    fn resolve_in_path_handles_missing_and_empty_path() {
+        {
+            let _guard = PathGuard::set(None);
+            assert!(resolve_in_path("gralph").is_none());
+        }
+        {
+            let _guard = PathGuard::set(Some(OsStr::new("")));
+            assert!(resolve_in_path("gralph").is_none());
+        }
     }
 
     #[test]
@@ -482,5 +589,29 @@ mod tests {
         install_binary(&source, &install_dir).expect("install");
         let target = install_dir.join("gralph");
         assert!(target.is_file());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_binary_reports_permission_denied() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempdir().expect("tempdir");
+        let source = temp.path().join("gralph");
+        fs::write(&source, "binary").expect("write");
+        let install_dir = temp.path().join("install");
+        fs::create_dir_all(&install_dir).expect("create install dir");
+
+        let mut perms = fs::metadata(&install_dir).expect("metadata").permissions();
+        perms.set_mode(0o555);
+        fs::set_permissions(&install_dir, perms).expect("set permissions");
+
+        let result = install_binary(&source, &install_dir);
+
+        let mut perms = fs::metadata(&install_dir).expect("metadata").permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&install_dir, perms).expect("reset permissions");
+
+        assert!(matches!(result, Err(UpdateError::PermissionDenied(_))));
     }
 }
