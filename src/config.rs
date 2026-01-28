@@ -53,26 +53,20 @@ pub struct Config {
 impl Config {
     pub fn load(project_dir: Option<&Path>) -> Result<Self, ConfigError> {
         let mut merged = Value::Mapping(Mapping::new());
+        // Merge precedence: default < global < project (later overrides earlier).
         for path in config_paths(project_dir) {
-            if path.exists() {
-                let value = read_yaml(&path)?;
-                merged = merge_values(merged, value);
-            }
+            let value = read_yaml(&path)?;
+            merged = merge_values(merged, value);
         }
         Ok(Self { merged })
     }
 
     pub fn get(&self, key: &str) -> Option<String> {
-        if key.is_empty() {
-            return None;
-        }
-        if let Some(value) = legacy_env_override(key) {
+        let normalized = normalize_key(key)?;
+        if let Some(value) = resolve_env_override(key, &normalized) {
             return Some(value);
         }
-        if let Some(value) = env_override(key) {
-            return Some(value);
-        }
-        lookup_value(&self.merged, key).and_then(value_to_string)
+        lookup_value(&self.merged, &normalized).and_then(value_to_string)
     }
 
     pub fn get_or(&self, key: &str, default: &str) -> String {
@@ -80,13 +74,13 @@ impl Config {
     }
 
     pub fn exists(&self, key: &str) -> bool {
-        if key.is_empty() {
+        let Some(normalized) = normalize_key(key) else {
             return false;
-        }
-        if legacy_env_override(key).is_some() || env_override(key).is_some() {
+        };
+        if resolve_env_override(key, &normalized).is_some() {
             return true;
         }
-        lookup_value(&self.merged, key).is_some()
+        lookup_value(&self.merged, &normalized).is_some()
     }
 
     pub fn list(&self) -> Vec<(String, String)> {
@@ -191,12 +185,37 @@ fn lookup_value<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
     for part in key.split('.') {
         match current {
             Value::Mapping(map) => {
-                current = map.get(&Value::String(part.to_string()))?;
+                current = lookup_mapping_value(map, part)?;
             }
             _ => return None,
         }
     }
     Some(current)
+}
+
+fn lookup_mapping_value<'a>(map: &'a Mapping, part: &str) -> Option<&'a Value> {
+    let direct = Value::String(part.to_string());
+    if let Some(value) = map.get(&direct) {
+        return Some(value);
+    }
+    let normalized = normalize_segment(part);
+    if normalized != part {
+        let normalized_key = Value::String(normalized.clone());
+        if let Some(value) = map.get(&normalized_key) {
+            return Some(value);
+        }
+    }
+    let mut matched = None;
+    for (key, value) in map {
+        let Some(text) = key.as_str() else {
+            continue;
+        };
+        if normalize_segment(text) == normalized {
+            matched = Some(value);
+            break;
+        }
+    }
+    matched
 }
 
 fn value_to_string(value: &Value) -> Option<String> {
@@ -243,6 +262,17 @@ fn flatten_value(prefix: &str, value: &Value, out: &mut BTreeMap<String, String>
     }
 }
 
+fn resolve_env_override(raw_key: &str, normalized_key: &str) -> Option<String> {
+    // Env precedence: legacy aliases -> normalized overrides -> legacy hyphenated overrides.
+    if let Some(value) = legacy_env_override(normalized_key) {
+        return Some(value);
+    }
+    if let Some(value) = env_override(normalized_key) {
+        return Some(value);
+    }
+    legacy_env_override_compat(raw_key)
+}
+
 fn env_override(key: &str) -> Option<String> {
     let env_key = format!("GRALPH_{}", key_to_env(key));
     env::var(env_key).ok()
@@ -260,11 +290,53 @@ fn legacy_env_override(key: &str) -> Option<String> {
     env::var(legacy_key).ok()
 }
 
+fn legacy_env_override_compat(key: &str) -> Option<String> {
+    let env_key = format!("GRALPH_{}", key_to_env_legacy(key));
+    let normalized_key = format!("GRALPH_{}", key_to_env(key));
+    if env_key == normalized_key {
+        return None;
+    }
+    env::var(env_key).ok()
+}
+
 fn key_to_env(key: &str) -> String {
+    key.chars()
+        .map(|ch| match ch {
+            '.' | '-' => '_',
+            _ => ch.to_ascii_uppercase(),
+        })
+        .collect()
+}
+
+fn key_to_env_legacy(key: &str) -> String {
     key.chars()
         .map(|ch| match ch {
             '.' => '_',
             _ => ch.to_ascii_uppercase(),
+        })
+        .collect()
+}
+
+fn normalize_key(key: &str) -> Option<String> {
+    let trimmed = key.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let normalized = trimmed
+        .split('.')
+        .map(normalize_segment)
+        .collect::<Vec<_>>()
+        .join(".");
+    Some(normalized)
+}
+
+fn normalize_segment(segment: &str) -> String {
+    segment
+        .trim()
+        .chars()
+        .map(|ch| match ch {
+            '-' => '_',
+            _ => ch.to_ascii_lowercase(),
         })
         .collect()
 }
@@ -395,6 +467,25 @@ mod tests {
     }
 
     #[test]
+    fn legacy_env_override_takes_precedence_over_normalized() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 10\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_DEFAULTS_MAX_ITERATIONS", "42");
+        set_env("GRALPH_MAX_ITERATIONS", "77");
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("defaults.max_iterations").as_deref(), Some("77"));
+
+        remove_env("GRALPH_MAX_ITERATIONS");
+        remove_env("GRALPH_DEFAULTS_MAX_ITERATIONS");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
     fn default_config_env_override_used() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -410,6 +501,22 @@ mod tests {
 
         remove_env("GRALPH_DEFAULT_CONFIG");
         remove_env("GRALPH_GLOBAL_CONFIG");
+    }
+
+    #[test]
+    fn key_normalization_resolves_hyphenated_keys() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(&default_path, "defaults:\n  max-iterations: 12\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("defaults.max_iterations").as_deref(), Some("12"));
+        assert!(config.exists("defaults.max-iterations"));
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
     }
 
     #[test]

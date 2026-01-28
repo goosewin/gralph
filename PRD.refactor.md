@@ -75,7 +75,7 @@ Preserve file locking, atomic writes, and error handling semantics across state,
   * Config merge and override logic is centralized and documented in code.
   * Existing config tests pass and new edge cases are covered if needed.
 - **Dependencies** None
-- [ ] REF-3 Simplify configuration merging and override handling
+- [x] REF-3 Simplify configuration merging and override handling
 ---
 
 ### Task REF-4
