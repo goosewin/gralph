@@ -161,7 +161,7 @@ Add tests for backend adapters, server endpoints, notifications, update/install 
   * Add a property-based test crate in `Cargo.toml` and generate randomized inputs for `task_blocks_from_contents`.
   * Validate invariants for `is_task_header`, `is_task_block_end`, and unchecked line detection without false positives.
 - **Dependencies** None
-- [ ] COV-10 Add property-based tests for task parsing invariants
+- [x] COV-10 Add property-based tests for task parsing invariants
 ---
 
 ### Task COV-11
