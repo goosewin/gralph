@@ -125,7 +125,7 @@ Add tests for backend adapters, server endpoints, notifications, update/install 
   * Cover `session_name` for explicit, directory-based, and fallback names, and verify `sanitize_session_name` output.
   * Add unit tests for `parse_bool_value`, `resolve_auto_worktree`, `auto_worktree_branch_name`, and `resolve_log_file` when log path is missing.
 - **Dependencies** None
-- [ ] COV-7 Expand CLI helper coverage in main
+- [x] COV-7 Expand CLI helper coverage in main
 ---
 
 ### Task COV-8
