@@ -237,10 +237,15 @@ mod tests {
             "type": "assistant",
             "message": {"content": [{"type": "image", "source": "ignored"}]}
         });
+        let mixed_missing_fields = json!({
+            "type": "assistant",
+            "message": {"content": [{"text": "missing type"}, {"type": "text"}]}
+        });
 
         assert!(extract_assistant_texts(&missing_content).is_empty());
         assert!(extract_assistant_texts(&non_array_content).is_empty());
         assert!(extract_assistant_texts(&non_text_only).is_empty());
+        assert!(extract_assistant_texts(&mixed_missing_fields).is_empty());
     }
 
     #[test]
@@ -281,6 +286,18 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("stream.json");
         let contents = "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hi\"}]}}\nnot-json\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, contents);
+    }
+
+    #[test]
+    fn parse_text_falls_back_when_no_result_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\n";
         fs::write(&path, contents).unwrap();
 
         let backend = ClaudeBackend::new();

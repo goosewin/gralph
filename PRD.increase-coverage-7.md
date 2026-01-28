@@ -170,7 +170,7 @@ Add tests for CLI helpers, server endpoints, notification formatting, update/ins
   * Cover parse_text fallback to raw contents when no result entries exist.
   * `cargo test --workspace` passes.
 - **Dependencies** None
-- [ ] COV-10 Expand Claude backend parsing and error-path coverage
+- [x] COV-10 Expand Claude backend parsing and error-path coverage
 ---
 
 ### Task COV-11
