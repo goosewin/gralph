@@ -247,7 +247,7 @@ Add tests for remaining modules (CLI helpers, server endpoints, notifications, b
   * Add a test that poisons ENV_LOCK in a thread and asserts env_lock still returns a guard without panicking.
   * Add a test that multiple env_lock calls serialize access via the mutex.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-16 Add env_lock behavior tests
+- [x] COV-16 Add env_lock behavior tests
 ---
 
 ## Success Criteria
