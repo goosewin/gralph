@@ -183,7 +183,7 @@ Add tests for CLI helpers, server endpoints, notification formatting, update/ins
   * Cover run_iteration error paths and skip-empty model or variant behavior.
   * `cargo test --workspace` passes.
 - **Dependencies** None
-- [ ] COV-11 Expand OpenCode backend command and env coverage
+- [x] COV-11 Expand OpenCode backend command and env coverage
 ---
 
 ### Task COV-12
