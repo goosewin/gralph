@@ -131,7 +131,7 @@ Add tests for CLI helpers, server endpoints, notification formatting, update/ins
   * Cover resolve_cors_origin for non-localhost host matches and open mode behavior.
   * `cargo test --workspace` passes.
 - **Dependencies** COV-2
-- [ ] COV-7 Expand server auth, CORS, and session enrichment coverage
+- [x] COV-7 Expand server auth, CORS, and session enrichment coverage
 ---
 
 ### Task COV-8

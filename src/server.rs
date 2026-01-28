@@ -696,6 +696,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn check_auth_rejects_bearer_with_empty_token() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let state = AppState {
+            config: ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 0,
+                token: Some("secret".to_string()),
+                open: false,
+                max_body_bytes: 4096,
+            },
+            store,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer "),
+        );
+
+        let response =
+            check_auth(&headers, &state, None).expect("empty bearer token unauthorized");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["error"], "Invalid or missing Bearer token");
+    }
+
+    #[tokio::test]
+    async fn check_auth_rejects_invalid_header_encoding() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let state = AppState {
+            config: ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 0,
+                token: Some("secret".to_string()),
+                open: false,
+                max_body_bytes: 4096,
+            },
+            store,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            HeaderValue::from_bytes(b"Bearer \xFF").unwrap(),
+        );
+
+        let response =
+            check_auth(&headers, &state, None).expect("invalid header encoding unauthorized");
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["error"], "Invalid or missing Bearer token");
+    }
+
+    #[tokio::test]
     async fn check_auth_rejects_wrong_token() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path());
@@ -1301,5 +1361,13 @@ mod tests {
         });
         let enriched = enrich_session(session);
         assert_eq!(enriched["current_remaining"], 1);
+    }
+
+    #[test]
+    fn enrich_session_handles_non_object_input() {
+        let enriched = enrich_session(json!("not-a-map"));
+        assert_eq!(enriched.get("current_remaining").and_then(|v| v.as_i64()), Some(0));
+        assert_eq!(enriched.get("is_alive").and_then(|v| v.as_bool()), Some(false));
+        assert_eq!(enriched.get("status").and_then(|v| v.as_str()), Some("unknown"));
     }
 }
