@@ -117,7 +117,7 @@ Tests verify existing behavior without changing production logic, CLI outputs, o
   * Cover resolve_env_override precedence for legacy, normalized, and compat forms.
   * Cover value_to_string returning None for mappings and flatten_value ignoring non-string keys.
 - **Dependencies** None
-- [ ] COV-22 Expand config loader and override coverage
+- [x] COV-22 Expand config loader and override coverage
  - [x] COV-22 Expand config loader and override coverage
 ---
 
