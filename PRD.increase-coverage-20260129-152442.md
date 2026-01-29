@@ -155,7 +155,7 @@ Each task block must contain exactly one unchecked task line.
   * Add tests for detect_webhook_type with mixed case and non-matching URLs.
   * Add tests for send_webhook handling of invalid URLs and timeout behavior with local test servers.
 - **Dependencies** COV-VER-1
-- [ ] COV-NOTIFY-1 Cover notification payload and HTTP error paths
+- [x] COV-NOTIFY-1 Cover notification payload and HTTP error paths
 ---
 
 ### Task COV-BACKEND-MOD-1
