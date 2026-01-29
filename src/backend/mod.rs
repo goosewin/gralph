@@ -517,6 +517,27 @@ mod tests {
         assert_eq!(lines, vec!["stdout-line\n"]);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_handles_stdout_closed_early() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("exec 1>&-; printf 'stderr-line\\n' 1>&2; exit 0")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert_eq!(lines, vec!["stderr-line\n"]);
+    }
+
     #[test]
     fn spawn_reader_exits_when_receiver_closed() {
         let reader = Cursor::new(b"first-line\nsecond-line\n".to_vec());

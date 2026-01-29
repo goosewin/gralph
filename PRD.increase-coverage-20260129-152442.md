@@ -168,7 +168,7 @@ Each task block must contain exactly one unchecked task line.
   * Add tests for command_in_path with relative or empty PATH segments and non-directory entries.
   * Add tests for stream_command_output with stderr-only output and early close scenarios.
 - **Dependencies** COV-VER-1
-- [ ] COV-BACKEND-MOD-1 Expand backend helper streaming and PATH coverage
+- [x] COV-BACKEND-MOD-1 Expand backend helper streaming and PATH coverage
 ---
 
 ### Task COV-BACKEND-CLAUDE-1
