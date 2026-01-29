@@ -227,7 +227,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add tests for skipping empty model values and invalid UTF-8 handling.
   * Add tests for non-zero exit propagation.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-BACKEND-CODEX-1 Expand Codex backend coverage
+- [x] COV90-BACKEND-CODEX-1 Expand Codex backend coverage
 ### Task COV90-UPDATE-1
 
 - **ID** COV90-UPDATE-1

@@ -118,7 +118,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV90-BACKEND-CLAUDE-1 Add Claude backend ordering and fallback tests.
 - COV90-BACKEND-OPENCODE-1 Expand OpenCode backend env flag ordering and no-flag prompt tests.
 - COV90-BACKEND-GEMINI-1 Expand Gemini backend command and error tests.
-- COV90-BACKEND-CODEX-1 Expand Codex backend flag ordering and error tests.
+- COV90-BACKEND-CODEX-1 Expand Codex backend flag ordering, model skipping, and exit propagation tests.
 - COV90-NOTIFY-1 Add notify payload formatting, duration edge-case, and HTTP status tests.
 - COV90-NOTIFY-1 Add notify_failed unknown and empty reason payload coverage.
 - COV90-UPDATE-1 Add update workflow error path tests.

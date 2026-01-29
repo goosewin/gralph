@@ -191,7 +191,8 @@ mod tests {
 
         assert!(matches!(
             result,
-            Err(BackendError::Io { path: error_path, .. }) if error_path == path
+            Err(BackendError::Io { path: error_path, source })
+                if error_path == path && source.kind() == io::ErrorKind::InvalidData
         ));
     }
 
@@ -420,6 +421,28 @@ mod tests {
         let output = fs::read_to_string(&output_path).unwrap();
         assert!(output.contains("args:--quiet|--auto-approve|prompt|"));
         assert!(!output.contains("--model"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_skips_whitespace_model_and_keeps_prompt_last() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("codex-mock");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf '%s\\n' \"$@\"\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = CodexBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("prompt", Some("   "), None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let args: Vec<&str> = output.lines().collect();
+        assert_eq!(args, vec!["--quiet", "--auto-approve", "prompt"]);
     }
 
     #[cfg(unix)]
