@@ -1130,6 +1130,64 @@ mod tests {
     }
 
     #[test]
+    fn notify_failed_preserves_unknown_reason_for_generic_payload() {
+        let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
+
+        notify_failed(
+            "session",
+            &format!("{}/failed", base),
+            Some("mystery"),
+            Some("repo"),
+            Some(1),
+            Some(2),
+            Some(3),
+            Some(4),
+            Some(5),
+        )
+        .expect("notify failed");
+
+        let request = captured.lock().unwrap().clone().expect("captured request");
+        let value: Value = serde_json::from_str(&request.body).expect("json payload");
+
+        assert_eq!(value["reason"], "mystery");
+        assert_eq!(
+            value["message"],
+            "Gralph loop 'session' failed: mystery after 1 iterations"
+        );
+
+        handle.join().expect("server thread");
+    }
+
+    #[test]
+    fn notify_failed_allows_empty_reason_for_generic_payload() {
+        let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
+
+        notify_failed(
+            "session",
+            &format!("{}/failed", base),
+            Some(""),
+            Some("repo"),
+            Some(1),
+            Some(2),
+            Some(3),
+            Some(4),
+            Some(5),
+        )
+        .expect("notify failed");
+
+        let request = captured.lock().unwrap().clone().expect("captured request");
+        let value: Value = serde_json::from_str(&request.body).expect("json payload");
+
+        assert_eq!(value["reason"], "");
+        assert_eq!(
+            value["message"],
+            "Gralph loop 'session' failed:  after 1 iterations"
+        );
+
+        handle.join().expect("server thread");
+    }
+
+    #[test]
     fn notify_failed_defaults_unknown_for_discord_payload() {
         let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
         let url = format!("{}/discord.com/api/webhooks/123", base);

@@ -119,6 +119,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV90-BACKEND-GEMINI-1 Expand Gemini backend command and error tests.
 - COV90-BACKEND-CODEX-1 Expand Codex backend flag ordering and error tests.
 - COV90-NOTIFY-1 Add notify payload formatting, duration edge-case, and HTTP status tests.
+- COV90-NOTIFY-1 Add notify_failed unknown and empty reason payload coverage.
 - COV90-UPDATE-1 Add update workflow error path tests.
 - COV90-TESTSUPPORT-1 Add env_lock stress and recovery tests.
 - COV90-CLI-1 Add CLI parsing tests for run-loop, verifier defaults, and PRD conflicts.

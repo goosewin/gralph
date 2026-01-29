@@ -161,7 +161,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add tests for `send_webhook` error handling when payload is empty or timeout is zero.
   * Add tests for webhook type detection on case-insensitive URLs.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-NOTIFY-1 Expand notification error-path coverage
+- [x] COV90-NOTIFY-1 Expand notification error-path coverage
 ### Task COV90-SERVER-1
 
 - **ID** COV90-SERVER-1
