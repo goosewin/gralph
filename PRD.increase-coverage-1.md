@@ -63,7 +63,7 @@ Expand tests for CLI flows, server endpoints, backend adapters, update workflow,
   * Add tests for lock acquisition failures when the lock path is invalid.
   * Add tests for cleanup_stale and delete_session error paths on malformed or missing sessions.
 - **Dependencies** None
-- [ ] COV-STATE-1 Cover state store lock and cleanup errors
+- [x] COV-STATE-1 Cover state store lock and cleanup errors
 ### Task COV-PRD-1
 
 - **ID** COV-PRD-1

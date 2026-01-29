@@ -758,11 +758,17 @@ mod tests {
         assert!(cleaned.is_empty());
 
         let idle = store.get_session("idle").unwrap().unwrap();
-        assert_eq!(idle.get("status").and_then(|v| v.as_str()), Some("complete"));
+        assert_eq!(
+            idle.get("status").and_then(|v| v.as_str()),
+            Some("complete")
+        );
         assert_eq!(idle.get("pid").and_then(|v| v.as_i64()), Some(999999));
 
         let missing_pid = store.get_session("missing-pid").unwrap().unwrap();
-        assert_eq!(missing_pid.get("status").and_then(|v| v.as_str()), Some("running"));
+        assert_eq!(
+            missing_pid.get("status").and_then(|v| v.as_str()),
+            Some("running")
+        );
         assert_eq!(missing_pid.get("pid").and_then(|v| v.as_i64()), Some(0));
     }
 
@@ -785,7 +791,10 @@ mod tests {
         );
         sessions.insert(
             "missing-status".to_string(),
-            Value::Object(Map::from_iter([("pid".to_string(), Value::Number(12.into()))])),
+            Value::Object(Map::from_iter([(
+                "pid".to_string(),
+                Value::Number(12.into()),
+            )])),
         );
         let state = StateData { sessions };
         store.write_state(&state).unwrap();
@@ -806,13 +815,14 @@ mod tests {
         assert!(missing_fields.as_object().unwrap().is_empty());
         let missing_pid = reloaded.sessions.get("missing-pid").unwrap();
         assert_eq!(
-            missing_pid
-                .get("status")
-                .and_then(|value| value.as_str()),
+            missing_pid.get("status").and_then(|value| value.as_str()),
             Some("running")
         );
         let missing_status = reloaded.sessions.get("missing-status").unwrap();
-        assert_eq!(missing_status.get("pid").and_then(|value| value.as_i64()), Some(12));
+        assert_eq!(
+            missing_status.get("pid").and_then(|value| value.as_i64()),
+            Some(12)
+        );
     }
 
     #[test]
@@ -869,6 +879,22 @@ mod tests {
     }
 
     #[test]
+    fn cleanup_stale_errors_when_state_file_is_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        fs::create_dir_all(&store.state_dir).unwrap();
+        fs::create_dir_all(&store.state_file).unwrap();
+
+        let err = store.cleanup_stale(CleanupMode::Remove).unwrap_err();
+        match err {
+            StateError::Io { path, .. } => {
+                assert_eq!(path, store.state_file);
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn invalid_session_names_are_rejected() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path(), Duration::from_secs(1));
@@ -899,6 +925,22 @@ mod tests {
                 assert!(message.contains("missing"));
             }
             other => panic!("expected InvalidState, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn delete_session_errors_when_state_file_is_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        fs::create_dir_all(&store.state_dir).unwrap();
+        fs::create_dir_all(&store.state_file).unwrap();
+
+        let err = store.delete_session("alpha").unwrap_err();
+        match err {
+            StateError::Io { path, .. } => {
+                assert_eq!(path, store.state_file);
+            }
+            other => panic!("expected Io, got {other:?}"),
         }
     }
 
@@ -1055,6 +1097,30 @@ mod tests {
         let state_dir = temp.path().join("state");
         let state_file = state_dir.join("state.json");
         let lock_file = temp.path().join("missing").join("state.lock");
+        let store = StateStore::with_paths(
+            state_dir,
+            state_file,
+            lock_file.clone(),
+            Duration::from_millis(100),
+        );
+
+        let err = store.get_session("alpha").unwrap_err();
+        match err {
+            StateError::Io { path, .. } => {
+                assert_eq!(path, lock_file);
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn lock_path_parent_is_file_returns_io_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = temp.path().join("state");
+        let state_file = state_dir.join("state.json");
+        let lock_parent = temp.path().join("lock-parent");
+        fs::write(&lock_parent, "not a dir").unwrap();
+        let lock_file = lock_parent.join("state.lock");
         let store = StateStore::with_paths(
             state_dir,
             state_file,
