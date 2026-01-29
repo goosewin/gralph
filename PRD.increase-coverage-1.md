@@ -73,7 +73,7 @@ Expand tests for CLI flows, server endpoints, backend adapters, update workflow,
   * Add proptest cases for context bundle parsing and sanitize_task_block unchecked line invariants.
   * Add unit tests for Open Questions stripping and base_dir override edge cases.
 - **Dependencies** None
-- [ ] COV-PRD-1 Expand PRD validation and sanitize invariants
+- [x] COV-PRD-1 Expand PRD validation and sanitize invariants
 ### Task COV-TASK-1
 
 - **ID** COV-TASK-1

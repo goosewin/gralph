@@ -1204,6 +1204,10 @@ mod tests {
         string_regex(r"[A-Za-z0-9][A-Za-z0-9 .,]{0,20}").unwrap()
     }
 
+    fn noise_strategy() -> impl Strategy<Value = String> {
+        string_regex(r"[A-Za-z0-9 ./,-]{0,6}").unwrap()
+    }
+
     fn heading_title_strategy() -> impl Strategy<Value = String> {
         string_regex(r"[A-Za-z0-9][A-Za-z0-9 ]{0,12}").unwrap()
     }
@@ -1235,11 +1239,10 @@ mod tests {
         fs::write(&prd, "").unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(
-            err.messages
-                .iter()
-                .any(|line| line.contains("Task file is empty"))
-        );
+        assert!(err
+            .messages
+            .iter()
+            .any(|line| line.contains("Task file is empty")));
     }
 
     #[test]
@@ -1258,11 +1261,10 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(
-            err.messages
-                .iter()
-                .any(|line| line.contains("Missing required field: DoD"))
-        );
+        assert!(err
+            .messages
+            .iter()
+            .any(|line| line.contains("Missing required field: DoD")));
     }
 
     #[test]
@@ -1277,11 +1279,9 @@ mod tests {
 
         let errors = validate_task_block(block, Path::new("prd.md"), false, Some(base));
 
-        assert!(
-            errors
-                .iter()
-                .any(|line| line.contains("Missing required field: DoD"))
-        );
+        assert!(errors
+            .iter()
+            .any(|line| line.contains("Missing required field: DoD")));
     }
 
     #[test]
@@ -1297,11 +1297,10 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(
-            err.messages
-                .iter()
-                .any(|line| { line.contains("Missing required field: Context Bundle") })
-        );
+        assert!(err
+            .messages
+            .iter()
+            .any(|line| { line.contains("Missing required field: Context Bundle") }));
     }
 
     #[test]
@@ -1320,11 +1319,10 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(
-            err.messages
-                .iter()
-                .any(|line| line.contains("Multiple unchecked task lines"))
-        );
+        assert!(err
+            .messages
+            .iter()
+            .any(|line| line.contains("Multiple unchecked task lines")));
     }
 
     #[test]
@@ -1339,11 +1337,9 @@ mod tests {
 
         let errors = validate_task_block(block, Path::new("prd.md"), false, Some(base));
 
-        assert!(
-            errors
-                .iter()
-                .any(|line| line.contains("Multiple unchecked task lines"))
-        );
+        assert!(errors
+            .iter()
+            .any(|line| line.contains("Multiple unchecked task lines")));
     }
 
     #[test]
@@ -1361,11 +1357,9 @@ mod tests {
 
         let errors = validate_task_block(&block, Path::new("prd.md"), false, Some(base));
 
-        assert!(
-            errors
-                .iter()
-                .any(|line| line.contains("Context Bundle path outside repo"))
-        );
+        assert!(errors
+            .iter()
+            .any(|line| line.contains("Context Bundle path outside repo")));
         assert!(!errors.iter().any(|line| line.contains("path not found")));
     }
 
@@ -1385,11 +1379,10 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(
-            err.messages
-                .iter()
-                .any(|line| line.contains("Unchecked task line outside task block"))
-        );
+        assert!(err
+            .messages
+            .iter()
+            .any(|line| line.contains("Unchecked task line outside task block")));
     }
 
     #[test]
@@ -1405,11 +1398,10 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(
-            err.messages
-                .iter()
-                .any(|line| line.contains("Context Bundle path not found"))
-        );
+        assert!(err
+            .messages
+            .iter()
+            .any(|line| line.contains("Context Bundle path not found")));
     }
 
     #[test]
@@ -1428,11 +1420,10 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(
-            err.messages
-                .iter()
-                .any(|line| line.contains("Open Questions section is not allowed"))
-        );
+        assert!(err
+            .messages
+            .iter()
+            .any(|line| line.contains("Open Questions section is not allowed")));
     }
 
     #[test]
@@ -1567,6 +1558,29 @@ mod tests {
     }
 
     #[test]
+    fn prd_sanitize_generated_file_removes_open_questions_until_end() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("context.md"), "ok").unwrap();
+
+        let prd = base.join("prd.md");
+        fs::write(
+            &prd,
+            "# PRD\n\n### Task D-13\n- **ID** D-13\n- **Context Bundle** `docs/context.md`\n- **DoD** Sanitize output.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] D-13 Task\n\n## Open Questions\n- Should be removed\nTrailing text\n",
+        )
+        .unwrap();
+
+        prd_sanitize_generated_file(&prd, Some(base), None).unwrap();
+        let sanitized = fs::read_to_string(&prd).unwrap();
+
+        assert!(sanitized.contains("- [ ] D-13 Task"));
+        assert!(!sanitized.contains("Open Questions"));
+        assert!(!sanitized.contains("Trailing text"));
+    }
+
+    #[test]
     fn prd_sanitize_generated_file_filters_context_by_allowed_list_and_relativizes() {
         let temp = tempdir().unwrap();
         let base = temp.path();
@@ -1669,11 +1683,10 @@ mod tests {
         fs::write(&prd, contents).unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(
-            err.messages
-                .iter()
-                .any(|line| line.contains("Context Bundle path outside repo"))
-        );
+        assert!(err
+            .messages
+            .iter()
+            .any(|line| line.contains("Context Bundle path outside repo")));
     }
 
     #[test]
@@ -1690,16 +1703,40 @@ mod tests {
         fs::write(&prd, contents).unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(
-            err.messages
-                .iter()
-                .any(|line| line.contains("Context Bundle path not found"))
-        );
-        assert!(
-            !err.messages
-                .iter()
-                .any(|line| line.contains("Context Bundle path outside repo"))
-        );
+        assert!(err
+            .messages
+            .iter()
+            .any(|line| line.contains("Context Bundle path not found")));
+        assert!(!err
+            .messages
+            .iter()
+            .any(|line| line.contains("Context Bundle path outside repo")));
+    }
+
+    #[test]
+    fn prd_validate_file_uses_base_dir_override_for_relative_context_entries() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let repo_root = base.join("repo");
+        let docs = repo_root.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("context.md"), "ok").unwrap();
+
+        let tasks_dir = repo_root.join("tasks");
+        fs::create_dir_all(&tasks_dir).unwrap();
+        let prd = tasks_dir.join("prd.md");
+        fs::write(
+            &prd,
+            "# PRD\n\n### Task D-9A\n- **ID** D-9A\n- **Context Bundle** `docs/context.md`\n- **DoD** Guard context.\n- **Checklist**\n  * Check base override.\n- **Dependencies** None\n- [ ] D-9A Guard\n",
+        )
+        .unwrap();
+
+        let err = prd_validate_file(&prd, false, None).unwrap_err();
+        assert!(err
+            .messages
+            .iter()
+            .any(|line| line.contains("Context Bundle path not found")));
+        assert!(prd_validate_file(&prd, false, Some(&repo_root)).is_ok());
     }
 
     #[test]
@@ -1741,11 +1778,10 @@ mod tests {
         fs::write(&prd, contents).unwrap();
 
         let err = prd_validate_file(&prd, false, Some(&repo_root)).unwrap_err();
-        assert!(
-            err.messages
-                .iter()
-                .any(|line| line.contains("Context Bundle path outside repo"))
-        );
+        assert!(err
+            .messages
+            .iter()
+            .any(|line| line.contains("Context Bundle path outside repo")));
     }
 
     #[test]
@@ -1879,7 +1915,8 @@ mod tests {
             let blocks_out = task_blocks_from_contents(&contents);
 
             prop_assert_eq!(blocks_out.len(), 1);
-            prop_assert_eq!(blocks_out[0], expected);
+            let block = &blocks_out[0];
+            prop_assert_eq!(block, &expected);
         }
 
         #[test]
@@ -1946,6 +1983,39 @@ mod tests {
                 block.push('\n');
             }
             block.push_str("- **Checklist**\n  * Work `ignored.md`\n- **Dependencies** None\n- [ ] P-CTX Task\n");
+
+            let extracted = extract_context_entries(&block);
+
+            prop_assert_eq!(extracted, entries);
+        }
+
+        #[test]
+        fn prop_extract_context_entries_handles_noise_and_breaks(
+            entries in prop::collection::vec(context_entry_strategy(), 1..6),
+            prefixes in prop::collection::vec(noise_strategy(), 1..6),
+            suffixes in prop::collection::vec(noise_strategy(), 1..6),
+            breaks in prop::collection::vec(any::<bool>(), 1..6)
+        ) {
+            let mut block = String::from("### Task P-CTX-N\n- **ID** P-CTX-N\n- **Context Bundle** ");
+            for (index, entry) in entries.iter().enumerate() {
+                if index > 0 {
+                    if breaks[index % breaks.len()] {
+                        block.push('\n');
+                        block.push_str("  ");
+                    } else {
+                        block.push_str(", ");
+                    }
+                }
+                let prefix = &prefixes[index % prefixes.len()];
+                let suffix = &suffixes[index % suffixes.len()];
+                block.push_str(prefix);
+                block.push('`');
+                block.push_str(entry);
+                block.push('`');
+                block.push_str(suffix);
+            }
+            block.push('\n');
+            block.push_str("- **DoD** Example\n- **Checklist**\n  * Work\n- **Dependencies** None\n- [ ] P-CTX-N Task\n");
 
             let extracted = extract_context_entries(&block);
 
@@ -2036,6 +2106,48 @@ mod tests {
             prop_assert_eq!(unchecked_lines, 1);
             prop_assert!(sanitized.contains("- **Context Bundle** `docs/allowed.md`"));
         }
+
+        #[test]
+        fn prop_sanitize_task_block_preserves_first_unchecked_and_strips_rest(
+            indents in prop::collection::vec(whitespace_strategy(), 1..5)
+        ) {
+            let temp = tempdir().unwrap();
+            let base = temp.path();
+            let docs = base.join("docs");
+            fs::create_dir_all(&docs).unwrap();
+            fs::write(docs.join("allowed.md"), "ok").unwrap();
+
+            let mut block = String::from("### Task P-U\n- **ID** P-U\n- **Context Bundle** `docs/allowed.md`\n- **DoD** Example.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n");
+            for (index, indent) in indents.iter().enumerate() {
+                block.push_str(&format!("{indent}- [ ] P-U Item-{index}\n"));
+            }
+
+            let sanitized = sanitize_task_block(&block, Some(base), None);
+            let unchecked_lines = sanitized
+                .lines()
+                .filter(|line| is_unchecked_line(line))
+                .count();
+
+            prop_assert_eq!(unchecked_lines, 1);
+
+            for (index, indent) in indents.iter().enumerate() {
+                let token = format!("Item-{index}");
+                let line = sanitized
+                    .lines()
+                    .find(|line| line.contains(&token))
+                    .unwrap_or("");
+                prop_assert!(!line.is_empty());
+                if index == 0 {
+                    prop_assert!(line.trim_start().starts_with("- [ ]"));
+                } else {
+                    prop_assert!(!line.trim_start().starts_with("- [ ]"));
+                    prop_assert!(line.trim_start().starts_with("- "));
+                }
+                if !indent.is_empty() {
+                    prop_assert!(line.starts_with(indent));
+                }
+            }
+        }
     }
 
     #[test]
@@ -2061,7 +2173,10 @@ mod tests {
         let outside_rel = "../outside.md";
 
         assert!(context_entry_exists(inside_rel, Some(base)));
-        assert!(context_entry_exists(inside_abs.to_string_lossy().as_ref(), Some(base)));
+        assert!(context_entry_exists(
+            inside_abs.to_string_lossy().as_ref(),
+            Some(base)
+        ));
         assert!(!context_entry_exists(
             outside_abs.to_string_lossy().as_ref(),
             Some(base)
@@ -2106,7 +2221,10 @@ mod tests {
 
         assert!(context_entry_exists(rel, Some(base)));
         assert!(!context_entry_exists(rel, None));
-        assert!(context_entry_exists(abs.to_string_lossy().as_ref(), Some(base)));
+        assert!(context_entry_exists(
+            abs.to_string_lossy().as_ref(),
+            Some(base)
+        ));
     }
 
     #[test]
