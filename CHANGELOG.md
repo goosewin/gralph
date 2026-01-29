@@ -105,7 +105,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV90-CONFIG-1 Expand config merge precedence, env compat empty override, and list rendering tests.
 - COV90-CI-1 Document soft coverage warning target and staged plan.
 - COV90-CI-1 Add soft coverage warning target in verifier config and docs.
-- COV90-CI-2 Raise soft coverage warning target to 75 to 80 percent.
+- COV90-CI-2 Raise soft coverage warning target to 80 percent (warning-only).
 - COV-CI-1 Set initial soft coverage warning target to 65 to 70 percent.
 - COV-CI-2 Document soft coverage warning target in README.
 - COV90-VER-1 Add verifier parsing, review gate, and gh error handling tests.

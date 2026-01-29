@@ -271,7 +271,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Update README to reflect the new warning target and staged policy.
   * Keep `verifier.coverage_min` unchanged to avoid blocking merges.
 - **Dependencies** COV90-CI-1
-- [ ] COV90-CI-2 Raise soft coverage warning target after stabilization
+- [x] COV90-CI-2 Raise soft coverage warning target after stabilization
 ---
 
 ## Success Criteria
