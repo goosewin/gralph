@@ -172,7 +172,7 @@ Increase coverage in supporting modules and backend adapters (`src/main.rs`, `sr
   * Add tests for parse_text when response_file is a directory and for run_iteration with empty model still including --headless.
   * Add tests for check_installed when PATH is unset and when PATH contains non-directory entries.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-13 Expand Gemini adapter coverage
+- [x] COV-13 Expand Gemini adapter coverage
 ### Task COV-14
 
 - **ID** COV-14

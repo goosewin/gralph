@@ -47,6 +47,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-12 Expand OpenCode adapter coverage.
 - COV-13 Expand OpenCode adapter error-path coverage.
 - COV-13 Expand Codex backend command and error coverage.
+- COV-13 Expand Gemini adapter error-path coverage.
 - COV-14 Expand Gemini adapter error-path coverage.
 - COV-14 Expand update/install error-path coverage.
 - COV-14 Add property-based tests for task block termination and unchecked parsing.

@@ -195,6 +195,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_text_returns_io_error_for_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("response-dir");
+        fs::create_dir(&path).unwrap();
+
+        let backend = GeminiBackend::new();
+        let result = backend.parse_text(&path);
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path: error_path, .. }) if error_path == path
+        ));
+    }
+
+    #[test]
     fn check_installed_respects_path_override() {
         let _lock = crate::test_support::env_lock();
         let temp = tempfile::tempdir().unwrap();
@@ -205,6 +220,15 @@ mod tests {
         let backend = GeminiBackend::with_command(command_name.to_string());
 
         assert!(backend.check_installed());
+    }
+
+    #[test]
+    fn check_installed_returns_false_when_path_unset() {
+        let _lock = crate::test_support::env_lock();
+        let _guard = PathGuard::set(None);
+        let backend = GeminiBackend::with_command("gemini-unset".to_string());
+
+        assert!(!backend.check_installed());
     }
 
     #[test]
@@ -224,6 +248,30 @@ mod tests {
         assert!(!backend.check_installed());
 
         fs::write(temp.path().join(command_name), "stub").unwrap();
+        assert!(backend.check_installed());
+    }
+
+    #[test]
+    fn check_installed_ignores_non_directory_path_entries() {
+        let _lock = crate::test_support::env_lock();
+        let command_name = "gemini-nondir";
+        let command_dir = tempfile::tempdir().unwrap();
+        let file_entry_dir = tempfile::tempdir().unwrap();
+        let file_entry = file_entry_dir.path().join("not-a-dir");
+        fs::write(&file_entry, "stub").unwrap();
+        fs::write(command_dir.path().join(command_name), "stub").unwrap();
+
+        let _guard = PathGuard::set(None);
+        unsafe {
+            env::set_var("PATH", &file_entry);
+        }
+        let backend = GeminiBackend::with_command(command_name.to_string());
+        assert!(!backend.check_installed());
+
+        let combined = env::join_paths([file_entry.as_path(), command_dir.path()]).unwrap();
+        unsafe {
+            env::set_var("PATH", &combined);
+        }
         assert!(backend.check_installed());
     }
 
@@ -352,7 +400,7 @@ mod tests {
         backend
             .run_iteration(
                 "prompt",
-                Some("  "),
+                Some(""),
                 None,
                 &output_path,
                 temp.path(),
