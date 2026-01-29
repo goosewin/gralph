@@ -153,7 +153,7 @@ Add tests around CLI helpers, server handlers, notification payloads, update wor
   * Add unit tests for relative PATH entries and missing directories.
   * Add tests for stream_command_output with stderr-only and early-close scenarios.
 - **Dependencies** None
-- [ ] COV-BACKEND-MOD-1 Add backend helper error-path coverage
+- [x] COV-BACKEND-MOD-1 Add backend helper error-path coverage
 ### Task COV-BACKEND-CLAUDE-1
 
 - **ID** COV-BACKEND-CLAUDE-1

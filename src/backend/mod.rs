@@ -417,6 +417,21 @@ mod tests {
         assert!(command_in_path(command_name));
     }
 
+    #[test]
+    fn command_in_path_returns_false_for_missing_directories_only() {
+        let _lock = crate::test_support::env_lock();
+        let command_name = "gralph-missing-dir-command";
+        let temp_dir = tempfile::tempdir().unwrap();
+        let missing_dir = temp_dir.path().join("missing");
+
+        let _guard = PathGuard::set(None);
+        unsafe {
+            env::set_var("PATH", &missing_dir);
+        }
+
+        assert!(!command_in_path(command_name));
+    }
+
     #[cfg(unix)]
     #[test]
     fn stream_command_output_returns_ok_on_success() {
@@ -458,6 +473,48 @@ mod tests {
 
         assert!(result.is_ok());
         assert_eq!(lines, vec!["first-line\n", "second-line"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_handles_stderr_only_output() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("printf 'stderr-only\\n' 1>&2")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert_eq!(lines, vec!["stderr-only\n"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_handles_stderr_closed_early() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("exec 2>&-; printf 'stdout-line\\n'; exit 0")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert_eq!(lines, vec!["stdout-line\n"]);
     }
 
     #[test]
