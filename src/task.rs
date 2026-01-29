@@ -64,6 +64,18 @@ mod tests {
         string_regex(r"[ \t]{0,4}").unwrap()
     }
 
+    fn tab_prefix_strategy() -> impl Strategy<Value = String> {
+        string_regex(r"\t{1,4}").unwrap()
+    }
+
+    fn mixed_indent_strategy() -> impl Strategy<Value = String> {
+        prop::collection::vec(prop_oneof![Just(' '), Just('\t')], 2..6)
+            .prop_filter("requires space and tab", |chars| {
+                chars.iter().any(|c| *c == ' ') && chars.iter().any(|c| *c == '\t')
+            })
+            .prop_map(|chars| chars.into_iter().collect())
+    }
+
     fn newline_strategy() -> impl Strategy<Value = String> {
         prop_oneof![Just("\n".to_string()), Just("\r\n".to_string())]
     }
@@ -100,6 +112,19 @@ mod tests {
     fn empty_h2_heading_strategy() -> impl Strategy<Value = String> {
         (whitespace_strategy(), whitespace_strategy())
             .prop_map(|(leading, trailing)| format!("{leading}## {trailing}"))
+    }
+
+    fn tabbed_heading_near_miss_strategy() -> impl Strategy<Value = String> {
+        (
+            whitespace_strategy(),
+            string_regex(r"[A-Za-z0-9][A-Za-z0-9 ]{0,12}").unwrap(),
+            prop_oneof![
+                Just("\t".to_string()),
+                Just("\t ".to_string()),
+                Just("\t\t".to_string())
+            ],
+        )
+            .prop_map(|(leading, title, sep)| format!("{leading}##{sep}{title}"))
     }
 
     fn separator_near_miss_strategy() -> impl Strategy<Value = String> {
@@ -522,6 +547,41 @@ mod tests {
         }
 
         #[test]
+        fn prop_task_blocks_from_contents_ignores_separator_near_miss_with_crlf(
+            header_leading in whitespace_strategy(),
+            id in task_id_strategy(),
+            body in prop::collection::vec(safe_line_strategy(), 0..3),
+            near_miss in separator_near_miss_strategy(),
+            suffix in prop::collection::vec(safe_line_strategy(), 0..2)
+        ) {
+            let header = format!("{}### Task {}", header_leading, id);
+            let mut lines = Vec::new();
+            lines.push(header.clone());
+            let mut expected = header;
+
+            for line in &body {
+                lines.push(line.clone());
+                expected.push('\n');
+                expected.push_str(line);
+            }
+
+            lines.push(near_miss.clone());
+            expected.push('\n');
+            expected.push_str(&near_miss);
+
+            if !suffix.is_empty() {
+                lines.extend(suffix.iter().cloned());
+                expected.push('\n');
+                expected.push_str(&suffix.join("\n"));
+            }
+
+            let contents = lines.join("\r\n");
+            let blocks_out = task_blocks_from_contents(&contents);
+            prop_assert_eq!(blocks_out.len(), 1);
+            prop_assert_eq!(&blocks_out[0], &expected);
+        }
+
+        #[test]
         fn prop_task_blocks_from_contents_round_trip(
             prefix in prop::collection::vec(safe_line_strategy(), 0..3),
             blocks in prop::collection::vec(
@@ -704,6 +764,31 @@ mod tests {
         }
 
         #[test]
+        fn prop_is_task_block_end_accepts_tabbed_heading(
+            leading in tab_prefix_strategy(),
+            title in string_regex(r"[A-Za-z0-9][A-Za-z0-9 ]{0,12}").unwrap()
+        ) {
+            let line = format!("{}## {}", leading, title);
+            prop_assert!(is_task_block_end(&line));
+        }
+
+        #[test]
+        fn prop_is_task_block_end_rejects_tabbed_heading_near_misses(
+            line in tabbed_heading_near_miss_strategy()
+        ) {
+            prop_assert!(!is_task_block_end(&line));
+        }
+
+        #[test]
+        fn prop_is_task_block_end_rejects_whitespace_only_heading(
+            leading in whitespace_strategy(),
+            trailing in string_regex(r"[ \t]{0,6}").unwrap()
+        ) {
+            let line = format!("{leading}## {trailing}");
+            prop_assert!(!is_task_block_end(&line));
+        }
+
+        #[test]
         fn prop_is_task_block_end_rejects_non_matches(
             leading in whitespace_strategy(),
             tail in string_regex(r"[^\n]{0,12}").unwrap(),
@@ -725,6 +810,15 @@ mod tests {
             tail in string_regex(r"[^\n]{0,12}").unwrap()
         ) {
             let line = format!("{}- [ ]{}", leading, tail);
+            prop_assert!(is_unchecked_line(&line));
+        }
+
+        #[test]
+        fn prop_is_unchecked_line_accepts_mixed_whitespace_prefix(
+            leading in mixed_indent_strategy(),
+            tail in string_regex(r"[ \tA-Za-z0-9]{0,12}").unwrap()
+        ) {
+            let line = format!("{leading}- [ ]{tail}");
             prop_assert!(is_unchecked_line(&line));
         }
 

@@ -107,7 +107,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add tests for `is_task_block_end` with tabbed headings and spacing near misses.
   * Add tests for unchecked checkbox detection with mixed whitespace.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-TASK-1 Add task parsing invariant tests
+- [x] COV90-TASK-1 Add task parsing invariant tests
 ### Task COV90-MAIN-1
 
 - **ID** COV90-MAIN-1
