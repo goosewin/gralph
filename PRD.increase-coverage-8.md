@@ -202,7 +202,7 @@ Increase coverage in supporting modules and backend adapters (`src/main.rs`, `sr
   * Add a repeated panic/recovery test across multiple threads to confirm the lock remains usable.
   * Add a higher-contention stress test to ensure max_active never exceeds 1.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-16 Expand env_lock stress coverage
+- [x] COV-16 Expand env_lock stress coverage
 ---
 
 ## Success Criteria
