@@ -92,6 +92,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-TASK-1 Add task block termination and whitespace invariants.
 - COV-30 Expand update parsing and extraction coverage.
 - COV-CORE-1 Expand core loop prompt template and retention edge coverage.
+- COV90-CORE-1 Add core loop tests for task selection and completion handling.
 - COV-9 Expand update check and archive error coverage.
 - COV-31 Expand verifier parsing and static check coverage.
 - COV-VERIFIER-1 Cover verifier parsing and static checks.

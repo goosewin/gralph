@@ -799,6 +799,8 @@ fn create_temp_file(prefix: &str) -> Result<PathBuf, CoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+    use proptest::string::string_regex;
     use std::cell::RefCell;
     use std::env;
     use std::fs;
@@ -827,6 +829,32 @@ mod tests {
     fn set_modified(path: &Path, time: SystemTime) {
         let file = OpenOptions::new().write(true).open(path).unwrap();
         file.set_modified(time).unwrap();
+    }
+
+    fn task_id_strategy() -> impl Strategy<Value = String> {
+        string_regex(r"[A-Z0-9]{1,8}").unwrap()
+    }
+
+    fn safe_line_strategy() -> impl Strategy<Value = String> {
+        string_regex(r"[A-Za-z0-9][A-Za-z0-9 .,]{0,12}").unwrap()
+    }
+
+    fn block_lines_strategy(unchecked: bool) -> impl Strategy<Value = Vec<String>> {
+        (
+            task_id_strategy(),
+            prop::collection::vec(safe_line_strategy(), 0..3),
+        )
+            .prop_map(move |(id, body)| {
+                let mut lines = Vec::new();
+                lines.push(format!("### Task {}", id));
+                lines.push(if unchecked {
+                    "- [ ] Task".to_string()
+                } else {
+                    "- [x] Task".to_string()
+                });
+                lines.extend(body);
+                lines
+            })
     }
 
     struct TestBackend {
@@ -1536,6 +1564,48 @@ mod tests {
     }
 
     #[test]
+    fn run_iteration_includes_context_files_from_config() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "### Task COV-CORE\n- [ ] Task\n").unwrap();
+
+        let config_path = temp.path().join("config.yaml");
+        fs::write(
+            &config_path,
+            "defaults:\n  context_files:\n    - ARCHITECTURE.md\n    - PROCESS.md\n",
+        )
+        .unwrap();
+        set_env("GRALPH_DEFAULT_CONFIG", &config_path);
+        let global_path = temp.path().join("missing-global.yaml");
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+
+        let backend = TestBackend::new();
+        let _ = run_iteration(
+            &backend,
+            temp.path(),
+            "PRD.md",
+            1,
+            2,
+            "COMPLETE",
+            None,
+            None,
+            None,
+            Some("{context_files_section}Task:\n{task_block}\n"),
+            Some(&config),
+        )
+        .unwrap();
+
+        let prompt = backend.prompt.borrow().clone().unwrap();
+        assert!(prompt.contains("Context Files (read these first):\nARCHITECTURE.md\nPROCESS.md\n"));
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
     fn run_iteration_rejects_empty_project_dir() {
         let backend = TestBackend::new();
         let result = run_iteration(
@@ -1556,6 +1626,34 @@ mod tests {
             result,
             Err(CoreError::InvalidInput(message))
                 if message.contains("project_dir is required")
+        ));
+    }
+
+    #[test]
+    fn run_iteration_rejects_project_dir_when_not_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_file = temp.path().join("not-dir");
+        fs::write(&project_file, "data").unwrap();
+
+        let backend = TestBackend::new();
+        let result = run_iteration(
+            &backend,
+            &project_file,
+            "PRD.md",
+            1,
+            1,
+            "COMPLETE",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message))
+                if message.contains("project directory does not exist")
         ));
     }
 
@@ -1730,6 +1828,37 @@ mod tests {
     }
 
     #[test]
+    fn run_iteration_logs_raw_output_when_backend_fails_with_empty_output() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [ ] Task\n").unwrap();
+
+        let log_path = temp.path().join("loop.log");
+        let raw_path = raw_log_path(&log_path);
+
+        let backend = LoopBackend::fail();
+        let result = run_iteration(
+            &backend,
+            temp.path(),
+            "PRD.md",
+            1,
+            1,
+            "COMPLETE",
+            None,
+            None,
+            Some(&log_path),
+            None,
+            None,
+        );
+
+        assert!(matches!(result, Err(CoreError::Backend(_))));
+
+        let log_contents = fs::read_to_string(&log_path).unwrap();
+        assert!(log_contents.contains(&format!("Raw output saved to: {}", raw_path.display())));
+        assert!(raw_path.exists());
+    }
+
+    #[test]
     fn run_iteration_rejects_empty_parsed_result() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("PRD.md");
@@ -1815,6 +1944,59 @@ mod tests {
         assert!(matches!(
             result,
             Err(CoreError::InvalidInput(message)) if message.contains("project_dir is required")
+        ));
+    }
+
+    #[test]
+    fn run_loop_rejects_zero_max_iterations() {
+        let temp = tempfile::tempdir().unwrap();
+        let backend = LoopBackend::success("ok");
+        let result = run_loop(
+            &backend,
+            temp.path(),
+            Some("PRD.md"),
+            Some(0),
+            Some("COMPLETE"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message))
+                if message.contains("max_iterations must be a positive integer")
+        ));
+    }
+
+    #[test]
+    fn run_loop_rejects_project_dir_when_not_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_file = temp.path().join("not-dir");
+        fs::write(&project_file, "data").unwrap();
+
+        let backend = LoopBackend::success("ok");
+        let result = run_loop(
+            &backend,
+            &project_file,
+            Some("PRD.md"),
+            Some(1),
+            Some("COMPLETE"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message))
+                if message.contains("project directory does not exist")
         ));
     }
 
@@ -1950,5 +2132,74 @@ mod tests {
                 (1, LoopStatus::MaxIterations, 1)
             ]
         );
+    }
+
+    proptest! {
+        #[test]
+        fn prop_get_next_unchecked_task_block_selects_first_unchecked(
+            before_blocks in prop::collection::vec(block_lines_strategy(false), 0..3),
+            selected_block in block_lines_strategy(true),
+            after_blocks in prop::collection::vec(block_lines_strategy(false), 0..3),
+        ) {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("PRD.md");
+
+            let mut lines = Vec::new();
+            for block in &before_blocks {
+                lines.extend(block.iter().cloned());
+            }
+            lines.extend(selected_block.iter().cloned());
+            for block in &after_blocks {
+                lines.extend(block.iter().cloned());
+            }
+
+            fs::write(&path, lines.join("\n")).unwrap();
+
+            let expected = selected_block.join("\n");
+            let found = get_next_unchecked_task_block(&path).unwrap();
+            prop_assert_eq!(found.as_deref(), Some(expected.as_str()));
+        }
+
+        #[test]
+        fn prop_check_completion_accepts_exact_promise_line(
+            prefix in prop::collection::vec(safe_line_strategy(), 0..3),
+            marker in string_regex(r"[A-Z]{3,8}").unwrap(),
+        ) {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("PRD.md");
+            fs::write(&path, "- [x] Done\n").unwrap();
+
+            let mut result = String::new();
+            for line in prefix {
+                result.push_str(&line);
+                result.push('\n');
+            }
+            result.push_str(&format!("<promise>{}</promise>\n", marker));
+
+            let complete = check_completion(&path, &result, &marker).unwrap();
+            prop_assert!(complete);
+        }
+
+        #[test]
+        fn prop_check_completion_rejects_non_promise_last_line(
+            prefix in prop::collection::vec(safe_line_strategy(), 0..3),
+            marker in string_regex(r"[A-Z]{3,8}").unwrap(),
+            final_line in safe_line_strategy(),
+        ) {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("PRD.md");
+            fs::write(&path, "- [x] Done\n").unwrap();
+
+            let mut result = String::new();
+            for line in prefix {
+                result.push_str(&line);
+                result.push('\n');
+            }
+            result.push_str(&final_line);
+            result.push('\n');
+
+            let complete = check_completion(&path, &result, &marker).unwrap();
+            prop_assert!(!complete);
+        }
     }
 }
