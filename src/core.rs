@@ -1175,9 +1175,9 @@ mod tests {
             Some("ARCHITECTURE.md\nPROCESS.md"),
         );
 
-        assert!(rendered.contains(
-            "Context Files (read these first):\nARCHITECTURE.md\nPROCESS.md\n"
-        ));
+        assert!(
+            rendered.contains("Context Files (read these first):\nARCHITECTURE.md\nPROCESS.md\n")
+        );
         assert!(rendered.contains("Header"));
         assert!(rendered.contains("Footer"));
     }
@@ -1258,6 +1258,24 @@ mod tests {
 
         let resolved = resolve_prompt_template(project_dir, None).unwrap();
         assert_eq!(resolved, DEFAULT_PROMPT_TEMPLATE);
+
+        remove_env("GRALPH_PROMPT_TEMPLATE_FILE");
+    }
+
+    #[test]
+    fn resolve_prompt_template_ignores_env_path_when_not_file() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path();
+        let gralph_dir = project_dir.join(".gralph");
+        fs::create_dir_all(&gralph_dir).unwrap();
+        let project_path = gralph_dir.join("prompt-template.txt");
+        fs::write(&project_path, "project").unwrap();
+
+        set_env("GRALPH_PROMPT_TEMPLATE_FILE", project_dir);
+
+        let resolved = resolve_prompt_template(project_dir, None).unwrap();
+        assert_eq!(resolved, "project");
 
         remove_env("GRALPH_PROMPT_TEMPLATE_FILE");
     }
@@ -1407,6 +1425,45 @@ mod tests {
 
         assert!(!old_log.exists());
         assert!(recent_log.exists());
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn cleanup_old_logs_respects_retention_boundary() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let log_dir = temp.path().join(".gralph");
+        fs::create_dir_all(&log_dir).unwrap();
+
+        let config_path = temp.path().join("config.yaml");
+        fs::write(&config_path, "logging:\n  retain_days: 1\n").unwrap();
+        set_env("GRALPH_DEFAULT_CONFIG", &config_path);
+        let global_path = temp.path().join("missing-global.yaml");
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+
+        let old_log = log_dir.join("old.log");
+        let edge_log = log_dir.join("edge.log");
+        fs::write(&old_log, "old").unwrap();
+        fs::write(&edge_log, "edge").unwrap();
+
+        let base_time = SystemTime::now();
+        let old_time = base_time
+            .checked_sub(Duration::from_secs(86400 + 10))
+            .unwrap();
+        let edge_time = base_time
+            .checked_sub(Duration::from_secs(86400 - 10))
+            .unwrap();
+        set_modified(&old_log, old_time);
+        set_modified(&edge_log, edge_time);
+
+        cleanup_old_logs(&log_dir, Some(&config)).unwrap();
+
+        assert!(!old_log.exists());
+        assert!(edge_log.exists());
 
         remove_env("GRALPH_GLOBAL_CONFIG");
         remove_env("GRALPH_DEFAULT_CONFIG");
@@ -1668,10 +1725,7 @@ mod tests {
 
         let log_contents = fs::read_to_string(&log_path).unwrap();
         assert!(log_contents.contains("Error: backend produced no JSON output."));
-        assert!(log_contents.contains(&format!(
-            "Raw output saved to: {}",
-            raw_path.display()
-        )));
+        assert!(log_contents.contains(&format!("Raw output saved to: {}", raw_path.display())));
         assert!(raw_path.exists());
     }
 
@@ -1701,6 +1755,44 @@ mod tests {
             Err(CoreError::InvalidInput(message))
                 if message.contains("backend returned no parsed result")
         ));
+    }
+
+    #[test]
+    fn run_iteration_logs_raw_output_when_parsed_result_empty() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [ ] Task\n").unwrap();
+
+        let log_path = temp.path().join("loop.log");
+        let raw_path = raw_log_path(&log_path);
+
+        let backend = StubBackend::new("raw-output", Some("   "));
+        let result = run_iteration(
+            &backend,
+            temp.path(),
+            "PRD.md",
+            1,
+            1,
+            "COMPLETE",
+            None,
+            None,
+            Some(&log_path),
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message))
+                if message.contains("backend returned no parsed result")
+        ));
+
+        let log_contents = fs::read_to_string(&log_path).unwrap();
+        assert!(log_contents.contains("Error: backend returned no parsed result."));
+        assert!(log_contents.contains(&format!("Raw output saved to: {}", raw_path.display())));
+
+        let raw_contents = fs::read_to_string(&raw_path).unwrap();
+        assert_eq!(raw_contents, "raw-output");
     }
 
     #[test]
