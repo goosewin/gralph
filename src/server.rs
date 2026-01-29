@@ -637,6 +637,32 @@ mod tests {
     }
 
     #[test]
+    fn server_config_validate_allows_localhost_without_token() {
+        let config = ServerConfig {
+            host: "localhost".to_string(),
+            port: 8080,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn server_config_validate_allows_non_localhost_with_token() {
+        let config = ServerConfig {
+            host: "example.com".to_string(),
+            port: 8080,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
     fn resolve_cors_origin_allows_open_mode() {
         let config = ServerConfig {
             host: "0.0.0.0".to_string(),
@@ -646,9 +672,15 @@ mod tests {
             max_body_bytes: 4096,
         };
         let mut headers = HeaderMap::new();
-        headers.insert(axum::http::header::ORIGIN, "https://example.com".parse().unwrap());
+        headers.insert(
+            axum::http::header::ORIGIN,
+            "https://example.com".parse().unwrap(),
+        );
 
-        assert_eq!(resolve_cors_origin(&headers, &config), Some("*".to_string()));
+        assert_eq!(
+            resolve_cors_origin(&headers, &config),
+            Some("*".to_string())
+        );
     }
 
     #[test]
@@ -661,7 +693,10 @@ mod tests {
             max_body_bytes: 4096,
         };
         let mut headers = HeaderMap::new();
-        headers.insert(axum::http::header::ORIGIN, "http://localhost".parse().unwrap());
+        headers.insert(
+            axum::http::header::ORIGIN,
+            "http://localhost".parse().unwrap(),
+        );
 
         assert_eq!(
             resolve_cors_origin(&headers, &config),
@@ -679,7 +714,10 @@ mod tests {
             max_body_bytes: 4096,
         };
         let mut headers = HeaderMap::new();
-        headers.insert(axum::http::header::ORIGIN, "http://example.com".parse().unwrap());
+        headers.insert(
+            axum::http::header::ORIGIN,
+            "http://example.com".parse().unwrap(),
+        );
 
         assert_eq!(
             resolve_cors_origin(&headers, &config),
@@ -697,7 +735,58 @@ mod tests {
             max_body_bytes: 4096,
         };
         let mut headers = HeaderMap::new();
-        headers.insert(axum::http::header::ORIGIN, "https://example.com".parse().unwrap());
+        headers.insert(
+            axum::http::header::ORIGIN,
+            "https://example.com".parse().unwrap(),
+        );
+
+        assert_eq!(resolve_cors_origin(&headers, &config), None);
+    }
+
+    #[test]
+    fn resolve_cors_origin_returns_none_without_origin_header() {
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 8080,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let headers = HeaderMap::new();
+
+        assert_eq!(resolve_cors_origin(&headers, &config), None);
+    }
+
+    #[test]
+    fn resolve_cors_origin_returns_none_for_invalid_origin_header() {
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 8080,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let mut headers = HeaderMap::new();
+        let value = HeaderValue::from_bytes(b"http://example.com/\xFF").unwrap();
+        headers.insert(axum::http::header::ORIGIN, value);
+
+        assert_eq!(resolve_cors_origin(&headers, &config), None);
+    }
+
+    #[test]
+    fn resolve_cors_origin_rejects_wildcard_host_origin() {
+        let config = ServerConfig {
+            host: "0.0.0.0".to_string(),
+            port: 8080,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::ORIGIN,
+            "http://0.0.0.0".parse().unwrap(),
+        );
 
         assert_eq!(resolve_cors_origin(&headers, &config), None);
     }
@@ -807,8 +896,7 @@ mod tests {
             HeaderValue::from_static("Bearer "),
         );
 
-        let response =
-            check_auth(&headers, &state, None).expect("empty bearer token unauthorized");
+        let response = check_auth(&headers, &state, None).expect("empty bearer token unauthorized");
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
@@ -929,7 +1017,11 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: Value = serde_json::from_slice(&body).unwrap();
-        assert!(body.get("sessions").and_then(|value| value.as_array()).is_some());
+        assert!(
+            body.get("sessions")
+                .and_then(|value| value.as_array())
+                .is_some()
+        );
     }
 
     #[tokio::test]
@@ -1285,6 +1377,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn status_name_handler_returns_error_when_state_unreadable() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = temp.path().join("state");
+        let state_file = state_dir.join("state.json");
+        fs::create_dir_all(&state_dir).unwrap();
+        fs::create_dir_all(&state_file).unwrap();
+        let store = store_for_test(temp.path());
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/status/alpha")
+                    .method("GET")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert!(body["error"].as_str().unwrap().contains("state io error"));
+    }
+
+    #[tokio::test]
     async fn stop_endpoint_marks_session_stopped() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path());
@@ -1335,7 +1464,11 @@ mod tests {
         store
             .set_session(
                 "alpha",
-                &[("status", "running"), ("pid", "123"), ("tmux_session", "abc")],
+                &[
+                    ("status", "running"),
+                    ("pid", "123"),
+                    ("tmux_session", "abc"),
+                ],
             )
             .unwrap();
 
@@ -1432,6 +1565,43 @@ mod tests {
             .unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         assert_cors_headers(response.headers(), "http://localhost");
+    }
+
+    #[tokio::test]
+    async fn stop_handler_returns_error_when_state_unreadable() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = temp.path().join("state");
+        let state_file = state_dir.join("state.json");
+        fs::create_dir_all(&state_dir).unwrap();
+        fs::create_dir_all(&state_file).unwrap();
+        let store = store_for_test(temp.path());
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/stop/alpha")
+                    .method("POST")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert!(body["error"].as_str().unwrap().contains("state io error"));
     }
 
     #[tokio::test]
@@ -1537,8 +1707,17 @@ mod tests {
     #[test]
     fn enrich_session_handles_non_object_input() {
         let enriched = enrich_session(json!("not-a-map"));
-        assert_eq!(enriched.get("current_remaining").and_then(|v| v.as_i64()), Some(0));
-        assert_eq!(enriched.get("is_alive").and_then(|v| v.as_bool()), Some(false));
-        assert_eq!(enriched.get("status").and_then(|v| v.as_str()), Some("unknown"));
+        assert_eq!(
+            enriched.get("current_remaining").and_then(|v| v.as_i64()),
+            Some(0)
+        );
+        assert_eq!(
+            enriched.get("is_alive").and_then(|v| v.as_bool()),
+            Some(false)
+        );
+        assert_eq!(
+            enriched.get("status").and_then(|v| v.as_str()),
+            Some("unknown")
+        );
     }
 }

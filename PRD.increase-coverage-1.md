@@ -113,7 +113,7 @@ Expand tests for CLI flows, server endpoints, backend adapters, update workflow,
   * Add tests for ServerConfig.validate host and token combinations and resolve_cors_origin edge cases.
   * Add tests for status_name_handler and stop_handler failure cases.
 - **Dependencies** COV-CORE-1, COV-STATE-1, COV-PRD-1, COV-TASK-1
-- [ ] COV-SERVER-1 Add server auth and error-path coverage
+- [x] COV-SERVER-1 Add server auth and error-path coverage
 ### Task COV-NOTIFY-1
 
 - **ID** COV-NOTIFY-1
