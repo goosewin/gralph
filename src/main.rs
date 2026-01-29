@@ -2077,6 +2077,56 @@ mod tests {
         git_status_ok(dir, &["commit", "-m", "init"]);
     }
 
+    fn is_semver(value: &str) -> bool {
+        let (core, build) = match value.split_once('+') {
+            Some((left, right)) => (left, Some(right)),
+            None => (value, None),
+        };
+        let (core, pre) = match core.split_once('-') {
+            Some((left, right)) => (left, Some(right)),
+            None => (core, None),
+        };
+        let mut parts = core.split('.');
+        let major = parts.next().unwrap_or("");
+        let minor = parts.next().unwrap_or("");
+        let patch = parts.next().unwrap_or("");
+        if parts.next().is_some() {
+            return false;
+        }
+        for part in [major, minor, patch] {
+            if part.is_empty() || !part.chars().all(|ch| ch.is_ascii_digit()) {
+                return false;
+            }
+        }
+        if let Some(pre) = pre {
+            if pre.is_empty() {
+                return false;
+            }
+            if !pre.split('.').all(|ident| {
+                !ident.is_empty()
+                    && ident
+                        .chars()
+                        .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+            }) {
+                return false;
+            }
+        }
+        if let Some(build) = build {
+            if build.is_empty() {
+                return false;
+            }
+            if !build.split('.').all(|ident| {
+                !ident.is_empty()
+                    && ident
+                        .chars()
+                        .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+            }) {
+                return false;
+            }
+        }
+        true
+    }
+
     #[test]
     fn resolve_prd_output_handles_relative_and_absolute_paths() {
         let temp = tempfile::tempdir().unwrap();
@@ -2229,6 +2279,17 @@ mod tests {
         for value in ["", "maybe", "truthy", "2"] {
             assert_eq!(parse_bool_value(value), None);
         }
+    }
+
+    #[test]
+    fn version_constants_match_package() {
+        assert_eq!(version::VERSION, env!("CARGO_PKG_VERSION"));
+        assert_eq!(version::VERSION_TAG, format!("v{}", version::VERSION));
+    }
+
+    #[test]
+    fn version_constant_parses_as_semver() {
+        assert!(is_semver(version::VERSION));
     }
 
     #[test]

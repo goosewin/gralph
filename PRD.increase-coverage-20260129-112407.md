@@ -150,7 +150,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add a test that `VERSION_TAG` equals `format!("v{}", VERSION)`.
   * Add a test that `VERSION` matches `env!("CARGO_PKG_VERSION")` and parses as a semantic version.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-VERSION-1 Add version constant tests
+- [x] COV90-VERSION-1 Add version constant tests
 ### Task COV90-NOTIFY-1
 
 - **ID** COV90-NOTIFY-1
