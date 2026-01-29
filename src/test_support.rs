@@ -87,6 +87,46 @@ mod tests {
     }
 
     #[test]
+    fn env_lock_releases_under_contention_and_allows_reacquire() {
+        const WAITERS: usize = 2;
+        let barrier = Arc::new(Barrier::new(WAITERS + 1));
+        let (tx, rx) = mpsc::channel();
+        let mut handles = Vec::with_capacity(WAITERS);
+
+        for id in 0..WAITERS {
+            let barrier = Arc::clone(&barrier);
+            let tx = tx.clone();
+            handles.push(thread::spawn(move || {
+                barrier.wait();
+                let _guard = env_lock();
+                tx.send(id).expect("send acquired");
+                thread::sleep(Duration::from_millis(5));
+            }));
+        }
+
+        let guard = env_lock();
+        barrier.wait();
+        assert_eq!(
+            rx.recv_timeout(Duration::from_millis(25)),
+            Err(mpsc::RecvTimeoutError::Timeout)
+        );
+        drop(guard);
+
+        let mut acquired = Vec::with_capacity(WAITERS);
+        for _ in 0..WAITERS {
+            acquired.push(rx.recv_timeout(Duration::from_secs(1)).unwrap());
+        }
+        acquired.sort();
+        assert_eq!(acquired, vec![0, 1]);
+
+        for handle in handles {
+            assert!(handle.join().is_ok());
+        }
+
+        let _guard = env_lock();
+    }
+
+    #[test]
     fn env_lock_serializes_env_updates() {
         const THREADS: usize = 4;
         let barrier = Arc::new(Barrier::new(THREADS));
@@ -315,6 +355,50 @@ mod tests {
         }
 
         assert_eq!(max_active.load(Ordering::SeqCst), 1);
+        let _guard = env_lock();
+        assert_eq!(env::var_os(key), original);
+    }
+
+    #[test]
+    fn env_lock_restores_env_before_next_thread_runs() {
+        const THREADS: usize = 6;
+        let key = "GRALPH_ENV_LOCK_RESTORE_SEQUENCE_TEST";
+        let original = {
+            let _guard = env_lock();
+            env::var_os(key)
+        };
+
+        let barrier = Arc::new(Barrier::new(THREADS));
+        let mismatches = Arc::new(AtomicUsize::new(0));
+        let mut handles = Vec::with_capacity(THREADS);
+
+        for thread_id in 0..THREADS {
+            let barrier = Arc::clone(&barrier);
+            let mismatches = Arc::clone(&mismatches);
+            let original = original.clone();
+            handles.push(thread::spawn(move || {
+                barrier.wait();
+                let _guard = env_lock();
+                if env::var_os(key) != original {
+                    mismatches.fetch_add(1, Ordering::SeqCst);
+                }
+                let value = format!("sequence-{thread_id}");
+                set_env(key, &value);
+                assert_eq!(env::var(key).as_deref(), Ok(value.as_str()));
+                if let Some(value) = &original {
+                    set_env(key, value);
+                } else {
+                    remove_env(key);
+                }
+                assert_eq!(env::var_os(key), original);
+            }));
+        }
+
+        for handle in handles {
+            assert!(handle.join().is_ok());
+        }
+
+        assert_eq!(mismatches.load(Ordering::SeqCst), 0);
         let _guard = env_lock();
         assert_eq!(env::var_os(key), original);
     }

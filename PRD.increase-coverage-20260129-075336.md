@@ -192,7 +192,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add tests to confirm env_lock releases under contention and allows subsequent acquisitions.
   * Add tests for env restore sequencing across multiple threads.
 - **Dependencies** None
-- [ ] COV-TESTSUPPORT-1 Expand env_lock resilience tests
+- [x] COV-TESTSUPPORT-1 Expand env_lock resilience tests
 ### Task COV-UPDATE-1
 
 - **ID** COV-UPDATE-1
