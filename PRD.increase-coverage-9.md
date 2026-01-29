@@ -159,7 +159,7 @@ Expand tests around public APIs, adapter command assembly, and failure handling 
   * Tests cover parse_text errors for missing files and directories.
   * Tests cover non-zero exit handling in run_iteration.
 - **Dependencies** None
-- [ ] COV-9 Expand Codex backend tests in src/backend/codex.rs
+- [x] COV-9 Expand Codex backend tests in src/backend/codex.rs
 ---
 
 ### Task COV-10
