@@ -242,7 +242,7 @@ Add tests for backends, server, verifier, update, notify, config, and CLI helper
   * PROCESS guidance updated to reflect the new signal level.
   * CHANGELOG entry added with the task ID.
 - **Dependencies** COV90-CI-1
-- [ ] COV90-CI-2 Raise soft coverage target to 75 to 80 percent
+- [x] COV90-CI-2 Raise soft coverage target to 75 to 80 percent
 ---
 
 ## Success Criteria
