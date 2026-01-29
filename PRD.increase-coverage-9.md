@@ -211,7 +211,7 @@ Expand tests around public APIs, adapter command assembly, and failure handling 
   * Tests cover `validate_task_id` for valid and invalid formats.
   * Tests cover `resolve_log_file` fallback and `parse_bool_value` option parsing.
 - **Dependencies** None
-- [ ] COV-13 Add CLI helper and worktree logic tests in src/main.rs
+- [x] COV-13 Add CLI helper and worktree logic tests in src/main.rs
 ---
 
 ### Task COV-14

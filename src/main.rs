@@ -2223,7 +2223,18 @@ mod tests {
 
     #[test]
     fn validate_task_id_rejects_invalid_formats() {
-        for value in ["", "A", "A-", "-1", "1-2", "A-1b", "A-1-2", "A_1"] {
+        for value in [
+            "",
+            "A",
+            "A-",
+            "-1",
+            "1-2",
+            "1A-2",
+            "A--1",
+            "A-1b",
+            "A-1-2",
+            "A_1",
+        ] {
             assert!(validate_task_id(value).is_err(), "expected invalid: {value}");
         }
     }
@@ -2239,6 +2250,7 @@ mod tests {
         assert_eq!(sanitize_session_name(""), "");
         assert_eq!(sanitize_session_name("   "), "---");
         assert_eq!(sanitize_session_name("\t"), "-");
+        assert_eq!(sanitize_session_name("!!!"), "---");
     }
 
     #[test]
@@ -2262,6 +2274,14 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let resolved = session_name(&None, &dir).unwrap();
         assert_eq!(resolved, "My-Session-2026-");
+    }
+
+    #[test]
+    fn session_name_uses_raw_basename_when_canonicalize_fails() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path().join("Missing Dir@2026!");
+        let resolved = session_name(&None, &dir).unwrap();
+        assert_eq!(resolved, "Missing-Dir-2026-");
     }
 
     #[test]
