@@ -193,7 +193,7 @@ Add tests around CLI helpers, server handlers, notification payloads, update wor
   * Add tests for flag ordering when model is None or empty.
   * Add tests for invalid UTF-8 parsing error propagation.
 - **Dependencies** None
-- [ ] COV-BACKEND-CODEX-1 Expand Codex adapter ordering and parse error coverage
+- [x] COV-BACKEND-CODEX-1 Expand Codex adapter ordering and parse error coverage
 ### Task COV-TESTSUPPORT-1
 
 - **ID** COV-TESTSUPPORT-1
