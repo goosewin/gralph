@@ -133,7 +133,7 @@ Expand tests around public APIs, adapter command assembly, and failure handling 
   * Tests cover empty model and variant handling.
   * Tests cover spawn failure error formatting and parse_text behavior for empty files.
 - **Dependencies** None
-- [ ] COV-7 Expand OpenCode backend tests in src/backend/opencode.rs
+- [x] COV-7 Expand OpenCode backend tests in src/backend/opencode.rs
 ---
 
 ### Task COV-8

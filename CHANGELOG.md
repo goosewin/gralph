@@ -34,6 +34,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-6 Expand CLI helper coverage in main.
 - COV-6 Expand Claude backend parsing and argument tests.
 - COV-7 Expand server auth and CORS error-path coverage.
+- COV-7 Expand OpenCode backend env flags, argument ordering, and error-path tests.
 - COV-8 Expand notification formatting helper and payload coverage.
 - COV-9 Expand backend module utility coverage.
 - COV-9 Add notify validation and failure formatting tests.
