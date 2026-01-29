@@ -719,6 +719,26 @@ mod tests {
     }
 
     #[test]
+    fn detect_webhook_type_handles_variants_and_non_matches() {
+        assert_eq!(
+            detect_webhook_type("https://discord.com/api/webhooks/123?wait=true"),
+            WebhookType::Discord
+        );
+        assert_eq!(
+            detect_webhook_type("https://hooks.slack.com/services/123?mode=test"),
+            WebhookType::Slack
+        );
+        assert_eq!(
+            detect_webhook_type("https://discord.com/api/users/123"),
+            WebhookType::Generic
+        );
+        assert_eq!(
+            detect_webhook_type("https://slack.com/hooks/123"),
+            WebhookType::Generic
+        );
+    }
+
+    #[test]
     fn format_discord_complete_payload_fields() {
         let payload =
             format_discord_complete("alpha", "./demo", "7", "2m 4s", "2026-01-26T10:11:12Z")
@@ -1153,6 +1173,42 @@ mod tests {
         assert_eq!(
             value["message"],
             "Gralph loop 'session' failed: mystery after 1 iterations"
+        );
+
+        handle.join().expect("server thread");
+    }
+
+    #[test]
+    fn notify_failed_includes_generic_payload_fields_for_unknown_reason() {
+        let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
+
+        notify_failed(
+            "session",
+            &format!("{}/failed", base),
+            Some("mystery"),
+            Some("repo"),
+            Some(2),
+            Some(5),
+            Some(1),
+            Some(3599),
+            Some(5),
+        )
+        .expect("notify failed");
+
+        let request = captured.lock().unwrap().clone().expect("captured request");
+        let value: Value = serde_json::from_str(&request.body).expect("json payload");
+
+        assert_eq!(value["event"], "failed");
+        assert_eq!(value["status"], "failure");
+        assert_eq!(value["reason"], "mystery");
+        assert_eq!(value["project"], "repo");
+        assert_eq!(value["iterations"], "2");
+        assert_eq!(value["max_iterations"], "5");
+        assert_eq!(value["remaining_tasks"], "1");
+        assert_eq!(value["duration"], "59m 59s");
+        assert_eq!(
+            value["message"],
+            "Gralph loop 'session' failed: mystery after 2 iterations"
         );
 
         handle.join().expect("server thread");

@@ -133,7 +133,7 @@ Add tests around CLI helpers, server handlers, notification payloads, update wor
   * Add unit tests for format_duration boundary values and unknown reasons.
   * Add tests for detect_webhook_type and generic payload field inclusion.
 - **Dependencies** None
-- [ ] COV-NOTIFY-1 Extend notification formatting and detection coverage
+- [x] COV-NOTIFY-1 Extend notification formatting and detection coverage
 ### Task COV-UPDATE-1
 
 - **ID** COV-UPDATE-1
