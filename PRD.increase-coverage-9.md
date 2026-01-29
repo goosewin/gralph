@@ -224,7 +224,7 @@ Expand tests around public APIs, adapter command assembly, and failure handling 
   * Tests cover install_release failure paths for missing archives or extraction errors.
   * Tests cover PATH resolution behavior when a different binary is found first.
 - **Dependencies** None
-- [ ] COV-14 Expand update check and install error-path tests in src/update.rs
+- [x] COV-14 Expand update check and install error-path tests in src/update.rs
 ---
 
 ### Task COV-15

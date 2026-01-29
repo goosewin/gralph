@@ -26,6 +26,19 @@ fn release_url() -> String {
     RELEASE_URL.to_string()
 }
 
+fn release_download_url() -> String {
+    #[cfg(test)]
+    {
+        if let Ok(value) = env::var("GRALPH_TEST_RELEASE_DOWNLOAD_URL") {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+    RELEASE_DOWNLOAD_URL.to_string()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UpdateInfo {
     pub current: String,
@@ -180,7 +193,10 @@ pub fn install_release() -> Result<InstallOutcome, UpdateError> {
 
     let url = format!(
         "{}/v{}/gralph-{}-{}.tar.gz",
-        RELEASE_DOWNLOAD_URL, version, version, platform
+        release_download_url(),
+        version,
+        version,
+        platform
     );
     let temp_dir = TempDir::new("gralph-update")?;
     let archive_path = temp_dir.path.join("gralph.tar.gz");
@@ -580,6 +596,25 @@ mod tests {
     }
 
     #[test]
+    fn check_for_update_rejects_invalid_current_version() {
+        let _lock = crate::test_support::env_lock();
+        let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "v1.2.3");
+        let result = check_for_update("not-a-version");
+        assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
+    fn check_for_update_reports_http_error() {
+        let _lock = crate::test_support::env_lock();
+        let (url, handle) = start_status_server("500 Internal Server Error", "boom");
+        let _url_guard = EnvGuard::set("GRALPH_TEST_RELEASE_URL", &url);
+        let _tag_guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "");
+        let result = check_for_update("0.1.0");
+        handle.join().expect("server thread");
+        assert!(matches!(result, Err(UpdateError::Http(_))));
+    }
+
+    #[test]
     fn release_url_prefers_test_override() {
         let _lock = crate::test_support::env_lock();
         let _guard = EnvGuard::set("GRALPH_TEST_RELEASE_URL", "  http://localhost/test ");
@@ -710,6 +745,21 @@ mod tests {
     }
 
     #[test]
+    fn resolve_in_path_prefers_first_match() {
+        let _lock = crate::test_support::env_lock();
+        let first = tempdir().expect("tempdir");
+        let second = tempdir().expect("tempdir");
+        let first_path = first.path().join("gralph");
+        let second_path = second.path().join("gralph");
+        fs::write(&first_path, "first").expect("write");
+        fs::write(&second_path, "second").expect("write");
+        let joined = env::join_paths([first.path(), second.path()]).expect("join paths");
+        let _guard = PathGuard::set(Some(joined.as_os_str()));
+        let resolved = resolve_in_path("gralph");
+        assert_eq!(resolved.as_deref(), Some(first_path.as_path()));
+    }
+
+    #[test]
     fn resolve_in_path_handles_missing_and_empty_path() {
         let _lock = crate::test_support::env_lock();
         {
@@ -806,6 +856,38 @@ mod tests {
         result.expect("download");
         let contents = fs::read(&dest).expect("read");
         assert_eq!(contents, b"fixture-bytes");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn install_release_reports_missing_archive() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempdir().expect("tempdir");
+        let install_dir = temp.path().join("install");
+        let install_dir_value = install_dir.to_string_lossy().to_string();
+        let _install_guard = EnvGuard::set("GRALPH_INSTALL_DIR", &install_dir_value);
+        let _version_guard = EnvGuard::set("GRALPH_VERSION", "1.2.3");
+        let (url, handle) = start_status_server("404 Not Found", "missing");
+        let _download_guard = EnvGuard::set("GRALPH_TEST_RELEASE_DOWNLOAD_URL", &url);
+        let result = install_release();
+        handle.join().expect("server thread");
+        assert!(matches!(result, Err(UpdateError::Http(_))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_release_reports_extract_failure() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempdir().expect("tempdir");
+        let install_dir = temp.path().join("install");
+        let install_dir_value = install_dir.to_string_lossy().to_string();
+        let _install_guard = EnvGuard::set("GRALPH_INSTALL_DIR", &install_dir_value);
+        let _version_guard = EnvGuard::set("GRALPH_VERSION", "1.2.3");
+        let (url, handle) = start_status_server("200 OK", "not a tar");
+        let _download_guard = EnvGuard::set("GRALPH_TEST_RELEASE_DOWNLOAD_URL", &url);
+        let result = install_release();
+        handle.join().expect("server thread");
+        assert!(matches!(result, Err(UpdateError::CommandFailed(_))));
     }
 
     #[test]
