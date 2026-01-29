@@ -165,7 +165,7 @@ Add tests for backends, server, verifier, update, notify, config, and CLI helper
   * Tests cover parse_text selection of last valid result.
   * Tests cover run_iteration model flag inclusion and empty prompt validation.
 - **Dependencies** COV90-CORE-1, COV90-STATE-1, COV90-PRD-1, COV90-TASK-1
-- [ ] COV90-BACKEND-CLAUDE-1 Expand Claude backend parsing and error tests
+- [x] COV90-BACKEND-CLAUDE-1 Expand Claude backend parsing and error tests
 ### Task COV90-BACKEND-OPENCODE-1
 
 - **ID** COV90-BACKEND-OPENCODE-1

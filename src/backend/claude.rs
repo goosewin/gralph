@@ -375,6 +375,19 @@ mod tests {
     }
 
     #[test]
+    fn parse_text_keeps_last_valid_result_when_trailing_results_are_invalid() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents =
+            "{\"type\":\"result\",\"result\":\"first\"}\n{\"type\":\"result\"}\n{\"type\":\"result\",\"result\":null}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, "first");
+    }
+
+    #[test]
     fn parse_text_returns_result_when_not_last() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("stream.json");
@@ -438,6 +451,21 @@ mod tests {
     fn parse_text_returns_io_error_for_missing_file() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("missing.json");
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path);
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path: error_path, .. }) if error_path == path
+        ));
+    }
+
+    #[test]
+    fn parse_text_returns_io_error_for_directory_path() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("dir");
+        fs::create_dir(&path).unwrap();
 
         let backend = ClaudeBackend::new();
         let result = backend.parse_text(&path);
