@@ -122,7 +122,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add tests ensuring --headless is always present and prompt is last.
   * Add tests for model flag omission when empty and parse_text error paths.
 - **Dependencies** None
-- [ ] COV-BACKEND-GEMINI-1 Add Gemini adapter tests for headless and args
+- [x] COV-BACKEND-GEMINI-1 Add Gemini adapter tests for headless and args
 ### Task COV-BACKEND-CODEX-1
 
 - **ID** COV-BACKEND-CODEX-1
