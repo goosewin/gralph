@@ -183,7 +183,7 @@ Expand tests for CLI flows, server endpoints, backend adapters, update workflow,
   * Add tests verifying --headless ordering and prompt placement in run_iteration.
   * Add tests for parse_text errors on directories and skipping empty models.
 - **Dependencies** COV-CORE-1, COV-STATE-1, COV-PRD-1, COV-TASK-1
-- [ ] COV-BACKEND-GEMINI-1 Add Gemini adapter edge-case tests
+- [x] COV-BACKEND-GEMINI-1 Add Gemini adapter edge-case tests
 ### Task COV-BACKEND-CODEX-1
 
 - **ID** COV-BACKEND-CODEX-1
