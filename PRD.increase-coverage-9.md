@@ -198,7 +198,7 @@ Expand tests around public APIs, adapter command assembly, and failure handling 
   * Tests cover generic payload optional fields for failure reasons.
   * Tests cover send_webhook default timeout when None or zero.
 - **Dependencies** None
-- [ ] COV-12 Expand notification formatting and timeout tests in src/notify.rs
+- [x] COV-12 Expand notification formatting and timeout tests in src/notify.rs
 ---
 
 ### Task COV-13

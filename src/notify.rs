@@ -776,6 +776,19 @@ mod tests {
     }
 
     #[test]
+    fn format_generic_complete_omits_failure_reason_fields() {
+        let payload =
+            format_generic_complete("delta", "repo", "2", "9s", "2026-01-26T12:13:14Z")
+                .expect("generic payload");
+        let value: Value = serde_json::from_str(&payload).expect("json payload");
+        let object = value.as_object().expect("payload object");
+
+        assert!(!object.contains_key("reason"));
+        assert!(!object.contains_key("max_iterations"));
+        assert!(!object.contains_key("remaining_tasks"));
+    }
+
+    #[test]
     fn format_generic_complete_message_assembly() {
         let payload = format_generic_complete(
             "alpha",
@@ -1017,6 +1030,33 @@ mod tests {
     }
 
     #[test]
+    fn notify_failed_defaults_reason_when_missing_for_generic_payload() {
+        let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
+
+        notify_failed(
+            "session",
+            &format!("{}/failed", base),
+            None,
+            Some("repo"),
+            Some(1),
+            Some(2),
+            Some(3),
+            Some(4),
+            Some(5),
+        )
+        .expect("notify failed");
+
+        let request = captured.lock().unwrap().clone().expect("captured request");
+        let value: Value = serde_json::from_str(&request.body).expect("json payload");
+
+        assert_eq!(value["event"], "failed");
+        assert_eq!(value["status"], "failure");
+        assert_eq!(value["reason"], "unknown");
+
+        handle.join().expect("server thread");
+    }
+
+    #[test]
     fn format_discord_failed_reason_mappings() {
         let reasons = ["max_iterations", "error", "manual_stop", "timeout"];
         for reason in reasons {
@@ -1209,6 +1249,7 @@ mod tests {
         assert_eq!(format_duration(Some(65)), "1m 5s");
         assert_eq!(format_duration(Some(3600)), "1h 0m 0s");
         assert_eq!(format_duration(Some(3661)), "1h 1m 1s");
+        assert_eq!(format_duration(Some(90061)), "25h 1m 1s");
     }
 
     #[test]
@@ -1288,6 +1329,18 @@ mod tests {
         let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
 
         send_webhook(&format!("{}/default", base), payload, Some(0))
+            .expect("send webhook");
+
+        assert!(captured.lock().unwrap().is_some());
+        handle.join().expect("server thread");
+    }
+
+    #[test]
+    fn send_webhook_defaults_timeout_when_none() {
+        let payload = "{}";
+        let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
+
+        send_webhook(&format!("{}/default-none", base), payload, None)
             .expect("send webhook");
 
         assert!(captured.lock().unwrap().is_some());
