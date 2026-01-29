@@ -108,6 +108,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV90-BACKEND-CODEX-1 Expand Codex backend flag ordering and error tests.
 - COV90-NOTIFY-1 Add notify payload formatting, duration edge-case, and HTTP status tests.
 - COV90-UPDATE-1 Add update workflow error path tests.
+- COV90-TESTSUPPORT-1 Add env_lock stress and recovery tests.
 - COV-9 Expand update check and archive error coverage.
 - COV-31 Expand verifier parsing and static check coverage.
 - COV-VERIFIER-1 Cover verifier parsing and static checks.

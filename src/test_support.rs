@@ -235,4 +235,87 @@ mod tests {
 
         assert_eq!(max_active.load(Ordering::SeqCst), 1);
     }
+
+    #[test]
+    fn env_lock_recovers_and_restores_env_after_panic() {
+        let key = "GRALPH_ENV_LOCK_PANIC_RESTORE_TEST";
+        let original = {
+            let _guard = env_lock();
+            env::var_os(key)
+        };
+
+        let result = std::panic::catch_unwind(|| {
+            let _guard = env_lock();
+            set_env(key, "poisoned");
+            panic!("panic while holding env lock");
+        });
+
+        assert!(result.is_err());
+
+        let _guard = env_lock();
+        if let Some(value) = &original {
+            set_env(key, value);
+        } else {
+            remove_env(key);
+        }
+        assert_eq!(env::var_os(key), original);
+    }
+
+    #[test]
+    fn env_lock_serializes_env_restore_under_contention() {
+        const THREADS: usize = 8;
+        let key = "GRALPH_ENV_LOCK_RESTORE_CONTEND_TEST";
+        let original = {
+            let _guard = env_lock();
+            env::var_os(key)
+        };
+
+        let barrier = Arc::new(Barrier::new(THREADS));
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
+        let mut handles = Vec::with_capacity(THREADS);
+
+        for thread_id in 0..THREADS {
+            let barrier = Arc::clone(&barrier);
+            let active = Arc::clone(&active);
+            let max_active = Arc::clone(&max_active);
+            let original = original.clone();
+            handles.push(thread::spawn(move || {
+                barrier.wait();
+                let _guard = env_lock();
+                let now = active.fetch_add(1, Ordering::SeqCst) + 1;
+                loop {
+                    let current = max_active.load(Ordering::SeqCst);
+                    if now <= current {
+                        break;
+                    }
+                    if max_active
+                        .compare_exchange(current, now, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_ok()
+                    {
+                        break;
+                    }
+                }
+                let value = format!("contended-{thread_id}");
+                set_env(key, &value);
+                assert_eq!(env::var(key).as_deref(), Ok(value.as_str()));
+                if let Some(value) = &original {
+                    set_env(key, value);
+                } else {
+                    remove_env(key);
+                }
+                assert_eq!(env::var_os(key), original);
+                thread::sleep(Duration::from_millis(2));
+                active.fetch_sub(1, Ordering::SeqCst);
+            }));
+        }
+
+        for handle in handles {
+            assert!(handle.join().is_ok());
+        }
+
+        assert_eq!(max_active.load(Ordering::SeqCst), 1);
+        let _guard = env_lock();
+        assert_eq!(env::var_os(key), original);
+    }
 }

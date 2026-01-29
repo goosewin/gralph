@@ -220,7 +220,7 @@ Add tests for backends, server, verifier, update, notify, config, and CLI helper
   * Tests confirm env values are restored safely after guarded changes.
   * Tests avoid direct env mutation outside env_lock.
 - **Dependencies** COV90-CORE-1, COV90-STATE-1, COV90-PRD-1, COV90-TASK-1
-- [ ] COV90-TESTSUPPORT-1 Add env_lock stress and recovery tests
+- [x] COV90-TESTSUPPORT-1 Add env_lock stress and recovery tests
 ### Task COV90-CI-1
 
 - **ID** COV90-CI-1
