@@ -132,7 +132,7 @@ Add tests for backends, server, verifier, update, notify, config, and CLI helper
   * Tests cover unauthorized responses for malformed Authorization headers.
   * Tests cover status handlers when session data is incomplete.
 - **Dependencies** COV90-CORE-1, COV90-STATE-1, COV90-PRD-1, COV90-TASK-1
-- [ ] COV90-SERVER-1 Add server auth and CORS error path tests
+- [x] COV90-SERVER-1 Add server auth and CORS error path tests
 ### Task COV90-NOTIFY-1
 
 - **ID** COV90-NOTIFY-1

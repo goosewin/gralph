@@ -1058,6 +1058,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn status_endpoint_rejects_malformed_authorization_header() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/status")
+                    .method("GET")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer\tsecret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["error"], "Invalid or missing Bearer token");
+    }
+
+    #[tokio::test]
     async fn status_endpoint_returns_sessions_with_valid_token() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path());
@@ -1099,6 +1132,48 @@ mod tests {
             sessions[0].get("name").and_then(|value| value.as_str()),
             Some("alpha")
         );
+    }
+
+    #[tokio::test]
+    async fn status_endpoint_handles_incomplete_session_data() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+        store.set_session("alpha", &[]).unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/status")
+                    .method("GET")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        let sessions = body
+            .get("sessions")
+            .and_then(|value| value.as_array())
+            .unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0]["name"], "alpha");
+        assert_eq!(sessions[0]["status"], "unknown");
+        assert_eq!(sessions[0]["current_remaining"], 0);
+        assert_eq!(sessions[0]["is_alive"], false);
     }
 
     #[tokio::test]
@@ -1195,6 +1270,40 @@ mod tests {
                 .and_then(|value| value.to_str().ok()),
             Some("GET, POST, OPTIONS")
         );
+    }
+
+    #[tokio::test]
+    async fn options_handler_allows_wildcard_origin_in_open_mode() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "0.0.0.0".to_string(),
+            port: 0,
+            token: None,
+            open: true,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/status")
+                    .method("OPTIONS")
+                    .header(axum::http::header::ORIGIN, "https://example.com")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        let headers = response.headers();
+        assert_cors_headers(headers, "*");
+        assert!(headers.get(axum::http::header::VARY).is_none());
     }
 
     #[tokio::test]
@@ -1685,6 +1794,44 @@ mod tests {
         });
         let enriched = enrich_session(session);
         assert_eq!(enriched["current_remaining"], 1);
+    }
+
+    #[test]
+    fn enrich_session_returns_zero_when_task_file_missing() {
+        let temp = tempfile::tempdir().unwrap();
+
+        let session = json!({
+            "name": "alpha",
+            "status": "idle",
+            "pid": 0,
+            "dir": temp.path().to_string_lossy(),
+            "task_file": "missing.md",
+        });
+        let enriched = enrich_session(session);
+        assert_eq!(enriched["current_remaining"], 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn enrich_session_returns_zero_when_task_file_unreadable() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let task_path = temp.path().join("tasks.md");
+        fs::write(&task_path, "- [ ] First\n- [x] Done\n").unwrap();
+        let mut permissions = fs::metadata(&task_path).unwrap().permissions();
+        permissions.set_mode(0o000);
+        fs::set_permissions(&task_path, permissions).unwrap();
+
+        let session = json!({
+            "name": "alpha",
+            "status": "idle",
+            "pid": 0,
+            "dir": temp.path().to_string_lossy(),
+            "task_file": "tasks.md",
+        });
+        let enriched = enrich_session(session);
+        assert_eq!(enriched["current_remaining"], 0);
     }
 
     #[test]
