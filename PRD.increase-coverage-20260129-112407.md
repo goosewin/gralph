@@ -85,7 +85,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add tests for review gate decisions (pending, failed, passed) based on rating and issues.
   * Add tests for static check settings parsing and failure reporting.
 - **Dependencies** None
-- [ ] COV90-VERIFIER-1 Expand verifier parsing and review gate coverage
+- [x] COV90-VERIFIER-1 Expand verifier parsing and review gate coverage
 ### Task COV90-CONFIG-1
 
 - **ID** COV90-CONFIG-1

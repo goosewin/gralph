@@ -2266,6 +2266,48 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn run_gh_pr_create_reports_failure_output() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\necho \"create failed\" 1>&2\nexit 1\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+        let template = temp.path().join("PULL_REQUEST_TEMPLATE.md");
+        fs::write(&template, "template\n").unwrap();
+
+        let err = run_gh_pr_create(temp.path(), &template, "feature", "main", "title").unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("gh pr create failed: create failed"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_gh_pr_create_reports_empty_failure() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\nexit 1\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+        let template = temp.path().join("pull_request_template.md");
+        fs::write(&template, "template\n").unwrap();
+
+        let err = run_gh_pr_create(temp.path(), &template, "feature", "main", "title").unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("gh pr create failed."));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
     #[test]
     fn parse_percent_from_line_returns_last_percent() {
         let value = parse_percent_from_line("Coverage 55.1% (line 88.2%)").unwrap();
@@ -2424,6 +2466,23 @@ mod tests {
                     "author": { "login": "greptile" },
                     "state": "APPROVED",
                     "body": "Looks good overall.",
+                    "submittedAt": "2024-01-02T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Pending(message) if message.contains("rating")));
+    }
+
+    #[test]
+    fn evaluate_review_gate_waits_for_rating_with_issue_count() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "APPROVED",
+                    "body": "Issues: 0",
                     "submittedAt": "2024-01-02T00:00:00Z"
                 }
             ]
@@ -2626,6 +2685,56 @@ mod tests {
         let settings = resolve_static_check_settings(&config).unwrap();
         assert!(!settings.enabled);
         assert!(!settings.check_todo);
+    }
+
+    #[test]
+    fn resolve_static_check_settings_parses_patterns_and_markers() {
+        let _guard = env_guard();
+        let config = load_project_config(
+            "verifier:\n  static_checks:\n    enabled: true\n    todo: false\n    comments: false\n    duplicate: true\n    allow: \" ./src/*.rs , docs/*.md \"\n    ignore: \" ./target/**, ./.gralph/** \"\n    todo_markers: \"todo,FixMe,TODO\"\n    max_comment_lines: 5\n    max_comment_chars: 120\n    duplicate_block_lines: 3\n    duplicate_min_alnum_lines: 2\n    max_file_bytes: 2048\n",
+        );
+        let settings = resolve_static_check_settings(&config).unwrap();
+        assert!(settings.enabled);
+        assert!(!settings.check_todo);
+        assert!(!settings.check_comments);
+        assert!(settings.check_duplicates);
+        assert_eq!(
+            settings.allow_patterns,
+            vec!["src/*.rs".to_string(), "docs/*.md".to_string()]
+        );
+        assert_eq!(
+            settings.ignore_patterns,
+            vec!["target/**".to_string(), ".gralph/**".to_string()]
+        );
+        assert_eq!(
+            settings.todo_markers,
+            vec!["FIXME".to_string(), "TODO".to_string()]
+        );
+        assert_eq!(settings.max_comment_lines, 5);
+        assert_eq!(settings.max_comment_chars, 120);
+        assert_eq!(settings.duplicate_block_lines, 3);
+        assert_eq!(settings.duplicate_min_alnum_lines, 2);
+        assert_eq!(settings.max_file_bytes, 2048);
+    }
+
+    #[test]
+    fn run_verifier_static_checks_reports_violations() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src")).unwrap();
+        fs::write(temp.path().join("src/lib.rs"), "// TODO: fix\n").unwrap();
+        let config = load_project_config(
+            "verifier:\n  static_checks:\n    enabled: true\n    todo: true\n    comments: false\n    duplicate: false\n    allow: \"src/*.rs\"\n",
+        );
+
+        let err = run_verifier_static_checks(temp.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Static checks failed"));
+                assert!(message.contains("1"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
     }
 
     #[test]

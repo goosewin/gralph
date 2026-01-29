@@ -108,6 +108,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-CI-1 Set initial soft coverage warning target to 65 to 70 percent.
 - COV-CI-2 Document soft coverage warning target in README.
 - COV90-VER-1 Add verifier parsing, review gate, and gh error handling tests.
+- COV90-VERIFIER-1 Expand verifier static check parsing and PR creation error coverage.
 - COV90-MAIN-1 Add CLI helper tests for session naming and worktree branch formatting.
 - COV90-SERVER-1 Add server auth, CORS, and session enrichment edge-case tests.
 - COV90-BACKEND-MOD-1 Add backend module PATH and streaming tests.
