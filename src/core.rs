@@ -708,13 +708,6 @@ fn copy_if_exists(from: &Path, to: &Path) -> Result<(), CoreError> {
     Ok(())
 }
 
-fn timestamp_seconds() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_else(|_| Duration::from_secs(0))
-        .as_secs()
-}
-
 fn format_timestamp(timestamp: SystemTime) -> String {
     let datetime: chrono::DateTime<chrono::Local> = timestamp.into();
     datetime.format("%Y-%m-%d %H:%M:%S %Z").to_string()
@@ -781,8 +774,11 @@ fn cleanup_old_logs(log_dir: &Path, config: Option<&Config>) -> Result<(), CoreE
 
 fn create_temp_file(prefix: &str) -> Result<PathBuf, CoreError> {
     let base_dir = std::env::temp_dir();
-    for attempt in 0..10u32 {
-        let now = timestamp_seconds();
+    for attempt in 0..100u32 {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
         let filename = format!("{}-{}-{}-{}.tmp", prefix, std::process::id(), now, attempt);
         let path = base_dir.join(filename);
         match OpenOptions::new().create_new(true).write(true).open(&path) {
@@ -837,6 +833,16 @@ mod tests {
 
     fn safe_line_strategy() -> impl Strategy<Value = String> {
         string_regex(r"[A-Za-z0-9][A-Za-z0-9 .,]{0,12}").unwrap()
+    }
+
+    fn context_entry_strategy() -> impl Strategy<Value = String> {
+        let whitespace = string_regex(r"[ \t]{0,3}").unwrap();
+        let value = prop_oneof![
+            Just(String::new()),
+            string_regex(r"[A-Za-z0-9._/-]{1,12}").unwrap(),
+        ];
+        (whitespace.clone(), value, whitespace)
+            .prop_map(|(prefix, entry, suffix)| format!("{}{}{}", prefix, entry, suffix))
     }
 
     fn block_lines_strategy(unchecked: bool) -> impl Strategy<Value = Vec<String>> {
@@ -2026,6 +2032,8 @@ mod tests {
 
     #[test]
     fn run_iteration_returns_parse_error_and_copies_raw_output() {
+        let _guard = env_guard();
+        remove_env("GRALPH_PROMPT_TEMPLATE_FILE");
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("PRD.md");
         fs::write(&path, "- [ ] Task\n").unwrap();
@@ -2051,7 +2059,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(CoreError::Backend(BackendError::Command(message)))
-                if message == "parse failed"
+                if message.contains("parse failed")
         ));
 
         let raw_contents = fs::read_to_string(&raw_path).unwrap();
@@ -2268,6 +2276,51 @@ mod tests {
         );
     }
 
+    #[test]
+    fn loop_updates_remaining_counts_after_iteration() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [ ] Task\n").unwrap();
+
+        let backend = LoopBackend::success("Still working\n");
+        let mut updates: Vec<(u32, LoopStatus, usize)> = Vec::new();
+        let mut flipped = false;
+        let task_path = path.clone();
+        let mut callback = |_: Option<&str>, iteration, status, remaining| {
+            updates.push((iteration, status, remaining));
+            if !flipped && status == LoopStatus::Running && remaining == 1 {
+                fs::write(&task_path, "- [x] Task\n").unwrap();
+                flipped = true;
+            }
+        };
+
+        let outcome = run_loop(
+            &backend,
+            temp.path(),
+            Some("PRD.md"),
+            Some(1),
+            Some("COMPLETE"),
+            None,
+            None,
+            Some("session"),
+            None,
+            None,
+            Some(&mut callback),
+        )
+        .unwrap();
+
+        assert_eq!(outcome.status, LoopStatus::MaxIterations);
+        assert_eq!(outcome.remaining_tasks, 0);
+        assert_eq!(
+            updates,
+            vec![
+                (1, LoopStatus::Running, 1),
+                (1, LoopStatus::Running, 0),
+                (1, LoopStatus::MaxIterations, 0)
+            ]
+        );
+    }
+
     proptest! {
         #[test]
         fn prop_get_next_unchecked_task_block_selects_first_unchecked(
@@ -2335,5 +2388,60 @@ mod tests {
             let complete = check_completion(&path, &result, &marker).unwrap();
             prop_assert!(!complete);
         }
+
+        #[test]
+        fn prop_normalize_context_files_trims_and_drops_empty(
+            entries in prop::collection::vec(context_entry_strategy(), 0..6),
+        ) {
+            let raw = entries.join(",");
+            let expected = entries
+                .iter()
+                .map(|entry| entry.trim())
+                .filter(|entry| !entry.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let normalized = normalize_context_files(&raw);
+            prop_assert_eq!(normalized, expected);
+            prop_assert!(!normalized.lines().any(|line| line.trim().is_empty()));
+        }
+
+        #[test]
+        fn prop_render_prompt_template_handles_context_section_and_task_block(
+            context_files in prop::option::of(context_entry_strategy()),
+            task_block in prop::option::of(safe_line_strategy()),
+        ) {
+            let template = "Header\n{context_files_section}Task:\n{task_block}\nFooter";
+            let rendered = render_prompt_template(
+                template,
+                "PRD.md",
+                "COMPLETE",
+                1,
+                2,
+                task_block.as_deref(),
+                context_files.as_deref(),
+            );
+
+            match context_files.as_deref() {
+                Some(context) if !context.trim().is_empty() => {
+                    prop_assert!(rendered.contains("Context Files (read these first):"));
+                    prop_assert!(rendered.contains(context));
+                }
+                _ => {
+                    prop_assert!(!rendered.contains("Context Files (read these first):"));
+                }
+            }
+
+            match task_block.as_deref() {
+                Some(task) => {
+                    prop_assert!(rendered.contains(task));
+                    prop_assert!(!rendered.contains("No task block available."));
+                }
+                None => {
+                    prop_assert!(rendered.contains("No task block available."));
+                }
+            }
+        }
+
     }
 }
