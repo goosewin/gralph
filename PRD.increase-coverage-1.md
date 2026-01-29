@@ -143,7 +143,7 @@ Expand tests for CLI flows, server endpoints, backend adapters, update workflow,
   * Add tests for wildcard_match and collect_static_check_files allow/ignore behavior.
   * Add tests for extract_coverage_percent and review gate parsing of ratings and issue counts.
 - **Dependencies** COV-CORE-1, COV-STATE-1, COV-PRD-1, COV-TASK-1
-- [ ] COV-VERIFIER-1 Cover verifier parsing and static checks
+- [x] COV-VERIFIER-1 Cover verifier parsing and static checks
 ### Task COV-BACKEND-MOD-1
 
 - **ID** COV-BACKEND-MOD-1
