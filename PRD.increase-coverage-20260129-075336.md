@@ -142,7 +142,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add tests for normalize_key and lookup_value with mixed case and hyphenated keys.
   * Add tests for env override precedence and list rendering with null or tagged values.
 - **Dependencies** None
-- [ ] COV-CONFIG-1 Add config normalization and env override tests
+- [x] COV-CONFIG-1 Add config normalization and env override tests
 ### Task COV-SERVER-1
 
 - **ID** COV-SERVER-1

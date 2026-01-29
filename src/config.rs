@@ -429,6 +429,14 @@ mod tests {
     }
 
     #[test]
+    fn normalize_key_handles_mixed_case_hyphenated_segments() {
+        assert_eq!(
+            normalize_key(" Defaults.Sub-Section.Log-Level "),
+            Some("defaults.sub_section.log_level".to_string())
+        );
+    }
+
+    #[test]
     fn normalize_key_preserves_empty_segments() {
         assert_eq!(
             normalize_key("defaults..backend"),
@@ -472,6 +480,15 @@ mod tests {
         let nested_value =
             lookup_value(&value, "DeFaUlts.Sub-Section.Mixed-Key").and_then(Value::as_i64);
         assert_eq!(nested_value, Some(12));
+    }
+
+    #[test]
+    fn lookup_value_resolves_mixed_case_hyphenated_segments() {
+        let value: Value =
+            serde_yaml::from_str("Defaults:\n  Sub-Section:\n    Log-Level: warn\n").unwrap();
+
+        let level = lookup_value(&value, "defaults.sub-section.log-level").and_then(Value::as_str);
+        assert_eq!(level, Some("warn"));
     }
 
     #[test]
@@ -799,6 +816,28 @@ mod tests {
     }
 
     #[test]
+    fn env_override_precedence_handles_mixed_case_hyphenated_keys() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(&default_path, "defaults:\n  auto_worktree: false\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_DEFAULTS_AUTO_WORKTREE", "true");
+        set_env("GRALPH_DEFAULTS_AUTO-WORKTREE", "false");
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(
+            config.get(" Defaults.Auto-Worktree ").as_deref(),
+            Some("true")
+        );
+
+        remove_env("GRALPH_DEFAULTS_AUTO-WORKTREE");
+        remove_env("GRALPH_DEFAULTS_AUTO_WORKTREE");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
     fn default_config_env_override_used() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -840,15 +879,18 @@ mod tests {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("missing-global.yaml");
 
         write_file(&default_path, "Logging:\n  Log-Level: INFO\n");
         set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
 
         let config = Config::load(None).unwrap();
         assert_eq!(config.get("logging.log-level").as_deref(), Some("INFO"));
         assert_eq!(config.get(" Logging.Log-Level ").as_deref(), Some("INFO"));
 
         remove_env("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_GLOBAL_CONFIG");
     }
 
     #[test]
@@ -1050,6 +1092,35 @@ mod tests {
             vec![
                 ("defaults.empty".to_string(), "".to_string()),
                 ("defaults.flags".to_string(), "one,2".to_string()),
+                ("logging.level".to_string(), "info".to_string()),
+            ]
+        );
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn list_renders_tagged_and_null_values() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("missing-global.yaml");
+
+        write_file(
+            &default_path,
+            "defaults:\n  tagged: !tagged hello\n  flags:\n    - !tagged one\n    - null\n    - !tagged 2\nlogging:\n  level: info\n",
+        );
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+        let list = config.list();
+        assert_eq!(
+            list,
+            vec![
+                ("defaults.flags".to_string(), "one,,2".to_string()),
+                ("defaults.tagged".to_string(), "hello".to_string()),
                 ("logging.level".to_string(), "info".to_string()),
             ]
         );
