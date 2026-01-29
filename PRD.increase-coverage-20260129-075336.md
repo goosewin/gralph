@@ -82,7 +82,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add tests for parse_verifier_command, extract_coverage_percent, and coverage warn thresholds.
   * Add tests for review gate rating parsing and check gate pending or failed states.
 - **Dependencies** None
-- [ ] COV-VERIFIER-1 Add verifier parsing and gate evaluation tests
+- [x] COV-VERIFIER-1 Add verifier parsing and gate evaluation tests
 ### Task COV-BACKEND-MOD-1
 
 - **ID** COV-BACKEND-MOD-1

@@ -2416,6 +2416,23 @@ mod tests {
     }
 
     #[test]
+    fn evaluate_review_gate_waits_for_rating_when_missing() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "APPROVED",
+                    "body": "Looks good overall.",
+                    "submittedAt": "2024-01-02T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Pending(message) if message.contains("rating")));
+    }
+
+    #[test]
     fn evaluate_review_gate_fails_on_changes_requested() {
         let settings = base_review_settings();
         let pr_view = json!({
@@ -2630,6 +2647,23 @@ mod tests {
     }
 
     #[test]
+    fn evaluate_check_gate_reports_pending_when_conclusion_missing() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "COMPLETED",
+                    "conclusion": ""
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Pending(message)
+                if message.contains("checks pending") && message.contains("ci")));
+    }
+
+    #[test]
     fn evaluate_check_gate_reports_no_checks_when_empty() {
         let settings = base_review_settings();
         let pr_view = json!({});
@@ -2670,6 +2704,23 @@ mod tests {
         assert!(
             matches!(decision, GateDecision::Failed(message) if message.contains("checks failed"))
         );
+    }
+
+    #[test]
+    fn evaluate_check_gate_reports_failed_when_cancelled() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "COMPLETED",
+                    "conclusion": "CANCELLED"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Failed(message)
+                if message.contains("checks failed") && message.contains("ci")));
     }
 
     #[test]
@@ -2941,5 +2992,26 @@ mod tests {
             .map(|path| normalize_relative_path(root, path))
             .collect();
         assert_eq!(rel, vec!["docs/readme.md", "src/main.rs"]);
+    }
+
+    #[test]
+    fn collect_static_check_files_skips_ignored_directory_suffix() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join("logs")).unwrap();
+        fs::write(root.join("src/lib.rs"), "fn main() {}\n").unwrap();
+        fs::write(root.join("logs/app.rs"), "fn main() {}\n").unwrap();
+
+        let mut settings = base_static_settings();
+        settings.allow_patterns = vec!["**/*.rs".to_string()];
+        settings.ignore_patterns = vec!["logs/".to_string()];
+
+        let files = collect_static_check_files(root, &settings).unwrap();
+        let rel: Vec<String> = files
+            .iter()
+            .map(|path| normalize_relative_path(root, path))
+            .collect();
+        assert_eq!(rel, vec!["src/lib.rs"]);
     }
 }
