@@ -80,7 +80,7 @@ Expand tests around public APIs, adapter command assembly, and failure handling 
   * Tests cover context bundle validation for paths outside repo root.
   * Tests cover sanitization of context entries and removal of stray unchecked lines.
 - **Dependencies** None
-- [ ] COV-3 Expand PRD validation and sanitization tests in src/prd.rs
+- [x] COV-3 Expand PRD validation and sanitization tests in src/prd.rs
 ---
 
 ### Task COV-4

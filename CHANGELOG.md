@@ -24,6 +24,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-3 Expand state store edge-case coverage.
 - COV-3 Expand PRD validation and sanitization coverage.
 - COV-3 Add PRD base override and sanitize proptests.
+- COV-3 Add PRD task block parsing and sanitization invariants.
 - COV-4 Expand verifier helper coverage for PR base resolution, template lookup, static checks, and gate parsing.
 - COV-5 Add Codex backend run_iteration flag validation tests.
 - COV-5 Expand config normalization and override tests.

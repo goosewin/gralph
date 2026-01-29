@@ -1188,6 +1188,26 @@ mod tests {
         string_regex(r"[A-Za-z0-9_./-]{1,16}").unwrap()
     }
 
+    fn whitespace_strategy() -> impl Strategy<Value = String> {
+        string_regex(r"[ \t]{0,4}").unwrap()
+    }
+
+    fn newline_strategy() -> impl Strategy<Value = String> {
+        prop_oneof![Just("\n".to_string()), Just("\r\n".to_string())]
+    }
+
+    fn task_id_strategy() -> impl Strategy<Value = String> {
+        string_regex(r"[A-Z0-9-]{1,8}").unwrap()
+    }
+
+    fn safe_line_strategy() -> impl Strategy<Value = String> {
+        string_regex(r"[A-Za-z0-9][A-Za-z0-9 .,]{0,20}").unwrap()
+    }
+
+    fn heading_title_strategy() -> impl Strategy<Value = String> {
+        string_regex(r"[A-Za-z0-9][A-Za-z0-9 ]{0,12}").unwrap()
+    }
+
     #[test]
     fn prd_validate_file_accepts_valid() {
         let temp = tempdir().unwrap();
@@ -1324,6 +1344,29 @@ mod tests {
                 .iter()
                 .any(|line| line.contains("Multiple unchecked task lines"))
         );
+    }
+
+    #[test]
+    fn validate_task_block_rejects_absolute_context_outside_repo_root() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let outside = tempdir().unwrap();
+        let outside_file = outside.path().join("outside.md");
+        fs::write(&outside_file, "ok").unwrap();
+
+        let block = format!(
+            "### Task D-OUT\n- **ID** D-OUT\n- **Context Bundle** `{}`\n- **DoD** Guard context.\n- **Checklist**\n  * Validate paths.\n- **Dependencies** None\n- [ ] D-OUT Task\n",
+            outside_file.display()
+        );
+
+        let errors = validate_task_block(&block, Path::new("prd.md"), false, Some(base));
+
+        assert!(
+            errors
+                .iter()
+                .any(|line| line.contains("Context Bundle path outside repo"))
+        );
+        assert!(!errors.iter().any(|line| line.contains("path not found")));
     }
 
     #[test]
@@ -1469,6 +1512,36 @@ mod tests {
         assert!(sanitized.contains("- [ ] D-7 Keep first"));
         assert!(sanitized.contains("- D-7 Drop checkbox"));
         assert!(sanitized.contains("- Outside checkbox"));
+    }
+
+    #[test]
+    fn prd_sanitize_generated_file_dedupes_context_and_strips_stray_unchecked() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("keep.md"), "ok").unwrap();
+
+        let allowed = base.join("allowed.txt");
+        fs::write(&allowed, "docs/keep.md\n").unwrap();
+
+        let prd = base.join("prd.md");
+        fs::write(
+            &prd,
+            "# PRD\n\n- [ ] Stray one\n- [ ] Stray two\n\n### Task D-7D\n- **ID** D-7D\n- **Context Bundle** `docs/keep.md`, `docs/keep.md`, `missing.md`\n- **DoD** Sanitize output.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] D-7D Task\n\n- [ ] Another stray\n",
+        )
+        .unwrap();
+
+        prd_sanitize_generated_file(&prd, Some(base), Some(&allowed)).unwrap();
+        let sanitized = fs::read_to_string(&prd).unwrap();
+
+        assert!(sanitized.contains("- **Context Bundle** `docs/keep.md`"));
+        assert!(!sanitized.contains("missing.md"));
+        assert_eq!(sanitized.matches("`docs/keep.md`").count(), 1);
+        assert!(!sanitized.contains("- [ ] Stray one"));
+        assert!(sanitized.contains("- Stray one"));
+        assert!(sanitized.contains("- Stray two"));
+        assert!(sanitized.contains("- Another stray"));
     }
 
     #[test]
@@ -1774,6 +1847,41 @@ mod tests {
     }
 
     proptest! {
+        #[test]
+        fn prop_task_block_parsing_stable_across_whitespace_and_separators(
+            newline in newline_strategy(),
+            header_leading in whitespace_strategy(),
+            separator_leading in whitespace_strategy(),
+            separator_trailing in whitespace_strategy(),
+            id in task_id_strategy(),
+            body in prop::collection::vec(safe_line_strategy(), 0..4),
+            heading in heading_title_strategy(),
+            use_heading in any::<bool>()
+        ) {
+            let header = format!("{}### Task {}", header_leading, id);
+            let mut lines = vec!["# PRD".to_string(), header.clone()];
+
+            let mut expected = header;
+            for line in &body {
+                lines.push(line.clone());
+                expected.push('\n');
+                expected.push_str(line);
+            }
+
+            let separator = if use_heading {
+                format!("{}## {}", separator_leading, heading)
+            } else {
+                format!("{}---{}", separator_leading, separator_trailing)
+            };
+            lines.push(separator);
+
+            let contents = lines.join(&newline);
+            let blocks_out = task_blocks_from_contents(&contents);
+
+            prop_assert_eq!(blocks_out.len(), 1);
+            prop_assert_eq!(blocks_out[0], expected);
+        }
+
         #[test]
         fn prop_extract_context_entries_round_trip(
             entries in prop::collection::vec(context_entry_strategy(), 0..6)
