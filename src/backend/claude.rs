@@ -1,4 +1,4 @@
-use super::{Backend, BackendError, stream_command_output};
+use super::{stream_command_output, Backend, BackendError};
 use serde_json::Value;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
@@ -303,6 +303,21 @@ mod tests {
     }
 
     #[test]
+    fn extract_assistant_texts_handles_malformed_stream_entries() {
+        let cases = vec![
+            json!(null),
+            json!("not-object"),
+            json!(["assistant"]),
+            json!({"type": "assistant", "message": "nope"}),
+            json!({"type": "assistant", "message": {"content": {"type": "text"}}}),
+        ];
+
+        for case in cases {
+            assert!(extract_assistant_texts(&case).is_empty());
+        }
+    }
+
+    #[test]
     fn extract_result_text_requires_result_type() {
         let result = json!({"type": "result", "result": "done"});
         let assistant = json!({"type": "assistant", "result": "ignored"});
@@ -318,6 +333,21 @@ mod tests {
 
         assert_eq!(extract_result_text(&missing_result), None);
         assert_eq!(extract_result_text(&non_string_result), None);
+    }
+
+    #[test]
+    fn extract_result_text_ignores_malformed_stream_entries() {
+        let cases = vec![
+            json!(null),
+            json!("not-object"),
+            json!(["result"]),
+            json!({"type": 7, "result": "nope"}),
+            json!({"type": "result", "result": ["nope"]}),
+        ];
+
+        for case in cases {
+            assert_eq!(extract_result_text(&case), None);
+        }
     }
 
     #[test]
@@ -533,7 +563,10 @@ printf '"}\n'
 
         let output = fs::read_to_string(&output_path).unwrap();
         let value: Value = serde_json::from_str(output.trim()).unwrap();
-        let result = value.get("result").and_then(|value| value.as_str()).unwrap();
+        let result = value
+            .get("result")
+            .and_then(|value| value.as_str())
+            .unwrap();
         assert!(result.contains("--model|model-x|"));
     }
 
@@ -562,7 +595,10 @@ printf '"}\n'
 
         let output = fs::read_to_string(&output_path).unwrap();
         let value: Value = serde_json::from_str(output.trim()).unwrap();
-        let result = value.get("result").and_then(|value| value.as_str()).unwrap();
+        let result = value
+            .get("result")
+            .and_then(|value| value.as_str())
+            .unwrap();
         assert!(!result.contains("--model"));
     }
 
@@ -584,6 +620,21 @@ printf '"}\n'
         assert!(matches!(
             result,
             Err(BackendError::Command(message)) if message.contains("claude exited with")
+        ));
+    }
+
+    #[test]
+    fn run_iteration_reports_spawn_failure() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_path = temp.path().join("output.json");
+        let missing_command = temp.path().join("missing-claude");
+        let backend = ClaudeBackend::with_command(missing_command.to_string_lossy().to_string());
+
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message.contains("failed to spawn claude")
         ));
     }
 }

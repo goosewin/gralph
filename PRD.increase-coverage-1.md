@@ -163,7 +163,7 @@ Expand tests for CLI flows, server endpoints, backend adapters, update workflow,
   * Add tests for extract_assistant_texts and extract_result_text with malformed stream entries.
   * Add tests for run_iteration model flag inclusion and command failure propagation.
 - **Dependencies** COV-CORE-1, COV-STATE-1, COV-PRD-1, COV-TASK-1
-- [ ] COV-BACKEND-CLAUDE-1 Add Claude adapter error-path tests
+- [x] COV-BACKEND-CLAUDE-1 Add Claude adapter error-path tests
 ### Task COV-BACKEND-OPENCODE-1
 
 - **ID** COV-BACKEND-OPENCODE-1
