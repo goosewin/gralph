@@ -372,6 +372,47 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn run_iteration_sets_lsp_env_and_orders_model_variant_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("opencode-order");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf 'env:%s\\n' \"$OPENCODE_EXPERIMENTAL_LSP_TOOL\"\nfor arg in \"$@\"; do\n  printf '%s\\n' \"$arg\"\ndone\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = OpenCodeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration(
+                "final-prompt",
+                Some("model-x"),
+                Some("variant-y"),
+                &output_path,
+                temp.path(),
+            )
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let mut lines = output.lines();
+        assert_eq!(lines.next(), Some("env:true"));
+
+        let args: Vec<&str> = lines.collect();
+        assert_eq!(
+            args,
+            vec![
+                "run",
+                "--model",
+                "model-x",
+                "--variant",
+                "variant-y",
+                "final-prompt",
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn run_iteration_skips_empty_model_variant() {
         let temp = tempfile::tempdir().unwrap();
         let script_path = temp.path().join("opencode-mock");
