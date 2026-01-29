@@ -52,8 +52,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add tests for run_iteration error paths (missing task file, empty backend output, parse failures) and raw log copy behavior.
   * Add property-based tests for completion marker and negated promise parsing invariants.
 - **Dependencies** None
-- [ ] COV-CORE-1 Expand core loop coverage for prompt and completion handling
- - [x] COV-CORE-1 Expand core loop coverage for prompt and completion handling
+- [x] COV-CORE-1 Expand core loop coverage for prompt and completion handling
 ### Task COV-STATE-1
 
 - **ID** COV-STATE-1
