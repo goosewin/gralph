@@ -94,6 +94,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-31 Expand verifier parsing and static check coverage.
 - COV-3 Expand verifier parsing and gate evaluation coverage.
 - COV-5 Expand server session enrichment and stop flow coverage.
+- COV-CONFIG-1 Expand config precedence and normalization tests.
 
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.

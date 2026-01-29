@@ -103,7 +103,7 @@ Expand tests for CLI flows, server endpoints, backend adapters, update workflow,
   * Add tests for resolve_env_override precedence when legacy and normalized env vars conflict.
   * Add tests for list rendering with sequences and null values.
 - **Dependencies** COV-CORE-1, COV-STATE-1, COV-PRD-1, COV-TASK-1
-- [ ] COV-CONFIG-1 Expand config precedence and normalization tests
+- [x] COV-CONFIG-1 Expand config precedence and normalization tests
 ### Task COV-SERVER-1
 
 - **ID** COV-SERVER-1
