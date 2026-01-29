@@ -90,7 +90,7 @@ Each task block must contain exactly one unchecked task line.
   * Add tests for cleanup_stale with pid <= 0 and malformed session maps preserving state.
   * Add tests for read_state and write_state when state_file is a directory or temp write fails.
 - **Dependencies** None
-- [ ] COV-STATE-1 Cover state lock and cleanup edge cases
+- [x] COV-STATE-1 Cover state lock and cleanup edge cases
 ---
 
 ### Task COV-VER-1
