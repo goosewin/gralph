@@ -249,7 +249,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add a contention test to ensure only one holder mutates env at a time.
   * Add a recovery test after a poisoned lock to ensure subsequent guards work.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-TESTSUPPORT-1 Expand env_lock test coverage
+- [x] COV90-TESTSUPPORT-1 Expand env_lock test coverage
 ### Task COV90-CI-1
 
 - **ID** COV90-CI-1

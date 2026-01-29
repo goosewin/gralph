@@ -124,6 +124,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV90-UPDATE-1 Add update workflow error path tests.
 - COV90-UPDATE-1 Expand update workflow coverage for version formats, tar failures, and permission errors.
 - COV90-TESTSUPPORT-1 Add env_lock stress and recovery tests.
+- COV90-TESTSUPPORT-1 Verify env_lock restore after guard drop.
 - COV90-CLI-1 Add CLI parsing tests for run-loop, verifier defaults, and PRD conflicts.
 - COV-9 Expand update check and archive error coverage.
 - COV-31 Expand verifier parsing and static check coverage.

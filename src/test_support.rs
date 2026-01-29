@@ -193,6 +193,29 @@ mod tests {
     }
 
     #[test]
+    fn env_lock_preserves_env_after_guard_drop() {
+        let key = "GRALPH_ENV_LOCK_DROP_RESTORE_TEST";
+        let original = {
+            let _guard = env_lock();
+            env::var_os(key)
+        };
+
+        {
+            let _guard = env_lock();
+            set_env(key, "temporary-value");
+            assert_eq!(env::var(key).as_deref(), Ok("temporary-value"));
+            if let Some(value) = &original {
+                set_env(key, value);
+            } else {
+                remove_env(key);
+            }
+        }
+
+        let _guard = env_lock();
+        assert_eq!(env::var_os(key), original);
+    }
+
+    #[test]
     fn env_lock_recovers_after_repeated_panics_across_threads() {
         const THREADS: usize = 6;
         const ROUNDS: usize = 4;
