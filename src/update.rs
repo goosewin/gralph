@@ -282,8 +282,10 @@ fn normalize_version(raw: &str) -> Result<String, UpdateError> {
 }
 
 fn detect_platform() -> Result<String, UpdateError> {
-    let os = env::consts::OS;
-    let arch = env::consts::ARCH;
+    detect_platform_for(env::consts::OS, env::consts::ARCH)
+}
+
+fn detect_platform_for(os: &str, arch: &str) -> Result<String, UpdateError> {
     let os = match os {
         "linux" => "linux",
         "macos" => "macos",
@@ -666,6 +668,17 @@ mod tests {
     }
 
     #[test]
+    fn release_download_url_prefers_test_override() {
+        let _lock = crate::test_support::env_lock();
+        let _guard = EnvGuard::set(
+            "GRALPH_TEST_RELEASE_DOWNLOAD_URL",
+            "  http://localhost/releases ",
+        );
+        let resolved = release_download_url();
+        assert_eq!(resolved, "http://localhost/releases");
+    }
+
+    #[test]
     fn fetch_latest_release_tag_reports_missing_tag_from_local_server() {
         let (url, handle) = start_release_server(r#"{ "name": "release" }"#);
         let _guard = EnvGuard::set("GRALPH_TEST_RELEASE_URL", &url);
@@ -800,6 +813,24 @@ mod tests {
         let expected = format!("{}-{}", os, arch);
         let resolved = detect_platform().expect("platform");
         assert_eq!(resolved, expected);
+    }
+
+    #[test]
+    fn detect_platform_for_rejects_unknown_os() {
+        let result = detect_platform_for("solaris", "x86_64");
+        assert!(matches!(
+            result,
+            Err(UpdateError::UnsupportedPlatform(value)) if value == "solaris"
+        ));
+    }
+
+    #[test]
+    fn detect_platform_for_rejects_unknown_arch() {
+        let result = detect_platform_for("linux", "mips");
+        assert!(matches!(
+            result,
+            Err(UpdateError::UnsupportedPlatform(value)) if value == "linux-mips"
+        ));
     }
 
     #[test]

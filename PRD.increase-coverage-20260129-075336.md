@@ -202,7 +202,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add tests for release_download_url overrides, detect_platform unsupported targets, and empty PATH resolution.
   * Add tests for extract_archive failures and install_binary permission errors.
 - **Dependencies** None
-- [ ] COV-UPDATE-1 Expand update workflow error-path coverage
+- [x] COV-UPDATE-1 Expand update workflow error-path coverage
 ### Task COV-CI-1
 
 - **ID** COV-CI-1
