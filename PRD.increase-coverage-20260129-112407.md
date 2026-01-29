@@ -118,7 +118,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add tests for `auto_worktree_branch_name` and `ensure_unique_worktree_branch` branch collisions.
   * Add tests for `parse_bool_value` and `resolve_auto_worktree` config overrides.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-MAIN-1 Expand main CLI helper coverage
+- [x] COV90-MAIN-1 Expand main CLI helper coverage
 ### Task COV90-CLI-1
 
 - **ID** COV90-CLI-1
