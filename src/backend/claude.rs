@@ -600,6 +600,61 @@ printf '"}\n'
 
     #[cfg(unix)]
     #[test]
+    fn run_iteration_orders_args_with_model() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("claude-mock");
+        let output_path = temp.path().join("output.json");
+        let script = r#"#!/bin/sh
+printf '{"type":"result","result":"'
+for arg in "$@"; do
+  printf '%s|' "$arg"
+done
+printf '"}\n'
+"#;
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration(
+                "final-prompt",
+                Some("model-a"),
+                None,
+                &output_path,
+                temp.path(),
+            )
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let value: Value = serde_json::from_str(output.trim()).unwrap();
+        let result = value
+            .get("result")
+            .and_then(|value| value.as_str())
+            .unwrap();
+        let args: Vec<&str> = result
+            .split('|')
+            .filter(|value| !value.is_empty())
+            .collect();
+        assert_eq!(
+            args,
+            vec![
+                "--dangerously-skip-permissions",
+                "--verbose",
+                "--print",
+                "--output-format",
+                "stream-json",
+                "-p",
+                "final-prompt",
+                "--model",
+                "model-a",
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn run_iteration_skips_empty_model_flag() {
         let temp = tempfile::tempdir().unwrap();
         let script_path = temp.path().join("claude-mock");
@@ -627,7 +682,12 @@ printf '"}\n'
             .get("result")
             .and_then(|value| value.as_str())
             .unwrap();
-        assert!(!result.contains("--model"));
+        let args: Vec<&str> = result
+            .split('|')
+            .filter(|value| !value.is_empty())
+            .collect();
+        assert!(!args.contains(&"--model"));
+        assert_eq!(args.last().copied(), Some("prompt"));
     }
 
     #[cfg(unix)]

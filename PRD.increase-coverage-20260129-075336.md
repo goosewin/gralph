@@ -102,7 +102,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add tests for parse_text fallback when no result entry exists and for invalid JSON lines.
   * Add tests for run_iteration argument ordering and empty model handling.
 - **Dependencies** None
-- [ ] COV-BACKEND-CLAUDE-1 Add Claude adapter tests for parsing and args
+- [x] COV-BACKEND-CLAUDE-1 Add Claude adapter tests for parsing and args
 ### Task COV-BACKEND-OPENCODE-1
 
 - **ID** COV-BACKEND-OPENCODE-1

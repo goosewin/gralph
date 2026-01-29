@@ -124,6 +124,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-UPDATE-1 Expand update workflow error-path coverage.
 - COV-BACKEND-MOD-1 Expand backend helper streaming and PATH edge coverage.
 - COV-BACKEND-CLAUDE-1 Add Claude adapter error-path tests.
+- COV-BACKEND-CLAUDE-1 Add Claude adapter argument ordering coverage.
 - COV-BACKEND-OPENCODE-1 Expand OpenCode adapter coverage.
 - COV-BACKEND-CODEX-1 Expand Codex adapter flag ordering coverage.
 
