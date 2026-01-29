@@ -72,7 +72,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add tests for sanitize_task_block context filtering, fallback selection, and unchecked line normalization.
   * Add property-based tests for task block validation invariants and context entry parsing.
 - **Dependencies** None
-- [ ] COV-PRD-1 Expand PRD validation and sanitization coverage
+- [x] COV-PRD-1 Expand PRD validation and sanitization coverage
 ### Task COV-VERIFIER-1
 
 - **ID** COV-VERIFIER-1

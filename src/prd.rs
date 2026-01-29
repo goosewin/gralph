@@ -1213,7 +1213,12 @@ mod tests {
     }
 
     fn relative_path_strategy() -> impl Strategy<Value = String> {
-        string_regex(r"[A-Za-z0-9_-]{1,8}(?:/[A-Za-z0-9_-]{1,8}){0,2}\\.md").unwrap()
+        let segment = string_regex(r"[A-Za-z0-9_-]{1,8}").unwrap();
+        prop::collection::vec(segment, 1..=3).prop_map(|segments| {
+            let mut path = segments.join("/");
+            path.push_str(".md");
+            path
+        })
     }
 
     fn open_questions_heading_strategy() -> impl Strategy<Value = String> {
@@ -2149,6 +2154,55 @@ mod tests {
         }
 
         #[test]
+        fn prop_validate_task_block_reports_missing_context_entries(
+            entries in prop::collection::hash_set(relative_path_strategy(), 1..5),
+            exists in prop::collection::vec(any::<bool>(), 1..5)
+        ) {
+            let temp = tempdir().unwrap();
+            let base = temp.path();
+            let mut entries: Vec<String> = entries.into_iter().collect();
+            entries.sort();
+
+            for (index, entry) in entries.iter().enumerate() {
+                if exists[index % exists.len()] {
+                    let path = base.join(entry);
+                    if let Some(parent) = path.parent() {
+                        fs::create_dir_all(parent).unwrap();
+                    }
+                    fs::write(&path, "ok").unwrap();
+                }
+            }
+
+            let mut block = String::from(
+                "### Task P-CHECK\n- **ID** P-CHECK\n- **Context Bundle** ",
+            );
+            for (index, entry) in entries.iter().enumerate() {
+                if index > 0 {
+                    block.push_str(", ");
+                }
+                block.push('`');
+                block.push_str(entry);
+                block.push('`');
+            }
+            block.push_str(
+                "\n- **DoD** Example.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] P-CHECK Task\n",
+            );
+
+            let errors = validate_task_block(&block, Path::new("prd.md"), false, Some(base));
+            let missing_count = entries
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !exists[index % exists.len()])
+                .count();
+            let missing_errors = errors
+                .iter()
+                .filter(|line| line.contains("Context Bundle path not found"))
+                .count();
+
+            prop_assert_eq!(missing_errors, missing_count);
+        }
+
+        #[test]
         fn prop_sanitize_task_block_single_unchecked_and_fallback_context(
             unchecked_count in 1usize..5,
             invalid_entries in prop::collection::vec(context_entry_strategy(), 0..4)
@@ -2304,10 +2358,11 @@ mod tests {
                 MissingField::Checklist => "Checklist",
                 MissingField::Dependencies => "Dependencies",
             };
+            let expected = format!("Missing required field: {}", missing_label);
 
             prop_assert!(errors
                 .iter()
-                .any(|line| line.contains(&format!("Missing required field: {}", missing_label))));
+                .any(|line| line.contains(&expected)));
         }
 
         #[test]
@@ -2336,7 +2391,10 @@ mod tests {
 
             prop_assert!(!sanitized.to_lowercase().contains("open questions"));
             for line in &questions {
-                prop_assert!(!sanitized.contains(line));
+                let question_line = format!("- {}", line);
+                prop_assert!(!sanitized
+                    .lines()
+                    .any(|san_line| san_line.trim_end() == question_line));
             }
             prop_assert!(sanitized.contains("- [ ] P-OPEN Task"));
         }
@@ -2353,7 +2411,14 @@ mod tests {
             let mut entries: Vec<String> = entries.into_iter().collect();
             entries.sort();
 
-            prop_assume!(allowed.iter().any(|value| *value));
+            let mut allowed = allowed;
+            if !entries
+                .iter()
+                .enumerate()
+                .any(|(index, _)| allowed[index % allowed.len()])
+            {
+                allowed[0] = true;
+            }
             let mut use_absolute = use_absolute;
 
             let mut first_allowed = None;
@@ -2364,8 +2429,9 @@ mod tests {
                 }
             }
             if let Some(index) = first_allowed {
-                if !use_absolute[index % use_absolute.len()] {
-                    use_absolute[index % use_absolute.len()] = true;
+                let idx = index % use_absolute.len();
+                if !use_absolute[idx] {
+                    use_absolute[idx] = true;
                 }
             }
 
@@ -2420,10 +2486,11 @@ mod tests {
             prop_assert!(!sanitized.contains(base.to_string_lossy().as_ref()));
 
             for (index, entry) in entries.iter().enumerate() {
+                let formatted = format!("`{}`", entry);
                 if allowed[index % allowed.len()] {
-                    prop_assert!(sanitized.contains(&format!("`{}`", entry)));
+                    prop_assert!(sanitized.contains(&formatted));
                 } else {
-                    prop_assert!(!sanitized.contains(&format!("`{}`", entry)));
+                    prop_assert!(!sanitized.contains(&formatted));
                 }
             }
 
@@ -2601,6 +2668,48 @@ mod tests {
         assert!(sanitized.contains("- **Context Bundle** `docs/allowed.md`"));
         assert!(!sanitized.contains("docs/blocked.md"));
         assert!(!sanitized.contains("missing.md"));
+    }
+
+    #[test]
+    fn sanitize_task_block_falls_back_to_readme_when_allowed_context_missing() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("README.md"), "readme").unwrap();
+
+        let allowed = base.join("allowed.txt");
+        fs::write(&allowed, "docs/missing.md\n").unwrap();
+
+        let block = "### Task V-5\n- **ID** V-5\n- **Context Bundle** `docs/unknown.md`\n- **DoD** Validate sanitize.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] V-5 Task\n";
+
+        let sanitized = sanitize_task_block(block, Some(base), Some(&allowed));
+
+        assert!(sanitized.contains("- **Context Bundle** `README.md`"));
+        assert!(!sanitized.contains("docs/unknown.md"));
+        assert!(!sanitized.contains("docs/missing.md"));
+    }
+
+    #[test]
+    fn sanitize_task_block_normalizes_unchecked_line_spacing() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("README.md"), "readme").unwrap();
+
+        let block = "### Task U-1\n- **ID** U-1\n- **Context Bundle** `README.md`\n- **DoD** Example.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ]   U-1 First\n\t- [ ]\tU-1 Second\n";
+
+        let sanitized = sanitize_task_block(block, Some(base), None);
+        let unchecked_lines = sanitized
+            .lines()
+            .filter(|line| is_unchecked_line(line))
+            .count();
+
+        assert_eq!(unchecked_lines, 1);
+        assert!(sanitized.contains("- [ ]   U-1 First"));
+        let second_line = sanitized
+            .lines()
+            .find(|line| line.contains("U-1 Second"))
+            .unwrap_or("");
+        assert!(second_line.starts_with("\t- "));
+        assert!(!second_line.contains("[ ]"));
     }
 
     #[test]
