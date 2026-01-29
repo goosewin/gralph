@@ -203,7 +203,7 @@ Add tests around CLI helpers, server handlers, notification payloads, update wor
   * Add tests that acquire, drop, and reacquire env_lock safely.
   * Add tests that confirm lock serialization in a single-thread sequence.
 - **Dependencies** None
-- [ ] COV-TESTSUPPORT-1 Extend env_lock safety and reuse coverage
+- [x] COV-TESTSUPPORT-1 Extend env_lock safety and reuse coverage
 ---
 
 ## Success Criteria

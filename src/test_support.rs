@@ -216,6 +216,59 @@ mod tests {
     }
 
     #[test]
+    fn env_lock_reacquires_after_drop_in_same_thread() {
+        let key = "GRALPH_ENV_LOCK_REACQUIRE_TEST";
+        let original = {
+            let _guard = env_lock();
+            env::var_os(key)
+        };
+
+        {
+            let _guard = env_lock();
+            set_env(key, "first");
+            assert_eq!(env::var(key).as_deref(), Ok("first"));
+        }
+
+        {
+            let _guard = env_lock();
+            set_env(key, "second");
+            assert_eq!(env::var(key).as_deref(), Ok("second"));
+            if let Some(value) = &original {
+                set_env(key, value);
+            } else {
+                remove_env(key);
+            }
+        }
+
+        let _guard = env_lock();
+        assert_eq!(env::var_os(key), original);
+    }
+
+    #[test]
+    fn env_lock_allows_sequential_acquisition_single_thread() {
+        let key = "GRALPH_ENV_LOCK_SEQUENCE_TEST";
+        let original = {
+            let _guard = env_lock();
+            env::var_os(key)
+        };
+
+        for idx in 0..3 {
+            let _guard = env_lock();
+            let value = format!("seq-{idx}");
+            set_env(key, &value);
+            assert_eq!(env::var(key).as_deref(), Ok(value.as_str()));
+        }
+
+        let _guard = env_lock();
+        if let Some(value) = &original {
+            set_env(key, value);
+        } else {
+            remove_env(key);
+        }
+        assert_eq!(env::var_os(key), original);
+    }
+
+    #[test]
     fn env_lock_recovers_after_repeated_panics_across_threads() {
         const THREADS: usize = 6;
         const ROUNDS: usize = 4;
