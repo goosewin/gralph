@@ -318,6 +318,15 @@ mod tests {
     }
 
     #[test]
+    fn extract_assistant_texts_handles_null_message_fields() {
+        let null_message = json!({"type": "assistant", "message": null});
+        let null_content = json!({"type": "assistant", "message": {"content": null}});
+
+        assert!(extract_assistant_texts(&null_message).is_empty());
+        assert!(extract_assistant_texts(&null_content).is_empty());
+    }
+
+    #[test]
     fn extract_result_text_requires_result_type() {
         let result = json!({"type": "result", "result": "done"});
         let assistant = json!({"type": "assistant", "result": "ignored"});

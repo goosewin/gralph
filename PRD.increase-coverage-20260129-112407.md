@@ -194,7 +194,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add tests for `parse_text` fallback to raw contents when no result entries exist.
   * Add tests for malformed stream entries in `extract_assistant_texts`.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-BACKEND-CLAUDE-1 Expand Claude backend coverage
+- [x] COV90-BACKEND-CLAUDE-1 Expand Claude backend coverage
 ### Task COV90-BACKEND-OPENCODE-1
 
 - **ID** COV90-BACKEND-OPENCODE-1
