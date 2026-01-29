@@ -141,7 +141,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-5 Expand server session enrichment and stop flow coverage.
 - COV-CONFIG-1 Add config normalization, env precedence, list rendering, and value_to_string property tests.
 - COV-CONFIG-1 Expand config path ordering, env empty override, and normalize_key lookup property coverage.
-- COV-SERVER-1 Expand server session enrichment and stop handler error coverage.
+- COV-SERVER-1 Expand server CORS mismatch and stale session coverage.
 - COV-NOTIFY-1 Expand notification duration boundary, unknown reason, and webhook type detection tests.
 - COV-UPDATE-1 Expand update workflow error-path coverage for release download overrides and unsupported targets.
 - COV-UPDATE-1 Add resolve_install_version tests for empty env values and invalid tags.

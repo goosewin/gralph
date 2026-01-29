@@ -142,7 +142,7 @@ Each task block must contain exactly one unchecked task line.
   * Add tests for status_name_handler and stop_handler when state store returns errors or session is missing.
   * Add tests for enrich_session when dir is missing or status is stale.
 - **Dependencies** COV-VER-1
-- [ ] COV-SERVER-1 Expand server auth, CORS, and session enrichment coverage
+- [x] COV-SERVER-1 Expand server auth, CORS, and session enrichment coverage
 ---
 
 ### Task COV-NOTIFY-1

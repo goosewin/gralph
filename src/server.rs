@@ -726,6 +726,24 @@ mod tests {
     }
 
     #[test]
+    fn resolve_cors_origin_rejects_mismatched_origin() {
+        let config = ServerConfig {
+            host: "example.com".to_string(),
+            port: 8080,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::ORIGIN,
+            "http://other.example.com".parse().unwrap(),
+        );
+
+        assert_eq!(resolve_cors_origin(&headers, &config), None);
+    }
+
+    #[test]
     fn resolve_cors_origin_rejects_untrusted_origin_when_closed() {
         let config = ServerConfig {
             host: "127.0.0.1".to_string(),
@@ -795,6 +813,24 @@ mod tests {
     fn resolve_cors_origin_rejects_origin_when_host_is_wildcard() {
         let config = ServerConfig {
             host: "0.0.0.0".to_string(),
+            port: 8080,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::ORIGIN,
+            "http://example.com".parse().unwrap(),
+        );
+
+        assert_eq!(resolve_cors_origin(&headers, &config), None);
+    }
+
+    #[test]
+    fn resolve_cors_origin_rejects_origin_when_host_is_ipv6_wildcard() {
+        let config = ServerConfig {
+            host: "::".to_string(),
             port: 8080,
             token: None,
             open: false,
@@ -1901,6 +1937,20 @@ mod tests {
             "name": "alpha",
             "status": "running",
             "pid": pid,
+            "dir": "",
+        });
+        let enriched = enrich_session(session);
+        assert_eq!(enriched["status"], "stale");
+        assert_eq!(enriched["is_alive"], false);
+        assert_eq!(enriched["current_remaining"], 0);
+    }
+
+    #[test]
+    fn enrich_session_preserves_stale_status() {
+        let session = json!({
+            "name": "alpha",
+            "status": "stale",
+            "pid": 123,
             "dir": "",
         });
         let enriched = enrich_session(session);
