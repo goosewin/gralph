@@ -631,4 +631,28 @@ mod tests {
         let output = fs::read_to_string(&output_path).unwrap();
         assert_eq!(output, "stderr-one\nstderr-two\n");
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_captures_stdout_and_stderr() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("opencode-mixed");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf 'stdout-one\\n'\nprintf 'stderr-one\\n' 1>&2\nprintf 'stdout-two\\n'\nprintf 'stderr-two\\n' 1>&2\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = OpenCodeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("prompt", None, None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        assert!(output.contains("stdout-one\n"));
+        assert!(output.contains("stderr-one\n"));
+        assert!(output.contains("stdout-two\n"));
+        assert!(output.contains("stderr-two\n"));
+    }
 }

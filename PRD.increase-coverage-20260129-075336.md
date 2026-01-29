@@ -112,7 +112,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add tests for OPENCODE_EXPERIMENTAL_LSP_TOOL env propagation and prompt-last ordering.
   * Add tests for model and variant combinations, including empty values.
 - **Dependencies** None
-- [ ] COV-BACKEND-OPENCODE-1 Expand OpenCode adapter tests for env and ordering
+- [x] COV-BACKEND-OPENCODE-1 Expand OpenCode adapter tests for env and ordering
 ### Task COV-BACKEND-GEMINI-1
 
 - **ID** COV-BACKEND-GEMINI-1
