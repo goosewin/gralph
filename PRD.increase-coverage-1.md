@@ -153,7 +153,7 @@ Expand tests for CLI flows, server endpoints, backend adapters, update workflow,
   * Add tests for stream_command_output on trailing lines and on_line error propagation.
   * Add tests for command_in_path with empty and relative PATH entries.
 - **Dependencies** COV-CORE-1, COV-STATE-1, COV-PRD-1, COV-TASK-1
-- [ ] COV-BACKEND-MOD-1 Expand backend helper coverage
+- [x] COV-BACKEND-MOD-1 Expand backend helper coverage
 ### Task COV-BACKEND-CLAUDE-1
 
 - **ID** COV-BACKEND-CLAUDE-1
