@@ -156,6 +156,12 @@ mod tests {
     }
 
     #[test]
+    fn is_unchecked_line_accepts_crlf_and_mixed_leading_whitespace() {
+        assert!(is_unchecked_line("- [ ] Edge case\r"));
+        assert!(is_unchecked_line(" \t- [ ] Edge case\r"));
+    }
+
+    #[test]
     fn is_task_block_end_detects_separators_and_headings() {
         assert!(is_task_block_end("---"));
         assert!(is_task_block_end("  ---  "));
@@ -192,12 +198,24 @@ mod tests {
     }
 
     #[test]
+    fn is_task_block_end_rejects_tabbed_heading_without_title() {
+        assert!(!is_task_block_end("##\t"));
+        assert!(!is_task_block_end(" \t##\t"));
+    }
+
+    #[test]
     fn is_task_header_rejects_malformed_headings() {
         assert!(!is_task_header("###Task COV-29"));
         assert!(!is_task_header("## Task COV-29"));
         assert!(!is_task_header("#### Task COV-29"));
         assert!(!is_task_header("### Tasks COV-29"));
         assert!(!is_task_header("### Task"));
+    }
+
+    #[test]
+    fn is_task_header_rejects_tabbed_headings() {
+        assert!(!is_task_header("###\tTask COV-29"));
+        assert!(!is_task_header("### Task\tCOV-29"));
     }
 
     #[test]
@@ -407,10 +425,11 @@ mod tests {
             let blocks_out = task_blocks_from_contents(&contents);
 
             prop_assert_eq!(blocks_out.len(), 1);
-            prop_assert_eq!(blocks_out[0], expected);
-            prop_assert!(!blocks_out[0].contains('\r'));
+            let block = &blocks_out[0];
+            prop_assert_eq!(block, &expected);
+            prop_assert!(!block.contains('\r'));
             for line in prefix.iter().chain(suffix.iter()) {
-                prop_assert!(!blocks_out[0].contains(line));
+                prop_assert!(!block.contains(line));
             }
         }
 

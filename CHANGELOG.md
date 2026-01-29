@@ -67,6 +67,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-15 Add verifier command parsing and review gate tests.
 - COV-15 Expand task parsing edge-case tests.
 - COV-15 Add CRLF and tabbed task parsing invariants.
+- COV-15 Add task parsing heading and CRLF unchecked tests.
 - COV-15 Expand env_lock contention and panic recovery tests.
 - COV-16 Expand env_lock stress coverage.
 - COV-16 Expand update workflow parsing and install error coverage.

@@ -237,7 +237,7 @@ Expand tests around public APIs, adapter command assembly, and failure handling 
   * Tests cover `is_unchecked_line` handling of tabs, CRLF, and leading spaces.
   * Tests cover `is_task_header` and `is_task_block_end` with malformed headings.
 - **Dependencies** None
-- [ ] COV-15 Expand task parsing invariants tests in src/task.rs
+- [x] COV-15 Expand task parsing invariants tests in src/task.rs
 ---
 
 ### Task COV-16
