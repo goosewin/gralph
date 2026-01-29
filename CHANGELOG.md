@@ -120,7 +120,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-5 Expand server session enrichment and stop flow coverage.
 - COV-CONFIG-1 Add config normalization, env precedence, and list rendering tests.
 - COV-SERVER-1 Expand server config validation and handler error coverage.
-- COV-NOTIFY-1 Expand notification formatting and delivery tests.
+- COV-NOTIFY-1 Expand notification formatting, generic payload, and timeout tests.
 - COV-UPDATE-1 Expand update workflow error-path coverage.
 - COV-BACKEND-MOD-1 Expand backend helper streaming and PATH edge coverage.
 - COV-BACKEND-CLAUDE-1 Add Claude adapter error-path tests.

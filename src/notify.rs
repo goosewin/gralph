@@ -578,6 +578,7 @@ mod tests {
     use std::net::{TcpListener, TcpStream};
     use std::sync::{Arc, Mutex};
     use std::thread;
+    use std::time::Duration;
 
     #[derive(Debug, Clone)]
     struct CapturedRequest {
@@ -674,6 +675,19 @@ mod tests {
         });
 
         (format!("http://{}", addr), captured, handle)
+    }
+
+    fn start_hanging_server(delay: Duration) -> (String, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
+        let addr = listener.local_addr().expect("local addr");
+
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept connection");
+            let _request = read_request(&mut stream);
+            thread::sleep(delay);
+        });
+
+        (format!("http://{}", addr), handle)
     }
 
     #[test]
@@ -1354,6 +1368,32 @@ mod tests {
     }
 
     #[test]
+    fn format_generic_failed_includes_required_fields() {
+        let payload = format_generic_failed(
+            "delta",
+            "/tmp/project",
+            "timeout",
+            "7",
+            "10",
+            "2",
+            "45s",
+            "2026-01-26T05:06:07Z",
+        )
+        .expect("generic payload");
+        let value: Value = serde_json::from_str(&payload).expect("json payload");
+
+        assert_eq!(value["event"], "failed");
+        assert_eq!(value["status"], "failure");
+        assert_eq!(value["session"], "delta");
+        assert_eq!(value["project"], "/tmp/project");
+        assert_eq!(value["iterations"], "7");
+        assert_eq!(value["max_iterations"], "10");
+        assert_eq!(value["remaining_tasks"], "2");
+        assert_eq!(value["duration"], "45s");
+        assert_eq!(value["timestamp"], "2026-01-26T05:06:07Z");
+    }
+
+    #[test]
     fn format_duration_handles_none_and_units() {
         assert_eq!(format_duration(None), "unknown");
         assert_eq!(format_duration(Some(0)), "0s");
@@ -1368,6 +1408,7 @@ mod tests {
         assert_eq!(format_duration(Some(59)), "59s");
         assert_eq!(format_duration(Some(60)), "1m 0s");
         assert_eq!(format_duration(Some(3599)), "59m 59s");
+        assert_eq!(format_duration(Some(3600)), "1h 0m 0s");
         assert_eq!(format_duration(Some(3601)), "1h 0m 1s");
     }
 
@@ -1473,6 +1514,21 @@ mod tests {
             .expect_err("non-success status");
         assert!(matches!(err, NotifyError::HttpStatus(500)));
         assert!(captured.lock().unwrap().is_some());
+
+        handle.join().expect("server thread");
+    }
+
+    #[test]
+    fn send_webhook_times_out_when_server_stalls() {
+        let payload = "{}";
+        let (base, handle) = start_hanging_server(Duration::from_millis(1500));
+
+        let err = send_webhook(&format!("{}/timeout", base), payload, Some(1))
+            .expect_err("timeout error");
+        match err {
+            NotifyError::Http(err) => assert!(err.is_timeout()),
+            _ => panic!("expected http timeout"),
+        }
 
         handle.join().expect("server thread");
     }

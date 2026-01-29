@@ -162,7 +162,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add tests for format_duration boundaries and generic payload field inclusion.
   * Add tests for send_webhook timeouts and HTTP status failures.
 - **Dependencies** None
-- [ ] COV-NOTIFY-1 Add notify formatting and HTTP error tests
+- [x] COV-NOTIFY-1 Add notify formatting and HTTP error tests
 ### Task COV-MAIN-1
 
 - **ID** COV-MAIN-1
