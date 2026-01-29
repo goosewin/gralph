@@ -2690,6 +2690,12 @@ mod tests {
     }
 
     #[test]
+    fn auto_worktree_branch_name_sanitizes_session_name() {
+        let name = auto_worktree_branch_name("My Session@2026!", "20260126-120000");
+        assert_eq!(name, "prd-My-Session-2026--20260126-120000");
+    }
+
+    #[test]
     fn session_name_uses_canonical_basename_for_dot() {
         let expected_path = env::current_dir().unwrap().canonicalize().unwrap();
         let expected = expected_path

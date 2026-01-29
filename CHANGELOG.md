@@ -99,6 +99,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV90-CONFIG-1 Add config precedence, env override, and list rendering edge-case tests.
 - COV90-CI-1 Add soft coverage warning target in verifier config and docs.
 - COV90-VER-1 Add verifier parsing, review gate, and gh error handling tests.
+- COV90-MAIN-1 Add CLI helper tests for session naming and worktree branch formatting.
 - COV-9 Expand update check and archive error coverage.
 - COV-31 Expand verifier parsing and static check coverage.
 - COV-VERIFIER-1 Cover verifier parsing and static checks.

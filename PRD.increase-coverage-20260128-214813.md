@@ -121,7 +121,7 @@ Add tests for backends, server, verifier, update, notify, config, and CLI helper
   * Tests cover validate_task_id acceptance and rejection cases.
   * Tests cover auto_worktree_branch_name format and parse_bool_value variants.
 - **Dependencies** COV90-CORE-1, COV90-STATE-1, COV90-PRD-1, COV90-TASK-1
-- [ ] COV90-MAIN-1 Add CLI helper tests for worktree and session logic
+- [x] COV90-MAIN-1 Add CLI helper tests for worktree and session logic
 ### Task COV90-SERVER-1
 
 - **ID** COV90-SERVER-1
