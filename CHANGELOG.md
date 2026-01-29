@@ -44,6 +44,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-11 Expand OpenCode backend command ordering and env coverage.
 - COV-12 Expand Gemini backend command and error coverage.
 - COV-12 Expand Claude adapter error-path coverage.
+- COV-12 Expand OpenCode adapter coverage.
 - COV-13 Expand OpenCode adapter error-path coverage.
 - COV-13 Expand Codex backend command and error coverage.
 - COV-14 Expand Gemini adapter error-path coverage.

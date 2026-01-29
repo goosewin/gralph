@@ -433,6 +433,64 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn run_iteration_orders_args_with_model_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("opencode-model-only");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf 'env:%s\\n' \"$OPENCODE_EXPERIMENTAL_LSP_TOOL\"\nprintf 'args:'\nfor arg in \"$@\"; do\n  printf '%s|' \"$arg\"\ndone\nprintf '\\n'\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = OpenCodeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration(
+                "prompt",
+                Some("model-only"),
+                None,
+                &output_path,
+                temp.path(),
+            )
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        assert!(output.contains("env:true"));
+        assert!(output.contains("args:run|--model|model-only|prompt|"));
+        assert!(!output.contains("--variant"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_orders_args_with_variant_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("opencode-variant-only");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf 'env:%s\\n' \"$OPENCODE_EXPERIMENTAL_LSP_TOOL\"\nprintf 'args:'\nfor arg in \"$@\"; do\n  printf '%s|' \"$arg\"\ndone\nprintf '\\n'\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = OpenCodeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration(
+                "prompt",
+                None,
+                Some("variant-only"),
+                &output_path,
+                temp.path(),
+            )
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        assert!(output.contains("env:true"));
+        assert!(output.contains("args:run|--variant|variant-only|prompt|"));
+        assert!(!output.contains("--model"));
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn run_iteration_writes_stdout_and_keeps_prompt_last() {
         let temp = tempfile::tempdir().unwrap();
         let script_path = temp.path().join("opencode-args");
@@ -488,5 +546,26 @@ mod tests {
             result,
             Err(BackendError::Command(message)) if message.contains("opencode exited with")
         ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_captures_stderr_only_output() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("opencode-stderr");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf 'stderr-one\\n' 1>&2\nprintf 'stderr-two\\n' 1>&2\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = OpenCodeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("prompt", None, None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        assert_eq!(output, "stderr-one\nstderr-two\n");
     }
 }

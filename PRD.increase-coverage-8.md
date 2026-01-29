@@ -162,7 +162,7 @@ Increase coverage in supporting modules and backend adapters (`src/main.rs`, `sr
   * Add tests for run_iteration when output is emitted only on stderr and ensure output file captures all lines.
   * Add tests for OPENCODE_LSP_ENV and argument ordering when only model or only variant is provided.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-12 Expand OpenCode adapter coverage
+- [x] COV-12 Expand OpenCode adapter coverage
 ### Task COV-13
 
 - **ID** COV-13
