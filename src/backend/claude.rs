@@ -283,6 +283,29 @@ mod tests {
     }
 
     #[test]
+    fn extract_assistant_texts_handles_nulls_and_mixed_entry_types() {
+        let assistant = json!({
+            "type": "assistant",
+            "message": {
+                "content": [
+                    null,
+                    {"type": "text", "text": null},
+                    {"type": "image", "source": "ignored"},
+                    9,
+                    {"type": "text", "text": "first"},
+                    "raw",
+                    {"type": "text", "text": "second"}
+                ]
+            }
+        });
+
+        assert_eq!(
+            extract_assistant_texts(&assistant),
+            vec!["first".to_string(), "second".to_string()]
+        );
+    }
+
+    #[test]
     fn extract_assistant_texts_skips_mismatched_types() {
         let type_not_string = json!({
             "type": 5,
@@ -437,6 +460,18 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("stream.json");
         let contents = "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, contents);
+    }
+
+    #[test]
+    fn parse_text_falls_back_when_only_non_result_entries_exist() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "null\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\n{\"type\":\"user\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hi\"}]}}\n";
         fs::write(&path, contents).unwrap();
 
         let backend = ClaudeBackend::new();

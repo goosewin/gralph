@@ -163,7 +163,7 @@ Add tests around CLI helpers, server handlers, notification payloads, update wor
   * Add tests that validate parse_text returns raw contents when result is absent.
   * Add tests for extract_assistant_texts with nulls and mixed entry types.
 - **Dependencies** None
-- [ ] COV-BACKEND-CLAUDE-1 Cover Claude adapter parse fallbacks and malformed content
+- [x] COV-BACKEND-CLAUDE-1 Cover Claude adapter parse fallbacks and malformed content
 ### Task COV-BACKEND-OPENCODE-1
 
 - **ID** COV-BACKEND-OPENCODE-1
