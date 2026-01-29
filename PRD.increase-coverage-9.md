@@ -146,7 +146,7 @@ Expand tests around public APIs, adapter command assembly, and failure handling 
   * Tests cover model flag skipping on empty values.
   * Tests cover parse_text errors for missing files and directories.
 - **Dependencies** None
-- [ ] COV-8 Expand Gemini backend tests in src/backend/gemini.rs
+- [x] COV-8 Expand Gemini backend tests in src/backend/gemini.rs
 ---
 
 ### Task COV-9

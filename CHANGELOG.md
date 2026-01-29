@@ -36,6 +36,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-7 Expand server auth and CORS error-path coverage.
 - COV-7 Expand OpenCode backend env flags, argument ordering, and error-path tests.
 - COV-8 Expand notification formatting helper and payload coverage.
+- COV-8 Expand Gemini backend tests for headless flags and parse_text errors.
 - COV-9 Expand backend module utility coverage.
 - COV-9 Add notify validation and failure formatting tests.
 - COV-9 Cover update version env and archive PATH error cases.

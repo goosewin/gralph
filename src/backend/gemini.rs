@@ -400,7 +400,7 @@ mod tests {
         backend
             .run_iteration(
                 "prompt",
-                Some(""),
+                Some("  "),
                 None,
                 &output_path,
                 temp.path(),
@@ -408,7 +408,7 @@ mod tests {
             .expect("run_iteration should succeed");
 
         let output = fs::read_to_string(&output_path).unwrap();
-        assert!(output.contains("args:--headless|prompt|"));
+        assert_eq!(output, "args:--headless|prompt|\n");
         assert!(!output.contains("--model"));
     }
 
