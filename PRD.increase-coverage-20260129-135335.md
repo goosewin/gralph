@@ -113,7 +113,7 @@ Add tests around CLI helpers, server handlers, notification payloads, update wor
   * Add tests for task ID validation failures and session name fallback paths.
   * Add tests for auto worktree naming and boolean parsing variants.
 - **Dependencies** None
-- [ ] COV-MAIN-1 Expand CLI helper and worktree utility coverage
+- [x] COV-MAIN-1 Expand CLI helper and worktree utility coverage
 ### Task COV-SERVER-1
 
 - **ID** COV-SERVER-1

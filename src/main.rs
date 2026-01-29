@@ -2282,6 +2282,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_bool_value_accepts_mixed_case_with_whitespace() {
+        assert_eq!(parse_bool_value("\tYeS\n"), Some(true));
+        assert_eq!(parse_bool_value("  oFf\t"), Some(false));
+    }
+
+    #[test]
     fn version_constants_match_package() {
         assert_eq!(version::VERSION, env!("CARGO_PKG_VERSION"));
         assert_eq!(version::VERSION_TAG, format!("v{}", version::VERSION));
@@ -2308,6 +2314,19 @@ mod tests {
                 validate_task_id(value).is_err(),
                 "expected invalid: {value}"
             );
+        }
+    }
+
+    #[test]
+    fn validate_task_id_reports_expected_error() {
+        let err = validate_task_id("A-1b").unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Invalid task ID format"));
+                assert!(message.contains("A-1b"));
+                assert!(message.contains("expected like A-1"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
         }
     }
 
@@ -2757,6 +2776,13 @@ mod tests {
     }
 
     #[test]
+    fn auto_worktree_branch_name_differs_by_timestamp() {
+        let first = auto_worktree_branch_name("demo-app", "20260126-120000");
+        let second = auto_worktree_branch_name("demo-app", "20260126-120001");
+        assert_ne!(first, second);
+    }
+
+    #[test]
     fn worktree_timestamp_slug_format_is_stable() {
         let slug = worktree_timestamp_slug();
 
@@ -2793,6 +2819,17 @@ mod tests {
     #[cfg(windows)]
     fn session_name_falls_back_for_root() {
         let resolved = session_name(&None, Path::new(r"C:\\")).unwrap();
+        assert_eq!(resolved, DEFAULT_SESSION_NAME);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn session_name_falls_back_for_non_utf8_dir_name() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let raw = std::ffi::OsString::from_vec(vec![0xff, 0xfe]);
+        let dir = PathBuf::from(raw);
+        let resolved = session_name(&None, &dir).unwrap();
         assert_eq!(resolved, DEFAULT_SESSION_NAME);
     }
 
@@ -3003,6 +3040,23 @@ mod tests {
         );
 
         assert_eq!(branch, "prd-collision-2");
+    }
+
+    #[test]
+    fn ensure_unique_worktree_branch_returns_base_when_available() {
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let branch = ensure_unique_worktree_branch(
+            temp.path().to_str().unwrap(),
+            &worktrees_dir,
+            "prd-free",
+        );
+
+        assert_eq!(branch, "prd-free");
     }
 
     #[test]
