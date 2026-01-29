@@ -181,6 +181,29 @@ mod tests {
     }
 
     #[test]
+    fn task_blocks_from_contents_terminates_on_h2_heading_with_trailing_spaces() {
+        let contents = "### Task A\n- [ ] First\n## Notes   \n- [ ] Outside\n---\n";
+        let blocks = task_blocks_from_contents(contents);
+
+        assert_eq!(blocks.len(), 1);
+        assert!(blocks[0].contains("### Task A"));
+        assert!(blocks[0].contains("- [ ] First"));
+        assert!(!blocks[0].contains("## Notes"));
+        assert!(!blocks[0].contains("Outside"));
+    }
+
+    #[test]
+    fn task_blocks_from_contents_ignores_tabbed_heading_near_miss() {
+        let contents = "### Task A\n- [ ] First\n##\tNotes\n- [ ] Still inside\n---\n- [ ] Outside";
+        let blocks = task_blocks_from_contents(contents);
+
+        assert_eq!(blocks.len(), 1);
+        assert!(blocks[0].contains("##\tNotes"));
+        assert!(blocks[0].contains("Still inside"));
+        assert!(!blocks[0].contains("Outside"));
+    }
+
+    #[test]
     fn is_task_header_accepts_leading_whitespace() {
         assert!(is_task_header("  ### Task COV-13"));
     }
@@ -336,7 +359,7 @@ mod tests {
             separator_trailing in whitespace_strategy(),
             id in task_id_strategy(),
             body in prop::collection::vec(safe_line_strategy(), 0..4),
-            suffix in prop::collection::vec(safe_line_strategy(), 0..3)
+            suffix in prop::collection::vec(noise_line_strategy(), 0..3)
         ) {
             let header = format!("{}### Task {}", header_leading, id);
             let separator = format!("{}---{}", separator_leading, separator_trailing);
@@ -359,6 +382,9 @@ mod tests {
             prop_assert_eq!(blocks_out.len(), 1);
             prop_assert_eq!(&blocks_out[0], &expected);
             prop_assert!(!blocks_out[0].lines().any(|line| line.trim() == "---"));
+            for line in suffix.iter() {
+                prop_assert!(!blocks_out[0].lines().any(|block_line| block_line == line));
+            }
         }
 
         #[test]
@@ -393,7 +419,7 @@ mod tests {
             let blocks_out = task_blocks_from_contents(&contents);
             prop_assert_eq!(blocks_out.len(), 1);
             prop_assert_eq!(&blocks_out[0], &expected);
-            prop_assert!(!blocks_out[0].contains(&heading));
+            prop_assert!(!blocks_out[0].lines().any(|line| line == heading));
         }
 
         #[test]
@@ -403,7 +429,7 @@ mod tests {
             id in task_id_strategy(),
             body in prop::collection::vec(safe_line_strategy(), 0..4),
             title in string_regex(r"[A-Za-z0-9][A-Za-z0-9 ]{0,12}").unwrap(),
-            suffix in prop::collection::vec(safe_line_strategy(), 0..3)
+            suffix in prop::collection::vec(noise_line_strategy(), 0..3)
         ) {
             let header = format!("{}### Task {}", header_leading, id);
             let heading = format!("{}## {}", heading_leading, title);
@@ -425,7 +451,10 @@ mod tests {
 
             prop_assert_eq!(blocks_out.len(), 1);
             prop_assert_eq!(&blocks_out[0], &expected);
-            prop_assert!(!blocks_out[0].contains(&heading));
+            prop_assert!(!blocks_out[0].lines().any(|line| line == heading));
+            for line in suffix.iter() {
+                prop_assert!(!blocks_out[0].lines().any(|block_line| block_line == line));
+            }
         }
 
         #[test]

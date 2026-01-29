@@ -103,7 +103,7 @@ Add tests around CLI helpers, server handlers, notification payloads, update wor
   * Add proptest cases for CRLF and separator near-miss handling.
   * Add unit tests for edge headings and spacing near-misses.
 - **Dependencies** None
-- [ ] COV-TASK-1 Strengthen task parsing invariants with property tests
+- [x] COV-TASK-1 Strengthen task parsing invariants with property tests
 ### Task COV-MAIN-1
 
 - **ID** COV-MAIN-1
