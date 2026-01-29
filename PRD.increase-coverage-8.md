@@ -182,7 +182,7 @@ Increase coverage in supporting modules and backend adapters (`src/main.rs`, `sr
   * Add tests for parse_text on directory paths and for run_iteration with empty model omitting --model while keeping quiet/auto-approve flags.
   * Add tests for check_installed when PATH is unset or empty.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-14 Expand Codex adapter coverage
+- [x] COV-14 Expand Codex adapter coverage
 ### Task COV-15
 
 - **ID** COV-15
