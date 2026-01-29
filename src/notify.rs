@@ -777,9 +777,8 @@ mod tests {
 
     #[test]
     fn format_generic_complete_omits_failure_reason_fields() {
-        let payload =
-            format_generic_complete("delta", "repo", "2", "9s", "2026-01-26T12:13:14Z")
-                .expect("generic payload");
+        let payload = format_generic_complete("delta", "repo", "2", "9s", "2026-01-26T12:13:14Z")
+            .expect("generic payload");
         let value: Value = serde_json::from_str(&payload).expect("json payload");
         let object = value.as_object().expect("payload object");
 
@@ -790,14 +789,9 @@ mod tests {
 
     #[test]
     fn format_generic_complete_message_assembly() {
-        let payload = format_generic_complete(
-            "alpha",
-            "/srv/demo",
-            "3",
-            "5s",
-            "2026-01-26T15:16:17Z",
-        )
-        .expect("generic payload");
+        let payload =
+            format_generic_complete("alpha", "/srv/demo", "3", "5s", "2026-01-26T15:16:17Z")
+                .expect("generic payload");
         let value: Value = serde_json::from_str(&payload).expect("json payload");
 
         assert_eq!(
@@ -858,7 +852,10 @@ mod tests {
         assert!(!object.contains_key("reason"));
         assert!(!object.contains_key("max_iterations"));
         assert!(!object.contains_key("remaining_tasks"));
-        assert_eq!(object.get("message").and_then(Value::as_str), Some("custom message"));
+        assert_eq!(
+            object.get("message").and_then(Value::as_str),
+            Some("custom message")
+        );
 
         let payload = build_generic_payload(
             "failed",
@@ -875,7 +872,10 @@ mod tests {
         );
         let object = payload.as_object().expect("payload object");
 
-        assert_eq!(object.get("reason").and_then(Value::as_str), Some("timeout"));
+        assert_eq!(
+            object.get("reason").and_then(Value::as_str),
+            Some("timeout")
+        );
         assert_eq!(
             object.get("max_iterations").and_then(Value::as_str),
             Some("5")
@@ -908,15 +908,8 @@ mod tests {
             _ => panic!("expected invalid input"),
         }
 
-        let err = notify_complete(
-            "session",
-            "  ",
-            Some("repo"),
-            Some(1),
-            Some(5),
-            Some(3),
-        )
-        .expect_err("empty webhook url");
+        let err = notify_complete("session", "  ", Some("repo"), Some(1), Some(5), Some(3))
+            .expect_err("empty webhook url");
         match err {
             NotifyError::InvalidInput(message) => {
                 assert_eq!(message, "webhook url is required")
@@ -1057,6 +1050,55 @@ mod tests {
     }
 
     #[test]
+    fn notify_failed_defaults_unknown_for_discord_payload() {
+        let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
+        let url = format!("{}/discord.com/api/webhooks/123", base);
+
+        notify_failed("session", &url, None, None, None, None, None, None, Some(5))
+            .expect("notify failed");
+
+        let request = captured.lock().unwrap().clone().expect("captured request");
+        let value: Value = serde_json::from_str(&request.body).expect("json payload");
+        let embed = &value["embeds"][0];
+
+        assert_eq!(embed["description"], "Session **session** failed: unknown");
+        assert_eq!(embed["fields"][0]["value"], "`unknown`");
+        assert_eq!(embed["fields"][1]["value"], "unknown");
+        assert_eq!(embed["fields"][2]["value"], "unknown/unknown");
+        assert_eq!(embed["fields"][3]["value"], "unknown");
+        assert_eq!(embed["fields"][4]["value"], "unknown");
+
+        handle.join().expect("server thread");
+    }
+
+    #[test]
+    fn notify_failed_defaults_unknown_for_slack_payload() {
+        let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
+        let url = format!("{}/hooks.slack.com/services/123", base);
+
+        notify_failed("session", &url, None, None, None, None, None, None, Some(5))
+            .expect("notify failed");
+
+        let request = captured.lock().unwrap().clone().expect("captured request");
+        let value: Value = serde_json::from_str(&request.body).expect("json payload");
+        let attachment = &value["attachments"][0];
+        let blocks = attachment["blocks"].as_array().expect("blocks");
+        let fields = blocks[2]["fields"].as_array().expect("fields");
+
+        assert_eq!(
+            blocks[1]["text"]["text"],
+            "Session *session* failed: unknown"
+        );
+        assert_eq!(fields[0]["text"], "*Project:*\n`unknown`");
+        assert_eq!(fields[1]["text"], "*Reason:*\nunknown");
+        assert_eq!(fields[2]["text"], "*Iterations:*\nunknown/unknown");
+        assert_eq!(fields[3]["text"], "*Remaining Tasks:*\nunknown");
+        assert_eq!(fields[4]["text"], "*Duration:*\nunknown");
+
+        handle.join().expect("server thread");
+    }
+
+    #[test]
     fn format_discord_failed_reason_mappings() {
         let reasons = ["max_iterations", "error", "manual_stop", "timeout"];
         for reason in reasons {
@@ -1075,7 +1117,10 @@ mod tests {
             let embed = &value["embeds"][0];
             let description = embed["description"].as_str().expect("description");
 
-            assert_eq!(description, format_failure_description("alpha", reason, "**"));
+            assert_eq!(
+                description,
+                format_failure_description("alpha", reason, "**")
+            );
             assert_eq!(embed["fields"][1]["name"], "Reason");
             assert_eq!(embed["fields"][1]["value"], reason);
         }
@@ -1121,10 +1166,7 @@ mod tests {
         let value: Value = serde_json::from_str(&payload).expect("json payload");
         let embed = &value["embeds"][0];
 
-        assert_eq!(
-            embed["description"],
-            "Session **alpha** failed: mystery"
-        );
+        assert_eq!(embed["description"], "Session **alpha** failed: mystery");
         assert_eq!(embed["fields"][1]["value"], "mystery");
     }
 
@@ -1149,7 +1191,10 @@ mod tests {
             let description = blocks[1]["text"]["text"].as_str().expect("description");
 
             assert_eq!(description, format_failure_description("beta", reason, "*"));
-            assert_eq!(blocks[2]["fields"][1]["text"], format!("*Reason:*\n{}", reason));
+            assert_eq!(
+                blocks[2]["fields"][1]["text"],
+                format!("*Reason:*\n{}", reason)
+            );
         }
     }
 
@@ -1260,8 +1305,7 @@ mod tests {
 
     #[test]
     fn send_webhook_rejects_empty_payload() {
-        let err = send_webhook("https://example.com", "", Some(5))
-            .expect_err("empty payload");
+        let err = send_webhook("https://example.com", "", Some(5)).expect_err("empty payload");
         match err {
             NotifyError::InvalidInput(message) => {
                 assert_eq!(message, "payload is required")
@@ -1269,8 +1313,8 @@ mod tests {
             _ => panic!("expected invalid input"),
         }
 
-        let err = send_webhook("https://example.com", "  ", Some(5))
-            .expect_err("whitespace payload");
+        let err =
+            send_webhook("https://example.com", "  ", Some(5)).expect_err("whitespace payload");
         match err {
             NotifyError::InvalidInput(message) => {
                 assert_eq!(message, "payload is required")
@@ -1328,8 +1372,7 @@ mod tests {
         let payload = "{}";
         let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
 
-        send_webhook(&format!("{}/default", base), payload, Some(0))
-            .expect("send webhook");
+        send_webhook(&format!("{}/default", base), payload, Some(0)).expect("send webhook");
 
         assert!(captured.lock().unwrap().is_some());
         handle.join().expect("server thread");
@@ -1340,8 +1383,7 @@ mod tests {
         let payload = "{}";
         let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
 
-        send_webhook(&format!("{}/default-none", base), payload, None)
-            .expect("send webhook");
+        send_webhook(&format!("{}/default-none", base), payload, None).expect("send webhook");
 
         assert!(captured.lock().unwrap().is_some());
         handle.join().expect("server thread");

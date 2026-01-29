@@ -123,7 +123,7 @@ Expand tests for CLI flows, server endpoints, backend adapters, update workflow,
   * Add tests for discord, slack, and generic payload formatting for failure reasons and missing fields.
   * Add tests for send_webhook timeout defaults and HTTP error handling using a local server.
 - **Dependencies** COV-CORE-1, COV-STATE-1, COV-PRD-1, COV-TASK-1
-- [ ] COV-NOTIFY-1 Expand notification formatting and delivery tests
+- [x] COV-NOTIFY-1 Expand notification formatting and delivery tests
 ### Task COV-UPDATE-1
 
 - **ID** COV-UPDATE-1
