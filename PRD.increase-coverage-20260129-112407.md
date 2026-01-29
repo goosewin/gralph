@@ -74,7 +74,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add tests for `write_state` failure modes and `validate_state_content` empty content rejection.
   * Add tests for `cleanup_stale` with malformed session entries and dead pid detection.
 - **Dependencies** None
-- [ ] COV90-STATE-1 Expand state store error-path and cleanup coverage
+- [x] COV90-STATE-1 Expand state store error-path and cleanup coverage
 ### Task COV90-VERIFIER-1
 
 - **ID** COV90-VERIFIER-1

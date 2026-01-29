@@ -98,6 +98,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-CORE-1 Add core loop parse failure coverage and completion invariants.
 - COV90-CORE-1 Add core loop tests for error paths, callbacks, and completion invariants.
 - COV90-STATE-1 Add state store recovery and parse_value edge-case tests.
+- COV90-STATE-1 Expand state store write failure and cleanup coverage.
 - COV90-PRD-1 Add property-based PRD validation and sanitize invariants.
 - COV90-PRD-1 Cover PRD absolute context acceptance and fallback selection tests.
 - COV90-TASK-1 Add property tests for task parsing boundaries.

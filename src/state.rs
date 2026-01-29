@@ -586,6 +586,28 @@ mod tests {
     }
 
     #[test]
+    fn write_state_propagates_tmp_write_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = temp.path().join("state-dir-file");
+        fs::write(&state_dir, "not a dir").unwrap();
+        let state_file = state_dir.join("state.json");
+        let lock_file = temp.path().join("state.lock");
+        let store =
+            StateStore::with_paths(state_dir, state_file, lock_file, Duration::from_secs(1));
+        let tmp_file = store
+            .state_file
+            .with_extension(format!("tmp.{}", std::process::id()));
+
+        let err = store.write_state(&empty_state()).unwrap_err();
+        match err {
+            StateError::Io { path, .. } => {
+                assert_eq!(path, tmp_file);
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn set_get_list_and_delete_session_flow() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path(), Duration::from_secs(1));
