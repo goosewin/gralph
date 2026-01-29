@@ -200,6 +200,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_text_ignores_invalid_json_lines_and_returns_result() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{invalid json}\n{\"type\":\"result\",\"result\":\"done\"}\n{still bad}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, "done");
+    }
+
+    #[test]
     fn extract_assistant_texts_filters_by_role_and_content() {
         let assistant = json!({
             "type": "assistant",
@@ -249,12 +261,41 @@ mod tests {
     }
 
     #[test]
+    fn extract_assistant_texts_skips_mismatched_types() {
+        let type_not_string = json!({
+            "type": 5,
+            "message": {"content": [{"type": "text", "text": "ignored"}]}
+        });
+        let text_not_string = json!({
+            "type": "assistant",
+            "message": {"content": [{"type": "text", "text": 42}]}
+        });
+        let content_not_object = json!({
+            "type": "assistant",
+            "message": {"content": ["plain"]}
+        });
+
+        assert!(extract_assistant_texts(&type_not_string).is_empty());
+        assert!(extract_assistant_texts(&text_not_string).is_empty());
+        assert!(extract_assistant_texts(&content_not_object).is_empty());
+    }
+
+    #[test]
     fn extract_result_text_requires_result_type() {
         let result = json!({"type": "result", "result": "done"});
         let assistant = json!({"type": "assistant", "result": "ignored"});
 
         assert_eq!(extract_result_text(&result), Some("done".to_string()));
         assert_eq!(extract_result_text(&assistant), None);
+    }
+
+    #[test]
+    fn extract_result_text_handles_missing_or_non_string_result() {
+        let missing_result = json!({"type": "result"});
+        let non_string_result = json!({"type": "result", "result": 123});
+
+        assert_eq!(extract_result_text(&missing_result), None);
+        assert_eq!(extract_result_text(&non_string_result), None);
     }
 
     #[test]
@@ -286,6 +327,18 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("stream.json");
         let contents = "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hi\"}]}}\nnot-json\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, contents);
+    }
+
+    #[test]
+    fn parse_text_returns_raw_contents_when_only_invalid_lines_exist() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "not-json\n{invalid json}\n";
         fs::write(&path, contents).unwrap();
 
         let backend = ClaudeBackend::new();

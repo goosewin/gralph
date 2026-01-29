@@ -152,7 +152,7 @@ Increase coverage in supporting modules and backend adapters (`src/main.rs`, `sr
   * Add tests for parse_text ignoring invalid JSON lines and returning raw contents when no result entries exist.
   * Add tests for extract_result_text and extract_assistant_texts when required fields are missing or types are mismatched.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-11 Expand Claude adapter parsing coverage
+- [x] COV-11 Expand Claude adapter parsing coverage
 ### Task COV-12
 
 - **ID** COV-12
