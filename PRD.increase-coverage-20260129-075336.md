@@ -212,7 +212,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Update verifier.coverage_warn in config to 65 to 70 and confirm warning-only behavior.
   * Document the soft target guidance in PROCESS.
 - **Dependencies** COV-CORE-1, COV-STATE-1, COV-PRD-1, COV-VERIFIER-1
-- [ ] COV-CI-1 Set initial soft coverage warning target
+- [x] COV-CI-1 Set initial soft coverage warning target
 ### Task COV-CI-2
 
 - **ID** COV-CI-2
