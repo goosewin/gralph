@@ -183,7 +183,7 @@ Add tests around CLI helpers, server handlers, notification payloads, update wor
   * Add tests for headless flag ordering and prompt placement.
   * Add tests for parse_text invalid UTF-8 error handling.
 - **Dependencies** None
-- [ ] COV-BACKEND-GEMINI-1 Add Gemini adapter ordering and invalid UTF-8 coverage
+- [x] COV-BACKEND-GEMINI-1 Add Gemini adapter ordering and invalid UTF-8 coverage
 ### Task COV-BACKEND-CODEX-1
 
 - **ID** COV-BACKEND-CODEX-1

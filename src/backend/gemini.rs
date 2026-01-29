@@ -114,6 +114,7 @@ mod tests {
     use std::env;
     use std::ffi::{OsStr, OsString};
     use std::fs;
+    use std::io;
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
@@ -218,10 +219,16 @@ mod tests {
         let backend = GeminiBackend::new();
         let result = backend.parse_text(&path);
 
-        assert!(matches!(
-            result,
-            Err(BackendError::Io { path: error_path, .. }) if error_path == path
-        ));
+        match result {
+            Err(BackendError::Io {
+                path: error_path,
+                source,
+            }) => {
+                assert_eq!(error_path, path);
+                assert_eq!(source.kind(), io::ErrorKind::InvalidData);
+            }
+            _ => panic!("expected invalid utf-8 io error"),
+        }
     }
 
     #[test]
@@ -389,8 +396,10 @@ mod tests {
 
         let output = fs::read_to_string(&output_path).unwrap();
         let args: Vec<&str> = output.lines().collect();
-        assert_eq!(args.first().copied(), Some("--headless"));
-        assert_eq!(args.last().copied(), Some("final-prompt"));
+        assert_eq!(
+            args,
+            vec!["--headless", "--model", "model-y", "final-prompt"]
+        );
     }
 
     #[cfg(unix)]
