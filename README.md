@@ -77,6 +77,8 @@ waits for review criteria (greptile by default), and merges only when reviews an
 checks meet thresholds. When `verifier.auto_run` is true, it runs automatically
 after loop completion; otherwise run `gralph verifier` manually. Configure the
 review gate under `verifier.review.*` and ensure `gh auth login` is complete.
+Soft coverage warning target is controlled by `verifier.coverage_warn` (default 80)
+and only prints a warning without failing the verifier.
 
 ## Commit Conventions
 

@@ -223,7 +223,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Update verifier.coverage_warn to the new range and align README guidance.
   * Confirm warning-only behavior remains unchanged.
 - **Dependencies** COV-CI-1
-- [ ] COV-CI-2 Raise soft coverage warning target after stabilization
+- [x] COV-CI-2 Raise soft coverage warning target after stabilization
 ---
 
 ## Success Criteria
