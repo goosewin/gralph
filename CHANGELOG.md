@@ -30,6 +30,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-PRD-1 Add PRD sanitize fallback and context validation proptests.
 - COV-PRD-1 Add PRD sanitize context filtering and stray unchecked invariants.
 - COV-4 Expand verifier helper coverage for auto-run defaults, command parsing, PR base resolution, template lookup, static checks, and review gate parsing.
+- COV-VER-1 Expand verifier parsing edge cases for empty commands and check rollups.
 - COV-5 Add Codex backend run_iteration flag validation tests.
 - COV-5 Expand config normalization and override tests.
 - COV-5 Cover config env override conflicts and empty values.

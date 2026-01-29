@@ -103,7 +103,7 @@ Each task block must contain exactly one unchecked task line.
   * Add tests for extract_coverage_percent using typical tarpaulin output patterns and fallback rules.
   * Add tests for parse_review_rating and parse_review_issue_count with fractions and percent formats.
 - **Dependencies** None
-- [ ] COV-VER-1 Expand verifier parsing and review gate coverage
+- [x] COV-VER-1 Expand verifier parsing and review gate coverage
 ---
 
 ### Task COV-MAIN-1

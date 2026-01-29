@@ -198,7 +198,13 @@ fn parse_verifier_command(command: &str) -> Result<(String, Vec<String>), CliErr
             "Verifier command cannot be empty.".to_string(),
         ));
     }
-    let program = parts[0].to_string();
+    let program = parts[0].trim();
+    if program.is_empty() {
+        return Err(CliError::Message(
+            "Verifier command cannot be empty.".to_string(),
+        ));
+    }
+    let program = program.to_string();
     let args = parts[1..].iter().cloned().collect();
     Ok((program, args))
 }
@@ -2237,6 +2243,17 @@ mod tests {
     }
 
     #[test]
+    fn parse_verifier_command_rejects_quoted_empty_program() {
+        let err = parse_verifier_command("\"\"").unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("cannot be empty"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn parse_verifier_command_rejects_invalid_shell_words() {
         let err = parse_verifier_command("cargo test \"unterminated").unwrap_err();
         match err {
@@ -2779,6 +2796,23 @@ mod tests {
     }
 
     #[test]
+    fn evaluate_check_gate_reports_pending_when_queued() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "QUEUED",
+                    "conclusion": ""
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Pending(message)
+                if message.contains("checks pending") && message.contains("ci")));
+    }
+
+    #[test]
     fn evaluate_check_gate_reports_pending_when_conclusion_missing() {
         let settings = base_review_settings();
         let pr_view = json!({
@@ -2836,6 +2870,23 @@ mod tests {
         assert!(
             matches!(decision, GateDecision::Failed(message) if message.contains("checks failed"))
         );
+    }
+
+    #[test]
+    fn evaluate_check_gate_reports_failed_on_action_required() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "COMPLETED",
+                    "conclusion": "ACTION_REQUIRED"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Failed(message)
+                if message.contains("checks failed") && message.contains("ci")));
     }
 
     #[test]
