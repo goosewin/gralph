@@ -1,11 +1,14 @@
 mod cli;
 mod verifier;
 
+#[cfg(test)]
+mod test_support;
+
 use clap::Parser;
 use cli::{
-    ASCII_BANNER, Cli, Command, ConfigArgs, ConfigCommand, InitArgs, LogsArgs, PrdArgs,
-    PrdCheckArgs, PrdCommand, PrdCreateArgs, ResumeArgs, RunLoopArgs, ServerArgs, StartArgs,
-    StopArgs, VerifierArgs, WorktreeCommand, WorktreeCreateArgs, WorktreeFinishArgs,
+    Cli, Command, ConfigArgs, ConfigCommand, InitArgs, LogsArgs, PrdArgs, PrdCheckArgs, PrdCommand,
+    PrdCreateArgs, ResumeArgs, RunLoopArgs, ServerArgs, StartArgs, StopArgs, VerifierArgs,
+    WorktreeCommand, WorktreeCreateArgs, WorktreeFinishArgs, ASCII_BANNER,
 };
 use gralph_rs::backend::backend_from_name;
 use gralph_rs::config::Config;
@@ -1993,6 +1996,10 @@ mod tests {
             "GRALPH_CONFIG_DIR",
             "GRALPH_PROJECT_CONFIG_NAME",
             "GRALPH_DEFAULTS_AUTO_WORKTREE",
+            "GRALPH_STATE_DIR",
+            "GRALPH_STATE_FILE",
+            "GRALPH_LOCK_FILE",
+            "GRALPH_LOCK_TIMEOUT",
         ] {
             remove_env(key);
         }
@@ -2032,6 +2039,14 @@ mod tests {
             no_worktree: false,
             strict_prd: false,
         }
+    }
+
+    fn set_state_env(root: &Path) -> PathBuf {
+        let state_dir = root.join("state");
+        set_env("GRALPH_STATE_DIR", &state_dir);
+        set_env("GRALPH_STATE_FILE", state_dir.join("state.json"));
+        set_env("GRALPH_LOCK_FILE", state_dir.join("state.lock"));
+        state_dir
     }
 
     fn git_status_ok(dir: &Path, args: &[&str]) {
@@ -2152,7 +2167,9 @@ mod tests {
         let notifications_map = notifications.as_mapping().unwrap();
         assert_eq!(
             notifications_map.get(&serde_yaml::Value::String("webhook".to_string())),
-            Some(&serde_yaml::Value::String("https://example.test".to_string()))
+            Some(&serde_yaml::Value::String(
+                "https://example.test".to_string()
+            ))
         );
 
         clear_env_overrides();
@@ -2224,24 +2241,21 @@ mod tests {
     #[test]
     fn validate_task_id_rejects_invalid_formats() {
         for value in [
-            "",
-            "A",
-            "A-",
-            "-1",
-            "1-2",
-            "1A-2",
-            "A--1",
-            "A-1b",
-            "A-1-2",
-            "A_1",
+            "", "A", "A-", "-1", "1-2", "1A-2", "A--1", "A-1b", "A-1-2", "A_1",
         ] {
-            assert!(validate_task_id(value).is_err(), "expected invalid: {value}");
+            assert!(
+                validate_task_id(value).is_err(),
+                "expected invalid: {value}"
+            );
         }
     }
 
     #[test]
     fn sanitize_session_name_replaces_invalid_chars() {
-        assert_eq!(sanitize_session_name("My Session@2026!"), "My-Session-2026-");
+        assert_eq!(
+            sanitize_session_name("My Session@2026!"),
+            "My-Session-2026-"
+        );
         assert_eq!(sanitize_session_name("dev_env-1"), "dev_env-1");
     }
 
@@ -2438,7 +2452,10 @@ mod tests {
             Some("README.md,missing.md"),
         );
 
-        assert_eq!(entries, vec!["README.md", "config/default.yaml", "src/main.rs"]);
+        assert_eq!(
+            entries,
+            vec!["README.md", "config/default.yaml", "src/main.rs"]
+        );
     }
 
     #[test]
@@ -2501,7 +2518,10 @@ mod tests {
             serde_yaml::Value::Number(value) => assert_eq!(value.as_i64(), Some(-7)),
             other => panic!("expected number, got: {other:?}"),
         }
-        assert_eq!(parse_yaml_value("1.5"), serde_yaml::Value::String("1.5".to_string()));
+        assert_eq!(
+            parse_yaml_value("1.5"),
+            serde_yaml::Value::String("1.5".to_string())
+        );
         assert_eq!(
             parse_yaml_value("maybe"),
             serde_yaml::Value::String("maybe".to_string())
@@ -2611,6 +2631,53 @@ mod tests {
             }
             other => panic!("unexpected error type: {other:?}"),
         }
+    }
+
+    #[test]
+    fn cmd_logs_uses_session_log_file() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        set_state_env(temp.path());
+        let store = StateStore::new_from_env();
+        store.init_state().unwrap();
+        let log_path = temp.path().join("custom.log");
+        write_file(&log_path, "line one\nline two\n");
+        let log_path_string = log_path.to_string_lossy().to_string();
+        let dir_string = temp.path().to_string_lossy().to_string();
+        store
+            .set_session(
+                "demo",
+                &[("dir", &dir_string), ("log_file", &log_path_string)],
+            )
+            .unwrap();
+
+        let args = LogsArgs {
+            name: "demo".to_string(),
+            follow: false,
+        };
+        cmd_logs(args).unwrap();
+        clear_env_overrides();
+    }
+
+    #[test]
+    fn cmd_logs_falls_back_to_session_dir_log() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        set_state_env(temp.path());
+        let store = StateStore::new_from_env();
+        store.init_state().unwrap();
+        let project_dir = temp.path().join("project");
+        let log_path = project_dir.join(".gralph").join("demo.log");
+        write_file(&log_path, "line one\n");
+        let dir_string = project_dir.to_string_lossy().to_string();
+        store.set_session("demo", &[("dir", &dir_string)]).unwrap();
+
+        let args = LogsArgs {
+            name: "demo".to_string(),
+            follow: false,
+        };
+        cmd_logs(args).unwrap();
+        clear_env_overrides();
     }
 
     #[test]
@@ -2811,6 +2878,142 @@ mod tests {
         );
 
         assert_eq!(branch, "prd-collision-3");
+    }
+
+    #[test]
+    fn create_worktree_at_rejects_existing_branch() {
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let branch = "task-C-1";
+        git_status_ok(temp.path(), &["branch", branch]);
+        let worktree_path = temp.path().join(".worktrees").join(branch);
+
+        let err =
+            create_worktree_at(temp.path().to_str().unwrap(), branch, &worktree_path).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Branch already exists"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn create_worktree_at_rejects_existing_path() {
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let branch = "task-C-2";
+        let worktree_path = temp.path().join(".worktrees").join(branch);
+        fs::create_dir_all(&worktree_path).unwrap();
+
+        let err =
+            create_worktree_at(temp.path().to_str().unwrap(), branch, &worktree_path).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Worktree path already exists"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_resume_errors_when_missing_dir() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        set_state_env(temp.path());
+        let store = StateStore::new_from_env();
+        store.init_state().unwrap();
+        store.set_session("demo", &[("status", "stopped")]).unwrap();
+
+        let args = ResumeArgs {
+            name: Some("demo".to_string()),
+        };
+        let err = cmd_resume(args).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Missing dir for session demo"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+        clear_env_overrides();
+    }
+
+    #[test]
+    fn join_or_none_returns_none_for_empty() {
+        let entries: Vec<String> = Vec::new();
+        assert_eq!(join_or_none(&entries), "None");
+    }
+
+    #[test]
+    fn join_or_none_joins_entries() {
+        let entries = vec!["one".to_string(), "two".to_string()];
+        assert_eq!(join_or_none(&entries), "one, two");
+    }
+
+    #[test]
+    fn init_template_for_path_selects_known_templates() {
+        let architecture = init_template_for_path(Path::new("ARCHITECTURE.md"));
+        assert_eq!(architecture, ARCHITECTURE_TEMPLATE);
+
+        let process = init_template_for_path(Path::new("process.md"));
+        assert_eq!(process, PROCESS_TEMPLATE);
+
+        let decisions = init_template_for_path(Path::new("DECISIONS.md"));
+        assert_eq!(decisions, DECISIONS_TEMPLATE);
+
+        let risk = init_template_for_path(Path::new("risk_register.md"));
+        assert_eq!(risk, RISK_REGISTER_TEMPLATE);
+
+        let changelog = init_template_for_path(Path::new("CHANGELOG.md"));
+        assert_eq!(changelog, CHANGELOG_TEMPLATE);
+    }
+
+    #[test]
+    fn generic_markdown_template_uses_stem_title() {
+        let template = generic_markdown_template(Path::new("docs/TEAM_NOTES.md"));
+        assert_eq!(template, "# TEAM NOTES\n\n## Overview\n\nTBD.\n");
+    }
+
+    #[test]
+    fn write_atomic_overwrites_target_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("notes.md");
+        write_file(&path, "old");
+
+        write_atomic(&path, "new", false).unwrap();
+
+        let contents = fs::read_to_string(&path).unwrap();
+        assert_eq!(contents, "new");
+    }
+
+    #[test]
+    fn add_context_entry_skips_missing_and_dedupes() {
+        let temp = tempfile::tempdir().unwrap();
+        let target_dir = temp.path();
+        write_file(&target_dir.join("README.md"), "readme");
+
+        let mut entries: Vec<String> = Vec::new();
+        let mut seen: BTreeMap<String, bool> = BTreeMap::new();
+
+        add_context_entry(target_dir, "README.md", &mut entries, &mut seen);
+        add_context_entry(target_dir, "README.md", &mut entries, &mut seen);
+        add_context_entry(target_dir, "missing.md", &mut entries, &mut seen);
+
+        assert_eq!(entries, vec!["README.md".to_string()]);
+    }
+
+    #[test]
+    fn write_allowed_context_writes_entries_to_temp_file() {
+        let entries = vec!["README.md".to_string(), "src/main.rs".to_string()];
+        let path = write_allowed_context(&entries).unwrap().unwrap();
+
+        let contents = fs::read_to_string(&path).unwrap();
+        assert!(contents.contains("README.md"));
+        assert!(contents.contains("src/main.rs"));
+
+        let _ = fs::remove_file(&path);
     }
 }
 

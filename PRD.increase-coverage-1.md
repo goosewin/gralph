@@ -93,7 +93,7 @@ Expand tests for CLI flows, server endpoints, backend adapters, update workflow,
   * Add tests for worktree helpers when branch or path already exists.
   * Add tests for cmd_logs resolution and cmd_resume when session metadata is incomplete.
 - **Dependencies** COV-CORE-1, COV-STATE-1, COV-PRD-1, COV-TASK-1
-- [ ] COV-MAIN-1 Cover CLI and worktree error paths
+- [x] COV-MAIN-1 Cover CLI and worktree error paths
 ### Task COV-CONFIG-1
 
 - **ID** COV-CONFIG-1
