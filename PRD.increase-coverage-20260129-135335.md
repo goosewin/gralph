@@ -173,7 +173,7 @@ Add tests around CLI helpers, server handlers, notification payloads, update wor
   * Add unit tests for parse_text invalid UTF-8 error propagation.
   * Add tests for model and variant whitespace trimming behavior.
 - **Dependencies** None
-- [ ] COV-BACKEND-OPENCODE-1 Expand OpenCode adapter error and flag handling coverage
+- [x] COV-BACKEND-OPENCODE-1 Expand OpenCode adapter error and flag handling coverage
 ### Task COV-BACKEND-GEMINI-1
 
 - **ID** COV-BACKEND-GEMINI-1

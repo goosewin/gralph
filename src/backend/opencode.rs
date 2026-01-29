@@ -235,6 +235,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_text_returns_io_error_for_invalid_utf8() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("invalid-utf8.txt");
+        fs::write(&path, [0xff, 0xfe, b'a']).unwrap();
+
+        let backend = OpenCodeBackend::new();
+        let result = backend.parse_text(&path);
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path: error_path, .. }) if error_path == path
+        ));
+    }
+
+    #[test]
     fn check_installed_reflects_path_entries() {
         let _lock = crate::test_support::env_lock();
         let temp = tempfile::tempdir().unwrap();
