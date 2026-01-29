@@ -791,6 +791,45 @@ mod tests {
         assert_eq!(resolve_cors_origin(&headers, &config), None);
     }
 
+    #[test]
+    fn resolve_cors_origin_rejects_origin_when_host_is_wildcard() {
+        let config = ServerConfig {
+            host: "0.0.0.0".to_string(),
+            port: 8080,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::ORIGIN,
+            "http://example.com".parse().unwrap(),
+        );
+
+        assert_eq!(resolve_cors_origin(&headers, &config), None);
+    }
+
+    #[test]
+    fn resolve_cors_origin_allows_explicit_ip_host_match() {
+        let config = ServerConfig {
+            host: "192.168.1.10".to_string(),
+            port: 8080,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::ORIGIN,
+            "http://192.168.1.10".parse().unwrap(),
+        );
+
+        assert_eq!(
+            resolve_cors_origin(&headers, &config),
+            Some("http://192.168.1.10".to_string())
+        );
+    }
+
     #[tokio::test]
     async fn check_auth_rejects_missing_header() {
         let temp = tempfile::tempdir().unwrap();
@@ -1645,6 +1684,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn stop_endpoint_unknown_session_allows_open_access() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/stop/missing")
+                    .method("POST")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["error"], "Session not found: missing");
+    }
+
+    #[tokio::test]
     async fn stop_endpoint_error_includes_cors_headers() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path());
@@ -1865,6 +1936,37 @@ mod tests {
             "task_file": "missing.md",
         });
         let enriched = enrich_session(session);
+        assert_eq!(enriched["current_remaining"], 0);
+    }
+
+    #[test]
+    fn enrich_session_defaults_to_zero_when_default_task_file_missing() {
+        let temp = tempfile::tempdir().unwrap();
+
+        let session = json!({
+            "name": "alpha",
+            "status": "idle",
+            "pid": 0,
+            "dir": temp.path().to_string_lossy(),
+        });
+        let enriched = enrich_session(session);
+        assert_eq!(enriched["current_remaining"], 0);
+    }
+
+    #[test]
+    fn enrich_session_marks_stale_when_pid_dead_and_task_file_missing() {
+        let temp = tempfile::tempdir().unwrap();
+
+        let session = json!({
+            "name": "alpha",
+            "status": "running",
+            "pid": dead_pid(),
+            "dir": temp.path().to_string_lossy(),
+            "task_file": "missing.md",
+        });
+        let enriched = enrich_session(session);
+        assert_eq!(enriched["status"], "stale");
+        assert_eq!(enriched["is_alive"], false);
         assert_eq!(enriched["current_remaining"], 0);
     }
 

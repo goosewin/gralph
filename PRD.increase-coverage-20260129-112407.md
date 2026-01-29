@@ -172,7 +172,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add tests for `enrich_session` when task file is missing or pid is stale.
   * Add tests for stop handler error responses when session is missing.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-SERVER-1 Expand server edge-case coverage
+- [x] COV90-SERVER-1 Expand server edge-case coverage
 ### Task COV90-BACKEND-MOD-1
 
 - **ID** COV90-BACKEND-MOD-1

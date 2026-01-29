@@ -112,7 +112,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV90-MAIN-1 Add CLI helper tests for session naming and worktree branch formatting.
 - COV90-VERSION-1 Add version constant tests.
 - COV90-LIB-1 Add lib crate wiring coverage.
-- COV90-SERVER-1 Add server auth, CORS, and session enrichment edge-case tests.
+- COV90-SERVER-1 Expand server edge-case coverage for CORS origins, stale sessions, and missing stop targets.
 - COV90-BACKEND-MOD-1 Add backend module PATH and streaming tests.
 - COV90-BACKEND-CLAUDE-1 Expand Claude backend parsing and error tests.
 - COV90-BACKEND-OPENCODE-1 Expand OpenCode backend env flag ordering tests.
