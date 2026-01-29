@@ -182,7 +182,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add property-based tests for block termination on separators and headings across CRLF input.
   * Add tests for is_task_header and is_unchecked_line near-miss spacing cases.
 - **Dependencies** None
-- [ ] COV-TASK-1 Add task parsing invariant tests
+- [x] COV-TASK-1 Add task parsing invariant tests
 ### Task COV-TESTSUPPORT-1
 
 - **ID** COV-TESTSUPPORT-1

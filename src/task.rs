@@ -252,9 +252,21 @@ mod tests {
     }
 
     #[test]
+    fn is_task_header_rejects_spacing_near_misses() {
+        assert!(!is_task_header("###  Task COV-29"));
+        assert!(!is_task_header("### Task\t COV-29"));
+    }
+
+    #[test]
     fn is_unchecked_line_rejects_tabbed_near_misses() {
         assert!(!is_unchecked_line("-\t[ ] Edge case"));
         assert!(!is_unchecked_line("- [\t] Edge case"));
+    }
+
+    #[test]
+    fn is_unchecked_line_rejects_spacing_near_misses_with_tabs() {
+        assert!(!is_unchecked_line("- \t[ ] Edge case"));
+        assert!(!is_unchecked_line("-\t [ ] Edge case"));
     }
 
     proptest! {
@@ -293,6 +305,38 @@ mod tests {
         }
 
         #[test]
+        fn prop_task_blocks_from_contents_terminates_on_separator_with_crlf(
+            header_leading in whitespace_strategy(),
+            separator_leading in whitespace_strategy(),
+            separator_trailing in whitespace_strategy(),
+            id in task_id_strategy(),
+            body in prop::collection::vec(safe_line_strategy(), 0..4),
+            suffix in prop::collection::vec(safe_line_strategy(), 0..3)
+        ) {
+            let header = format!("{}### Task {}", header_leading, id);
+            let separator = format!("{}---{}", separator_leading, separator_trailing);
+            let mut lines = Vec::new();
+            lines.push(header.clone());
+            let mut expected = header;
+
+            for line in body {
+                lines.push(line.clone());
+                expected.push('\n');
+                expected.push_str(&line);
+            }
+
+            lines.push(separator);
+            lines.extend(suffix.iter().cloned());
+
+            let contents = lines.join("\r\n");
+            let blocks_out = task_blocks_from_contents(&contents);
+
+            prop_assert_eq!(blocks_out.len(), 1);
+            prop_assert_eq!(&blocks_out[0], &expected);
+            prop_assert!(!blocks_out[0].lines().any(|line| line.trim() == "---"));
+        }
+
+        #[test]
         fn prop_task_blocks_from_contents_terminates_on_h2_heading(
             header_leading in whitespace_strategy(),
             heading_leading in whitespace_strategy(),
@@ -322,6 +366,38 @@ mod tests {
             }
 
             let blocks_out = task_blocks_from_contents(&contents);
+            prop_assert_eq!(blocks_out.len(), 1);
+            prop_assert_eq!(&blocks_out[0], &expected);
+            prop_assert!(!blocks_out[0].contains(&heading));
+        }
+
+        #[test]
+        fn prop_task_blocks_from_contents_terminates_on_h2_heading_with_crlf(
+            header_leading in whitespace_strategy(),
+            heading_leading in whitespace_strategy(),
+            id in task_id_strategy(),
+            body in prop::collection::vec(safe_line_strategy(), 0..4),
+            title in string_regex(r"[A-Za-z0-9][A-Za-z0-9 ]{0,12}").unwrap(),
+            suffix in prop::collection::vec(safe_line_strategy(), 0..3)
+        ) {
+            let header = format!("{}### Task {}", header_leading, id);
+            let heading = format!("{}## {}", heading_leading, title);
+            let mut lines = Vec::new();
+            lines.push(header.clone());
+            let mut expected = header;
+
+            for line in body {
+                lines.push(line.clone());
+                expected.push('\n');
+                expected.push_str(&line);
+            }
+
+            lines.push(heading.clone());
+            lines.extend(suffix.iter().cloned());
+
+            let contents = lines.join("\r\n");
+            let blocks_out = task_blocks_from_contents(&contents);
+
             prop_assert_eq!(blocks_out.len(), 1);
             prop_assert_eq!(&blocks_out[0], &expected);
             prop_assert!(!blocks_out[0].contains(&heading));
@@ -369,8 +445,8 @@ mod tests {
 
             let blocks_out = task_blocks_from_contents(&contents);
             prop_assert_eq!(blocks_out.len(), 2);
-            prop_assert_eq!(blocks_out[0], expected_first);
-            prop_assert_eq!(blocks_out[1], expected_second);
+            prop_assert_eq!(&blocks_out[0], &expected_first);
+            prop_assert_eq!(&blocks_out[1], &expected_second);
         }
 
         #[test]
@@ -406,7 +482,7 @@ mod tests {
 
             let blocks_out = task_blocks_from_contents(&contents);
             prop_assert_eq!(blocks_out.len(), 1);
-            prop_assert_eq!(blocks_out[0], expected);
+            prop_assert_eq!(&blocks_out[0], &expected);
         }
 
         #[test]
@@ -442,7 +518,7 @@ mod tests {
 
             let blocks_out = task_blocks_from_contents(&contents);
             prop_assert_eq!(blocks_out.len(), 1);
-            prop_assert_eq!(blocks_out[0], expected);
+            prop_assert_eq!(&blocks_out[0], &expected);
         }
 
         #[test]
