@@ -413,6 +413,13 @@ mod tests {
             prop::collection::vec(inner, 0..4).prop_map(SeqItem::Sequence)
         })
     }
+
+    fn key_segment_strategy() -> impl Strategy<Value = String> {
+        let base = string_regex("[A-Za-z0-9_-]{1,8}").unwrap();
+        let padding = string_regex("[ ]{0,2}").unwrap();
+        (padding.clone(), base, padding)
+            .prop_map(|(prefix, segment, suffix)| format!("{prefix}{segment}{suffix}"))
+    }
     fn env_guard() -> std::sync::MutexGuard<'static, ()> {
         let guard = crate::test_support::env_lock();
         clear_env_overrides();
@@ -718,6 +725,24 @@ mod tests {
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(32))]
         #[test]
+        fn normalize_key_stability_matches_lookup(segments in prop::collection::vec(key_segment_strategy(), 1..4)) {
+            let raw_key = segments.join(".");
+            let normalized = normalize_key(&raw_key).expect("normalized key");
+            let mut current = Value::String("value".to_string());
+            for segment in normalized.split('.').rev() {
+                let mut map = Mapping::new();
+                map.insert(Value::String(segment.to_string()), current);
+                current = Value::Mapping(map);
+            }
+
+            let raw_lookup = lookup_value(&current, &raw_key).and_then(Value::as_str);
+            let normalized_lookup = lookup_value(&current, &normalized).and_then(Value::as_str);
+
+            prop_assert_eq!(raw_lookup, Some("value"));
+            prop_assert_eq!(normalized_lookup, Some("value"));
+        }
+
+        #[test]
         fn value_to_string_mixed_sequences_render_csv(items in prop::collection::vec(seq_item_strategy(), 0..6)) {
             let sequence = Value::Sequence(items.iter().map(SeqItem::to_value).collect());
             let expected = items
@@ -725,7 +750,8 @@ mod tests {
                 .map(SeqItem::expected_string)
                 .collect::<Vec<_>>()
                 .join(",");
-            prop_assert_eq!(value_to_string(&sequence).as_deref(), Some(expected.as_str()));
+            let actual = value_to_string(&sequence);
+            prop_assert_eq!(actual.as_deref(), Some(expected.as_str()));
         }
     }
 
@@ -952,6 +978,19 @@ mod tests {
     }
 
     #[test]
+    fn normalized_empty_override_precedes_compat_for_hyphenated_key() {
+        let _guard = env_guard();
+        set_env("GRALPH_DEFAULTS_AUTO_WORKTREE", "");
+        set_env("GRALPH_DEFAULTS_AUTO-WORKTREE", "true");
+
+        let value = resolve_env_override("defaults.auto-worktree", "defaults.auto_worktree");
+        assert_eq!(value.as_deref(), Some(""));
+
+        remove_env("GRALPH_DEFAULTS_AUTO-WORKTREE");
+        remove_env("GRALPH_DEFAULTS_AUTO_WORKTREE");
+    }
+
+    #[test]
     fn legacy_compat_env_override_keeps_empty_value() {
         let _guard = env_guard();
         set_env("GRALPH_DEFAULTS_AUTO-WORKTREE", "");
@@ -1147,6 +1186,37 @@ mod tests {
         );
 
         remove_env("GRALPH_PROJECT_CONFIG_NAME");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn config_paths_order_default_global_project() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let default_path = root.join("default.yaml");
+        let global_path = root.join("global.yaml");
+        let project_dir = root.join("project");
+        let project_path = project_dir.join(".gralph.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 1\n");
+        write_file(&global_path, "defaults:\n  backend: claude\n");
+        write_file(&project_path, "defaults:\n  backend: gemini\n");
+
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let paths = config_paths(Some(&project_dir));
+        assert_eq!(
+            paths,
+            vec![
+                default_path.clone(),
+                global_path.clone(),
+                project_path.clone()
+            ]
+        );
+
         remove_env("GRALPH_GLOBAL_CONFIG");
         remove_env("GRALPH_DEFAULT_CONFIG");
     }

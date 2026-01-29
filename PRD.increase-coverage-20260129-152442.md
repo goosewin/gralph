@@ -129,7 +129,7 @@ Each task block must contain exactly one unchecked task line.
   * Add tests for resolve_env_override with empty values and hyphenated keys.
   * Add a proptest for normalize_key stability in lookup behavior.
 - **Dependencies** COV-VER-1
-- [ ] COV-CONFIG-1 Expand config precedence and override coverage
+- [x] COV-CONFIG-1 Expand config precedence and override coverage
 ---
 
 ### Task COV-SERVER-1
