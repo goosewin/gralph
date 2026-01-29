@@ -140,7 +140,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add a test that ensures the lib crate compiles and exposes expected modules.
   * Avoid new public APIs or refactors.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-LIB-1 Add lib crate wiring coverage
+- [x] COV90-LIB-1 Add lib crate wiring coverage
 ### Task COV90-VERSION-1
 
 - **ID** COV90-VERSION-1
