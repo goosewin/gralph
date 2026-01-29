@@ -209,7 +209,7 @@ Add tests for backends, server, verifier, update, notify, config, and CLI helper
   * Tests cover download failures and empty archive extraction failures.
   * Tests cover permission denied behavior with GRALPH_INSTALL_DIR overrides.
 - **Dependencies** COV90-CORE-1, COV90-STATE-1, COV90-PRD-1, COV90-TASK-1
-- [ ] COV90-UPDATE-1 Add update workflow error path tests
+- [x] COV90-UPDATE-1 Add update workflow error path tests
 ### Task COV90-TESTSUPPORT-1
 
 - **ID** COV90-TESTSUPPORT-1

@@ -415,6 +415,8 @@ mod tests {
     use std::fs;
     use std::io::{Read, Write};
     use std::net::TcpListener;
+    #[cfg(unix)]
+    use std::process::Command;
     use std::thread;
     use tempfile::tempdir;
 
@@ -514,6 +516,47 @@ mod tests {
             let _ = stream.write_all(response.as_bytes());
         });
         (format!("http://{}", addr), handle)
+    }
+
+    fn start_bytes_server(
+        status: &'static str,
+        response_body: Vec<u8>,
+    ) -> (String, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind status listener");
+        let addr = listener.local_addr().expect("local addr");
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept connection");
+            let mut buffer = [0u8; 512];
+            let _ = stream.read(&mut buffer);
+            let header = format!(
+                "HTTP/1.1 {}\r\nContent-Length: {}\r\nContent-Type: application/octet-stream\r\nConnection: close\r\n\r\n",
+                status,
+                response_body.len()
+            );
+            let _ = stream.write_all(header.as_bytes());
+            let _ = stream.write_all(&response_body);
+        });
+        (format!("http://{}", addr), handle)
+    }
+
+    #[cfg(unix)]
+    fn build_release_archive(version: &str) -> Vec<u8> {
+        let temp = tempdir().expect("tempdir");
+        let release_dir = temp.path().join(format!("gralph-{}", version));
+        fs::create_dir_all(&release_dir).expect("create release dir");
+        let binary_path = release_dir.join("gralph");
+        fs::write(&binary_path, "binary").expect("write binary");
+        let archive_path = temp.path().join("gralph.tar.gz");
+        let status = Command::new("tar")
+            .arg("-czf")
+            .arg(&archive_path)
+            .arg("-C")
+            .arg(temp.path())
+            .arg(release_dir.file_name().expect("release dir name"))
+            .status()
+            .expect("run tar");
+        assert!(status.success());
+        fs::read(&archive_path).expect("read archive")
     }
 
     #[test]
@@ -926,6 +969,71 @@ mod tests {
         let result = install_release();
         handle.join().expect("server thread");
         assert!(matches!(result, Err(UpdateError::CommandFailed(_))));
+    }
+
+    #[test]
+    fn install_release_rejects_invalid_version_env() {
+        let _lock = crate::test_support::env_lock();
+        let _version_guard = EnvGuard::set("GRALPH_VERSION", "not-a-version");
+        let result = install_release();
+        assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
+    fn install_release_reports_missing_release_tag() {
+        let _lock = crate::test_support::env_lock();
+        let _version_guard = EnvGuard::set("GRALPH_VERSION", "latest");
+        let _tag_guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "");
+        let (url, handle) = start_release_server(r#"{ "name": "release" }"#);
+        let _url_guard = EnvGuard::set("GRALPH_TEST_RELEASE_URL", &url);
+        let result = install_release();
+        handle.join().expect("server thread");
+        assert!(matches!(result, Err(UpdateError::MissingTag)));
+    }
+
+    #[test]
+    fn install_release_reports_empty_archive() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempdir().expect("tempdir");
+        let install_dir = temp.path().join("install");
+        let install_dir_value = install_dir.to_string_lossy().to_string();
+        let _install_guard = EnvGuard::set("GRALPH_INSTALL_DIR", &install_dir_value);
+        let _version_guard = EnvGuard::set("GRALPH_VERSION", "1.2.3");
+        let (url, handle) = start_status_server("200 OK", "");
+        let _download_guard = EnvGuard::set("GRALPH_TEST_RELEASE_DOWNLOAD_URL", &url);
+        let result = install_release();
+        handle.join().expect("server thread");
+        assert!(matches!(result, Err(UpdateError::CommandFailed(_))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_release_reports_permission_denied_for_override_dir() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let _lock = crate::test_support::env_lock();
+        let temp = tempdir().expect("tempdir");
+        let install_dir = temp.path().join("install");
+        fs::create_dir_all(&install_dir).expect("create install dir");
+        let mut perms = fs::metadata(&install_dir).expect("metadata").permissions();
+        perms.set_mode(0o555);
+        fs::set_permissions(&install_dir, perms).expect("set permissions");
+
+        let archive_body = build_release_archive("1.2.3");
+        let (url, handle) = start_bytes_server("200 OK", archive_body);
+        let _download_guard = EnvGuard::set("GRALPH_TEST_RELEASE_DOWNLOAD_URL", &url);
+        let _version_guard = EnvGuard::set("GRALPH_VERSION", "1.2.3");
+        let _install_guard =
+            EnvGuard::set("GRALPH_INSTALL_DIR", install_dir.to_string_lossy().as_ref());
+
+        let result = install_release();
+        handle.join().expect("server thread");
+
+        let mut perms = fs::metadata(&install_dir).expect("metadata").permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&install_dir, perms).expect("reset permissions");
+
+        assert!(matches!(result, Err(UpdateError::PermissionDenied(_))));
     }
 
     #[test]
