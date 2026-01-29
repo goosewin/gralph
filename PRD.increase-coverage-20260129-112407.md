@@ -205,7 +205,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add tests for model and variant ordering and skipping empty values.
   * Add tests for non-zero exit propagation.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-BACKEND-OPENCODE-1 Expand OpenCode backend coverage
+- [x] COV90-BACKEND-OPENCODE-1 Expand OpenCode backend coverage
 ### Task COV90-BACKEND-GEMINI-1
 
 - **ID** COV90-BACKEND-GEMINI-1

@@ -116,7 +116,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV90-BACKEND-MOD-1 Add backend module PATH and streaming tests.
 - COV90-BACKEND-CLAUDE-1 Expand Claude backend parsing and error tests.
 - COV90-BACKEND-CLAUDE-1 Add Claude backend ordering and fallback tests.
-- COV90-BACKEND-OPENCODE-1 Expand OpenCode backend env flag ordering tests.
+- COV90-BACKEND-OPENCODE-1 Expand OpenCode backend env flag ordering and no-flag prompt tests.
 - COV90-BACKEND-GEMINI-1 Expand Gemini backend command and error tests.
 - COV90-BACKEND-CODEX-1 Expand Codex backend flag ordering and error tests.
 - COV90-NOTIFY-1 Add notify payload formatting, duration edge-case, and HTTP status tests.
