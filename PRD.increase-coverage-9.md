@@ -120,7 +120,7 @@ Expand tests around public APIs, adapter command assembly, and failure handling 
   * Tests cover `extract_assistant_texts` for malformed content entries.
   * Tests cover `run_iteration` model flag behavior with empty and non-empty values.
 - **Dependencies** None
-- [ ] COV-6 Expand Claude backend parsing and argument tests in src/backend/claude.rs
+- [x] COV-6 Expand Claude backend parsing and argument tests in src/backend/claude.rs
 ---
 
 ### Task COV-7

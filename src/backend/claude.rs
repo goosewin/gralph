@@ -261,6 +261,28 @@ mod tests {
     }
 
     #[test]
+    fn extract_assistant_texts_ignores_malformed_content_entries() {
+        let assistant = json!({
+            "type": "assistant",
+            "message": {
+                "content": [
+                    null,
+                    7,
+                    {"type": "text"},
+                    {"type": "text", "text": null},
+                    {"type": "text", "text": "valid"},
+                    {"type": "image", "text": "ignored"}
+                ]
+            }
+        });
+
+        assert_eq!(
+            extract_assistant_texts(&assistant),
+            vec!["valid".to_string()]
+        );
+    }
+
+    #[test]
     fn extract_assistant_texts_skips_mismatched_types() {
         let type_not_string = json!({
             "type": 5,
@@ -311,6 +333,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_text_returns_last_valid_result_with_interleaved_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\n{\"type\":\"result\"}\n{\"type\":\"result\",\"result\":\"first\"}\nnot-json\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"more\"}]}}\n{\"type\":\"result\",\"result\":\"second\"}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, "second");
+    }
+
+    #[test]
     fn parse_text_returns_result_when_not_last() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("stream.json");
@@ -351,6 +385,18 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("stream.json");
         let contents = "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, contents);
+    }
+
+    #[test]
+    fn parse_text_falls_back_when_result_entries_missing_text() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{\"type\":\"result\"}\n{\"type\":\"result\",\"result\":null}\n";
         fs::write(&path, contents).unwrap();
 
         let backend = ClaudeBackend::new();

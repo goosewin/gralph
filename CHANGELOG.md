@@ -32,6 +32,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-5 Add config path edge-case and key existence tests.
 - COV-5 Expand backend utility PATH and stream coverage.
 - COV-6 Expand CLI helper coverage in main.
+- COV-6 Expand Claude backend parsing and argument tests.
 - COV-7 Expand server auth and CORS error-path coverage.
 - COV-8 Expand notification formatting helper and payload coverage.
 - COV-9 Expand backend module utility coverage.
