@@ -216,7 +216,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add tests for skipping empty model values.
   * Add tests for invalid UTF-8 handling in `parse_text`.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-BACKEND-GEMINI-1 Expand Gemini backend coverage
+- [x] COV90-BACKEND-GEMINI-1 Expand Gemini backend coverage
 ### Task COV90-BACKEND-CODEX-1
 
 - **ID** COV90-BACKEND-CODEX-1
