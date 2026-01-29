@@ -132,7 +132,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add tests for prompt-last ordering and model flag inclusion or omission.
   * Add tests for parse_text error cases and spawn failures.
 - **Dependencies** None
-- [ ] COV-BACKEND-CODEX-1 Expand Codex adapter tests for args and errors
+- [x] COV-BACKEND-CODEX-1 Expand Codex adapter tests for args and errors
 ### Task COV-CONFIG-1
 
 - **ID** COV-CONFIG-1

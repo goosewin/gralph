@@ -181,6 +181,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_text_returns_io_error_for_invalid_utf8() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("invalid.txt");
+        fs::write(&path, [0xff, 0xfe, 0xfd]).unwrap();
+
+        let backend = CodexBackend::new();
+        let result = backend.parse_text(&path);
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path: error_path, .. }) if error_path == path
+        ));
+    }
+
+    #[test]
     fn check_installed_reflects_path_entries() {
         let _lock = crate::test_support::env_lock();
         let temp = tempfile::tempdir().unwrap();
@@ -331,6 +346,36 @@ mod tests {
             args,
             vec!["--quiet", "--auto-approve", "--model", "model-x", "prompt"]
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_keeps_prompt_last_and_flags_first() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("codex-mock");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf '%s\\n' \"$@\"\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = CodexBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration(
+                "final-prompt",
+                Some("model-y"),
+                None,
+                &output_path,
+                temp.path(),
+            )
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let args: Vec<&str> = output.lines().collect();
+        assert_eq!(args.first().copied(), Some("--quiet"));
+        assert_eq!(args.get(1).copied(), Some("--auto-approve"));
+        assert_eq!(args.last().copied(), Some("final-prompt"));
     }
 
     #[cfg(unix)]
