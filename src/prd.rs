@@ -2101,6 +2101,30 @@ mod tests {
         }
 
         #[test]
+        fn prop_extract_context_entries_empty_without_context_bundle(
+            noise in prop::collection::vec(context_entry_strategy(), 0..4)
+        ) {
+            let mut block = String::from("### Task P-NOCTX\n- **ID** P-NOCTX\n");
+            if noise.is_empty() {
+                block.push_str("- **DoD** Example\n");
+            } else {
+                block.push_str("- **DoD** Example ");
+                for entry in &noise {
+                    block.push('`');
+                    block.push_str(entry);
+                    block.push('`');
+                    block.push(' ');
+                }
+                block.push('\n');
+            }
+            block.push_str("- **Checklist**\n  * Work `ignored.md`\n- **Dependencies** None\n- [ ] P-NOCTX Task\n");
+
+            let extracted = extract_context_entries(&block);
+
+            prop_assert!(extracted.is_empty());
+        }
+
+        #[test]
         fn prop_extract_context_entries_handles_noise_and_breaks(
             entries in prop::collection::vec(context_entry_strategy(), 1..6),
             prefixes in prop::collection::vec(noise_strategy(), 1..6),
@@ -2446,6 +2470,54 @@ mod tests {
         }
 
         #[test]
+        fn prop_prd_sanitize_generated_file_strips_stray_unchecked_lines(
+            prefix in prop::collection::vec(
+                (any::<bool>(), safe_line_strategy(), whitespace_strategy()),
+                0..4
+            ),
+            suffix in prop::collection::vec(
+                (any::<bool>(), safe_line_strategy(), whitespace_strategy()),
+                0..4
+            )
+        ) {
+            let temp = tempdir().unwrap();
+            let base = temp.path();
+            let docs = base.join("docs");
+            fs::create_dir_all(&docs).unwrap();
+            fs::write(docs.join("context.md"), "ok").unwrap();
+
+            let mut contents = String::from("# PRD\n\n");
+            for (unchecked, line, indent) in &prefix {
+                if *unchecked {
+                    contents.push_str(&format!("{indent}- [ ] {line}\n"));
+                } else {
+                    contents.push_str(&format!("{indent}{line}\n"));
+                }
+            }
+            contents.push('\n');
+            contents.push_str("### Task P-STRAY-OUT\n- **ID** P-STRAY-OUT\n- **Context Bundle** `docs/context.md`\n- **DoD** Example.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] P-STRAY-OUT Task\n---\n");
+            for (unchecked, line, indent) in &suffix {
+                if *unchecked {
+                    contents.push_str(&format!("{indent}- [ ] {line}\n"));
+                } else {
+                    contents.push_str(&format!("{indent}{line}\n"));
+                }
+            }
+
+            let prd = base.join("prd.md");
+            fs::write(&prd, contents).unwrap();
+
+            prd_sanitize_generated_file(&prd, Some(base), None).unwrap();
+            let sanitized = fs::read_to_string(&prd).unwrap();
+
+            let unchecked_lines = sanitized
+                .lines()
+                .filter(|line| is_unchecked_line(line))
+                .count();
+            prop_assert_eq!(unchecked_lines, 1);
+        }
+
+        #[test]
         fn prop_prd_sanitize_generated_file_filters_context_allowed_list_and_base_dir(
             entries in prop::collection::hash_set(relative_path_strategy(), 1..5),
             allowed in prop::collection::vec(any::<bool>(), 1..5),
@@ -2674,6 +2746,31 @@ mod tests {
         assert!(sanitized.contains("- [ ] X-3 Keep"));
         assert!(sanitized.contains("- X-3 Drop"));
         assert!(!sanitized.contains("- [ ] X-3 Drop"));
+    }
+
+    #[test]
+    fn sanitize_task_block_rejects_absolute_context_not_in_allowed_list() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("allowed.md"), "ok").unwrap();
+        fs::write(docs.join("blocked.md"), "ok").unwrap();
+
+        let allowed = base.join("allowed.txt");
+        fs::write(&allowed, "docs/allowed.md\n").unwrap();
+
+        let blocked_abs = docs.join("blocked.md");
+        let block = format!(
+            "### Task V-3A\n- **ID** V-3A\n- **Context Bundle** `{}`\n- **DoD** Validate sanitize.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] V-3A Task\n",
+            blocked_abs.display()
+        );
+
+        let sanitized = sanitize_task_block(&block, Some(base), Some(&allowed));
+
+        assert!(sanitized.contains("- **Context Bundle** `docs/allowed.md`"));
+        assert!(!sanitized.contains("blocked.md"));
+        assert!(!sanitized.contains(base.to_string_lossy().as_ref()));
     }
 
     #[test]

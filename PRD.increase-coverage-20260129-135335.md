@@ -73,7 +73,7 @@ Add tests around CLI helpers, server handlers, notification payloads, update wor
   * Add unit tests for allowed context selection and absolute path handling.
   * Add proptest cases for context bundle parsing and checkbox sanitization.
 - **Dependencies** None
-- [ ] COV-PRD-1 Expand PRD sanitize and context selection invariants
+- [x] COV-PRD-1 Expand PRD sanitize and context selection invariants
 ### Task COV-VER-1
 
 - **ID** COV-VER-1
