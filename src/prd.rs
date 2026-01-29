@@ -1949,6 +1949,61 @@ mod tests {
             prop_assert_eq!(blocks_out.len(), 1);
             let block = &blocks_out[0];
             prop_assert_eq!(block, &expected);
+            prop_assert!(!block.contains('\r'));
+        }
+
+        #[test]
+        fn prop_validate_stray_unchecked_only_outside_task_blocks(
+            newline in newline_strategy(),
+            header_leading in whitespace_strategy(),
+            separator_leading in whitespace_strategy(),
+            separator_trailing in whitespace_strategy(),
+            prefix_leading in whitespace_strategy(),
+            suffix_leading in whitespace_strategy(),
+            id in task_id_strategy(),
+            body in prop::collection::vec(safe_line_strategy(), 0..3),
+            heading in heading_title_strategy(),
+            use_heading in any::<bool>(),
+            prefix_unchecked in any::<bool>(),
+            suffix_unchecked in any::<bool>()
+        ) {
+            let mut lines = vec!["# PRD".to_string()];
+            if prefix_unchecked {
+                lines.push(format!("{}- [ ] Outside before", prefix_leading));
+            } else {
+                lines.push(format!("{}Notes", prefix_leading));
+            }
+
+            lines.push(format!("{}### Task {}", header_leading, id));
+            lines.push("- [ ] Inside".to_string());
+            lines.extend(body.iter().cloned());
+
+            let terminator = if use_heading {
+                format!("{}## {}", separator_leading, heading)
+            } else {
+                format!("{}---{}", separator_leading, separator_trailing)
+            };
+            lines.push(terminator);
+
+            if suffix_unchecked {
+                lines.push(format!("{}- [ ] Outside after", suffix_leading));
+            } else {
+                lines.push(format!("{}Trailing", suffix_leading));
+            }
+
+            let contents = lines.join(&newline);
+            let errors = validate_stray_unchecked(&contents, Path::new("prd.md"));
+            let expected = (prefix_unchecked as usize) + (suffix_unchecked as usize);
+
+            match errors {
+                None => prop_assert_eq!(expected, 0),
+                Some(messages) => {
+                    prop_assert_eq!(messages.len(), expected);
+                    prop_assert!(messages
+                        .iter()
+                        .all(|line| line.contains("Unchecked task line outside task block")));
+                }
+            }
         }
 
         #[test]

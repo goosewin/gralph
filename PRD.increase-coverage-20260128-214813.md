@@ -87,7 +87,7 @@ Add tests for backends, server, verifier, update, notify, config, and CLI helper
   * Tests cover CRLF input and ensure parsed blocks do not retain carriage returns.
   * Tests verify unchecked line detection only within task blocks.
 - **Dependencies** None
-- [ ] COV90-TASK-1 Add property tests for task parsing invariants
+- [x] COV90-TASK-1 Add property tests for task parsing invariants
 ### Task COV90-CONFIG-1
 
 - **ID** COV90-CONFIG-1
