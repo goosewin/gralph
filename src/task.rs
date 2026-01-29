@@ -77,7 +77,11 @@ mod tests {
     }
 
     fn mixed_whitespace_line_strategy() -> impl Strategy<Value = String> {
-        (whitespace_strategy(), safe_line_strategy(), whitespace_strategy())
+        (
+            whitespace_strategy(),
+            safe_line_strategy(),
+            whitespace_strategy(),
+        )
             .prop_map(|(leading, content, trailing)| format!("{leading}{content}{trailing}"))
     }
 
@@ -93,6 +97,20 @@ mod tests {
             .prop_map(|(outer, inner)| format!("-{}[{}]", " ".repeat(outer), " ".repeat(inner)))
     }
 
+    fn empty_h2_heading_strategy() -> impl Strategy<Value = String> {
+        (whitespace_strategy(), whitespace_strategy())
+            .prop_map(|(leading, trailing)| format!("{leading}## {trailing}"))
+    }
+
+    fn separator_near_miss_strategy() -> impl Strategy<Value = String> {
+        (
+            whitespace_strategy(),
+            string_regex(r"[A-Za-z0-9-]{1,3}").unwrap(),
+            whitespace_strategy(),
+        )
+            .prop_map(|(leading, suffix, trailing)| format!("{leading}---{suffix}{trailing}"))
+    }
+
     #[test]
     fn task_blocks_from_contents_returns_empty_when_no_blocks_exist() {
         let contents = "## Overview\n- [ ] Not a task block\n---\n";
@@ -102,7 +120,8 @@ mod tests {
 
     #[test]
     fn task_blocks_from_contents_ends_on_separator_and_section_heading() {
-        let contents = "### Task A\n- [ ] First\n---\n### Task B\n- [ ] Second\n## Success Criteria\n- Done\n";
+        let contents =
+            "### Task A\n- [ ] First\n---\n### Task B\n- [ ] Second\n## Success Criteria\n- Done\n";
         let blocks = task_blocks_from_contents(contents);
 
         assert_eq!(blocks.len(), 2);
@@ -124,7 +143,8 @@ mod tests {
 
     #[test]
     fn task_blocks_from_contents_handles_adjacent_blocks_and_trailing_sections() {
-        let contents = "### Task A\n- [ ] First\n### Task B\n- [ ] Second\n## Trailing\n- [ ] Not a task";
+        let contents =
+            "### Task A\n- [ ] First\n### Task B\n- [ ] Second\n## Trailing\n- [ ] Not a task";
         let blocks = task_blocks_from_contents(contents);
 
         assert_eq!(blocks.len(), 2);
@@ -159,6 +179,12 @@ mod tests {
     fn is_unchecked_line_accepts_crlf_and_mixed_leading_whitespace() {
         assert!(is_unchecked_line("- [ ] Edge case\r"));
         assert!(is_unchecked_line(" \t- [ ] Edge case\r"));
+    }
+
+    #[test]
+    fn is_unchecked_line_rejects_spacing_near_misses() {
+        assert!(!is_unchecked_line("-  [ ] Edge case"));
+        assert!(!is_unchecked_line("- [  ] Edge case"));
     }
 
     #[test]
@@ -201,6 +227,13 @@ mod tests {
     fn is_task_block_end_rejects_tabbed_heading_without_title() {
         assert!(!is_task_block_end("##\t"));
         assert!(!is_task_block_end(" \t##\t"));
+    }
+
+    #[test]
+    fn is_task_block_end_rejects_spacing_near_misses() {
+        assert!(!is_task_block_end("## \t"));
+        assert!(!is_task_block_end("##\t Notes"));
+        assert!(!is_task_block_end(" ---#"));
     }
 
     #[test]
@@ -292,6 +325,124 @@ mod tests {
             prop_assert_eq!(blocks_out.len(), 1);
             prop_assert_eq!(&blocks_out[0], &expected);
             prop_assert!(!blocks_out[0].contains(&heading));
+        }
+
+        #[test]
+        fn prop_task_blocks_from_contents_terminates_on_new_task_header(
+            header_leading in whitespace_strategy(),
+            next_leading in whitespace_strategy(),
+            first_id in task_id_strategy(),
+            second_id in task_id_strategy(),
+            first_body in prop::collection::vec(safe_line_strategy(), 0..3),
+            second_body in prop::collection::vec(safe_line_strategy(), 0..3),
+            suffix in prop::collection::vec(safe_line_strategy(), 0..2)
+        ) {
+            let first_header = format!("{}### Task {}", header_leading, first_id);
+            let second_header = format!("{}### Task {}", next_leading, second_id);
+            let mut contents = first_header.clone();
+            let mut expected_first = first_header;
+
+            for line in &first_body {
+                contents.push('\n');
+                contents.push_str(line);
+                expected_first.push('\n');
+                expected_first.push_str(line);
+            }
+
+            contents.push('\n');
+            contents.push_str(&second_header);
+
+            let mut expected_second = second_header;
+            for line in &second_body {
+                contents.push('\n');
+                contents.push_str(line);
+                expected_second.push('\n');
+                expected_second.push_str(line);
+            }
+
+            if !suffix.is_empty() {
+                contents.push('\n');
+                contents.push_str(&suffix.join("\n"));
+                expected_second.push('\n');
+                expected_second.push_str(&suffix.join("\n"));
+            }
+
+            let blocks_out = task_blocks_from_contents(&contents);
+            prop_assert_eq!(blocks_out.len(), 2);
+            prop_assert_eq!(blocks_out[0], expected_first);
+            prop_assert_eq!(blocks_out[1], expected_second);
+        }
+
+        #[test]
+        fn prop_task_blocks_from_contents_ignores_empty_h2_heading(
+            header_leading in whitespace_strategy(),
+            id in task_id_strategy(),
+            body in prop::collection::vec(safe_line_strategy(), 0..3),
+            empty_heading in empty_h2_heading_strategy(),
+            suffix in prop::collection::vec(safe_line_strategy(), 0..2)
+        ) {
+            let header = format!("{}### Task {}", header_leading, id);
+            let mut contents = header.clone();
+            let mut expected = header;
+
+            for line in &body {
+                contents.push('\n');
+                contents.push_str(line);
+                expected.push('\n');
+                expected.push_str(line);
+            }
+
+            contents.push('\n');
+            contents.push_str(&empty_heading);
+            expected.push('\n');
+            expected.push_str(&empty_heading);
+
+            if !suffix.is_empty() {
+                contents.push('\n');
+                contents.push_str(&suffix.join("\n"));
+                expected.push('\n');
+                expected.push_str(&suffix.join("\n"));
+            }
+
+            let blocks_out = task_blocks_from_contents(&contents);
+            prop_assert_eq!(blocks_out.len(), 1);
+            prop_assert_eq!(blocks_out[0], expected);
+        }
+
+        #[test]
+        fn prop_task_blocks_from_contents_ignores_separator_near_miss(
+            header_leading in whitespace_strategy(),
+            id in task_id_strategy(),
+            body in prop::collection::vec(safe_line_strategy(), 0..3),
+            near_miss in separator_near_miss_strategy(),
+            suffix in prop::collection::vec(safe_line_strategy(), 0..2)
+        ) {
+            let header = format!("{}### Task {}", header_leading, id);
+            let mut contents = header.clone();
+            let mut expected = header;
+
+            for line in &body {
+                contents.push('\n');
+                contents.push_str(line);
+                expected.push('\n');
+                expected.push_str(line);
+            }
+
+            contents.push('\n');
+            contents.push_str(&near_miss);
+            expected.push('\n');
+            expected.push_str(&near_miss);
+
+            if !suffix.is_empty() {
+                contents.push('\n');
+                contents.push_str(&suffix.join("\n"));
+                expected.push('\n');
+                expected.push_str(&suffix.join("\n"));
+            }
+
+            let blocks_out = task_blocks_from_contents(&contents);
+            prop_assert_eq!(blocks_out.len(), 1);
+            prop_assert_eq!(blocks_out[0], expected);
         }
 
         #[test]

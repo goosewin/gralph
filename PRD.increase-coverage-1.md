@@ -83,7 +83,7 @@ Expand tests for CLI flows, server endpoints, backend adapters, update workflow,
   * Add proptest coverage for task_blocks_from_contents termination rules.
   * Add unit tests for is_task_block_end and is_unchecked_line spacing near-misses.
 - **Dependencies** None
-- [ ] COV-TASK-1 Add task block parsing invariants in src/task.rs
+- [x] COV-TASK-1 Add task block parsing invariants in src/task.rs
 ### Task COV-MAIN-1
 
 - **ID** COV-MAIN-1
