@@ -143,7 +143,7 @@ Add tests around CLI helpers, server handlers, notification payloads, update wor
   * Add tests for empty and whitespace version env values.
   * Add tests for invalid tag formats with prerelease or build metadata.
 - **Dependencies** None
-- [ ] COV-UPDATE-1 Cover update version resolution error paths
+- [x] COV-UPDATE-1 Cover update version resolution error paths
 ### Task COV-BACKEND-MOD-1
 
 - **ID** COV-BACKEND-MOD-1

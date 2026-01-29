@@ -771,6 +771,24 @@ mod tests {
     }
 
     #[test]
+    fn resolve_install_version_rejects_empty_gralph_version_env() {
+        let _lock = crate::test_support::env_lock();
+        let _guard = EnvGuard::set("GRALPH_VERSION", "");
+        let raw = env::var("GRALPH_VERSION").expect("env set");
+        let result = resolve_install_version(&raw);
+        assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
+    fn resolve_install_version_rejects_whitespace_gralph_version_env() {
+        let _lock = crate::test_support::env_lock();
+        let _guard = EnvGuard::set("GRALPH_VERSION", "   ");
+        let raw = env::var("GRALPH_VERSION").expect("env set");
+        let result = resolve_install_version(&raw);
+        assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
     fn resolve_install_version_rejects_invalid_version() {
         let result = resolve_install_version("1.2");
         assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
@@ -797,6 +815,21 @@ mod tests {
         let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "v1.2");
         let result = resolve_install_version("latest");
         assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
+    fn resolve_install_version_latest_rejects_prerelease_and_build_override() {
+        let _lock = crate::test_support::env_lock();
+        {
+            let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "v1.2.3-beta");
+            let result = resolve_install_version("latest");
+            assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
+        }
+        {
+            let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "1.2.3+build");
+            let result = resolve_install_version("latest");
+            assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
+        }
     }
 
     #[test]

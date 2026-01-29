@@ -140,6 +140,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-SERVER-1 Expand server session enrichment and stop handler error coverage.
 - COV-NOTIFY-1 Expand notification duration boundary, unknown reason, and webhook type detection tests.
 - COV-UPDATE-1 Expand update workflow error-path coverage for release download overrides and unsupported targets.
+- COV-UPDATE-1 Add resolve_install_version tests for empty env values and invalid tags.
 - COV-BACKEND-MOD-1 Expand backend helper streaming and PATH edge coverage.
 - COV-BACKEND-CLAUDE-1 Add Claude adapter error-path tests.
 - COV-BACKEND-CLAUDE-1 Add Claude adapter argument ordering coverage.
