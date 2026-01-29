@@ -101,6 +101,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-UPDATE-1 Expand update workflow error-path coverage.
 - COV-BACKEND-MOD-1 Expand backend helper streaming and PATH edge coverage.
 - COV-BACKEND-CLAUDE-1 Add Claude adapter error-path tests.
+- COV-BACKEND-OPENCODE-1 Expand OpenCode adapter coverage.
 
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.

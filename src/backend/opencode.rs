@@ -1,4 +1,4 @@
-use super::{Backend, BackendError, command_in_path, stream_command_output};
+use super::{command_in_path, stream_command_output, Backend, BackendError};
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -220,6 +220,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_text_returns_io_error_for_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir_path = temp.path().join("opencode-dir");
+        fs::create_dir(&dir_path).unwrap();
+
+        let backend = OpenCodeBackend::new();
+        let result = backend.parse_text(&dir_path);
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path, .. }) if path == dir_path
+        ));
+    }
+
+    #[test]
     fn check_installed_reflects_path_entries() {
         let _lock = crate::test_support::env_lock();
         let temp = tempfile::tempdir().unwrap();
@@ -252,11 +267,8 @@ mod tests {
         }
 
         fs::write(temp.path().join(command_name), "stub").unwrap();
-        let combined = env::join_paths([
-            temp.path(),
-            temp.path().join("missing").as_path(),
-        ])
-        .unwrap();
+        let combined =
+            env::join_paths([temp.path(), temp.path().join("missing").as_path()]).unwrap();
         let _guard = PathGuard::set(Some(combined.as_os_str()));
 
         assert!(backend.check_installed());
@@ -288,6 +300,21 @@ mod tests {
         assert!(matches!(
             result,
             Err(BackendError::Command(message)) if message.contains("failed to spawn opencode")
+        ));
+    }
+
+    #[test]
+    fn run_iteration_returns_io_when_output_path_is_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_path = temp.path().join("output-dir");
+        fs::create_dir(&output_path).unwrap();
+        let backend = OpenCodeBackend::with_command("opencode".to_string());
+
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path, .. }) if path == output_path
         ));
     }
 
@@ -357,13 +384,7 @@ mod tests {
 
         let backend = OpenCodeBackend::with_command(script_path.to_string_lossy().to_string());
         backend
-            .run_iteration(
-                "prompt",
-                Some("  "),
-                Some("\t"),
-                &output_path,
-                temp.path(),
-            )
+            .run_iteration("prompt", Some("  "), Some("\t"), &output_path, temp.path())
             .expect("run_iteration should succeed");
 
         let output = fs::read_to_string(&output_path).unwrap();
@@ -495,7 +516,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let script_path = temp.path().join("opencode-args");
         let output_path = temp.path().join("output.txt");
-        let script = "#!/bin/sh\nprintf 'stdout-line\\n'\nprintf 'args:'\nfor arg in \"$@\"; do\n  printf '%s|' \"$arg\"\ndone\nprintf '\\n'\n";
+        let script = "#!/bin/sh\nprintf 'env:%s\\n' \"$OPENCODE_EXPERIMENTAL_LSP_TOOL\"\nprintf 'stdout-line\\n'\nprintf 'args:'\nfor arg in \"$@\"; do\n  printf '%s|' \"$arg\"\ndone\nprintf '\\n'\n";
         fs::write(&script_path, script).unwrap();
         let mut perms = fs::metadata(&script_path).unwrap().permissions();
         perms.set_mode(0o755);
@@ -513,6 +534,7 @@ mod tests {
             .expect("run_iteration should succeed");
 
         let output = fs::read_to_string(&output_path).unwrap();
+        assert!(output.contains("env:true"));
         assert!(output.contains("stdout-line"));
 
         let args_line = output

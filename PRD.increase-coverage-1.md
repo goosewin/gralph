@@ -173,7 +173,7 @@ Expand tests for CLI flows, server endpoints, backend adapters, update workflow,
   * Add tests ensuring OPENCODE_EXPERIMENTAL_LSP_TOOL is set and prompt stays last.
   * Add tests for parse_text and output file errors.
 - **Dependencies** COV-CORE-1, COV-STATE-1, COV-PRD-1, COV-TASK-1
-- [ ] COV-BACKEND-OPENCODE-1 Expand OpenCode adapter coverage
+- [x] COV-BACKEND-OPENCODE-1 Expand OpenCode adapter coverage
 ### Task COV-BACKEND-GEMINI-1
 
 - **ID** COV-BACKEND-GEMINI-1
