@@ -231,7 +231,7 @@ Add tests for backends, server, verifier, update, notify, config, and CLI helper
   * Documentation states coverage is informational until the soft target is enabled.
   * Verifier output warns when below the soft target without blocking merges.
 - **Dependencies** COV90-VER-1
-- [ ] COV90-CI-1 Introduce soft coverage warning target at 65 to 70 percent
+- [x] COV90-CI-1 Introduce soft coverage warning target at 65 to 70 percent
 ### Task COV90-CI-2
 
 - **ID** COV90-CI-2

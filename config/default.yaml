@@ -18,6 +18,7 @@ verifier:
   test_command: cargo test --workspace
   coverage_command: cargo tarpaulin --workspace --fail-under 90 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*
   coverage_min: 90
+  coverage_warn: 70
   auto_run: true
   pr:
     base: main

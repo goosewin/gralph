@@ -43,6 +43,8 @@
 - New risks must be added to RISK_REGISTER.md with mitigation.
 - Rust CLI is the source of truth; do not reintroduce shell scripts.
 - Test coverage must remain >= 90%.
+- The soft coverage target (`verifier.coverage_warn`) is a warning signal only.
 - Final PRD task requires a PR, review gate approval, and green CI before merge.
 - Use `gh` for PR creation, review checks, and merges.
 - Commit messages must be lower-case conventional commits (for example: `feat: add verifier pipeline`).
+- Env var mutation in tests must use the local helpers guarded by `ENV_LOCK`; never call `std::env::set_var` or `std::env::remove_var` directly.

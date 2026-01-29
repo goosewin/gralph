@@ -48,4 +48,6 @@ above 90%. CI runs `cargo test --workspace` and
 `cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs
 src/core.rs src/notify.rs src/server.rs src/backend/*`. Release and smoke
 workflows assume CI is green. The verifier mirrors these gates, adds static
-checks, and enforces the review gate before merge.
+checks, and enforces the review gate before merge. The verifier can also emit
+a non-blocking warning when coverage falls below the soft target configured in
+`verifier.coverage_warn`.

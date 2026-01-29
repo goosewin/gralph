@@ -1,4 +1,4 @@
-use crate::{CliError, git_output_in_dir, join_or_none, normalize_csv, parse_bool_value};
+use crate::{git_output_in_dir, join_or_none, normalize_csv, parse_bool_value, CliError};
 use gralph_rs::config::Config;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 const DEFAULT_TEST_COMMAND: &str = "cargo test --workspace";
 const DEFAULT_COVERAGE_COMMAND: &str = "cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*";
 const DEFAULT_COVERAGE_MIN: f64 = 90.0;
+const DEFAULT_COVERAGE_WARN: f64 = 70.0;
 const DEFAULT_PR_BASE: &str = "main";
 const DEFAULT_PR_TITLE: &str = "chore: verifier run";
 const DEFAULT_STATIC_MAX_COMMENT_LINES: usize = 12;
@@ -49,6 +50,7 @@ pub(crate) fn run_verifier_pipeline(
         DEFAULT_COVERAGE_COMMAND,
     )?;
     let coverage_min = resolve_verifier_coverage_min(coverage_min, config)?;
+    let coverage_warn = resolve_verifier_coverage_warn(config)?;
 
     println!("Verifier running in {}", dir.display());
 
@@ -66,6 +68,9 @@ pub(crate) fn run_verifier_pipeline(
         )));
     }
     println!("Coverage OK: {:.2}% (>= {:.2}%)", coverage, coverage_min);
+    if let Some(message) = coverage_warn_message(coverage, coverage_warn) {
+        println!("{}", message);
+    }
 
     run_verifier_static_checks(dir, config)?;
     let pr_url = run_verifier_pr_create(dir, config)?;
@@ -118,6 +123,30 @@ fn resolve_verifier_coverage_min(arg_value: Option<f64>, config: &Config) -> Res
         return validate_coverage_min(parsed);
     }
     Ok(DEFAULT_COVERAGE_MIN)
+}
+
+fn resolve_verifier_coverage_warn(config: &Config) -> Result<f64, CliError> {
+    if let Some(value) = config.get("verifier.coverage_warn") {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Ok(DEFAULT_COVERAGE_WARN);
+        }
+        let parsed = trimmed.parse::<f64>().map_err(|_| {
+            CliError::Message(format!("Invalid verifier.coverage_warn: {}", trimmed))
+        })?;
+        return validate_coverage_min(parsed);
+    }
+    Ok(DEFAULT_COVERAGE_WARN)
+}
+
+fn coverage_warn_message(coverage: f64, warn_min: f64) -> Option<String> {
+    if coverage + f64::EPSILON < warn_min {
+        return Some(format!(
+            "Warning: Coverage {:.2}% below soft target {:.2}%.",
+            coverage, warn_min
+        ));
+    }
+    None
 }
 
 fn validate_coverage_min(value: f64) -> Result<f64, CliError> {
@@ -1975,8 +2004,8 @@ mod tests {
     #[test]
     fn resolve_verifier_command_rejects_empty_default() {
         let config = load_project_config("verifier:\n  test_command: \"\"\n");
-        let err = resolve_verifier_command(None, &config, "verifier.test_command", " ")
-            .unwrap_err();
+        let err =
+            resolve_verifier_command(None, &config, "verifier.test_command", " ").unwrap_err();
         match err {
             CliError::Message(message) => {
                 assert!(message.contains("empty"));
@@ -2001,16 +2030,11 @@ mod tests {
     #[test]
     fn resolve_verifier_command_defaults_for_blank_config() {
         let _guard = env_guard();
-        let config = load_project_config(
-            "verifier:\n  test_command: \"  \"\n  coverage_command: \"\"\n",
-        );
-        let test_command = resolve_verifier_command(
-            None,
-            &config,
-            "verifier.test_command",
-            DEFAULT_TEST_COMMAND,
-        )
-        .unwrap();
+        let config =
+            load_project_config("verifier:\n  test_command: \"  \"\n  coverage_command: \"\"\n");
+        let test_command =
+            resolve_verifier_command(None, &config, "verifier.test_command", DEFAULT_TEST_COMMAND)
+                .unwrap();
         let coverage_command = resolve_verifier_command(
             None,
             &config,
@@ -2053,6 +2077,37 @@ mod tests {
         let config = load_project_config("verifier:\n  coverage_min: \"\"\n");
         let value = resolve_verifier_coverage_min(None, &config).unwrap();
         assert!((value - DEFAULT_COVERAGE_MIN).abs() < 1e-6);
+    }
+
+    #[test]
+    fn resolve_verifier_coverage_warn_defaults_on_empty_config() {
+        let config = load_project_config("verifier:\n  coverage_warn: \"\"\n");
+        let value = resolve_verifier_coverage_warn(&config).unwrap();
+        assert!((value - DEFAULT_COVERAGE_WARN).abs() < 1e-6);
+    }
+
+    #[test]
+    fn resolve_verifier_coverage_warn_rejects_invalid_value() {
+        let config = load_project_config("verifier:\n  coverage_warn: nope\n");
+        let err = resolve_verifier_coverage_warn(&config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("verifier.coverage_warn"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn coverage_warn_message_emits_warning_below_target() {
+        let message = coverage_warn_message(64.9, 70.0).unwrap();
+        assert!(message.contains("below soft target"));
+    }
+
+    #[test]
+    fn coverage_warn_message_skips_at_or_above_target() {
+        assert!(coverage_warn_message(70.0, 70.0).is_none());
+        assert!(coverage_warn_message(90.0, 70.0).is_none());
     }
 
     #[test]
@@ -2242,7 +2297,10 @@ mod tests {
     fn parse_review_issue_count_handles_fraction_and_percent_formats() {
         assert_eq!(parse_review_issue_count("Issues: 2/10 (minor)"), Some(2));
         assert_eq!(parse_review_issue_count("Issue rate: 20%"), Some(20));
-        assert_eq!(parse_review_issue_count("Issue count: 3 remaining"), Some(3));
+        assert_eq!(
+            parse_review_issue_count("Issue count: 3 remaining"),
+            Some(3)
+        );
     }
 
     #[test]
@@ -2423,9 +2481,8 @@ mod tests {
 
     #[test]
     fn resolve_review_gate_rating_rejects_out_of_range() {
-        let err =
-            resolve_review_gate_rating(Some("101".to_string()), DEFAULT_REVIEW_MIN_RATING)
-                .unwrap_err();
+        let err = resolve_review_gate_rating(Some("101".to_string()), DEFAULT_REVIEW_MIN_RATING)
+            .unwrap_err();
         match err {
             CliError::Message(message) => {
                 assert!(message.contains("min_rating"));
@@ -2454,8 +2511,8 @@ mod tests {
     #[test]
     fn resolve_review_gate_bool_defaults_on_empty_value() {
         let config = load_project_config("verifier:\n  review:\n    require_checks: \"\"\n");
-        let value = resolve_review_gate_bool(&config, "verifier.review.require_checks", true)
-            .unwrap();
+        let value =
+            resolve_review_gate_bool(&config, "verifier.review.require_checks", true).unwrap();
         assert!(value);
     }
 
@@ -2483,7 +2540,9 @@ mod tests {
             ]
         });
         let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
-        assert!(matches!(decision, GateDecision::Pending(message) if message.contains("checks pending")));
+        assert!(
+            matches!(decision, GateDecision::Pending(message) if message.contains("checks pending"))
+        );
     }
 
     #[test]
@@ -2524,7 +2583,9 @@ mod tests {
             ]
         });
         let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
-        assert!(matches!(decision, GateDecision::Failed(message) if message.contains("checks failed")));
+        assert!(
+            matches!(decision, GateDecision::Failed(message) if message.contains("checks failed"))
+        );
     }
 
     #[test]
@@ -2593,10 +2654,16 @@ mod tests {
     #[test]
     fn line_contains_marker_respects_boundaries() {
         let markers = vec!["TODO".to_string(), "FIXME".to_string()];
-        assert_eq!(line_contains_marker("todo: fix", &markers), Some("TODO".to_string()));
+        assert_eq!(
+            line_contains_marker("todo: fix", &markers),
+            Some("TODO".to_string())
+        );
         assert_eq!(line_contains_marker("METHODODO", &markers), None);
         assert_eq!(line_contains_marker("TODO_", &markers), None);
-        assert_eq!(line_contains_marker("FIXME.", &markers), Some("FIXME".to_string()));
+        assert_eq!(
+            line_contains_marker("FIXME.", &markers),
+            Some("FIXME".to_string())
+        );
     }
 
     #[test]
@@ -2726,9 +2793,7 @@ mod tests {
         assert_eq!(violations.len(), 1);
         assert_eq!(violations[0].path, PathBuf::from("src/beta.rs"));
         assert_eq!(violations[0].line, 1);
-        assert!(violations[0]
-            .message
-            .contains("Duplicate block matches"));
+        assert!(violations[0].message.contains("Duplicate block matches"));
     }
 
     #[test]
