@@ -668,6 +668,18 @@ mod tests {
     }
 
     #[test]
+    fn normalize_version_trims_whitespace() {
+        let version = normalize_version("  v1.2.3  ").expect("normalized");
+        assert_eq!(version, "1.2.3");
+    }
+
+    #[test]
+    fn normalize_version_rejects_whitespace_only() {
+        let result = normalize_version("   ");
+        assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
     fn normalize_version_rejects_invalid_input() {
         let result = normalize_version("1.2");
         assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
@@ -677,6 +689,20 @@ mod tests {
     fn resolve_install_version_accepts_concrete_version() {
         let resolved = resolve_install_version("v1.2.3").expect("resolved");
         assert_eq!(resolved, "1.2.3");
+    }
+
+    #[test]
+    fn resolve_install_version_trims_latest_whitespace() {
+        let _lock = crate::test_support::env_lock();
+        let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "v4.5.6");
+        let resolved = resolve_install_version("  latest  ").expect("resolved");
+        assert_eq!(resolved, "4.5.6");
+    }
+
+    #[test]
+    fn resolve_install_version_rejects_whitespace_only_input() {
+        let result = resolve_install_version("   ");
+        assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
     }
 
     #[test]
@@ -819,6 +845,18 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn extract_archive_reports_failure_when_target_is_file() {
+        let temp = tempdir().expect("tempdir");
+        let archive_path = temp.path().join("gralph.tar.gz");
+        fs::write(&archive_path, "not a tar").expect("write invalid");
+        let target_file = temp.path().join("target-file");
+        fs::write(&target_file, "not a dir").expect("write target file");
+        let result = extract_archive(&archive_path, &target_file);
+        assert!(matches!(result, Err(UpdateError::CommandFailed(_))));
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn extract_archive_reports_missing_tar_binary() {
         let _lock = crate::test_support::env_lock();
         let temp = tempdir().expect("tempdir");
@@ -911,6 +949,17 @@ mod tests {
         let target = install_dir.join("gralph");
         assert!(target.is_file());
         assert!(install_dir.is_dir());
+    }
+
+    #[test]
+    fn install_binary_reports_error_when_install_dir_is_file() {
+        let temp = tempdir().expect("tempdir");
+        let source = temp.path().join("gralph");
+        fs::write(&source, "binary").expect("write");
+        let install_dir = temp.path().join("install");
+        fs::write(&install_dir, "not a dir").expect("write file");
+        let result = install_binary(&source, &install_dir);
+        assert!(matches!(result, Err(UpdateError::Io(_))));
     }
 
     #[test]

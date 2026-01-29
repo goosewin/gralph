@@ -133,7 +133,7 @@ Expand tests for CLI flows, server endpoints, backend adapters, update workflow,
   * Add tests for resolve_install_version and normalize_version handling whitespace and invalid inputs.
   * Add tests for extract_archive and install_binary failure paths using temp fixtures.
 - **Dependencies** COV-CORE-1, COV-STATE-1, COV-PRD-1, COV-TASK-1
-- [ ] COV-UPDATE-1 Add update workflow error-path coverage
+- [x] COV-UPDATE-1 Add update workflow error-path coverage
 ### Task COV-VERIFIER-1
 
 - **ID** COV-VERIFIER-1

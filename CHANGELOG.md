@@ -97,6 +97,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-CONFIG-1 Expand config precedence and normalization tests.
 - COV-SERVER-1 Expand server config validation and handler error coverage.
 - COV-NOTIFY-1 Expand notification formatting and delivery tests.
+- COV-UPDATE-1 Expand update workflow error-path coverage.
 
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.
