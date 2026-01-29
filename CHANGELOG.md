@@ -55,6 +55,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-15 Expand Codex adapter error-path coverage.
 - COV-15 Add verifier command parsing and review gate tests.
 - COV-15 Expand task parsing edge-case tests.
+- COV-15 Add CRLF and tabbed task parsing invariants.
 - COV-15 Expand env_lock contention and panic recovery tests.
 - COV-16 Expand update workflow parsing and install error coverage.
 - COV-17 Expand Claude backend parsing and failure path coverage.

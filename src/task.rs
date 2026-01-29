@@ -64,12 +64,21 @@ mod tests {
         string_regex(r"[ \t]{0,4}").unwrap()
     }
 
+    fn newline_strategy() -> impl Strategy<Value = String> {
+        prop_oneof![Just("\n".to_string()), Just("\r\n".to_string())]
+    }
+
     fn task_id_strategy() -> impl Strategy<Value = String> {
         string_regex(r"[A-Z0-9-]{1,8}").unwrap()
     }
 
     fn safe_line_strategy() -> impl Strategy<Value = String> {
         string_regex(r"[A-Za-z0-9][A-Za-z0-9 .,]{0,20}").unwrap()
+    }
+
+    fn mixed_whitespace_line_strategy() -> impl Strategy<Value = String> {
+        (whitespace_strategy(), safe_line_strategy(), whitespace_strategy())
+            .prop_map(|(leading, content, trailing)| format!("{leading}{content}{trailing}"))
     }
 
     fn noise_line_strategy() -> impl Strategy<Value = String> {
@@ -142,12 +151,23 @@ mod tests {
     }
 
     #[test]
+    fn is_unchecked_line_accepts_tab_leading_whitespace() {
+        assert!(is_unchecked_line("\t- [ ] Edge case"));
+    }
+
+    #[test]
     fn is_task_block_end_detects_separators_and_headings() {
         assert!(is_task_block_end("---"));
         assert!(is_task_block_end("  ---  "));
         assert!(is_task_block_end("## Notes"));
         assert!(is_task_block_end("  ## Notes"));
         assert!(!is_task_block_end("### Task COV-13"));
+    }
+
+    #[test]
+    fn is_task_block_end_accepts_tabbed_separator_and_heading() {
+        assert!(is_task_block_end("\t---\t"));
+        assert!(is_task_block_end("\t## Notes"));
     }
 
     #[test]
@@ -166,12 +186,24 @@ mod tests {
     }
 
     #[test]
+    fn is_task_block_end_rejects_tabbed_heading_without_space() {
+        assert!(!is_task_block_end("##\tNotes"));
+        assert!(!is_task_block_end("\t##\tNotes"));
+    }
+
+    #[test]
     fn is_task_header_rejects_malformed_headings() {
         assert!(!is_task_header("###Task COV-29"));
         assert!(!is_task_header("## Task COV-29"));
         assert!(!is_task_header("#### Task COV-29"));
         assert!(!is_task_header("### Tasks COV-29"));
         assert!(!is_task_header("### Task"));
+    }
+
+    #[test]
+    fn is_unchecked_line_rejects_tabbed_near_misses() {
+        assert!(!is_unchecked_line("-\t[ ] Edge case"));
+        assert!(!is_unchecked_line("- [\t] Edge case"));
     }
 
     proptest! {
@@ -340,6 +372,45 @@ mod tests {
             prop_assert_eq!(block, &expected);
             for line in prefix.iter().chain(suffix.iter()) {
                 prop_assert!(!block.contains(line));
+            }
+        }
+
+        #[test]
+        fn prop_task_blocks_from_contents_handles_crlf_and_mixed_whitespace(
+            newline in newline_strategy(),
+            header_leading in whitespace_strategy(),
+            separator_leading in whitespace_strategy(),
+            separator_trailing in whitespace_strategy(),
+            id in task_id_strategy(),
+            prefix in prop::collection::vec(noise_line_strategy(), 0..3),
+            body in prop::collection::vec(mixed_whitespace_line_strategy(), 0..4),
+            suffix in prop::collection::vec(noise_line_strategy(), 0..3)
+        ) {
+            let header = format!("{}### Task {}", header_leading, id);
+            let separator = format!("{}---{}", separator_leading, separator_trailing);
+
+            let mut lines = Vec::new();
+            lines.extend(prefix.iter().cloned());
+            lines.push(header.clone());
+
+            let mut expected = header;
+            for line in &body {
+                lines.push(line.clone());
+                expected.push('\n');
+                expected.push_str(line);
+            }
+
+            lines.push(separator);
+            lines.extend(suffix.iter().cloned());
+
+            let contents = lines.join(&newline);
+            let blocks_out = task_blocks_from_contents(&contents);
+
+            prop_assert_eq!(blocks_out.len(), 1);
+            prop_assert_eq!(blocks_out[0], expected);
+            prop_assert!(!blocks_out[0].contains('\r'));
+            for line in prefix.iter().chain(suffix.iter()) {
+                prop_assert!(!blocks_out[0].contains(line));
             }
         }
 

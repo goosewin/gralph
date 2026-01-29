@@ -192,7 +192,7 @@ Increase coverage in supporting modules and backend adapters (`src/main.rs`, `sr
   * Add proptest cases for CRLF and mixed whitespace to ensure task_blocks_from_contents preserves only task blocks.
   * Add tests for is_task_block_end and is_unchecked_line with tab spacing and near-miss patterns.
 - **Dependencies** COV-1, COV-2, COV-3, COV-4
-- [ ] COV-15 Expand task parsing invariants
+- [x] COV-15 Expand task parsing invariants
 ### Task COV-16
 
 - **ID** COV-16
