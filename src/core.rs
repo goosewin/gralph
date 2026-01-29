@@ -857,6 +857,25 @@ mod tests {
             })
     }
 
+    fn completion_marker_strategy() -> impl Strategy<Value = String> {
+        string_regex(r"[A-Za-z0-9_-]{1,12}").unwrap()
+    }
+
+    fn negation_phrase_strategy() -> impl Strategy<Value = &'static str> {
+        prop_oneof![
+            Just("cannot"),
+            Just("can't"),
+            Just("won't"),
+            Just("will not"),
+            Just("do not"),
+            Just("don't"),
+            Just("should not"),
+            Just("shouldn't"),
+            Just("must not"),
+            Just("mustn't"),
+        ]
+    }
+
     struct TestBackend {
         prompt: RefCell<Option<String>>,
     }
@@ -1004,6 +1023,48 @@ mod tests {
         }
     }
 
+    struct ParseFailBackend {
+        output: String,
+        error_message: String,
+    }
+
+    impl ParseFailBackend {
+        fn new(output: &str, error_message: &str) -> Self {
+            Self {
+                output: output.to_string(),
+                error_message: error_message.to_string(),
+            }
+        }
+    }
+
+    impl Backend for ParseFailBackend {
+        fn check_installed(&self) -> bool {
+            true
+        }
+
+        fn run_iteration(
+            &self,
+            _prompt: &str,
+            _model: Option<&str>,
+            _variant: Option<&str>,
+            output_file: &Path,
+            _working_dir: &Path,
+        ) -> Result<(), BackendError> {
+            fs::write(output_file, &self.output).map_err(|source| BackendError::Io {
+                path: output_file.to_path_buf(),
+                source,
+            })
+        }
+
+        fn parse_text(&self, _response_file: &Path) -> Result<String, BackendError> {
+            Err(BackendError::Command(self.error_message.clone()))
+        }
+
+        fn get_models(&self) -> Vec<String> {
+            Vec::new()
+        }
+    }
+
     struct UninstalledBackend;
 
     impl Backend for UninstalledBackend {
@@ -1134,6 +1195,45 @@ mod tests {
         let result = "<promise>COMPLETE</promis>\n";
         let complete = check_completion(&path, result, "COMPLETE").unwrap();
         assert!(!complete);
+    }
+
+    proptest! {
+        #[test]
+        fn completion_marker_requires_exact_match(
+            marker in completion_marker_strategy(),
+            other in completion_marker_strategy(),
+        ) {
+            prop_assume!(marker != other);
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("PRD.md");
+            fs::write(&path, "- [x] Done\n").unwrap();
+
+            let exact = format!("<promise>{}</promise>", marker);
+            prop_assert!(check_completion(&path, &exact, &marker).unwrap());
+
+            let mismatch = format!("<promise>{}</promise>", other);
+            prop_assert!(!check_completion(&path, &mismatch, &marker).unwrap());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn negated_promise_prefix_prevents_completion(
+            phrase in negation_phrase_strategy(),
+            uppercase in any::<bool>(),
+        ) {
+            let temp = tempfile::tempdir().unwrap();
+            let path = temp.path().join("PRD.md");
+            fs::write(&path, "- [x] Done\n").unwrap();
+
+            let phrase = if uppercase {
+                phrase.to_uppercase()
+            } else {
+                phrase.to_string()
+            };
+            let line = format!("{} <promise>COMPLETE</promise>", phrase);
+            prop_assert!(!check_completion(&path, &line, "COMPLETE").unwrap());
+        }
     }
 
     #[test]
@@ -1919,6 +2019,40 @@ mod tests {
         let log_contents = fs::read_to_string(&log_path).unwrap();
         assert!(log_contents.contains("Error: backend returned no parsed result."));
         assert!(log_contents.contains(&format!("Raw output saved to: {}", raw_path.display())));
+
+        let raw_contents = fs::read_to_string(&raw_path).unwrap();
+        assert_eq!(raw_contents, "raw-output");
+    }
+
+    #[test]
+    fn run_iteration_returns_parse_error_and_copies_raw_output() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [ ] Task\n").unwrap();
+
+        let log_path = temp.path().join("loop.log");
+        let raw_path = raw_log_path(&log_path);
+
+        let backend = ParseFailBackend::new("raw-output", "parse failed");
+        let result = run_iteration(
+            &backend,
+            temp.path(),
+            "PRD.md",
+            1,
+            1,
+            "COMPLETE",
+            None,
+            None,
+            Some(&log_path),
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::Backend(BackendError::Command(message)))
+                if message == "parse failed"
+        ));
 
         let raw_contents = fs::read_to_string(&raw_path).unwrap();
         assert_eq!(raw_contents, "raw-output");
