@@ -93,7 +93,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add tests for command_in_path with empty, missing, and mixed PATH entries.
   * Add tests for stream_command_output when stdout or stderr pipes are missing.
 - **Dependencies** None
-- [ ] COV-BACKEND-MOD-1 Expand backend utility coverage for PATH and stream cases
+- [x] COV-BACKEND-MOD-1 Expand backend utility coverage for PATH and stream cases
 ### Task COV-BACKEND-CLAUDE-1
 
 - **ID** COV-BACKEND-CLAUDE-1
