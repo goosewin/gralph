@@ -360,11 +360,13 @@ mod tests {
             "GRALPH_CONFIG_DIR",
             "GRALPH_PROJECT_CONFIG_NAME",
             "GRALPH_DEFAULTS_MAX_ITERATIONS",
+            "GRALPH_DEFAULTS_MAX-ITERATIONS",
             "GRALPH_DEFAULTS_TASK_FILE",
             "GRALPH_DEFAULTS_COMPLETION_MARKER",
             "GRALPH_DEFAULTS_BACKEND",
             "GRALPH_DEFAULTS_MODEL",
             "GRALPH_DEFAULTS_AUTO_WORKTREE",
+            "GRALPH_DEFAULTS_AUTO-WORKTREE",
             "GRALPH_MAX_ITERATIONS",
             "GRALPH_TASK_FILE",
             "GRALPH_COMPLETION_MARKER",
@@ -627,6 +629,12 @@ mod tests {
     }
 
     #[test]
+    fn value_to_string_renders_sequence_with_mapping_entries() {
+        let sequence: Value = serde_yaml::from_str("[one, {key: value}, null]").unwrap();
+        assert_eq!(value_to_string(&sequence).as_deref(), Some("one,,"));
+    }
+
+    #[test]
     fn value_to_string_returns_none_for_map_values() {
         let mapping: Value = serde_yaml::from_str("key: value").unwrap();
         assert!(matches!(mapping, Value::Mapping(_)));
@@ -666,6 +674,32 @@ mod tests {
         remove_env("GRALPH_DEFAULT_CONFIG");
         remove_env("GRALPH_GLOBAL_CONFIG");
         remove_env("GRALPH_PROJECT_CONFIG_NAME");
+    }
+
+    #[test]
+    fn merge_values_overrides_nested_mappings() {
+        let base: Value = serde_yaml::from_str(
+            "defaults:\n  backend: claude\n  nested:\n    level: info\n    enabled: true\n",
+        )
+        .unwrap();
+        let overlay: Value =
+            serde_yaml::from_str("defaults:\n  backend: gemini\n  nested:\n    enabled: false\n")
+                .unwrap();
+
+        let merged = merge_values(base, overlay);
+
+        assert_eq!(
+            lookup_value(&merged, "defaults.backend").and_then(Value::as_str),
+            Some("gemini")
+        );
+        assert_eq!(
+            lookup_value(&merged, "defaults.nested.level").and_then(Value::as_str),
+            Some("info")
+        );
+        assert_eq!(
+            lookup_value(&merged, "defaults.nested.enabled").and_then(Value::as_bool),
+            Some(false)
+        );
     }
 
     #[test]
@@ -813,6 +847,17 @@ mod tests {
 
         remove_env("GRALPH_DEFAULTS_AUTO-WORKTREE");
         remove_env("GRALPH_DEFAULTS_AUTO_WORKTREE");
+    }
+
+    #[test]
+    fn legacy_compat_env_override_keeps_empty_value() {
+        let _guard = env_guard();
+        set_env("GRALPH_DEFAULTS_AUTO-WORKTREE", "");
+
+        let value = resolve_env_override("defaults.auto-worktree", "defaults.auto_worktree");
+        assert_eq!(value.as_deref(), Some(""));
+
+        remove_env("GRALPH_DEFAULTS_AUTO-WORKTREE");
     }
 
     #[test]

@@ -96,7 +96,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add tests for env overrides with empty values and legacy compatibility keys.
   * Add tests for sequence rendering and null handling in `value_to_string`.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-CONFIG-1 Expand config precedence and rendering coverage
+- [x] COV90-CONFIG-1 Expand config precedence and rendering coverage
 ### Task COV90-TASK-1
 
 - **ID** COV90-TASK-1
