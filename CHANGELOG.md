@@ -50,6 +50,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-11 Expand Claude adapter parsing coverage for invalid stream entries.
 - COV-11 Expand OpenCode backend run_iteration tests.
 - COV-11 Expand OpenCode backend command ordering and env coverage.
+- COV-11 Expand server CORS, auth, and session enrichment tests.
 - COV-12 Expand Gemini backend command and error coverage.
 - COV-12 Expand Claude adapter error-path coverage.
 - COV-12 Expand OpenCode adapter coverage.

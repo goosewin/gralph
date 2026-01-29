@@ -185,7 +185,7 @@ Expand tests around public APIs, adapter command assembly, and failure handling 
   * Tests cover `check_auth` for invalid header encodings and missing bearer tokens.
   * Tests cover `enrich_session` when dir or task_file is missing and status is updated.
 - **Dependencies** None
-- [ ] COV-11 Expand server CORS, auth, and enrichment tests in src/server.rs
+- [x] COV-11 Expand server CORS, auth, and enrichment tests in src/server.rs
 ---
 
 ### Task COV-12

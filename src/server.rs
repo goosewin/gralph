@@ -496,11 +496,15 @@ mod tests {
     }
 
     fn set_env(key: &str, value: impl AsRef<std::ffi::OsStr>) {
-        env::set_var(key, value);
+        unsafe {
+            env::set_var(key, value);
+        }
     }
 
     fn remove_env(key: &str) {
-        env::remove_var(key);
+        unsafe {
+            env::remove_var(key);
+        }
     }
 
     fn store_for_test(dir: &std::path::Path) -> StateStore {
@@ -1168,6 +1172,20 @@ mod tests {
         );
     }
 
+    fn dead_pid() -> i64 {
+        #[cfg(unix)]
+        {
+            let mut child = std::process::Command::new("true").spawn().unwrap();
+            let pid = child.id() as i64;
+            let _ = child.wait();
+            pid
+        }
+        #[cfg(not(unix))]
+        {
+            1
+        }
+    }
+
     #[tokio::test]
     async fn fallback_handler_returns_not_found_for_unknown_path() {
         let temp = tempfile::tempdir().unwrap();
@@ -1457,19 +1475,7 @@ mod tests {
 
     #[test]
     fn enrich_session_marks_stale_when_pid_is_dead() {
-        let pid = {
-            #[cfg(unix)]
-            {
-                let mut child = std::process::Command::new("true").spawn().unwrap();
-                let pid = child.id() as i64;
-                let _ = child.wait();
-                pid
-            }
-            #[cfg(not(unix))]
-            {
-                1
-            }
-        };
+        let pid = dead_pid();
 
         let session = json!({
             "name": "alpha",
@@ -1481,6 +1487,34 @@ mod tests {
         assert_eq!(enriched["status"], "stale");
         assert_eq!(enriched["is_alive"], false);
         assert_eq!(enriched["current_remaining"], 0);
+    }
+
+    #[test]
+    fn enrich_session_marks_stale_when_dir_missing() {
+        let session = json!({
+            "name": "alpha",
+            "status": "running",
+            "pid": dead_pid(),
+        });
+        let enriched = enrich_session(session);
+        assert_eq!(enriched["status"], "stale");
+        assert_eq!(enriched["current_remaining"], 0);
+    }
+
+    #[test]
+    fn enrich_session_defaults_task_file_when_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let task_path = temp.path().join("PRD.md");
+        fs::write(&task_path, "- [ ] First\n- [x] Done\n").unwrap();
+
+        let session = json!({
+            "name": "alpha",
+            "status": "idle",
+            "pid": 0,
+            "dir": temp.path().to_string_lossy(),
+        });
+        let enriched = enrich_session(session);
+        assert_eq!(enriched["current_remaining"], 1);
     }
 
     #[test]
