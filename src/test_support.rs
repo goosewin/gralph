@@ -9,6 +9,7 @@ pub fn env_lock() -> std::sync::MutexGuard<'static, ()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{mpsc, Arc, Barrier};
     use std::thread;
@@ -71,6 +72,53 @@ mod tests {
         }
 
         assert_eq!(max_active.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn env_lock_serializes_env_updates() {
+        const THREADS: usize = 4;
+        let barrier = Arc::new(Barrier::new(THREADS));
+        let mut handles = Vec::with_capacity(THREADS);
+
+        for thread_id in 0..THREADS {
+            let barrier = Arc::clone(&barrier);
+            handles.push(thread::spawn(move || {
+                barrier.wait();
+                let _guard = env_lock();
+                let value = format!("thread-{thread_id}");
+                env::set_var("GRALPH_ENV_LOCK_SERIALIZE_TEST", &value);
+                thread::sleep(Duration::from_millis(5));
+                assert_eq!(
+                    env::var("GRALPH_ENV_LOCK_SERIALIZE_TEST").as_deref(),
+                    Ok(value.as_str())
+                );
+            }));
+        }
+
+        for handle in handles {
+            assert!(handle.join().is_ok());
+        }
+
+        let _guard = env_lock();
+        env::remove_var("GRALPH_ENV_LOCK_SERIALIZE_TEST");
+    }
+
+    #[test]
+    fn env_lock_supports_safe_env_restore() {
+        let _guard = env_lock();
+        let key = "GRALPH_ENV_LOCK_SAFE_TEST";
+        let original = env::var_os(key);
+
+        env::set_var(key, "temporary-value");
+        assert_eq!(env::var(key).as_deref(), Ok("temporary-value"));
+
+        if let Some(value) = &original {
+            env::set_var(key, value);
+        } else {
+            env::remove_var(key);
+        }
+
+        assert_eq!(env::var_os(key), original);
     }
 
     #[test]

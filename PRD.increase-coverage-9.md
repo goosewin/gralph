@@ -250,7 +250,7 @@ Expand tests around public APIs, adapter command assembly, and failure handling 
   * Tests cover poison recovery behavior for env_lock guard.
   * Tests demonstrate safe env mutation pattern used by other tests.
 - **Dependencies** None
-- [ ] COV-16 Add test_support env lock safety tests in src/test_support.rs
+- [x] COV-16 Add test_support env lock safety tests in src/test_support.rs
 ---
 
 ## Success Criteria

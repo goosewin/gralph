@@ -69,7 +69,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-15 Add CRLF and tabbed task parsing invariants.
 - COV-15 Add task parsing heading and CRLF unchecked tests.
 - COV-15 Expand env_lock contention and panic recovery tests.
-- COV-16 Expand env_lock stress coverage.
+- COV-16 Add env_lock safety tests for test_support helpers.
 - COV-16 Expand update workflow parsing and install error coverage.
 - COV-17 Expand Claude backend parsing and failure path coverage.
 - COV-18 Expand Codex backend installation and error coverage.
