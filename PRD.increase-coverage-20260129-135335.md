@@ -123,7 +123,7 @@ Add tests around CLI helpers, server handlers, notification payloads, update wor
   * Add tests for enrich_session state updates and remaining task computation.
   * Add handler tests for missing sessions and CORS in open mode.
 - **Dependencies** None
-- [ ] COV-SERVER-1 Cover server session enrichment and error responses
+- [x] COV-SERVER-1 Cover server session enrichment and error responses
 ### Task COV-NOTIFY-1
 
 - **ID** COV-NOTIFY-1

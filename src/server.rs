@@ -1716,6 +1716,39 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn stop_endpoint_missing_session_sets_open_cors_headers() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "0.0.0.0".to_string(),
+            port: 0,
+            token: None,
+            open: true,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/stop/missing")
+                    .method("POST")
+                    .header(axum::http::header::ORIGIN, "https://example.com")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let headers = response.headers();
+        assert_cors_headers(headers, "*");
+        assert!(headers.get(axum::http::header::VARY).is_none());
+    }
+
+    #[tokio::test]
     async fn stop_endpoint_error_includes_cors_headers() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path());
@@ -1948,6 +1981,22 @@ mod tests {
             "status": "idle",
             "pid": 0,
             "dir": temp.path().to_string_lossy(),
+        });
+        let enriched = enrich_session(session);
+        assert_eq!(enriched["current_remaining"], 0);
+    }
+
+    #[test]
+    fn enrich_session_returns_zero_when_dir_missing_on_disk() {
+        let temp = tempfile::tempdir().unwrap();
+        let missing_dir = temp.path().join("missing-dir");
+
+        let session = json!({
+            "name": "alpha",
+            "status": "idle",
+            "pid": 0,
+            "dir": missing_dir.to_string_lossy(),
+            "task_file": "tasks.md",
         });
         let enriched = enrich_session(session);
         assert_eq!(enriched["current_remaining"], 0);

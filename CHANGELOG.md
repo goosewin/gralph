@@ -137,7 +137,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-3 Expand verifier parsing and gate evaluation coverage.
 - COV-5 Expand server session enrichment and stop flow coverage.
 - COV-CONFIG-1 Add config normalization, env precedence, list rendering, and value_to_string property tests.
-- COV-SERVER-1 Expand server config validation and handler error coverage.
+- COV-SERVER-1 Expand server session enrichment and stop handler error coverage.
 - COV-NOTIFY-1 Expand notification formatting, generic payload, and timeout tests.
 - COV-UPDATE-1 Expand update workflow error-path coverage for release download overrides and unsupported targets.
 - COV-BACKEND-MOD-1 Expand backend helper streaming and PATH edge coverage.
