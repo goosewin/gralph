@@ -63,7 +63,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add tests for lock acquisition failures, invalid lock paths, and write_state failure paths.
   * Add tests for cleanup_stale behavior with mixed session data and dead PID handling.
 - **Dependencies** None
-- [ ] COV-STATE-1 Add state store tests for lock and cleanup edges
+- [x] COV-STATE-1 Add state store tests for lock and cleanup edges
 ### Task COV-PRD-1
 
 - **ID** COV-PRD-1
