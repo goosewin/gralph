@@ -76,7 +76,7 @@ Add tests for backends, server, verifier, update, notify, config, and CLI helper
   * Validation tests cover stray unchecked lines and missing required fields.
   * Sanitization tests ensure only one unchecked task line remains per block.
 - **Dependencies** None
-- [ ] COV90-PRD-1 Add PRD validation and sanitize invariant tests
+- [x] COV90-PRD-1 Add PRD validation and sanitize invariant tests
 ### Task COV90-TASK-1
 
 - **ID** COV90-TASK-1

@@ -1212,6 +1212,38 @@ mod tests {
         string_regex(r"[A-Za-z0-9][A-Za-z0-9 ]{0,12}").unwrap()
     }
 
+    fn relative_path_strategy() -> impl Strategy<Value = String> {
+        string_regex(r"[A-Za-z0-9_-]{1,8}(?:/[A-Za-z0-9_-]{1,8}){0,2}\\.md").unwrap()
+    }
+
+    fn open_questions_heading_strategy() -> impl Strategy<Value = String> {
+        prop_oneof![
+            Just("Open Questions".to_string()),
+            Just("OPEN QUESTIONS".to_string()),
+            Just("Open questions".to_string()),
+            Just("open questions".to_string()),
+        ]
+    }
+
+    #[derive(Clone, Debug)]
+    enum MissingField {
+        Id,
+        ContextBundle,
+        DoD,
+        Checklist,
+        Dependencies,
+    }
+
+    fn missing_field_strategy() -> impl Strategy<Value = MissingField> {
+        prop_oneof![
+            Just(MissingField::Id),
+            Just(MissingField::ContextBundle),
+            Just(MissingField::DoD),
+            Just(MissingField::Checklist),
+            Just(MissingField::Dependencies),
+        ]
+    }
+
     #[test]
     fn prd_validate_file_accepts_valid() {
         let temp = tempdir().unwrap();
@@ -2147,6 +2179,204 @@ mod tests {
                     prop_assert!(line.starts_with(indent));
                 }
             }
+        }
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(32))]
+
+        #[test]
+        fn prop_prd_validate_file_reports_stray_unchecked_line(
+            prefix in prop::collection::vec(safe_line_strategy(), 0..3)
+        ) {
+            let temp = tempdir().unwrap();
+            let base = temp.path();
+            let docs = base.join("docs");
+            fs::create_dir_all(&docs).unwrap();
+            fs::write(docs.join("context.md"), "ok").unwrap();
+
+            let mut contents = String::from("# PRD\n\n");
+            for line in prefix {
+                contents.push_str(&line);
+                contents.push('\n');
+            }
+            contents.push_str("- [ ] Stray unchecked\n\n");
+            contents.push_str("### Task P-STRAY\n- **ID** P-STRAY\n- **Context Bundle** `docs/context.md`\n- **DoD** Example.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] P-STRAY Task\n");
+
+            let prd = base.join("prd.md");
+            fs::write(&prd, contents).unwrap();
+
+            let err = prd_validate_file(&prd, false, None).unwrap_err();
+            prop_assert!(err
+                .messages
+                .iter()
+                .any(|line| line.contains("Unchecked task line outside task block")));
+        }
+
+        #[test]
+        fn prop_validate_task_block_reports_missing_required_fields(
+            missing in missing_field_strategy()
+        ) {
+            let temp = tempdir().unwrap();
+            let base = temp.path();
+            let docs = base.join("docs");
+            fs::create_dir_all(&docs).unwrap();
+            fs::write(docs.join("context.md"), "ok").unwrap();
+
+            let mut block = String::from("### Task P-MISS\n");
+            if !matches!(missing, MissingField::Id) {
+                block.push_str("- **ID** P-MISS\n");
+            }
+            if !matches!(missing, MissingField::ContextBundle) {
+                block.push_str("- **Context Bundle** `docs/context.md`\n");
+            }
+            if !matches!(missing, MissingField::DoD) {
+                block.push_str("- **DoD** Example.\n");
+            }
+            if !matches!(missing, MissingField::Checklist) {
+                block.push_str("- **Checklist**\n  * Work.\n");
+            }
+            if !matches!(missing, MissingField::Dependencies) {
+                block.push_str("- **Dependencies** None\n");
+            }
+            block.push_str("- [ ] P-MISS Task\n");
+
+            let errors = validate_task_block(&block, Path::new("prd.md"), false, Some(base));
+            let missing_label = match missing {
+                MissingField::Id => "ID",
+                MissingField::ContextBundle => "Context Bundle",
+                MissingField::DoD => "DoD",
+                MissingField::Checklist => "Checklist",
+                MissingField::Dependencies => "Dependencies",
+            };
+
+            prop_assert!(errors
+                .iter()
+                .any(|line| line.contains(&format!("Missing required field: {}", missing_label))));
+        }
+
+        #[test]
+        fn prop_prd_sanitize_generated_file_removes_open_questions_section(
+            heading in open_questions_heading_strategy(),
+            questions in prop::collection::vec(safe_line_strategy(), 1..4)
+        ) {
+            let temp = tempdir().unwrap();
+            let base = temp.path();
+            let docs = base.join("docs");
+            fs::create_dir_all(&docs).unwrap();
+            fs::write(docs.join("context.md"), "ok").unwrap();
+
+            let mut contents = String::from("# PRD\n\n");
+            contents.push_str(&format!("## {}\n", heading));
+            for line in &questions {
+                contents.push_str(&format!("- {}\n", line));
+            }
+            contents.push_str("\n### Task P-OPEN\n- **ID** P-OPEN\n- **Context Bundle** `docs/context.md`\n- **DoD** Example.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] P-OPEN Task\n");
+
+            let prd = base.join("prd.md");
+            fs::write(&prd, contents).unwrap();
+
+            prd_sanitize_generated_file(&prd, Some(base), None).unwrap();
+            let sanitized = fs::read_to_string(&prd).unwrap();
+
+            prop_assert!(!sanitized.to_lowercase().contains("open questions"));
+            for line in &questions {
+                prop_assert!(!sanitized.contains(line));
+            }
+            prop_assert!(sanitized.contains("- [ ] P-OPEN Task"));
+        }
+
+        #[test]
+        fn prop_prd_sanitize_generated_file_filters_context_allowed_list_and_base_dir(
+            entries in prop::collection::hash_set(relative_path_strategy(), 1..5),
+            allowed in prop::collection::vec(any::<bool>(), 1..5),
+            use_absolute in prop::collection::vec(any::<bool>(), 1..5),
+            unchecked_count in 1usize..5
+        ) {
+            let temp = tempdir().unwrap();
+            let base = temp.path();
+            let mut entries: Vec<String> = entries.into_iter().collect();
+            entries.sort();
+
+            prop_assume!(allowed.iter().any(|value| *value));
+            let mut use_absolute = use_absolute;
+
+            let mut first_allowed = None;
+            for index in 0..entries.len() {
+                if allowed[index % allowed.len()] {
+                    first_allowed = Some(index);
+                    break;
+                }
+            }
+            if let Some(index) = first_allowed {
+                if !use_absolute[index % use_absolute.len()] {
+                    use_absolute[index % use_absolute.len()] = true;
+                }
+            }
+
+            for entry in &entries {
+                let path = base.join(entry);
+                if let Some(parent) = path.parent() {
+                    fs::create_dir_all(parent).unwrap();
+                }
+                fs::write(&path, "ok").unwrap();
+            }
+
+            let allowed_path = base.join("allowed.txt");
+            let mut allowed_lines = String::new();
+            for (index, entry) in entries.iter().enumerate() {
+                if allowed[index % allowed.len()] {
+                    allowed_lines.push_str(entry);
+                    allowed_lines.push('\n');
+                }
+            }
+            fs::write(&allowed_path, allowed_lines).unwrap();
+
+            let mut context_line = String::from("- **Context Bundle** ");
+            for (index, entry) in entries.iter().enumerate() {
+                if index > 0 {
+                    context_line.push_str(", ");
+                }
+                let use_abs = use_absolute[index % use_absolute.len()];
+                if use_abs {
+                    let abs = base.join(entry);
+                    context_line.push_str(&format!("`{}`", abs.display()));
+                } else {
+                    context_line.push_str(&format!("`{}`", entry));
+                }
+            }
+
+            let mut contents = String::from("# PRD\n\n### Task P-CONTEXT\n- **ID** P-CONTEXT\n");
+            contents.push_str(&format!("{}\n", context_line));
+            contents.push_str("- **DoD** Example.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n");
+            for index in 0..unchecked_count {
+                contents.push_str(&format!("- [ ] P-CONTEXT Task {}\n", index));
+            }
+
+            let prd_dir = base.join("tasks");
+            fs::create_dir_all(&prd_dir).unwrap();
+            let prd = prd_dir.join("prd.md");
+            fs::write(&prd, contents).unwrap();
+
+            prd_sanitize_generated_file(&prd, Some(base), Some(&allowed_path)).unwrap();
+            let sanitized = fs::read_to_string(&prd).unwrap();
+
+            prop_assert!(sanitized.contains("- **Context Bundle**"));
+            prop_assert!(!sanitized.contains(base.to_string_lossy().as_ref()));
+
+            for (index, entry) in entries.iter().enumerate() {
+                if allowed[index % allowed.len()] {
+                    prop_assert!(sanitized.contains(&format!("`{}`", entry)));
+                } else {
+                    prop_assert!(!sanitized.contains(&format!("`{}`", entry)));
+                }
+            }
+
+            let unchecked_lines = sanitized
+                .lines()
+                .filter(|line| is_unchecked_line(line))
+                .count();
+            prop_assert_eq!(unchecked_lines, 1);
         }
     }
 
