@@ -85,6 +85,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-23 Expand core loop validation and completion coverage.
 - COV-24 Expand main CLI helper coverage.
 - COV-MAIN-1 Cover CLI and worktree error paths.
+- COV-MAIN-1 Add CLI helper tests for auto worktree defaults and timestamp slug.
 - COV-25 Expand notification formatting and HTTP error coverage.
 - COV-26 Expand PRD sanitization and stack summary coverage.
 - COV-27 Expand server auth, CORS, and session enrichment coverage.

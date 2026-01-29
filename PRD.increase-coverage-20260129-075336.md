@@ -172,7 +172,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add tests for session_name sanitization and fallback rules.
   * Add tests for parse_bool_value, resolve_auto_worktree, and branch naming helpers.
 - **Dependencies** None
-- [ ] COV-MAIN-1 Expand main CLI helper coverage
+- [x] COV-MAIN-1 Expand main CLI helper coverage
 ### Task COV-TASK-1
 
 - **ID** COV-TASK-1

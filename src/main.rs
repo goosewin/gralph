@@ -2696,6 +2696,20 @@ mod tests {
     }
 
     #[test]
+    fn worktree_timestamp_slug_format_is_stable() {
+        let slug = worktree_timestamp_slug();
+
+        assert_eq!(slug.len(), 15);
+        assert_eq!(slug.chars().nth(8), Some('-'));
+        for (index, ch) in slug.chars().enumerate() {
+            if index == 8 {
+                continue;
+            }
+            assert!(ch.is_ascii_digit(), "expected digit at {index}, got {ch}");
+        }
+    }
+
+    #[test]
     fn session_name_uses_canonical_basename_for_dot() {
         let expected_path = env::current_dir().unwrap().canonicalize().unwrap();
         let expected = expected_path
@@ -2742,6 +2756,32 @@ mod tests {
 
         assert!(!resolve_auto_worktree(&config, false));
         assert!(!resolve_auto_worktree(&config, true));
+    }
+
+    #[test]
+    fn resolve_auto_worktree_disables_when_cli_override_set() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join(".gralph.yaml"),
+            "defaults:\n  auto_worktree: true\n",
+        );
+        let config = Config::load(Some(temp.path())).unwrap();
+
+        assert!(!resolve_auto_worktree(&config, true));
+    }
+
+    #[test]
+    fn resolve_auto_worktree_defaults_true_on_invalid_config_value() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join(".gralph.yaml"),
+            "defaults:\n  auto_worktree: maybe\n",
+        );
+        let config = Config::load(Some(temp.path())).unwrap();
+
+        assert!(resolve_auto_worktree(&config, false));
     }
 
     #[test]
@@ -2884,6 +2924,24 @@ mod tests {
         );
 
         assert_eq!(branch, "prd-collision-3");
+    }
+
+    #[test]
+    fn ensure_unique_worktree_branch_handles_path_only_collision() {
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+        fs::create_dir_all(worktrees_dir.join("prd-collision")).unwrap();
+
+        let branch = ensure_unique_worktree_branch(
+            temp.path().to_str().unwrap(),
+            &worktrees_dir,
+            "prd-collision",
+        );
+
+        assert_eq!(branch, "prd-collision-2");
     }
 
     #[test]
