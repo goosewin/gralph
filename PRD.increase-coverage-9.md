@@ -172,7 +172,7 @@ Expand tests around public APIs, adapter command assembly, and failure handling 
   * Tests cover `normalize_key` and `lookup_value` for mixed case and hyphenated keys.
   * Tests cover list rendering for sequences and nulls.
 - **Dependencies** None
-- [ ] COV-10 Expand config resolution and listing tests in src/config.rs
+- [x] COV-10 Expand config resolution and listing tests in src/config.rs
 ---
 
 ### Task COV-11

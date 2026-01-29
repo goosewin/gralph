@@ -421,6 +421,10 @@ mod tests {
             normalize_key(" Defaults.Max-Iterations "),
             Some("defaults.max_iterations".to_string())
         );
+        assert_eq!(
+            normalize_key(" Logging.Log-Level "),
+            Some("logging.log_level".to_string())
+        );
         assert_eq!(normalize_key("  "), None);
     }
 
@@ -468,6 +472,14 @@ mod tests {
         let nested_value =
             lookup_value(&value, "DeFaUlts.Sub-Section.Mixed-Key").and_then(Value::as_i64);
         assert_eq!(nested_value, Some(12));
+    }
+
+    #[test]
+    fn lookup_value_resolves_mixed_case_hyphenated_key() {
+        let value: Value = serde_yaml::from_str("Logging:\n  Log-Level: debug\n").unwrap();
+
+        let level = lookup_value(&value, "logging.log-level").and_then(Value::as_str);
+        assert_eq!(level, Some("debug"));
     }
 
     #[test]
@@ -729,6 +741,19 @@ mod tests {
     }
 
     #[test]
+    fn legacy_env_override_empty_value_precedes_normalized() {
+        let _guard = env_guard();
+        set_env("GRALPH_MAX_ITERATIONS", "");
+        set_env("GRALPH_DEFAULTS_MAX_ITERATIONS", "55");
+
+        let value = resolve_env_override("defaults.max_iterations", "defaults.max_iterations");
+        assert_eq!(value.as_deref(), Some(""));
+
+        remove_env("GRALPH_DEFAULTS_MAX_ITERATIONS");
+        remove_env("GRALPH_MAX_ITERATIONS");
+    }
+
+    #[test]
     fn normalized_env_override_precedes_compat_without_legacy_alias() {
         let _guard = env_guard();
         set_env("GRALPH_DEFAULTS_AUTO_WORKTREE", "normalized");
@@ -973,6 +998,34 @@ mod tests {
                 ("defaults.empty".to_string(), "".to_string()),
                 ("defaults.flags".to_string(), "one,2".to_string()),
                 ("logging.level".to_string(), "info".to_string()),
+            ]
+        );
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn list_renders_sequences_with_null_entries() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("missing-global.yaml");
+
+        write_file(
+            &default_path,
+            "defaults:\n  flags:\n    - one\n    - null\n    - two\n  empty: null\n",
+        );
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+        let list = config.list();
+        assert_eq!(
+            list,
+            vec![
+                ("defaults.empty".to_string(), "".to_string()),
+                ("defaults.flags".to_string(), "one,,two".to_string()),
             ]
         );
 
