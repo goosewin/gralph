@@ -238,7 +238,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add tests for `extract_archive` error handling when tar fails or PATH is empty.
   * Add tests for `install_binary` permission-denied behavior.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-UPDATE-1 Expand update workflow coverage
+- [x] COV90-UPDATE-1 Expand update workflow coverage
 ### Task COV90-TESTSUPPORT-1
 
 - **ID** COV90-TESTSUPPORT-1

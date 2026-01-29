@@ -777,6 +777,14 @@ mod tests {
     }
 
     #[test]
+    fn resolve_install_version_rejects_prerelease_and_build_metadata() {
+        let prerelease = resolve_install_version("v1.2.3-beta");
+        assert!(matches!(prerelease, Err(UpdateError::InvalidVersion(_))));
+        let build = resolve_install_version("1.2.3+build");
+        assert!(matches!(build, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
     fn resolve_install_version_latest_uses_override() {
         let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "v2.0.0");
         let resolved = resolve_install_version("latest").expect("resolved");
@@ -888,12 +896,39 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn extract_archive_reports_tar_failure_message() {
+        let temp = tempdir().expect("tempdir");
+        let archive_path = temp.path().join("gralph.tar.gz");
+        fs::write(&archive_path, "not a tar").expect("write invalid");
+        let result = extract_archive(&archive_path, temp.path());
+        match result {
+            Err(UpdateError::CommandFailed(message)) => {
+                assert!(message.starts_with("Failed to extract archive:"));
+            }
+            other => panic!("expected command failed, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn extract_archive_uses_fallback_path_when_env_empty() {
         let _lock = crate::test_support::env_lock();
         let temp = tempdir().expect("tempdir");
         let archive_path = temp.path().join("gralph.tar.gz");
         fs::write(&archive_path, "not a tar").expect("write invalid");
         let _guard = PathGuard::set(Some(OsStr::new("")));
+        let result = extract_archive(&archive_path, temp.path());
+        assert!(matches!(result, Err(UpdateError::CommandFailed(_))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_archive_uses_fallback_path_when_env_missing() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempdir().expect("tempdir");
+        let archive_path = temp.path().join("gralph.tar.gz");
+        fs::write(&archive_path, "not a tar").expect("write invalid");
+        let _guard = PathGuard::set(None);
         let result = extract_archive(&archive_path, temp.path());
         assert!(matches!(result, Err(UpdateError::CommandFailed(_))));
     }
@@ -1130,5 +1165,34 @@ mod tests {
         fs::set_permissions(&install_dir, perms).expect("reset permissions");
 
         assert!(matches!(result, Err(UpdateError::PermissionDenied(_))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_binary_permission_denied_includes_install_dir() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempdir().expect("tempdir");
+        let source = temp.path().join("gralph");
+        fs::write(&source, "binary").expect("write");
+        let install_dir = temp.path().join("install");
+        fs::create_dir_all(&install_dir).expect("create install dir");
+
+        let mut perms = fs::metadata(&install_dir).expect("metadata").permissions();
+        perms.set_mode(0o555);
+        fs::set_permissions(&install_dir, perms).expect("set permissions");
+
+        let result = install_binary(&source, &install_dir);
+
+        let mut perms = fs::metadata(&install_dir).expect("metadata").permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&install_dir, perms).expect("reset permissions");
+
+        match result {
+            Err(UpdateError::PermissionDenied(path)) => {
+                assert_eq!(path, install_dir.display().to_string());
+            }
+            other => panic!("expected permission denied, got {other:?}"),
+        }
     }
 }
