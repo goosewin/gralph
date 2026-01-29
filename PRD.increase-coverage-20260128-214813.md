@@ -65,7 +65,7 @@ Add tests for backends, server, verifier, update, notify, config, and CLI helper
   * Tests validate corrupted JSON recovery and empty state protection.
   * Tests use env_lock and temporary directories for state files.
 - **Dependencies** None
-- [ ] COV90-STATE-1 Add state store tests for lock and recovery edge cases
+- [x] COV90-STATE-1 Add state store tests for lock and recovery edge cases
 ### Task COV90-PRD-1
 
 - **ID** COV90-PRD-1

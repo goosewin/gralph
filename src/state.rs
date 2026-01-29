@@ -984,6 +984,12 @@ mod tests {
     }
 
     #[test]
+    fn parse_value_keeps_large_numeric_strings() {
+        let large = "999999999999999999999999999999999999";
+        assert_eq!(parse_value(large), Value::String(large.to_string()));
+    }
+
+    #[test]
     fn default_state_dir_uses_home_env() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -1060,6 +1066,21 @@ mod tests {
         fs::write(&store.state_file, "{not valid json").unwrap();
 
         store.init_state().unwrap();
+        let state = store.read_state().unwrap();
+        assert!(state.sessions.is_empty());
+    }
+
+    #[test]
+    fn init_state_recovers_from_empty_state_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+
+        fs::create_dir_all(&store.state_dir).unwrap();
+        fs::write(&store.state_file, "").unwrap();
+
+        store.init_state().unwrap();
+        let contents = fs::read_to_string(&store.state_file).unwrap();
+        assert!(!contents.trim().is_empty());
         let state = store.read_state().unwrap();
         assert!(state.sessions.is_empty());
     }
