@@ -836,12 +836,13 @@ mod tests {
     }
 
     fn context_entry_strategy() -> impl Strategy<Value = String> {
-        let whitespace = string_regex(r"[ \t]{0,3}").unwrap();
+        let leading_ws = string_regex(r"[ \t]{0,3}").unwrap();
+        let trailing_ws = string_regex(r"[ \t]{0,3}").unwrap();
         let value = prop_oneof![
             Just(String::new()),
             string_regex(r"[A-Za-z0-9._/-]{1,12}").unwrap(),
         ];
-        (whitespace.clone(), value, whitespace)
+        (leading_ws, value, trailing_ws)
             .prop_map(|(prefix, entry, suffix)| format!("{}{}{}", prefix, entry, suffix))
     }
 
@@ -2402,7 +2403,7 @@ mod tests {
                 .join("\n");
 
             let normalized = normalize_context_files(&raw);
-            prop_assert_eq!(normalized, expected);
+            prop_assert_eq!(normalized.as_str(), expected.as_str());
             prop_assert!(!normalized.lines().any(|line| line.trim().is_empty()));
         }
 
@@ -2441,6 +2442,56 @@ mod tests {
                     prop_assert!(rendered.contains("No task block available."));
                 }
             }
+        }
+
+        #[test]
+        fn prop_render_prompt_template_replaces_placeholders(
+            task_file in string_regex(r"[A-Za-z0-9._/-]{1,16}").unwrap(),
+            completion_marker in string_regex(r"[A-Za-z0-9_-]{1,12}").unwrap(),
+            iteration in 1u32..50,
+            max_iterations in 1u32..50,
+            task_block in safe_line_strategy(),
+            context_files in prop::option::of(string_regex(r"[A-Za-z0-9._/-]{1,20}").unwrap()),
+        ) {
+            prop_assume!(max_iterations >= iteration);
+            let template = "File:{task_file}\nMarker:{completion_marker}\nIter:{iteration}/{max_iterations}\nBlock:{task_block}\nCtx:{context_files}\n{context_files_section}End";
+            let rendered = render_prompt_template(
+                template,
+                &task_file,
+                &completion_marker,
+                iteration,
+                max_iterations,
+                Some(&task_block),
+                context_files.as_deref(),
+            );
+
+            prop_assert!(rendered.contains(&format!("File:{}", task_file)));
+            prop_assert!(rendered.contains(&format!("Marker:{}", completion_marker)));
+            prop_assert!(rendered.contains(&format!(
+                "Iter:{}/{}",
+                iteration, max_iterations
+            )));
+            prop_assert!(rendered.contains(&format!("Block:{}", task_block)));
+
+            match context_files.as_deref() {
+                Some(context) if !context.is_empty() => {
+                    prop_assert!(rendered.contains(&format!("Ctx:{}", context)));
+                    prop_assert!(rendered.contains("Context Files (read these first):"));
+                    prop_assert!(rendered.contains(context));
+                }
+                _ => {
+                    prop_assert!(rendered.contains("Ctx:\n"));
+                    prop_assert!(!rendered.contains("Context Files (read these first):"));
+                }
+            }
+
+            prop_assert!(!rendered.contains("{task_file}"));
+            prop_assert!(!rendered.contains("{completion_marker}"));
+            prop_assert!(!rendered.contains("{iteration}"));
+            prop_assert!(!rendered.contains("{max_iterations}"));
+            prop_assert!(!rendered.contains("{task_block}"));
+            prop_assert!(!rendered.contains("{context_files}"));
+            prop_assert!(!rendered.contains("{context_files_section}"));
         }
 
     }
