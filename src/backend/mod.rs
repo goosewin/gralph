@@ -279,6 +279,14 @@ mod tests {
     }
 
     #[test]
+    fn backend_error_display_and_source_for_command() {
+        let error = BackendError::Command("missing binary".to_string());
+
+        assert_eq!(error.to_string(), "backend command error: missing binary");
+        assert!(error.source().is_none());
+    }
+
+    #[test]
     fn command_in_path_handles_missing_and_empty_path() {
         let _lock = crate::test_support::env_lock();
         let dir_temp = tempfile::tempdir().unwrap();
@@ -303,6 +311,28 @@ mod tests {
         unsafe {
             env::set_var("PATH", file_temp.path());
         }
+        assert!(command_in_path(command_name));
+    }
+
+    #[test]
+    fn command_in_path_ignores_empty_segments_and_missing_dirs() {
+        let _lock = crate::test_support::env_lock();
+        let command_name = "gralph-empty-segment-command";
+        let temp_dir = tempfile::tempdir().unwrap();
+        let command_dir = temp_dir.path().join("bin");
+        let missing_dir = temp_dir.path().join("missing");
+        fs::create_dir(&command_dir).unwrap();
+        fs::write(command_dir.join(command_name), "stub").unwrap();
+
+        let empty = OsString::new();
+        let combined = env::join_paths([
+            missing_dir.as_os_str(),
+            empty.as_os_str(),
+            command_dir.as_os_str(),
+        ])
+        .unwrap();
+        let _guard = PathGuard::set(Some(combined.as_os_str()));
+
         assert!(command_in_path(command_name));
     }
 
@@ -426,6 +456,27 @@ mod tests {
 
         assert!(result.is_ok());
         assert!(lines.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_handles_child_exit_before_channel_close() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("printf 'early-line\\n'; exit 0")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert_eq!(lines, vec!["early-line\n"]);
     }
 
     #[cfg(unix)]

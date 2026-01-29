@@ -30,6 +30,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-5 Expand config normalization and override tests.
 - COV-5 Cover config env override conflicts and empty values.
 - COV-5 Add config path edge-case and key existence tests.
+- COV-5 Expand backend utility PATH and stream coverage.
 - COV-6 Expand CLI helper coverage in main.
 - COV-7 Expand server auth and CORS error-path coverage.
 - COV-8 Expand notification formatting helper and payload coverage.
