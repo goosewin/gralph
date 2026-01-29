@@ -129,7 +129,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add tests for `VerifierArgs` overrides and defaults.
   * Add tests for `PrdCreateArgs` interactive and no-interactive conflict handling.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-CLI-1 Expand CLI parsing coverage
+- [x] COV90-CLI-1 Expand CLI parsing coverage
 ### Task COV90-LIB-1
 
 - **ID** COV90-LIB-1

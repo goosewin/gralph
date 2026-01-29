@@ -349,6 +349,7 @@ pub struct ServerArgs {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::error::ErrorKind;
 
     #[test]
     fn parse_update_command() {
@@ -431,6 +432,52 @@ mod tests {
     }
 
     #[test]
+    fn parse_run_loop_optional_flags() {
+        let cli = Cli::parse_from([
+            "gralph",
+            "run-loop",
+            ".",
+            "--name",
+            "session",
+            "--max-iterations",
+            "42",
+            "--task-file",
+            "PRD.md",
+            "--completion-marker",
+            "DONE",
+            "--backend",
+            "opencode",
+            "--model",
+            "gpt",
+            "--variant",
+            "fast",
+            "--prompt-template",
+            "prompt.md",
+            "--webhook",
+            "https://example.com/hook",
+            "--no-worktree",
+            "--strict-prd",
+        ]);
+        match cli.command {
+            Some(Command::RunLoop(args)) => {
+                assert_eq!(args.dir, PathBuf::from("."));
+                assert_eq!(args.name, "session");
+                assert_eq!(args.max_iterations, Some(42));
+                assert_eq!(args.task_file.as_deref(), Some("PRD.md"));
+                assert_eq!(args.completion_marker.as_deref(), Some("DONE"));
+                assert_eq!(args.backend.as_deref(), Some("opencode"));
+                assert_eq!(args.model.as_deref(), Some("gpt"));
+                assert_eq!(args.variant.as_deref(), Some("fast"));
+                assert_eq!(args.prompt_template, Some(PathBuf::from("prompt.md")));
+                assert_eq!(args.webhook.as_deref(), Some("https://example.com/hook"));
+                assert!(args.no_worktree);
+                assert!(args.strict_prd);
+            }
+            other => panic!("Expected run-loop command, got: {other:?}"),
+        }
+    }
+
+    #[test]
     fn parse_prd_create_options() {
         let cli = Cli::parse_from([
             "gralph",
@@ -480,6 +527,61 @@ mod tests {
                 other => panic!("Expected prd create command, got: {other:?}"),
             },
             other => panic!("Expected prd command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_prd_create_interactive_conflict() {
+        let err = Cli::try_parse_from([
+            "gralph",
+            "prd",
+            "create",
+            "--interactive",
+            "--no-interactive",
+        ])
+        .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn parse_verifier_defaults() {
+        let cli = Cli::parse_from(["gralph", "verifier"]);
+        match cli.command {
+            Some(Command::Verifier(args)) => {
+                assert!(args.dir.is_none());
+                assert!(args.test_command.is_none());
+                assert!(args.coverage_command.is_none());
+                assert!(args.coverage_min.is_none());
+            }
+            other => panic!("Expected verifier command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_verifier_overrides() {
+        let cli = Cli::parse_from([
+            "gralph",
+            "verifier",
+            "--dir",
+            ".",
+            "--test-command",
+            "cargo test --workspace",
+            "--coverage-command",
+            "cargo tarpaulin --workspace",
+            "--coverage-min",
+            "95.5",
+        ]);
+        match cli.command {
+            Some(Command::Verifier(args)) => {
+                assert_eq!(args.dir, Some(PathBuf::from(".")));
+                assert_eq!(args.test_command.as_deref(), Some("cargo test --workspace"));
+                assert_eq!(
+                    args.coverage_command.as_deref(),
+                    Some("cargo tarpaulin --workspace")
+                );
+                assert_eq!(args.coverage_min, Some(95.5));
+            }
+            other => panic!("Expected verifier command, got: {other:?}"),
         }
     }
 
