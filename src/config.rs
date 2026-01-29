@@ -574,7 +574,10 @@ mod tests {
         set_env("GRALPH_DEFAULTS_AUTO-WORKTREE", "true");
 
         let config = Config::load(None).unwrap();
-        assert_eq!(config.get("defaults.auto-worktree").as_deref(), Some("true"));
+        assert_eq!(
+            config.get("defaults.auto-worktree").as_deref(),
+            Some("true")
+        );
 
         remove_env("GRALPH_DEFAULTS_AUTO-WORKTREE");
         remove_env("GRALPH_DEFAULT_CONFIG");
@@ -646,6 +649,35 @@ mod tests {
         remove_env("GRALPH_DEFAULT_CONFIG");
         remove_env("GRALPH_GLOBAL_CONFIG");
         remove_env("GRALPH_PROJECT_CONFIG_NAME");
+    }
+
+    #[test]
+    fn env_override_precedes_project_config() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+
+        let default_path = root.join("default.yaml");
+        let global_path = root.join("global.yaml");
+        let project_dir = root.join("project");
+        let project_path = project_dir.join(".gralph.yaml");
+
+        write_file(&default_path, "defaults:\n  backend: claude\n");
+        write_file(&global_path, "defaults:\n  backend: gemini\n");
+        write_file(&project_path, "defaults:\n  backend: opencode\n");
+
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+        set_env("GRALPH_PROJECT_CONFIG_NAME", ".gralph.yaml");
+        set_env("GRALPH_DEFAULTS_BACKEND", "codex");
+
+        let config = Config::load(Some(&project_dir)).unwrap();
+        assert_eq!(config.get("defaults.backend").as_deref(), Some("codex"));
+
+        remove_env("GRALPH_DEFAULTS_BACKEND");
+        remove_env("GRALPH_PROJECT_CONFIG_NAME");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
     }
 
     #[test]
@@ -804,6 +836,22 @@ mod tests {
     }
 
     #[test]
+    fn get_normalizes_case_and_hyphenated_segments() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(&default_path, "Logging:\n  Log-Level: INFO\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("logging.log-level").as_deref(), Some("INFO"));
+        assert_eq!(config.get(" Logging.Log-Level ").as_deref(), Some("INFO"));
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
     fn config_dir_env_sets_global_path() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -900,7 +948,14 @@ mod tests {
         set_env("GRALPH_PROJECT_CONFIG_NAME", "custom.yaml");
 
         let paths = config_paths(Some(&project_dir));
-        assert_eq!(paths, vec![default_path.clone(), global_path.clone(), project_path.clone()]);
+        assert_eq!(
+            paths,
+            vec![
+                default_path.clone(),
+                global_path.clone(),
+                project_path.clone()
+            ]
+        );
 
         remove_env("GRALPH_PROJECT_CONFIG_NAME");
         remove_env("GRALPH_GLOBAL_CONFIG");
@@ -963,14 +1018,12 @@ mod tests {
 
         let config = Config::load(None).unwrap();
         let list = config.list();
-        assert!(
-            list.iter()
-                .any(|(key, value)| key == "defaults.max_iterations" && value == "5")
-        );
-        assert!(
-            list.iter()
-                .any(|(key, value)| key == "logging.level" && value == "info")
-        );
+        assert!(list
+            .iter()
+            .any(|(key, value)| key == "defaults.max_iterations" && value == "5"));
+        assert!(list
+            .iter()
+            .any(|(key, value)| key == "logging.level" && value == "info"));
 
         remove_env("GRALPH_GLOBAL_CONFIG");
         remove_env("GRALPH_DEFAULT_CONFIG");
@@ -1070,6 +1123,24 @@ mod tests {
             config.get("test.flags").as_deref(),
             Some("--headless,--verbose")
         );
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn get_renders_sequences_with_null_entries() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(
+            &default_path,
+            "defaults:\n  flags:\n    - one\n    - null\n    - two\n",
+        );
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("defaults.flags").as_deref(), Some("one,,two"));
 
         remove_env("GRALPH_DEFAULT_CONFIG");
     }

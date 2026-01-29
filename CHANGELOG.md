@@ -96,6 +96,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV90-STATE-1 Add state store recovery and parse_value edge-case tests.
 - COV90-PRD-1 Add property-based PRD validation and sanitize invariants.
 - COV90-TASK-1 Add property tests for task parsing boundaries.
+- COV90-CONFIG-1 Add config precedence, env override, and list rendering edge-case tests.
 - COV-9 Expand update check and archive error coverage.
 - COV-31 Expand verifier parsing and static check coverage.
 - COV-VERIFIER-1 Cover verifier parsing and static checks.

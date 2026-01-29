@@ -99,6 +99,7 @@ Add tests for backends, server, verifier, update, notify, config, and CLI helper
   * Tests cover sequence and null flattening into CSV values.
 - **Dependencies** COV90-CORE-1, COV90-STATE-1, COV90-PRD-1, COV90-TASK-1
 - [ ] COV90-CONFIG-1 Add config precedence and normalization tests
+ - [x] COV90-CONFIG-1 Add config precedence and normalization tests
 ### Task COV90-VER-1
 
 - **ID** COV90-VER-1
