@@ -1006,6 +1006,19 @@ mod tests {
     }
 
     #[test]
+    fn parse_value_keeps_whitespace_and_symbol_mixed_tokens() {
+        assert_eq!(parse_value(" "), Value::String(" ".to_string()));
+        assert_eq!(parse_value("\t"), Value::String("\t".to_string()));
+        assert_eq!(parse_value(" 42"), Value::String(" 42".to_string()));
+        assert_eq!(parse_value("42 "), Value::String("42 ".to_string()));
+        assert_eq!(parse_value("1 2"), Value::String("1 2".to_string()));
+        assert_eq!(parse_value("12-3"), Value::String("12-3".to_string()));
+        assert_eq!(parse_value("12_3"), Value::String("12_3".to_string()));
+        assert_eq!(parse_value("1,234"), Value::String("1,234".to_string()));
+        assert_eq!(parse_value("12.3"), Value::String("12.3".to_string()));
+    }
+
+    #[test]
     fn parse_value_keeps_large_numeric_strings() {
         let large = "999999999999999999999999999999999999";
         assert_eq!(parse_value(large), Value::String(large.to_string()));
@@ -1195,6 +1208,51 @@ mod tests {
         );
 
         let err = store.get_session("alpha").unwrap_err();
+        match err {
+            StateError::Io { path, .. } => {
+                assert_eq!(path, lock_file);
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn with_lock_fails_when_state_dir_is_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = temp.path().join("state-dir-file");
+        fs::write(&state_dir, "not a dir").unwrap();
+        let state_file = state_dir.join("state.json");
+        let lock_file = state_dir.join("state.lock");
+        let store = StateStore::with_paths(
+            state_dir,
+            state_file,
+            lock_file.clone(),
+            Duration::from_millis(100),
+        );
+
+        let err = store.with_lock(|| Ok(())).unwrap_err();
+        match err {
+            StateError::Io { path, .. } => {
+                assert_eq!(path, lock_file);
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn with_lock_fails_when_lock_parent_is_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = temp.path().join("state");
+        let state_file = state_dir.join("state.json");
+        let lock_file = temp.path().join("missing").join("state.lock");
+        let store = StateStore::with_paths(
+            state_dir,
+            state_file,
+            lock_file.clone(),
+            Duration::from_millis(100),
+        );
+
+        let err = store.with_lock(|| Ok(())).unwrap_err();
         match err {
             StateError::Io { path, .. } => {
                 assert_eq!(path, lock_file);

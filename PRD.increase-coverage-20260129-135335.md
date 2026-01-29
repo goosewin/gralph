@@ -63,7 +63,7 @@ Add tests around CLI helpers, server handlers, notification payloads, update wor
   * Add tests that force with_lock to fail when state_dir or lock paths are invalid.
   * Add tests for parse_value with whitespace and mixed numeric tokens.
 - **Dependencies** None
-- [ ] COV-STATE-1 Cover state lock path failures and parse_value edge cases
+- [x] COV-STATE-1 Cover state lock path failures and parse_value edge cases
 ### Task COV-PRD-1
 
 - **ID** COV-PRD-1
