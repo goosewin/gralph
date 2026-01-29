@@ -183,7 +183,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add tests for `stream_command_output` when the callback fails mid-stream.
   * Add tests for missing stdout or stderr handles in child processes.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-BACKEND-MOD-1 Expand backend helper coverage
+- [x] COV90-BACKEND-MOD-1 Expand backend helper coverage
 ### Task COV90-BACKEND-CLAUDE-1
 
 - **ID** COV90-BACKEND-CLAUDE-1

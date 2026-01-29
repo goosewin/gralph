@@ -536,6 +536,35 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn stream_command_output_propagates_mid_stream_error() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("printf 'first-line\\nsecond-line\\nthird-line\\n'")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            if lines.len() == 2 {
+                return Err(BackendError::Command("callback failed".to_string()));
+            }
+            Ok(())
+        });
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message == "callback failed"
+        ));
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("first-line"));
+        assert!(lines[1].contains("second-line"));
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn stream_command_output_reports_non_zero_exit() {
         let child = Command::new("/bin/sh")
             .arg("-c")
