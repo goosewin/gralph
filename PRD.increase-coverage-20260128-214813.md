@@ -110,7 +110,7 @@ Add tests for backends, server, verifier, update, notify, config, and CLI helper
   * Tests cover extract_coverage_percent for common tarpaulin output variants.
   * Tests cover review gate rating scaling and issue count detection.
 - **Dependencies** COV90-CORE-1, COV90-STATE-1, COV90-PRD-1, COV90-TASK-1
-- [ ] COV90-VER-1 Add verifier parsing and review gate tests
+- [x] COV90-VER-1 Add verifier parsing and review gate tests
 ### Task COV90-MAIN-1
 
 - **ID** COV90-MAIN-1

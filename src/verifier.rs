@@ -1881,6 +1881,8 @@ mod tests {
     use serde_json::json;
     use std::env;
     use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
     use std::process::Command;
 
@@ -1974,6 +1976,42 @@ mod tests {
         }
     }
 
+    struct PathGuard {
+        previous: Option<String>,
+    }
+
+    impl PathGuard {
+        fn set(bin_dir: &Path) -> Self {
+            let previous = env::var("PATH").ok();
+            let new_path = match &previous {
+                Some(value) if !value.is_empty() => format!("{}:{}", bin_dir.display(), value),
+                _ => bin_dir.display().to_string(),
+            };
+            set_env("PATH", new_path);
+            Self { previous }
+        }
+    }
+
+    impl Drop for PathGuard {
+        fn drop(&mut self) {
+            if let Some(value) = &self.previous {
+                set_env("PATH", value);
+            } else {
+                remove_env("PATH");
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    fn write_mock_gh(dir: &Path, script: &str) -> PathBuf {
+        let path = dir.join("gh");
+        fs::write(&path, script).unwrap();
+        let mut perms = fs::metadata(&path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).unwrap();
+        path
+    }
+
     fn init_git_repo(branch: &str) -> tempfile::TempDir {
         let temp = tempfile::tempdir().unwrap();
         run_git(temp.path(), &["init"]);
@@ -2058,6 +2096,22 @@ mod tests {
         assert!(args.contains(&"--fail-under".to_string()));
         assert!(args.contains(&"60".to_string()));
         assert!(args.contains(&"src/backend/*".to_string()));
+    }
+
+    #[test]
+    fn parse_verifier_command_preserves_quoted_args() {
+        let (program, args) =
+            parse_verifier_command("cargo test -- --ignored \"path with spaces\"").unwrap();
+        assert_eq!(program, "cargo");
+        assert_eq!(
+            args,
+            vec![
+                "test".to_string(),
+                "--".to_string(),
+                "--ignored".to_string(),
+                "path with spaces".to_string(),
+            ]
+        );
     }
 
     #[test]
@@ -2193,6 +2247,25 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn gh_pr_view_json_reports_failure_output() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\necho \"boom\" 1>&2\nexit 1\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let err = gh_pr_view_json(temp.path()).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("gh pr view failed: boom"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
     #[test]
     fn parse_percent_from_line_returns_last_percent() {
         let value = parse_percent_from_line("Coverage 55.1% (line 88.2%)").unwrap();
@@ -2239,6 +2312,12 @@ mod tests {
     fn extract_coverage_percent_reads_generic_coverage() {
         let output = "coverage: 83.7%";
         assert_eq!(extract_coverage_percent(output), Some(83.7));
+    }
+
+    #[test]
+    fn extract_coverage_percent_reads_tarpaulin_results_variant() {
+        let output = "Coverage Results: 81.23% (123/151)";
+        assert_eq!(extract_coverage_percent(output), Some(81.23));
     }
 
     #[test]
@@ -2301,6 +2380,11 @@ mod tests {
             parse_review_issue_count("Issue count: 3 remaining"),
             Some(3)
         );
+    }
+
+    #[test]
+    fn parse_review_issue_count_handles_explicit_zero() {
+        assert_eq!(parse_review_issue_count("Issues: 0"), Some(0));
     }
 
     #[test]
