@@ -203,7 +203,7 @@ Expand tests for CLI flows, server endpoints, backend adapters, update workflow,
   * Add tests that env_lock serializes env mutation across threads without overlap.
   * Add tests that env_lock recovers after poisoning across repeated acquisitions.
 - **Dependencies** COV-CORE-1, COV-STATE-1, COV-PRD-1, COV-TASK-1
-- [ ] COV-TEST-SUPPORT-1 Expand env lock coverage in src/test_support.rs
+- [x] COV-TEST-SUPPORT-1 Expand env lock coverage in src/test_support.rs
 ---
 
 ## Success Criteria

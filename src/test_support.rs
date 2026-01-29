@@ -15,6 +15,18 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
+    fn set_env(key: &str, value: impl AsRef<std::ffi::OsStr>) {
+        unsafe {
+            env::set_var(key, value);
+        }
+    }
+
+    fn remove_env(key: &str) {
+        unsafe {
+            env::remove_var(key);
+        }
+    }
+
     #[test]
     fn env_lock_is_usable_after_panic_in_prior_holder() {
         let handle = thread::spawn(|| {
@@ -78,20 +90,38 @@ mod tests {
     fn env_lock_serializes_env_updates() {
         const THREADS: usize = 4;
         let barrier = Arc::new(Barrier::new(THREADS));
+        let active = Arc::new(AtomicUsize::new(0));
+        let max_active = Arc::new(AtomicUsize::new(0));
         let mut handles = Vec::with_capacity(THREADS);
 
         for thread_id in 0..THREADS {
             let barrier = Arc::clone(&barrier);
+            let active = Arc::clone(&active);
+            let max_active = Arc::clone(&max_active);
             handles.push(thread::spawn(move || {
                 barrier.wait();
                 let _guard = env_lock();
+                let now = active.fetch_add(1, Ordering::SeqCst) + 1;
+                loop {
+                    let current = max_active.load(Ordering::SeqCst);
+                    if now <= current {
+                        break;
+                    }
+                    if max_active
+                        .compare_exchange(current, now, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_ok()
+                    {
+                        break;
+                    }
+                }
                 let value = format!("thread-{thread_id}");
-                env::set_var("GRALPH_ENV_LOCK_SERIALIZE_TEST", &value);
+                set_env("GRALPH_ENV_LOCK_SERIALIZE_TEST", &value);
                 thread::sleep(Duration::from_millis(5));
                 assert_eq!(
                     env::var("GRALPH_ENV_LOCK_SERIALIZE_TEST").as_deref(),
                     Ok(value.as_str())
                 );
+                active.fetch_sub(1, Ordering::SeqCst);
             }));
         }
 
@@ -99,8 +129,9 @@ mod tests {
             assert!(handle.join().is_ok());
         }
 
+        assert_eq!(max_active.load(Ordering::SeqCst), 1);
         let _guard = env_lock();
-        env::remove_var("GRALPH_ENV_LOCK_SERIALIZE_TEST");
+        remove_env("GRALPH_ENV_LOCK_SERIALIZE_TEST");
     }
 
     #[test]
@@ -109,13 +140,13 @@ mod tests {
         let key = "GRALPH_ENV_LOCK_SAFE_TEST";
         let original = env::var_os(key);
 
-        env::set_var(key, "temporary-value");
+        set_env(key, "temporary-value");
         assert_eq!(env::var(key).as_deref(), Ok("temporary-value"));
 
         if let Some(value) = &original {
-            env::set_var(key, value);
+            set_env(key, value);
         } else {
-            env::remove_var(key);
+            remove_env(key);
         }
 
         assert_eq!(env::var_os(key), original);
@@ -142,6 +173,12 @@ mod tests {
                     assert!(result.is_err());
 
                     let _guard = env_lock();
+                    let value = format!("{thread_id}-{round}");
+                    set_env("GRALPH_ENV_LOCK_POISON_RECOVER_TEST", &value);
+                    assert_eq!(
+                        env::var("GRALPH_ENV_LOCK_POISON_RECOVER_TEST").as_deref(),
+                        Ok(value.as_str())
+                    );
                     recovered.fetch_add(1, Ordering::SeqCst);
                 }
             }));
@@ -152,6 +189,8 @@ mod tests {
         }
 
         assert_eq!(recovered.load(Ordering::SeqCst), THREADS * ROUNDS);
+        let _guard = env_lock();
+        remove_env("GRALPH_ENV_LOCK_POISON_RECOVER_TEST");
     }
 
     #[test]
