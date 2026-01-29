@@ -63,7 +63,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Add property-based tests that `sanitize_task_block` keeps exactly one unchecked task line.
   * Add tests for context bundle fallback selection when entries are invalid.
 - **Dependencies** None
-- [ ] COV90-PRD-1 Expand PRD validation and sanitization coverage
+- [x] COV90-PRD-1 Expand PRD validation and sanitization coverage
 ### Task COV90-STATE-1
 
 - **ID** COV90-STATE-1

@@ -1401,6 +1401,25 @@ mod tests {
     }
 
     #[test]
+    fn validate_task_block_accepts_absolute_context_inside_repo_root() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        let inside = docs.join("inside.md");
+        fs::write(&inside, "ok").unwrap();
+
+        let block = format!(
+            "### Task D-IN\n- **ID** D-IN\n- **Context Bundle** `{}`\n- **DoD** Guard context.\n- **Checklist**\n  * Validate paths.\n- **Dependencies** None\n- [ ] D-IN Task\n",
+            inside.display()
+        );
+
+        let errors = validate_task_block(&block, Path::new("prd.md"), false, Some(base));
+
+        assert!(errors.is_empty());
+    }
+
+    #[test]
     fn prd_validate_file_rejects_stray_checkbox() {
         let temp = tempdir().unwrap();
         let base = temp.path();
@@ -2289,6 +2308,33 @@ mod tests {
                 }
             }
         }
+
+        #[test]
+        fn prop_sanitize_task_block_keeps_single_unchecked_line(
+            unchecked_count in 1usize..6,
+            indent in whitespace_strategy()
+        ) {
+            let temp = tempdir().unwrap();
+            let base = temp.path();
+            let docs = base.join("docs");
+            fs::create_dir_all(&docs).unwrap();
+            fs::write(docs.join("context.md"), "ok").unwrap();
+
+            let mut block = String::from(
+                "### Task P-ONE\n- **ID** P-ONE\n- **Context Bundle** `docs/context.md`\n- **DoD** Example.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n",
+            );
+            for index in 0..unchecked_count {
+                block.push_str(&format!("{indent}- [ ] P-ONE Task {index}\n"));
+            }
+
+            let sanitized = sanitize_task_block(&block, Some(base), None);
+            let unchecked_lines = sanitized
+                .lines()
+                .filter(|line| is_unchecked_line(line))
+                .count();
+
+            prop_assert_eq!(unchecked_lines, 1);
+        }
     }
 
     proptest! {
@@ -2668,6 +2714,22 @@ mod tests {
         assert!(sanitized.contains("- **Context Bundle** `docs/allowed.md`"));
         assert!(!sanitized.contains("docs/blocked.md"));
         assert!(!sanitized.contains("missing.md"));
+    }
+
+    #[test]
+    fn pick_fallback_context_skips_invalid_allowed_entries() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("keep.md"), "ok").unwrap();
+
+        let allowed = base.join("allowed.txt");
+        fs::write(&allowed, "docs/missing.md\n\ndocs/keep.md\n").unwrap();
+
+        let fallback = pick_fallback_context(Some(base), Some(&allowed));
+
+        assert_eq!(fallback, Some("docs/keep.md".to_string()));
     }
 
     #[test]
