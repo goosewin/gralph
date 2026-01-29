@@ -93,7 +93,7 @@ Add tests around CLI helpers, server handlers, notification payloads, update wor
   * Add unit tests for env override precedence with compat keys and empty values.
   * Add proptest coverage for value_to_string sequence rendering.
 - **Dependencies** None
-- [ ] COV-CONFIG-1 Add config normalization and env override edge coverage
+- [x] COV-CONFIG-1 Add config normalization and env override edge coverage
 ### Task COV-TASK-1
 
 - **ID** COV-TASK-1

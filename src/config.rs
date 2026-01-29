@@ -346,7 +346,73 @@ fn normalize_segment(segment: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+    use proptest::string::string_regex;
     use std::fs;
+
+    #[derive(Debug, Clone)]
+    enum SeqItem {
+        Text(String),
+        Bool(bool),
+        Number(i64),
+        Null,
+        Map,
+        Sequence(Vec<SeqItem>),
+    }
+
+    impl SeqItem {
+        fn expected_string(&self) -> String {
+            match self {
+                SeqItem::Text(text) => text.clone(),
+                SeqItem::Bool(flag) => flag.to_string(),
+                SeqItem::Number(number) => number.to_string(),
+                SeqItem::Null => String::new(),
+                SeqItem::Map => String::new(),
+                SeqItem::Sequence(items) => items
+                    .iter()
+                    .map(SeqItem::expected_string)
+                    .collect::<Vec<_>>()
+                    .join(","),
+            }
+        }
+
+        fn to_value(&self) -> Value {
+            match self {
+                SeqItem::Text(text) => Value::String(text.clone()),
+                SeqItem::Bool(flag) => Value::Bool(*flag),
+                SeqItem::Number(number) => Value::Number(serde_yaml::Number::from(*number)),
+                SeqItem::Null => Value::Null,
+                SeqItem::Map => {
+                    let mut map = Mapping::new();
+                    map.insert(
+                        Value::String("key".to_string()),
+                        Value::String("value".to_string()),
+                    );
+                    Value::Mapping(map)
+                }
+                SeqItem::Sequence(items) => {
+                    Value::Sequence(items.iter().map(SeqItem::to_value).collect())
+                }
+            }
+        }
+    }
+
+    fn seq_item_strategy() -> impl Strategy<Value = SeqItem> {
+        let text = string_regex("[a-zA-Z0-9_-]{0,8}")
+            .unwrap()
+            .prop_map(SeqItem::Text);
+        let number = (-999i64..=999).prop_map(SeqItem::Number);
+        let leaf = prop_oneof![
+            text,
+            any::<bool>().prop_map(SeqItem::Bool),
+            number,
+            Just(SeqItem::Null),
+            Just(SeqItem::Map),
+        ];
+        leaf.prop_recursive(2, 16, 4, |inner| {
+            prop::collection::vec(inner, 0..4).prop_map(SeqItem::Sequence)
+        })
+    }
     fn env_guard() -> std::sync::MutexGuard<'static, ()> {
         let guard = crate::test_support::env_lock();
         clear_env_overrides();
@@ -447,6 +513,14 @@ mod tests {
         assert_eq!(
             normalize_key("defaults. .backend"),
             Some("defaults..backend".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_key_preserves_underscores_and_hyphen_mix() {
+        assert_eq!(
+            normalize_key(" Defaults.Auto_Worktree-Mode "),
+            Some("defaults.auto_worktree_mode".to_string())
         );
     }
 
@@ -639,6 +713,20 @@ mod tests {
         let mapping: Value = serde_yaml::from_str("key: value").unwrap();
         assert!(matches!(mapping, Value::Mapping(_)));
         assert!(value_to_string(&mapping).is_none());
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(32))]
+        #[test]
+        fn value_to_string_mixed_sequences_render_csv(items in prop::collection::vec(seq_item_strategy(), 0..6)) {
+            let sequence = Value::Sequence(items.iter().map(SeqItem::to_value).collect());
+            let expected = items
+                .iter()
+                .map(SeqItem::expected_string)
+                .collect::<Vec<_>>()
+                .join(",");
+            prop_assert_eq!(value_to_string(&sequence).as_deref(), Some(expected.as_str()));
+        }
     }
 
     #[test]
@@ -847,6 +935,20 @@ mod tests {
 
         remove_env("GRALPH_DEFAULTS_AUTO-WORKTREE");
         remove_env("GRALPH_DEFAULTS_AUTO_WORKTREE");
+    }
+
+    #[test]
+    fn normalized_empty_override_precedes_compat_for_mixed_key() {
+        let _guard = env_guard();
+        set_env("GRALPH_DEFAULTS_AUTO_WORKTREE_MODE", "");
+        set_env("GRALPH_DEFAULTS_AUTO-WORKTREE_MODE", "true");
+
+        let value =
+            resolve_env_override("defaults.auto-worktree_mode", "defaults.auto_worktree_mode");
+        assert_eq!(value.as_deref(), Some(""));
+
+        remove_env("GRALPH_DEFAULTS_AUTO-WORKTREE_MODE");
+        remove_env("GRALPH_DEFAULTS_AUTO_WORKTREE_MODE");
     }
 
     #[test]
