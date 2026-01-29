@@ -2339,6 +2339,12 @@ mod tests {
     }
 
     #[test]
+    fn extract_coverage_percent_handles_multiple_percent_tokens() {
+        let output = "Coverage Results: 80.0% (line 82.4%)";
+        assert_eq!(extract_coverage_percent(output), Some(82.4));
+    }
+
+    #[test]
     fn extract_coverage_percent_falls_back_to_last_match() {
         let output = "Line Coverage: 70.1%\nTotal coverage: 72.0%";
         assert_eq!(extract_coverage_percent(output), Some(72.0));
@@ -2557,6 +2563,23 @@ mod tests {
         });
         let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
         assert!(matches!(decision, GateDecision::Failed(message) if message.contains("issue")));
+    }
+
+    #[test]
+    fn evaluate_review_gate_passes_with_percent_rating_and_issue_rate() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "APPROVED",
+                    "body": "Quality score: 90%\nIssue rate: 0%",
+                    "submittedAt": "2024-01-03T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(_)));
     }
 
     #[test]
@@ -2904,6 +2927,11 @@ mod tests {
         );
         assert_eq!(line_contains_marker("METHODODO", &markers), None);
         assert_eq!(line_contains_marker("TODO_", &markers), None);
+        assert_eq!(line_contains_marker("TODO123", &markers), None);
+        assert_eq!(
+            line_contains_marker("TODO-123", &markers),
+            Some("TODO".to_string())
+        );
         assert_eq!(
             line_contains_marker("FIXME.", &markers),
             Some("FIXME".to_string())
@@ -3122,5 +3150,27 @@ mod tests {
             .map(|path| normalize_relative_path(root, path))
             .collect();
         assert_eq!(rel, vec!["src/lib.rs"]);
+    }
+
+    #[test]
+    fn collect_static_check_files_includes_all_when_allow_empty() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join("target")).unwrap();
+        fs::write(root.join("notes.txt"), "notes\n").unwrap();
+        fs::write(root.join("src/main.rs"), "fn main() {}\n").unwrap();
+        fs::write(root.join("target/skip.rs"), "fn main() {}\n").unwrap();
+
+        let mut settings = base_static_settings();
+        settings.allow_patterns = Vec::new();
+        settings.ignore_patterns = vec!["**/target/**".to_string()];
+
+        let files = collect_static_check_files(root, &settings).unwrap();
+        let rel: Vec<String> = files
+            .iter()
+            .map(|path| normalize_relative_path(root, path))
+            .collect();
+        assert_eq!(rel, vec!["notes.txt", "src/main.rs"]);
     }
 }

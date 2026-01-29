@@ -83,7 +83,7 @@ Add tests around CLI helpers, server handlers, notification payloads, update wor
   * Add unit tests for extract_coverage_percent and rating parsing with fractions and percents.
   * Add tests for static checks allow/ignore patterns and TODO marker boundaries.
 - **Dependencies** None
-- [ ] COV-VER-1 Cover verifier parsing, review gate, and static check edges
+- [x] COV-VER-1 Cover verifier parsing, review gate, and static check edges
 ### Task COV-CONFIG-1
 
 - **ID** COV-CONFIG-1

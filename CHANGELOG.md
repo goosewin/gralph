@@ -131,6 +131,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV90-CLI-1 Add CLI parsing tests for run-loop, verifier defaults, and PRD conflicts.
 - COV-9 Expand update check and archive error coverage.
 - COV-31 Expand verifier parsing and static check coverage.
+- COV-VER-1 Add verifier parsing tests for coverage tokens, review gate parsing, and static checks.
 - COV-VERIFIER-1 Cover verifier parsing and static checks.
 - COV-3 Expand verifier parsing and gate evaluation coverage.
 - COV-5 Expand server session enrichment and stop flow coverage.
