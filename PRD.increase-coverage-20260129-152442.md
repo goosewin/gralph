@@ -116,7 +116,7 @@ Each task block must contain exactly one unchecked task line.
   * Add tests for parse_bool_value and resolve_auto_worktree with config overrides.
   * Add tests for auto_worktree_branch_name formatting with known timestamp strings.
 - **Dependencies** COV-VER-1
-- [ ] COV-MAIN-1 Cover CLI helper and auto worktree utilities
+- [x] COV-MAIN-1 Cover CLI helper and auto worktree utilities
 ---
 
 ### Task COV-CONFIG-1
