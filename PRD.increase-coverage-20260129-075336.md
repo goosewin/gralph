@@ -152,7 +152,7 @@ Introduce property-based tests for parsers and normalization behavior (task bloc
   * Add tests for stop handler when sessions are missing or state store errors.
   * Add tests for enrich_session status transitions and remaining task calculations.
 - **Dependencies** None
-- [ ] COV-SERVER-1 Expand server handler and auth error path tests
+- [x] COV-SERVER-1 Expand server handler and auth error path tests
 ### Task COV-NOTIFY-1
 
 - **ID** COV-NOTIFY-1

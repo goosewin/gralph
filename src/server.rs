@@ -1714,6 +1714,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn stop_handler_returns_error_when_lock_file_is_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = temp.path().join("state");
+        let lock_file = state_dir.join("state.lock");
+        fs::create_dir_all(&state_dir).unwrap();
+        fs::create_dir_all(&lock_file).unwrap();
+        let store = store_for_test(temp.path());
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/stop/alpha")
+                    .method("POST")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert!(body["error"].as_str().unwrap().contains("state io error"));
+    }
+
+    #[tokio::test]
     async fn error_response_has_expected_schema() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path());
@@ -1766,6 +1803,26 @@ mod tests {
         assert_eq!(enriched["status"], "stale");
         assert_eq!(enriched["is_alive"], false);
         assert_eq!(enriched["current_remaining"], 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn enrich_session_keeps_running_when_pid_is_alive() {
+        let mut child = std::process::Command::new("sleep").arg("2").spawn().unwrap();
+        let pid = child.id() as i64;
+
+        let session = json!({
+            "name": "alpha",
+            "status": "running",
+            "pid": pid,
+            "dir": "",
+        });
+        let enriched = enrich_session(session);
+        assert_eq!(enriched["status"], "running");
+        assert_eq!(enriched["is_alive"], true);
+        assert_eq!(enriched["current_remaining"], 0);
+
+        let _ = child.wait();
     }
 
     #[test]
@@ -1849,6 +1906,23 @@ mod tests {
         });
         let enriched = enrich_session(session);
         assert_eq!(enriched["current_remaining"], 1);
+    }
+
+    #[test]
+    fn enrich_session_counts_multiple_remaining_tasks() {
+        let temp = tempfile::tempdir().unwrap();
+        let task_path = temp.path().join("tasks.md");
+        fs::write(&task_path, "- [ ] One\n- [ ] Two\n- [x] Done\n").unwrap();
+
+        let session = json!({
+            "name": "alpha",
+            "status": "idle",
+            "pid": 0,
+            "dir": temp.path().to_string_lossy(),
+            "task_file": "tasks.md",
+        });
+        let enriched = enrich_session(session);
+        assert_eq!(enriched["current_remaining"], 2);
     }
 
     #[test]
