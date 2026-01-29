@@ -1041,7 +1041,12 @@ fn extract_context_entries(block: &str) -> Vec<String> {
         }
     }
 
-    entries
+    let mut deduped = Vec::new();
+    for entry in entries {
+        add_unique(&mut deduped, &entry);
+    }
+
+    deduped
 }
 
 fn collect_backtick_entries(line: &str, entries: &mut Vec<String>) {
@@ -1228,6 +1233,14 @@ mod tests {
             Just("Open questions".to_string()),
             Just("open questions".to_string()),
         ]
+    }
+
+    fn dedupe_entries(entries: Vec<String>) -> Vec<String> {
+        let mut deduped = Vec::new();
+        for entry in entries {
+            add_unique(&mut deduped, &entry);
+        }
+        deduped
     }
 
     #[derive(Clone, Debug)]
@@ -1417,6 +1430,29 @@ mod tests {
         let errors = validate_task_block(&block, Path::new("prd.md"), false, Some(base));
 
         assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn validate_task_block_reports_missing_absolute_context_inside_repo_root() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        let missing = docs.join("missing.md");
+
+        let block = format!(
+            "### Task D-MISS\n- **ID** D-MISS\n- **Context Bundle** `{}`\n- **DoD** Guard context.\n- **Checklist**\n  * Validate paths.\n- **Dependencies** None\n- [ ] D-MISS Task\n",
+            missing.display()
+        );
+
+        let errors = validate_task_block(&block, Path::new("prd.md"), false, Some(base));
+
+        assert!(errors
+            .iter()
+            .any(|line| line.contains("Context Bundle path not found")));
+        assert!(!errors
+            .iter()
+            .any(|line| line.contains("Context Bundle path outside repo")));
     }
 
     #[test]
@@ -2057,8 +2093,9 @@ mod tests {
             block.push_str("- **DoD** Example\n- **Checklist**\n  * Work\n- **Dependencies** None\n- [ ] P-1 Task\n");
 
             let extracted = extract_context_entries(&block);
+            let expected = dedupe_entries(entries);
 
-            prop_assert_eq!(extracted, entries);
+            prop_assert_eq!(extracted, expected);
         }
 
         #[test]
@@ -2096,8 +2133,9 @@ mod tests {
             block.push_str("- **Checklist**\n  * Work `ignored.md`\n- **Dependencies** None\n- [ ] P-CTX Task\n");
 
             let extracted = extract_context_entries(&block);
+            let expected = dedupe_entries(entries);
 
-            prop_assert_eq!(extracted, entries);
+            prop_assert_eq!(extracted, expected);
         }
 
         #[test]
@@ -2153,8 +2191,65 @@ mod tests {
             block.push_str("- **DoD** Example\n- **Checklist**\n  * Work\n- **Dependencies** None\n- [ ] P-CTX-N Task\n");
 
             let extracted = extract_context_entries(&block);
+            let expected = dedupe_entries(entries);
 
-            prop_assert_eq!(extracted, entries);
+            prop_assert_eq!(extracted, expected);
+        }
+
+        #[test]
+        fn prop_extract_context_entries_collects_backticked_only_and_dedupes(
+            entries in prop::collection::vec(context_entry_strategy(), 1..6),
+            backticked in prop::collection::vec(any::<bool>(), 1..6),
+            repeats in prop::collection::vec(any::<bool>(), 1..6),
+            breaks in prop::collection::vec(any::<bool>(), 1..6)
+        ) {
+            let mut block = String::from("### Task P-MIX\n- **ID** P-MIX\n- **Context Bundle** ");
+            let mut expected_raw = Vec::new();
+            let mut first = true;
+
+            let mut push_token = |token: &str, break_line: bool| {
+                if !first {
+                    if break_line {
+                        block.push('\n');
+                        block.push_str("  ");
+                    } else {
+                        block.push_str(", ");
+                    }
+                }
+                block.push_str(token);
+                first = false;
+            };
+
+            for (index, entry) in entries.iter().enumerate() {
+                let is_backticked = backticked[index % backticked.len()];
+                let repeat = repeats[index % repeats.len()];
+                let break_line = breaks[index % breaks.len()];
+
+                if is_backticked {
+                    let token = format!("`{}`", entry);
+                    push_token(token.as_str(), break_line);
+                    expected_raw.push(entry.clone());
+
+                    if repeat {
+                        let repeat_break = breaks[(index + 1) % breaks.len()];
+                        push_token(token.as_str(), repeat_break);
+                        expected_raw.push(entry.clone());
+                    }
+                } else {
+                    push_token(entry, break_line);
+                    if repeat {
+                        let repeat_break = breaks[(index + 1) % breaks.len()];
+                        push_token(entry, repeat_break);
+                    }
+                }
+            }
+            block.push('\n');
+            block.push_str("- **DoD** Example\n- **Checklist**\n  * Work\n- **Dependencies** None\n- [ ] P-MIX Task\n");
+
+            let extracted = extract_context_entries(&block);
+            let expected = dedupe_entries(expected_raw);
+
+            prop_assert_eq!(extracted, expected);
         }
 
         #[test]
@@ -2746,6 +2841,44 @@ mod tests {
         assert!(sanitized.contains("- [ ] X-3 Keep"));
         assert!(sanitized.contains("- X-3 Drop"));
         assert!(!sanitized.contains("- [ ] X-3 Drop"));
+    }
+
+    #[test]
+    fn sanitize_task_block_filters_invalid_context_entries_without_allowed_list() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("keep.md"), "ok").unwrap();
+
+        let outside = tempdir().unwrap();
+        let outside_path = outside.path().join("outside.md");
+        fs::write(&outside_path, "ok").unwrap();
+
+        let block = format!(
+            "### Task X-4\n- **ID** X-4\n- **Context Bundle** `docs/keep.md`, `missing.md`, `{}`\n- **DoD** Confirm sanitize.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] X-4 Task\n",
+            outside_path.display()
+        );
+
+        let sanitized = sanitize_task_block(&block, Some(base), None);
+
+        assert!(sanitized.contains("- **Context Bundle** `docs/keep.md`"));
+        assert!(!sanitized.contains("missing.md"));
+        assert!(!sanitized.contains(outside_path.to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn sanitize_task_block_falls_back_to_readme_when_context_invalid_without_allowed_list() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("README.md"), "readme").unwrap();
+
+        let block = "### Task X-5\n- **ID** X-5\n- **Context Bundle** `missing.md`\n- **DoD** Confirm sanitize.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] X-5 Task\n";
+
+        let sanitized = sanitize_task_block(block, Some(base), None);
+
+        assert!(sanitized.contains("- **Context Bundle** `README.md`"));
+        assert!(!sanitized.contains("missing.md"));
     }
 
     #[test]

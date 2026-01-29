@@ -77,7 +77,7 @@ Each task block must contain exactly one unchecked task line.
   * Add tests for validate_task_block with absolute paths inside and outside repo base, plus missing context.
   * Add a proptest to ensure extract_context_entries collects only backticked paths and de-duplicates entries.
 - **Dependencies** None
-- [ ] COV-PRD-1 Expand PRD validation and sanitize invariants
+- [x] COV-PRD-1 Expand PRD validation and sanitize invariants
 ---
 
 ### Task COV-STATE-1
