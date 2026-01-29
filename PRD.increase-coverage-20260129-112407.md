@@ -260,7 +260,7 @@ Keep coverage non-blocking during the ramp-up. Use a warning-only soft target (6
   * Update README text to match the soft warning target and non-blocking behavior.
   * Note the staged target plan in README without blocking merges.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-STATE-1, COV90-VERIFIER-1
-- [ ] COV90-CI-1 Align soft coverage warning target and docs
+- [x] COV90-CI-1 Align soft coverage warning target and docs
 ### Task COV90-CI-2
 
 - **ID** COV90-CI-2
