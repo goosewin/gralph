@@ -742,9 +742,11 @@ fn cleanup_old_logs(log_dir: &Path, config: Option<&Config>) -> Result<(), CoreE
     }
     let retain_days = config
         .and_then(|cfg| cfg.get("logging.retain_days"))
-        .and_then(|value| value.parse::<u64>().ok())
-        .filter(|value| *value > 0)
-        .unwrap_or(7);
+        .and_then(|value| value.parse::<u64>().ok());
+    if retain_days == Some(0) {
+        return Ok(());
+    }
+    let retain_days = retain_days.unwrap_or(7);
 
     let cutoff = SystemTime::now()
         .checked_sub(Duration::from_secs(retain_days.saturating_mul(86400)))
@@ -1060,6 +1062,31 @@ mod tests {
     }
 
     #[test]
+    fn check_completion_rejects_multiple_negated_phrases() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [x] Done\n").unwrap();
+
+        let phrases = ["can't", "won't", "do not", "don't", "shouldn't", "must not"];
+        for phrase in phrases {
+            let result = format!("We {} <promise>COMPLETE</promise>\n", phrase);
+            let complete = check_completion(&path, &result, "COMPLETE").unwrap();
+            assert!(!complete, "phrase should be rejected: {}", phrase);
+        }
+    }
+
+    #[test]
+    fn check_completion_matches_last_non_empty_line() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "- [x] Done\n").unwrap();
+
+        let result = "Cannot <promise>COMPLETE</promise>\n\n<promise>COMPLETE</promise>\n";
+        let complete = check_completion(&path, result, "COMPLETE").unwrap();
+        assert!(complete);
+    }
+
+    #[test]
     fn check_completion_rejects_mismatched_marker() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("PRD.md");
@@ -1222,6 +1249,20 @@ mod tests {
     }
 
     #[test]
+    fn resolve_prompt_template_falls_back_when_env_and_project_missing() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path();
+        let env_path = project_dir.join("missing-template.txt");
+        set_env("GRALPH_PROMPT_TEMPLATE_FILE", &env_path);
+
+        let resolved = resolve_prompt_template(project_dir, None).unwrap();
+        assert_eq!(resolved, DEFAULT_PROMPT_TEMPLATE);
+
+        remove_env("GRALPH_PROMPT_TEMPLATE_FILE");
+    }
+
+    #[test]
     fn task_blocks_end_on_separator_and_section_heading() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("PRD.md");
@@ -1366,6 +1407,45 @@ mod tests {
 
         assert!(!old_log.exists());
         assert!(recent_log.exists());
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn cleanup_old_logs_skips_missing_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let log_dir = temp.path().join("missing");
+
+        cleanup_old_logs(&log_dir, None).unwrap();
+        assert!(!log_dir.exists());
+    }
+
+    #[test]
+    fn cleanup_old_logs_skips_when_retention_disabled() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let log_dir = temp.path().join(".gralph");
+        fs::create_dir_all(&log_dir).unwrap();
+
+        let config_path = temp.path().join("config.yaml");
+        fs::write(&config_path, "logging:\n  retain_days: 0\n").unwrap();
+        set_env("GRALPH_DEFAULT_CONFIG", &config_path);
+        let global_path = temp.path().join("missing-global.yaml");
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+
+        let old_log = log_dir.join("old.log");
+        fs::write(&old_log, "old").unwrap();
+        let old_time = SystemTime::now()
+            .checked_sub(Duration::from_secs(30 * 86400))
+            .unwrap();
+        set_modified(&old_log, old_time);
+
+        cleanup_old_logs(&log_dir, Some(&config)).unwrap();
+
+        assert!(old_log.exists());
 
         remove_env("GRALPH_GLOBAL_CONFIG");
         remove_env("GRALPH_DEFAULT_CONFIG");
