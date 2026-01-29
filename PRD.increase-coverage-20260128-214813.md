@@ -143,7 +143,7 @@ Add tests for backends, server, verifier, update, notify, config, and CLI helper
   * Tests cover failure reason mapping and default values.
   * Tests cover non-2xx status handling and timeout defaults.
 - **Dependencies** COV90-CORE-1, COV90-STATE-1, COV90-PRD-1, COV90-TASK-1
-- [ ] COV90-NOTIFY-1 Add notify formatting and HTTP error tests
+- [x] COV90-NOTIFY-1 Add notify formatting and HTTP error tests
 ### Task COV90-BACKEND-MOD-1
 
 - **ID** COV90-BACKEND-MOD-1

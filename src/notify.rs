@@ -988,6 +988,72 @@ mod tests {
     }
 
     #[test]
+    fn notify_complete_formats_discord_payload() {
+        let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
+        let url = format!("{}/discord.com/api/webhooks/123", base);
+
+        notify_complete("session", &url, Some("repo"), Some(4), Some(62), Some(5))
+            .expect("notify complete");
+
+        let request = captured.lock().unwrap().clone().expect("captured request");
+        let value: Value = serde_json::from_str(&request.body).expect("json payload");
+        let embed = &value["embeds"][0];
+
+        assert_eq!(embed["title"], "✅ Gralph Complete");
+        assert_eq!(embed["fields"][0]["value"], "`repo`");
+        assert_eq!(embed["fields"][1]["value"], "4");
+        assert_eq!(embed["fields"][2]["value"], "1m 2s");
+
+        handle.join().expect("server thread");
+    }
+
+    #[test]
+    fn notify_complete_formats_slack_payload() {
+        let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
+        let url = format!("{}/hooks.slack.com/services/123", base);
+
+        notify_complete("session", &url, Some("repo"), Some(4), Some(62), Some(5))
+            .expect("notify complete");
+
+        let request = captured.lock().unwrap().clone().expect("captured request");
+        let value: Value = serde_json::from_str(&request.body).expect("json payload");
+        let attachment = &value["attachments"][0];
+        let blocks = attachment["blocks"].as_array().expect("blocks");
+        let fields = blocks[2]["fields"].as_array().expect("fields");
+
+        assert_eq!(attachment["color"], "#57F287");
+        assert_eq!(blocks[0]["text"]["text"], "✅ Gralph Complete");
+        assert!(blocks[1]["text"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("session"));
+        assert_eq!(fields[0]["text"], "*Project:*\n`repo`");
+        assert_eq!(fields[1]["text"], "*Iterations:*\n4");
+        assert_eq!(fields[2]["text"], "*Duration:*\n1m 2s");
+
+        handle.join().expect("server thread");
+    }
+
+    #[test]
+    fn notify_complete_handles_non_success_status() {
+        let (base, captured, handle) = start_test_server("HTTP/1.1 503 Service Unavailable", "");
+
+        let err = notify_complete(
+            "session",
+            &format!("{}/status", base),
+            None,
+            None,
+            None,
+            Some(5),
+        )
+        .expect_err("non-success status");
+        assert!(matches!(err, NotifyError::HttpStatus(503)));
+        assert!(captured.lock().unwrap().is_some());
+
+        handle.join().expect("server thread");
+    }
+
+    #[test]
     fn notify_failed_defaults_unknown_when_optional_missing() {
         let (base, captured, handle) = start_test_server("HTTP/1.1 204 No Content", "");
 
@@ -1295,6 +1361,14 @@ mod tests {
         assert_eq!(format_duration(Some(3600)), "1h 0m 0s");
         assert_eq!(format_duration(Some(3661)), "1h 1m 1s");
         assert_eq!(format_duration(Some(90061)), "25h 1m 1s");
+    }
+
+    #[test]
+    fn format_duration_handles_boundaries() {
+        assert_eq!(format_duration(Some(59)), "59s");
+        assert_eq!(format_duration(Some(60)), "1m 0s");
+        assert_eq!(format_duration(Some(3599)), "59m 59s");
+        assert_eq!(format_duration(Some(3601)), "1h 0m 1s");
     }
 
     #[test]
