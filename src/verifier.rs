@@ -1850,6 +1850,7 @@ fn format_static_violation_path(root: &Path, path: &Path, line: usize) -> String
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::env;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
@@ -1908,6 +1909,42 @@ mod tests {
         );
     }
 
+    fn env_guard() -> std::sync::MutexGuard<'static, ()> {
+        let guard = crate::test_support::env_lock();
+        clear_env_overrides();
+        guard
+    }
+
+    fn clear_env_overrides() {
+        for key in [
+            "GRALPH_DEFAULT_CONFIG",
+            "GRALPH_GLOBAL_CONFIG",
+            "GRALPH_CONFIG_DIR",
+            "GRALPH_PROJECT_CONFIG_NAME",
+            "GRALPH_VERIFIER_AUTO_RUN",
+            "GRALPH_VERIFIER_TEST_COMMAND",
+            "GRALPH_VERIFIER_COVERAGE_COMMAND",
+            "GRALPH_VERIFIER_REVIEW_MIN_RATING",
+            "GRALPH_VERIFIER_REVIEW_MAX_ISSUES",
+            "GRALPH_VERIFIER_REVIEW_TIMEOUT_SECONDS",
+            "GRALPH_VERIFIER_STATIC_CHECKS_ENABLED",
+        ] {
+            remove_env(key);
+        }
+    }
+
+    fn set_env(key: &str, value: impl AsRef<std::ffi::OsStr>) {
+        unsafe {
+            env::set_var(key, value);
+        }
+    }
+
+    fn remove_env(key: &str) {
+        unsafe {
+            env::remove_var(key);
+        }
+    }
+
     fn init_git_repo(branch: &str) -> tempfile::TempDir {
         let temp = tempfile::tempdir().unwrap();
         run_git(temp.path(), &["init"]);
@@ -1962,6 +1999,44 @@ mod tests {
     }
 
     #[test]
+    fn resolve_verifier_command_defaults_for_blank_config() {
+        let _guard = env_guard();
+        let config = load_project_config(
+            "verifier:\n  test_command: \"  \"\n  coverage_command: \"\"\n",
+        );
+        let test_command = resolve_verifier_command(
+            None,
+            &config,
+            "verifier.test_command",
+            DEFAULT_TEST_COMMAND,
+        )
+        .unwrap();
+        let coverage_command = resolve_verifier_command(
+            None,
+            &config,
+            "verifier.coverage_command",
+            DEFAULT_COVERAGE_COMMAND,
+        )
+        .unwrap();
+        assert_eq!(test_command, DEFAULT_TEST_COMMAND);
+        assert_eq!(coverage_command, DEFAULT_COVERAGE_COMMAND);
+    }
+
+    #[test]
+    fn parse_verifier_command_parses_default_commands() {
+        let (program, args) = parse_verifier_command(DEFAULT_TEST_COMMAND).unwrap();
+        assert_eq!(program, "cargo");
+        assert_eq!(args, vec!["test".to_string(), "--workspace".to_string()]);
+
+        let (program, args) = parse_verifier_command(DEFAULT_COVERAGE_COMMAND).unwrap();
+        assert_eq!(program, "cargo");
+        assert!(args.starts_with(&["tarpaulin".to_string()]));
+        assert!(args.contains(&"--fail-under".to_string()));
+        assert!(args.contains(&"60".to_string()));
+        assert!(args.contains(&"src/backend/*".to_string()));
+    }
+
+    #[test]
     fn resolve_verifier_coverage_min_rejects_out_of_range() {
         let config = Config::load(None).unwrap();
         let err = resolve_verifier_coverage_min(Some(120.0), &config).unwrap_err();
@@ -1978,6 +2053,27 @@ mod tests {
         let config = load_project_config("verifier:\n  coverage_min: \"\"\n");
         let value = resolve_verifier_coverage_min(None, &config).unwrap();
         assert!((value - DEFAULT_COVERAGE_MIN).abs() < 1e-6);
+    }
+
+    #[test]
+    fn resolve_verifier_auto_run_defaults_when_missing() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        fs::write(&default_path, "defaults:\n  max_iterations: 30\n").unwrap();
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+
+        let config = Config::load(None).unwrap();
+        assert!(resolve_verifier_auto_run(&config));
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn resolve_verifier_auto_run_respects_override() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  auto_run: false\n");
+        assert!(!resolve_verifier_auto_run(&config));
     }
 
     #[test]
@@ -2114,6 +2210,13 @@ mod tests {
     fn parse_review_rating_scales_low_values() {
         let rating = parse_review_rating("Score: 0.8").unwrap();
         assert!((rating - 8.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn resolve_review_gate_rating_scales_percent_values() {
+        let rating =
+            resolve_review_gate_rating(Some("85".to_string()), DEFAULT_REVIEW_MIN_RATING).unwrap();
+        assert!((rating - 8.5).abs() < 1e-6);
     }
 
     #[test]
@@ -2273,6 +2376,40 @@ mod tests {
     }
 
     #[test]
+    fn resolve_review_gate_settings_rejects_invalid_max_issues() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  review:\n    max_issues: nope\n");
+        let err = resolve_review_gate_settings(&config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("max_issues"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_review_gate_settings_defaults_timeout_on_empty() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  review:\n    timeout_seconds: \"\"\n");
+        let settings = resolve_review_gate_settings(&config).unwrap();
+        assert_eq!(settings.timeout_seconds, DEFAULT_REVIEW_TIMEOUT_SECONDS);
+    }
+
+    #[test]
+    fn resolve_review_gate_settings_rejects_short_timeout() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  review:\n    timeout_seconds: 5\n");
+        let err = resolve_review_gate_settings(&config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("timeout_seconds"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn resolve_review_gate_settings_rejects_invalid_bool() {
         let config = load_project_config("verifier:\n  review:\n    require_checks: maybe\n");
         let err = resolve_review_gate_settings(&config).unwrap_err();
@@ -2320,6 +2457,17 @@ mod tests {
         let value = resolve_review_gate_bool(&config, "verifier.review.require_checks", true)
             .unwrap();
         assert!(value);
+    }
+
+    #[test]
+    fn resolve_static_check_settings_respects_disable_flag() {
+        let _guard = env_guard();
+        let config = load_project_config(
+            "verifier:\n  static_checks:\n    enabled: false\n    todo: false\n",
+        );
+        let settings = resolve_static_check_settings(&config).unwrap();
+        assert!(!settings.enabled);
+        assert!(!settings.check_todo);
     }
 
     #[test]

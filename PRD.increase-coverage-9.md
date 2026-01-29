@@ -93,7 +93,7 @@ Expand tests around public APIs, adapter command assembly, and failure handling 
   * Tests cover review gate parsing for min rating, max issues, and timeout behavior.
   * Tests cover command construction for test, coverage, and static checks without invoking external tools.
 - **Dependencies** None
-- [ ] COV-4 Add verifier pipeline parsing and command assembly tests in src/verifier.rs
+- [x] COV-4 Add verifier pipeline parsing and command assembly tests in src/verifier.rs
 ---
 
 ### Task COV-5
