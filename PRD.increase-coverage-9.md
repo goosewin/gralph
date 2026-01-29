@@ -106,7 +106,7 @@ Expand tests around public APIs, adapter command assembly, and failure handling 
   * Tests cover `stream_command_output` when child exits early and receiver closes.
   * Tests cover `BackendError` formatting for each error variant.
 - **Dependencies** None
-- [ ] COV-5 Expand backend utility tests in src/backend/mod.rs
+- [x] COV-5 Expand backend utility tests in src/backend/mod.rs
  - [x] COV-5 Expand backend utility tests in src/backend/mod.rs
 ---
 
