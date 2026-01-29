@@ -67,7 +67,7 @@ Expand tests around public APIs, adapter command assembly, and failure handling 
   * Tests cover `cleanup_stale` handling of malformed session entries and remove mode.
   * Tests cover `parse_value` for tricky numeric and boolean inputs that are currently unexercised.
 - **Dependencies** None
-- [ ] COV-2 Add state store lock and cleanup edge case tests in src/state.rs
+- [x] COV-2 Add state store lock and cleanup edge case tests in src/state.rs
 ---
 
 ### Task COV-3

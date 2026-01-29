@@ -816,6 +816,59 @@ mod tests {
     }
 
     #[test]
+    fn cleanup_stale_remove_keeps_malformed_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        store.init_state().unwrap();
+
+        let mut sessions = BTreeMap::new();
+        sessions.insert("stringy".to_string(), Value::String("oops".to_string()));
+        sessions.insert(
+            "missing-pid".to_string(),
+            Value::Object(Map::from_iter([(
+                "status".to_string(),
+                Value::String("running".to_string()),
+            )])),
+        );
+        sessions.insert(
+            "missing-status".to_string(),
+            Value::Object(Map::from_iter([(
+                "pid".to_string(),
+                Value::Number(12.into()),
+            )])),
+        );
+        sessions.insert(
+            "pid-string".to_string(),
+            Value::Object(Map::from_iter([
+                ("status".to_string(), Value::String("running".to_string())),
+                ("pid".to_string(), Value::String("oops".to_string())),
+            ])),
+        );
+        sessions.insert(
+            "stale".to_string(),
+            Value::Object(Map::from_iter([
+                ("status".to_string(), Value::String("running".to_string())),
+                ("pid".to_string(), Value::Number(999999.into())),
+            ])),
+        );
+        let state = StateData { sessions };
+        store.write_state(&state).unwrap();
+
+        let cleaned = store.cleanup_stale(CleanupMode::Remove).unwrap();
+        assert_eq!(cleaned, vec!["stale".to_string()]);
+        assert!(store.get_session("stale").unwrap().is_none());
+
+        let reloaded = store.read_state().unwrap();
+        assert!(matches!(
+            reloaded.sessions.get("stringy"),
+            Some(Value::String(_))
+        ));
+        assert!(reloaded.sessions.contains_key("missing-pid"));
+        assert!(reloaded.sessions.contains_key("missing-status"));
+        assert!(reloaded.sessions.contains_key("pid-string"));
+    }
+
+    #[test]
     fn invalid_session_names_are_rejected() {
         let temp = tempfile::tempdir().unwrap();
         let store = store_for_test(temp.path(), Duration::from_secs(1));
@@ -876,6 +929,16 @@ mod tests {
         assert_eq!(parse_value("-42"), Value::String("-42".to_string()));
         assert_eq!(parse_value("42x"), Value::String("42x".to_string()));
         assert_eq!(parse_value("x42"), Value::String("x42".to_string()));
+    }
+
+    #[test]
+    fn parse_value_handles_bool_case_and_numeric_zero() {
+        assert_eq!(parse_value("TRUE"), Value::String("TRUE".to_string()));
+        assert_eq!(parse_value("False"), Value::String("False".to_string()));
+        assert_eq!(parse_value("true "), Value::String("true ".to_string()));
+        assert_eq!(parse_value(" false"), Value::String(" false".to_string()));
+        assert_eq!(parse_value("0").as_i64(), Some(0));
+        assert_eq!(parse_value("000").as_i64(), Some(0));
     }
 
     #[test]
@@ -992,6 +1055,29 @@ mod tests {
         let state_dir = temp.path().join("state");
         let state_file = state_dir.join("state.json");
         let lock_file = temp.path().join("missing").join("state.lock");
+        let store = StateStore::with_paths(
+            state_dir,
+            state_file,
+            lock_file.clone(),
+            Duration::from_millis(100),
+        );
+
+        let err = store.get_session("alpha").unwrap_err();
+        match err {
+            StateError::Io { path, .. } => {
+                assert_eq!(path, lock_file);
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn lock_path_state_dir_is_file_returns_io_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = temp.path().join("state-dir-file");
+        fs::write(&state_dir, "not a dir").unwrap();
+        let state_file = state_dir.join("state.json");
+        let lock_file = state_dir.join("state.lock");
         let store = StateStore::with_paths(
             state_dir,
             state_file,
