@@ -1,4 +1,4 @@
-use super::{Backend, BackendError, command_in_path, stream_command_output};
+use super::{command_in_path, stream_command_output, Backend, BackendError};
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -314,7 +314,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let script_path = temp.path().join("codex-mock");
         let output_path = temp.path().join("output.txt");
-        let script = "#!/bin/sh\nprintf 'args:'\nfor arg in \"$@\"; do\n  printf '%s|' \"$arg\"\ndone\nprintf '\\n'\n";
+        let script = "#!/bin/sh\nprintf '%s\\n' \"$@\"\n";
         fs::write(&script_path, script).unwrap();
         let mut perms = fs::metadata(&script_path).unwrap().permissions();
         perms.set_mode(0o755);
@@ -322,17 +322,15 @@ mod tests {
 
         let backend = CodexBackend::with_command(script_path.to_string_lossy().to_string());
         backend
-            .run_iteration(
-                "prompt",
-                Some("model-x"),
-                None,
-                &output_path,
-                temp.path(),
-            )
+            .run_iteration("prompt", Some("model-x"), None, &output_path, temp.path())
             .expect("run_iteration should succeed");
 
         let output = fs::read_to_string(&output_path).unwrap();
-        assert!(output.contains("args:--quiet|--auto-approve|--model|model-x|prompt|"));
+        let args: Vec<&str> = output.lines().collect();
+        assert_eq!(
+            args,
+            vec!["--quiet", "--auto-approve", "--model", "model-x", "prompt"]
+        );
     }
 
     #[cfg(unix)]
@@ -341,7 +339,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let script_path = temp.path().join("codex-mock");
         let output_path = temp.path().join("output.txt");
-        let script = "#!/bin/sh\nprintf 'args:'\nfor arg in \"$@\"; do\n  printf '%s|' \"$arg\"\ndone\nprintf '\\n'\n";
+        let script = "#!/bin/sh\nprintf '%s\\n' \"$@\"\n";
         fs::write(&script_path, script).unwrap();
         let mut perms = fs::metadata(&script_path).unwrap().permissions();
         perms.set_mode(0o755);
@@ -353,8 +351,8 @@ mod tests {
             .expect("run_iteration should succeed");
 
         let output = fs::read_to_string(&output_path).unwrap();
-        assert!(output.contains("args:--quiet|--auto-approve|prompt|"));
-        assert!(!output.contains("--model"));
+        let args: Vec<&str> = output.lines().collect();
+        assert_eq!(args, vec!["--quiet", "--auto-approve", "prompt"]);
     }
 
     #[cfg(unix)]
@@ -371,13 +369,7 @@ mod tests {
 
         let backend = CodexBackend::with_command(script_path.to_string_lossy().to_string());
         backend
-            .run_iteration(
-                "prompt",
-                Some("  "),
-                None,
-                &output_path,
-                temp.path(),
-            )
+            .run_iteration("prompt", Some("  "), None, &output_path, temp.path())
             .expect("run_iteration should succeed");
 
         let output = fs::read_to_string(&output_path).unwrap();
