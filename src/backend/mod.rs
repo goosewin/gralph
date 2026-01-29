@@ -162,6 +162,7 @@ mod tests {
     use std::ffi::{OsStr, OsString};
     use std::fs;
     use std::io::{self, Cursor};
+    use std::path::{Path, PathBuf};
 
     #[cfg(unix)]
     use std::process::{Command, Stdio};
@@ -195,6 +196,24 @@ mod tests {
                     env::remove_var("PATH");
                 },
             }
+        }
+    }
+
+    struct CurrentDirGuard {
+        original: PathBuf,
+    }
+
+    impl CurrentDirGuard {
+        fn set(path: &Path) -> Self {
+            let original = env::current_dir().unwrap();
+            env::set_current_dir(path).unwrap();
+            Self { original }
+        }
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            let _ = env::set_current_dir(&self.original);
         }
     }
 
@@ -242,15 +261,14 @@ mod tests {
         let path = temp_dir.path().join("missing-file");
         let source = io::Error::new(io::ErrorKind::Other, "disk full");
         let source_message = source.to_string();
-        let error = BackendError::Io { path: path.clone(), source };
+        let error = BackendError::Io {
+            path: path.clone(),
+            source,
+        };
 
         assert_eq!(
             error.to_string(),
-            format!(
-                "backend io error at {}: {}",
-                path.display(),
-                source_message
-            )
+            format!("backend io error at {}: {}", path.display(), source_message)
         );
         let error_source = error.source().expect("io error source");
         assert_eq!(error_source.to_string(), source_message);
@@ -312,6 +330,22 @@ mod tests {
             env::set_var("PATH", file_temp.path());
         }
         assert!(command_in_path(command_name));
+    }
+
+    #[test]
+    fn command_in_path_ignores_current_dir_when_path_empty() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        let command_name = "gralph-current-dir-command";
+        fs::write(temp.path().join(command_name), "stub").unwrap();
+
+        let _dir_guard = CurrentDirGuard::set(temp.path());
+        let _guard = PathGuard::set(None);
+        unsafe {
+            env::set_var("PATH", "");
+        }
+
+        assert!(!command_in_path(command_name));
     }
 
     #[test]
@@ -506,6 +540,25 @@ mod tests {
         let child = Command::new("/bin/sh")
             .arg("-c")
             .arg("printf 'stderr-line\\n' 1>&2; exit 2")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let result = stream_command_output(child, "stub", |_| Ok(()));
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message.contains("stub exited with")
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_reports_non_zero_exit_without_output() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("exit 1")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()

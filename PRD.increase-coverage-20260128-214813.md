@@ -154,7 +154,7 @@ Add tests for backends, server, verifier, update, notify, config, and CLI helper
   * Tests cover missing stdout or stderr streams and non-zero exit status.
   * Tests cover on_line error propagation.
 - **Dependencies** COV90-CORE-1, COV90-STATE-1, COV90-PRD-1, COV90-TASK-1
-- [ ] COV90-BACKEND-MOD-1 Add backend module PATH and streaming tests
+- [x] COV90-BACKEND-MOD-1 Add backend module PATH and streaming tests
 ### Task COV90-BACKEND-CLAUDE-1
 
 - **ID** COV90-BACKEND-CLAUDE-1

@@ -101,6 +101,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV90-VER-1 Add verifier parsing, review gate, and gh error handling tests.
 - COV90-MAIN-1 Add CLI helper tests for session naming and worktree branch formatting.
 - COV90-SERVER-1 Add server auth, CORS, and session enrichment edge-case tests.
+- COV90-BACKEND-MOD-1 Add backend module PATH and streaming tests.
 - COV90-NOTIFY-1 Add notify payload formatting, duration edge-case, and HTTP status tests.
 - COV-9 Expand update check and archive error coverage.
 - COV-31 Expand verifier parsing and static check coverage.
