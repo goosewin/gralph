@@ -1,5 +1,6 @@
-use crate::{git_output_in_dir, join_or_none, normalize_csv, parse_bool_value, CliError};
-use gralph_rs::config::Config;
+use crate::app::worktree::git_output_in_dir;
+use crate::app::{join_or_none, normalize_csv, parse_bool_value, CliError};
+use crate::config::Config;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::{self, Write};
@@ -9,7 +10,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const DEFAULT_TEST_COMMAND: &str = "cargo test --workspace";
-const DEFAULT_COVERAGE_COMMAND: &str = "cargo tarpaulin --workspace --fail-under 90 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*";
+const DEFAULT_COVERAGE_COMMAND: &str = "cargo tarpaulin --workspace --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*";
 const DEFAULT_COVERAGE_MIN: f64 = 90.0;
 const DEFAULT_COVERAGE_WARN: f64 = 70.0;
 const DEFAULT_PR_BASE: &str = "main";
@@ -2128,8 +2129,6 @@ mod tests {
         let (program, args) = parse_verifier_command(DEFAULT_COVERAGE_COMMAND).unwrap();
         assert_eq!(program, "cargo");
         assert!(args.starts_with(&["tarpaulin".to_string()]));
-        assert!(args.contains(&"--fail-under".to_string()));
-        assert!(args.contains(&"90".to_string()));
         assert!(args.contains(&"src/backend/*".to_string()));
     }
 

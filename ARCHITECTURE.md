@@ -4,8 +4,13 @@ This document captures the high-level structure of gralph. It is a living summar
 
 ## Modules
 
-`src/main.rs` is the Rust CLI entrypoint. It wires clap subcommands to Rust modules, manages session state updates, coordinates backend execution, and runs the verifier quality gates.
-`src/lib.rs` holds shared types and helpers used by the Rust modules.
+`src/main.rs` is the thin CLI entrypoint. It delegates to `cli_entrypoint` re-exported from `src/lib.rs` and returns its `ExitCode`.
+`src/entrypoint.rs` owns the CLI entrypoint helper that parses args, builds real deps, runs the app, and maps results to exit codes.
+`src/lib.rs` exposes `run`, `Deps`, and the entrypoint helper for external callers.
+`src/app.rs` owns the `run` entrypoint, dependency seams, and command dispatch.
+`src/app/loop_session.rs` implements start/run-loop/stop/status/logs/resume handlers with `Deps`.
+`src/app/prd_init.rs` implements `gralph prd` and `gralph init` plus PRD/template helpers.
+`src/app/worktree.rs` implements worktree commands and auto-worktree flow.
 `src/cli.rs` defines the clap command tree and options; `build.rs` generates bash/zsh completions during build.
 
 `src/core.rs` owns the execution loop for iteration execution, task counting, completion checks, and loop orchestration.
@@ -23,16 +28,18 @@ This document captures the high-level structure of gralph. It is a living summar
 
 ## Runtime Flow
 
-The CLI initializes configuration and starts the core loop. The loop
-prepares logging, counts remaining tasks, and iterates until completion
-or max iterations. Each iteration builds the prompt, invokes the backend,
-parses the result, checks for completion promises, and updates optional
-state callbacks with remaining task counts. On completion or failure, the
-loop records duration, writes final status to logs, and optionally sends
-notifications. When completion succeeds and `verifier.auto_run` is true,
-the verifier pipeline runs in the active worktree to execute tests,
-coverage, and static checks, open a PR via `gh`, wait for the configured
-review gate, and merge after approvals.
+`src/main.rs` calls `cli_entrypoint` in `src/lib.rs`, which parses CLI
+arguments, builds real dependencies, and calls `app::run`. The `run`
+entrypoint dispatches to command handlers. The
+start/run-loop paths optionally create a worktree, load configuration,
+validate PRDs (when strict), and invoke `core::run_loop_with_clock`.
+Each iteration builds the prompt, invokes the backend, parses the result,
+checks for completion promises, and updates state callbacks with remaining
+task counts. On completion or failure, the loop records duration, writes
+final status to logs, and optionally sends notifications. When completion
+succeeds and `verifier.auto_run` is true, the verifier pipeline runs in the
+active worktree to execute tests, coverage, and static checks, open a PR
+via `gh`, wait for the configured review gate, and merge after approvals.
 
 ## Storage
 

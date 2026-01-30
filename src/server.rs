@@ -340,6 +340,8 @@ fn stop_session(_name: &str, session: &Value) {
             .arg("kill-session")
             .arg("-t")
             .arg(tmux_session)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .status();
     } else if pid > 0 {
         #[cfg(unix)]

@@ -10,6 +10,24 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const DEFAULT_PROMPT_TEMPLATE: &str = "Read {task_file} carefully. Find any task marked '- [ ]' (unchecked).\n\nIf unchecked tasks exist:\n- Complete ONE task fully\n- Mark it '- [x]' in {task_file}\n- Commit changes with a concise, lower-case conventional commit message (e.g. 'feat: add worktree collision checks')\n- Exit normally (do NOT output completion promise)\n\nIf ZERO '- [ ]' remain (all complete):\n- Verify by searching the file\n- Output ONLY: <promise>{completion_marker}</promise>\n\nCRITICAL: Never mention the promise unless outputting it as the completion signal.\n\n{context_files_section}Task Block:\n{task_block}\n\nIteration: {iteration}/{max_iterations}";
 
+pub trait Clock: Send + Sync {
+    fn now(&self) -> SystemTime;
+    fn sleep(&self, duration: Duration);
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SystemClock;
+
+impl Clock for SystemClock {
+    fn now(&self) -> SystemTime {
+        SystemTime::now()
+    }
+
+    fn sleep(&self, duration: Duration) {
+        std::thread::sleep(duration);
+    }
+}
+
 #[derive(Debug)]
 pub enum CoreError {
     Io { path: PathBuf, source: io::Error },
@@ -91,6 +109,36 @@ pub fn run_iteration<B: Backend + ?Sized>(
     prompt_template: Option<&str>,
     config: Option<&Config>,
 ) -> Result<IterationResult, CoreError> {
+    run_iteration_with_clock(
+        backend,
+        project_dir,
+        task_file,
+        iteration,
+        max_iterations,
+        completion_marker,
+        model,
+        variant,
+        log_file,
+        prompt_template,
+        config,
+        &SystemClock,
+    )
+}
+
+pub fn run_iteration_with_clock<B: Backend + ?Sized>(
+    backend: &B,
+    project_dir: &Path,
+    task_file: &str,
+    iteration: u32,
+    max_iterations: u32,
+    completion_marker: &str,
+    model: Option<&str>,
+    variant: Option<&str>,
+    log_file: Option<&Path>,
+    prompt_template: Option<&str>,
+    config: Option<&Config>,
+    clock: &dyn Clock,
+) -> Result<IterationResult, CoreError> {
     if project_dir.as_os_str().is_empty() {
         return Err(CoreError::InvalidInput(
             "project_dir is required".to_string(),
@@ -128,7 +176,7 @@ pub fn run_iteration<B: Backend + ?Sized>(
         ));
     }
 
-    let tmpfile = create_temp_file("gralph-iteration")?;
+    let tmpfile = create_temp_file_with_clock("gralph-iteration", clock)?;
 
     let raw_output_file = log_file.map(|path| raw_log_path(path));
 
@@ -287,7 +335,37 @@ pub fn run_loop<B: Backend + ?Sized>(
     session_name: Option<&str>,
     prompt_template: Option<&str>,
     config: Option<&Config>,
+    state_callback: Option<&mut dyn FnMut(Option<&str>, u32, LoopStatus, usize)>,
+) -> Result<LoopOutcome, CoreError> {
+    run_loop_with_clock(
+        backend,
+        project_dir,
+        task_file,
+        max_iterations,
+        completion_marker,
+        model,
+        variant,
+        session_name,
+        prompt_template,
+        config,
+        state_callback,
+        &SystemClock,
+    )
+}
+
+pub fn run_loop_with_clock<B: Backend + ?Sized>(
+    backend: &B,
+    project_dir: &Path,
+    task_file: Option<&str>,
+    max_iterations: Option<u32>,
+    completion_marker: Option<&str>,
+    model: Option<&str>,
+    variant: Option<&str>,
+    session_name: Option<&str>,
+    prompt_template: Option<&str>,
+    config: Option<&Config>,
     mut state_callback: Option<&mut dyn FnMut(Option<&str>, u32, LoopStatus, usize)>,
+    clock: &dyn Clock,
 ) -> Result<LoopOutcome, CoreError> {
     if project_dir.as_os_str().is_empty() {
         return Err(CoreError::InvalidInput(
@@ -330,12 +408,12 @@ pub fn run_loop<B: Backend + ?Sized>(
         source,
     })?;
 
-    cleanup_old_logs(&gralph_dir, config)?;
+    cleanup_old_logs_with_clock(&gralph_dir, config, clock)?;
 
     let log_name = session_name.unwrap_or("gralph");
     let log_file = gralph_dir.join(format!("{}.log", log_name));
 
-    let loop_start = SystemTime::now();
+    let loop_start = clock.now();
     let mut iteration = 1;
 
     log_message(
@@ -426,9 +504,10 @@ pub fn run_loop<B: Backend + ?Sized>(
         let iteration_result = iteration_result.unwrap();
 
         if check_completion(&full_task_path, &iteration_result.result, completion_marker)? {
-            let duration_secs = loop_start
-                .elapsed()
-                .unwrap_or_else(|_| Duration::from_secs(0))
+            let duration_secs = clock
+                .now()
+                .duration_since(loop_start)
+                .unwrap_or_default()
                 .as_secs();
 
             log_message(Some(&log_file), "")?;
@@ -442,7 +521,7 @@ pub fn run_loop<B: Backend + ?Sized>(
             )?;
             log_message(
                 Some(&log_file),
-                &format!("FINISHED: {}", format_timestamp(SystemTime::now())),
+                &format!("FINISHED: {}", format_timestamp(clock.now())),
             )?;
 
             if let Some(callback) = state_callback.as_deref_mut() {
@@ -474,14 +553,15 @@ pub fn run_loop<B: Backend + ?Sized>(
 
         iteration += 1;
         if iteration <= max_iterations {
-            std::thread::sleep(Duration::from_secs(2));
+            clock.sleep(Duration::from_secs(2));
         }
     }
 
     let final_remaining = count_remaining_tasks(&full_task_path);
-    let duration_secs = loop_start
-        .elapsed()
-        .unwrap_or_else(|_| Duration::from_secs(0))
+    let duration_secs = clock
+        .now()
+        .duration_since(loop_start)
+        .unwrap_or_default()
         .as_secs();
 
     log_message(Some(&log_file), "")?;
@@ -499,7 +579,7 @@ pub fn run_loop<B: Backend + ?Sized>(
     )?;
     log_message(
         Some(&log_file),
-        &format!("FINISHED: {}", format_timestamp(SystemTime::now())),
+        &format!("FINISHED: {}", format_timestamp(clock.now())),
     )?;
 
     if let Some(callback) = state_callback.as_deref_mut() {
@@ -729,7 +809,16 @@ fn format_duration(duration_secs: u64) -> String {
     format!("{} ({}s)", parts.join(" "), duration_secs)
 }
 
+#[cfg(test)]
 fn cleanup_old_logs(log_dir: &Path, config: Option<&Config>) -> Result<(), CoreError> {
+    cleanup_old_logs_with_clock(log_dir, config, &SystemClock)
+}
+
+fn cleanup_old_logs_with_clock(
+    log_dir: &Path,
+    config: Option<&Config>,
+    clock: &dyn Clock,
+) -> Result<(), CoreError> {
     if !log_dir.is_dir() {
         return Ok(());
     }
@@ -741,7 +830,8 @@ fn cleanup_old_logs(log_dir: &Path, config: Option<&Config>) -> Result<(), CoreE
     }
     let retain_days = retain_days.unwrap_or(7);
 
-    let cutoff = SystemTime::now()
+    let cutoff = clock
+        .now()
         .checked_sub(Duration::from_secs(retain_days.saturating_mul(86400)))
         .unwrap_or(SystemTime::UNIX_EPOCH);
 
@@ -772,10 +862,11 @@ fn cleanup_old_logs(log_dir: &Path, config: Option<&Config>) -> Result<(), CoreE
     Ok(())
 }
 
-fn create_temp_file(prefix: &str) -> Result<PathBuf, CoreError> {
+fn create_temp_file_with_clock(prefix: &str, clock: &dyn Clock) -> Result<PathBuf, CoreError> {
     let base_dir = std::env::temp_dir();
     for attempt in 0..100u32 {
-        let now = SystemTime::now()
+        let now = clock
+            .now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
@@ -1728,9 +1819,7 @@ mod tests {
         .unwrap();
 
         let prompt = backend.prompt.borrow().clone().unwrap();
-        assert!(
-            prompt.contains("Context Files (read these first):\nARCHITECTURE.md\nPROCESS.md\n")
-        );
+        assert!(prompt.contains("Context Files (read these first):\nARCHITECTURE.md\nPROCESS.md\n"));
 
         remove_env("GRALPH_GLOBAL_CONFIG");
         remove_env("GRALPH_DEFAULT_CONFIG");

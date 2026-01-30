@@ -19,6 +19,80 @@ pub enum NotifyError {
     Json(serde_json::Error),
 }
 
+pub trait Notifier: Send + Sync {
+    fn notify_complete(
+        &self,
+        session_name: &str,
+        webhook_url: &str,
+        project_dir: Option<&str>,
+        iterations: Option<u32>,
+        duration_secs: Option<u64>,
+        timeout_secs: Option<u64>,
+    ) -> Result<(), NotifyError>;
+
+    fn notify_failed(
+        &self,
+        session_name: &str,
+        webhook_url: &str,
+        failure_reason: Option<&str>,
+        project_dir: Option<&str>,
+        iterations: Option<u32>,
+        max_iterations: Option<u32>,
+        remaining_tasks: Option<u32>,
+        duration_secs: Option<u64>,
+        timeout_secs: Option<u64>,
+    ) -> Result<(), NotifyError>;
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct RealNotifier;
+
+impl Notifier for RealNotifier {
+    fn notify_complete(
+        &self,
+        session_name: &str,
+        webhook_url: &str,
+        project_dir: Option<&str>,
+        iterations: Option<u32>,
+        duration_secs: Option<u64>,
+        timeout_secs: Option<u64>,
+    ) -> Result<(), NotifyError> {
+        notify_complete(
+            session_name,
+            webhook_url,
+            project_dir,
+            iterations,
+            duration_secs,
+            timeout_secs,
+        )
+    }
+
+    fn notify_failed(
+        &self,
+        session_name: &str,
+        webhook_url: &str,
+        failure_reason: Option<&str>,
+        project_dir: Option<&str>,
+        iterations: Option<u32>,
+        max_iterations: Option<u32>,
+        remaining_tasks: Option<u32>,
+        duration_secs: Option<u64>,
+        timeout_secs: Option<u64>,
+    ) -> Result<(), NotifyError> {
+        notify_failed(
+            session_name,
+            webhook_url,
+            failure_reason,
+            project_dir,
+            iterations,
+            max_iterations,
+            remaining_tasks,
+            duration_secs,
+            timeout_secs,
+        )
+    }
+}
+
 impl fmt::Display for NotifyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -1069,12 +1143,10 @@ mod tests {
 
         assert_eq!(attachment["color"], "#57F287");
         assert_eq!(blocks[0]["text"]["text"], "✅ Gralph Complete");
-        assert!(
-            blocks[1]["text"]["text"]
-                .as_str()
-                .unwrap()
-                .contains("session")
-        );
+        assert!(blocks[1]["text"]["text"]
+            .as_str()
+            .unwrap()
+            .contains("session"));
         assert_eq!(fields[0]["text"], "*Project:*\n`repo`");
         assert_eq!(fields[1]["text"], "*Iterations:*\n4");
         assert_eq!(fields[2]["text"], "*Duration:*\n1m 2s");

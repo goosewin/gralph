@@ -11,6 +11,17 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ## [Unreleased]
 
+### Changed
+- DOC-1 Record entrypoint refactor and coverage recovery notes in shared docs.
+- MD-2 Extract loop and session command handlers into the app loop session module.
+- MD-3 Move PRD and init command handlers into the app PRD module.
+- MD-4 Move worktree and git helpers into the app worktree module.
+- MD-7 Document the run entrypoint and command module layout.
+- MR-2 Document the lib entrypoint helper and main delegation flow.
+
+### Verification
+- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
+
 ## [0.2.3]
 
 ### Added
@@ -164,6 +175,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-SERVER-1 Add server CORS invalid origin, stale pid stop, and unreadable task file tests.
 
 ### Fixed
+- MD-8 Fix verifier config import, public CLI error type, and file reader trait alias.
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.
 - REF-1 Consolidate shared backend execution helpers.
 - REF-2 Unify task block parsing helpers across core and PRD validation.
@@ -185,7 +197,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - Windows installer: fix Join-Path usage when piping to iex.
 
 ### Verification
-- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
+- Verification: Tests=cargo test --workspace; Coverage=65.49% (>= 90%); CI=not-run; PR=not-opened
 
 ## [0.2.1]
 
