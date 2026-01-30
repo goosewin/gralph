@@ -416,9 +416,29 @@ mod tests {
 
     fn key_segment_strategy() -> impl Strategy<Value = String> {
         let base = string_regex("[A-Za-z0-9_-]{1,8}").unwrap();
-        let padding = string_regex("[ ]{0,2}").unwrap();
-        (padding.clone(), base, padding)
+        let leading_padding = string_regex("[ ]{0,2}").unwrap();
+        let trailing_padding = string_regex("[ ]{0,2}").unwrap();
+        (leading_padding, base, trailing_padding)
             .prop_map(|(prefix, segment, suffix)| format!("{prefix}{segment}{suffix}"))
+    }
+
+    fn mixed_key_variant(segment: &str) -> String {
+        segment
+            .chars()
+            .enumerate()
+            .map(|(idx, ch)| match ch {
+                '_' => '-',
+                '-' => '_',
+                _ if ch.is_ascii_alphabetic() => {
+                    if idx % 2 == 0 {
+                        ch.to_ascii_uppercase()
+                    } else {
+                        ch.to_ascii_lowercase()
+                    }
+                }
+                _ => ch,
+            })
+            .collect()
     }
     fn env_guard() -> std::sync::MutexGuard<'static, ()> {
         let guard = crate::test_support::env_lock();
@@ -699,6 +719,16 @@ mod tests {
     }
 
     #[test]
+    fn value_to_string_handles_nested_sequences_with_tagged_values() {
+        let sequence: Value =
+            serde_yaml::from_str("[one, [!tagged 2, [false, !tagged true]], null]").unwrap();
+        assert_eq!(
+            value_to_string(&sequence).as_deref(),
+            Some("one,2,false,true,")
+        );
+    }
+
+    #[test]
     fn value_to_string_handles_null_and_mixed_sequence() {
         assert_eq!(value_to_string(&Value::Null).as_deref(), Some(""));
 
@@ -732,6 +762,24 @@ mod tests {
             for segment in normalized.split('.').rev() {
                 let mut map = Mapping::new();
                 map.insert(Value::String(segment.to_string()), current);
+                current = Value::Mapping(map);
+            }
+
+            let raw_lookup = lookup_value(&current, &raw_key).and_then(Value::as_str);
+            let normalized_lookup = lookup_value(&current, &normalized).and_then(Value::as_str);
+
+            prop_assert_eq!(raw_lookup, Some("value"));
+            prop_assert_eq!(normalized_lookup, Some("value"));
+        }
+
+        #[test]
+        fn lookup_value_matches_mixed_case_hyphenated_keys(segments in prop::collection::vec(key_segment_strategy(), 1..4)) {
+            let raw_key = segments.join(".");
+            let normalized = normalize_key(&raw_key).expect("normalized key");
+            let mut current = Value::String("value".to_string());
+            for segment in segments.iter().rev() {
+                let mut map = Mapping::new();
+                map.insert(Value::String(mixed_key_variant(segment)), current);
                 current = Value::Mapping(map);
             }
 
@@ -948,6 +996,25 @@ mod tests {
 
         remove_env("GRALPH_DEFAULTS_MAX_ITERATIONS");
         remove_env("GRALPH_MAX_ITERATIONS");
+    }
+
+    #[test]
+    fn legacy_alias_empty_override_beats_normalized_and_config() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(&default_path, "defaults:\n  backend: claude\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_BACKEND", "");
+        set_env("GRALPH_DEFAULTS_BACKEND", "gemini");
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("defaults.backend").as_deref(), Some(""));
+
+        remove_env("GRALPH_DEFAULTS_BACKEND");
+        remove_env("GRALPH_BACKEND");
+        remove_env("GRALPH_DEFAULT_CONFIG");
     }
 
     #[test]

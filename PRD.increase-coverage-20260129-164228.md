@@ -120,7 +120,7 @@ Keep coverage as a warning-only signal for now. After stability, introduce a sof
   * Add tests for env override precedence with empty values and legacy aliases.
   * Add tests for value_to_string with nested sequences and tagged values.
 - **Dependencies** None
-- [ ] COV-CONFIG-1 Expand config normalization and override coverage
+- [x] COV-CONFIG-1 Expand config normalization and override coverage
 ### Task COV-MAIN-1
 
 - **ID** COV-MAIN-1
