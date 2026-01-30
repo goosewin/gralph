@@ -303,6 +303,16 @@ esac
     ;;
 esac
 ;;
+(verifier)
+_arguments "${_arguments_options[@]}" : \
+'--test-command=[Override test command]:TEST_COMMAND:_default' \
+'--coverage-command=[Override coverage command]:COVERAGE_COMMAND:_default' \
+'--coverage-min=[Minimum coverage percent (default\: 90)]:COVERAGE_MIN:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+'::dir -- Project directory to verify (default\: current):_files' \
+&& ret=0
+;;
 (server)
 _arguments "${_arguments_options[@]}" : \
 '-H+[Host/IP to bind to (default\: 127.0.0.1)]:HOST:_default' \
@@ -462,6 +472,10 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
+(verifier)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (server)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -504,6 +518,7 @@ _gralph_commands() {
 'worktree:Manage task worktrees' \
 'backends:List available AI backends' \
 'config:Manage configuration' \
+'verifier:Run verifier quality gates' \
 'server:Start status API server' \
 'version:Show version' \
 'update:Install the latest release' \
@@ -585,6 +600,7 @@ _gralph__help_commands() {
 'worktree:Manage task worktrees' \
 'backends:List available AI backends' \
 'config:Manage configuration' \
+'verifier:Run verifier quality gates' \
 'server:Start status API server' \
 'version:Show version' \
 'update:Install the latest release' \
@@ -689,6 +705,11 @@ _gralph__help__stop_commands() {
 _gralph__help__update_commands() {
     local commands; commands=()
     _describe -t commands 'gralph help update commands' commands "$@"
+}
+(( $+functions[_gralph__help__verifier_commands] )) ||
+_gralph__help__verifier_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph help verifier commands' commands "$@"
 }
 (( $+functions[_gralph__help__version_commands] )) ||
 _gralph__help__version_commands() {
@@ -800,6 +821,11 @@ _gralph__stop_commands() {
 _gralph__update_commands() {
     local commands; commands=()
     _describe -t commands 'gralph update commands' commands "$@"
+}
+(( $+functions[_gralph__verifier_commands] )) ||
+_gralph__verifier_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph verifier commands' commands "$@"
 }
 (( $+functions[_gralph__version_commands] )) ||
 _gralph__version_commands() {

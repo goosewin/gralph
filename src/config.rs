@@ -53,26 +53,20 @@ pub struct Config {
 impl Config {
     pub fn load(project_dir: Option<&Path>) -> Result<Self, ConfigError> {
         let mut merged = Value::Mapping(Mapping::new());
+        // Merge precedence: default < global < project (later overrides earlier).
         for path in config_paths(project_dir) {
-            if path.exists() {
-                let value = read_yaml(&path)?;
-                merged = merge_values(merged, value);
-            }
+            let value = read_yaml(&path)?;
+            merged = merge_values(merged, value);
         }
         Ok(Self { merged })
     }
 
     pub fn get(&self, key: &str) -> Option<String> {
-        if key.is_empty() {
-            return None;
-        }
-        if let Some(value) = legacy_env_override(key) {
+        let normalized = normalize_key(key)?;
+        if let Some(value) = resolve_env_override(key, &normalized) {
             return Some(value);
         }
-        if let Some(value) = env_override(key) {
-            return Some(value);
-        }
-        lookup_value(&self.merged, key).and_then(value_to_string)
+        lookup_value(&self.merged, &normalized).and_then(value_to_string)
     }
 
     pub fn get_or(&self, key: &str, default: &str) -> String {
@@ -80,13 +74,15 @@ impl Config {
     }
 
     pub fn exists(&self, key: &str) -> bool {
-        if key.is_empty() {
+        let Some(normalized) = normalize_key(key) else {
             return false;
-        }
-        if legacy_env_override(key).is_some() || env_override(key).is_some() {
+        };
+        if resolve_env_override(key, &normalized).is_some() {
             return true;
         }
-        lookup_value(&self.merged, key).is_some()
+        lookup_value(&self.merged, &normalized)
+            .and_then(value_to_string)
+            .is_some()
     }
 
     pub fn list(&self) -> Vec<(String, String)> {
@@ -191,12 +187,37 @@ fn lookup_value<'a>(value: &'a Value, key: &str) -> Option<&'a Value> {
     for part in key.split('.') {
         match current {
             Value::Mapping(map) => {
-                current = map.get(&Value::String(part.to_string()))?;
+                current = lookup_mapping_value(map, part)?;
             }
             _ => return None,
         }
     }
     Some(current)
+}
+
+fn lookup_mapping_value<'a>(map: &'a Mapping, part: &str) -> Option<&'a Value> {
+    let direct = Value::String(part.to_string());
+    if let Some(value) = map.get(&direct) {
+        return Some(value);
+    }
+    let normalized = normalize_segment(part);
+    if normalized != part {
+        let normalized_key = Value::String(normalized.clone());
+        if let Some(value) = map.get(&normalized_key) {
+            return Some(value);
+        }
+    }
+    let mut matched = None;
+    for (key, value) in map {
+        let Some(text) = key.as_str() else {
+            continue;
+        };
+        if normalize_segment(text) == normalized {
+            matched = Some(value);
+            break;
+        }
+    }
+    matched
 }
 
 fn value_to_string(value: &Value) -> Option<String> {
@@ -243,6 +264,17 @@ fn flatten_value(prefix: &str, value: &Value, out: &mut BTreeMap<String, String>
     }
 }
 
+fn resolve_env_override(raw_key: &str, normalized_key: &str) -> Option<String> {
+    // Env precedence: legacy aliases -> normalized overrides -> legacy hyphenated overrides.
+    if let Some(value) = legacy_env_override(normalized_key) {
+        return Some(value);
+    }
+    if let Some(value) = env_override(normalized_key) {
+        return Some(value);
+    }
+    legacy_env_override_compat(raw_key)
+}
+
 fn env_override(key: &str) -> Option<String> {
     let env_key = format!("GRALPH_{}", key_to_env(key));
     env::var(env_key).ok()
@@ -260,7 +292,25 @@ fn legacy_env_override(key: &str) -> Option<String> {
     env::var(legacy_key).ok()
 }
 
+fn legacy_env_override_compat(key: &str) -> Option<String> {
+    let env_key = format!("GRALPH_{}", key_to_env_legacy(key));
+    let normalized_key = format!("GRALPH_{}", key_to_env(key));
+    if env_key == normalized_key {
+        return None;
+    }
+    env::var(env_key).ok()
+}
+
 fn key_to_env(key: &str) -> String {
+    key.chars()
+        .map(|ch| match ch {
+            '.' | '-' => '_',
+            _ => ch.to_ascii_uppercase(),
+        })
+        .collect()
+}
+
+fn key_to_env_legacy(key: &str) -> String {
     key.chars()
         .map(|ch| match ch {
             '.' => '_',
@@ -269,16 +319,129 @@ fn key_to_env(key: &str) -> String {
         .collect()
 }
 
+fn normalize_key(key: &str) -> Option<String> {
+    let trimmed = key.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let normalized = trimmed
+        .split('.')
+        .map(normalize_segment)
+        .collect::<Vec<_>>()
+        .join(".");
+    Some(normalized)
+}
+
+fn normalize_segment(segment: &str) -> String {
+    segment
+        .trim()
+        .chars()
+        .map(|ch| match ch {
+            '-' => '_',
+            _ => ch.to_ascii_lowercase(),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+    use proptest::string::string_regex;
     use std::fs;
-    use std::sync::Mutex;
 
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    #[derive(Debug, Clone)]
+    enum SeqItem {
+        Text(String),
+        Bool(bool),
+        Number(i64),
+        Null,
+        Map,
+        Sequence(Vec<SeqItem>),
+    }
 
+    impl SeqItem {
+        fn expected_string(&self) -> String {
+            match self {
+                SeqItem::Text(text) => text.clone(),
+                SeqItem::Bool(flag) => flag.to_string(),
+                SeqItem::Number(number) => number.to_string(),
+                SeqItem::Null => String::new(),
+                SeqItem::Map => String::new(),
+                SeqItem::Sequence(items) => items
+                    .iter()
+                    .map(SeqItem::expected_string)
+                    .collect::<Vec<_>>()
+                    .join(","),
+            }
+        }
+
+        fn to_value(&self) -> Value {
+            match self {
+                SeqItem::Text(text) => Value::String(text.clone()),
+                SeqItem::Bool(flag) => Value::Bool(*flag),
+                SeqItem::Number(number) => Value::Number(serde_yaml::Number::from(*number)),
+                SeqItem::Null => Value::Null,
+                SeqItem::Map => {
+                    let mut map = Mapping::new();
+                    map.insert(
+                        Value::String("key".to_string()),
+                        Value::String("value".to_string()),
+                    );
+                    Value::Mapping(map)
+                }
+                SeqItem::Sequence(items) => {
+                    Value::Sequence(items.iter().map(SeqItem::to_value).collect())
+                }
+            }
+        }
+    }
+
+    fn seq_item_strategy() -> impl Strategy<Value = SeqItem> {
+        let text = string_regex("[a-zA-Z0-9_-]{0,8}")
+            .unwrap()
+            .prop_map(SeqItem::Text);
+        let number = (-999i64..=999).prop_map(SeqItem::Number);
+        let leaf = prop_oneof![
+            text,
+            any::<bool>().prop_map(SeqItem::Bool),
+            number,
+            Just(SeqItem::Null),
+            Just(SeqItem::Map),
+        ];
+        leaf.prop_recursive(2, 16, 4, |inner| {
+            prop::collection::vec(inner, 0..4).prop_map(SeqItem::Sequence)
+        })
+    }
+
+    fn key_segment_strategy() -> impl Strategy<Value = String> {
+        let base = string_regex("[A-Za-z0-9_-]{1,8}").unwrap();
+        let leading_padding = string_regex("[ ]{0,2}").unwrap();
+        let trailing_padding = string_regex("[ ]{0,2}").unwrap();
+        (leading_padding, base, trailing_padding)
+            .prop_map(|(prefix, segment, suffix)| format!("{prefix}{segment}{suffix}"))
+    }
+
+    fn mixed_key_variant(segment: &str) -> String {
+        segment
+            .chars()
+            .enumerate()
+            .map(|(idx, ch)| match ch {
+                '_' => '-',
+                '-' => '_',
+                _ if ch.is_ascii_alphabetic() => {
+                    if idx % 2 == 0 {
+                        ch.to_ascii_uppercase()
+                    } else {
+                        ch.to_ascii_lowercase()
+                    }
+                }
+                _ => ch,
+            })
+            .collect()
+    }
     fn env_guard() -> std::sync::MutexGuard<'static, ()> {
-        let guard = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+        let guard = crate::test_support::env_lock();
         clear_env_overrides();
         guard
     }
@@ -290,11 +453,13 @@ mod tests {
             "GRALPH_CONFIG_DIR",
             "GRALPH_PROJECT_CONFIG_NAME",
             "GRALPH_DEFAULTS_MAX_ITERATIONS",
+            "GRALPH_DEFAULTS_MAX-ITERATIONS",
             "GRALPH_DEFAULTS_TASK_FILE",
             "GRALPH_DEFAULTS_COMPLETION_MARKER",
             "GRALPH_DEFAULTS_BACKEND",
             "GRALPH_DEFAULTS_MODEL",
             "GRALPH_DEFAULTS_AUTO_WORKTREE",
+            "GRALPH_DEFAULTS_AUTO-WORKTREE",
             "GRALPH_MAX_ITERATIONS",
             "GRALPH_TASK_FILE",
             "GRALPH_COMPLETION_MARKER",
@@ -322,6 +487,319 @@ mod tests {
     fn remove_env(key: &str) {
         unsafe {
             env::remove_var(key);
+        }
+    }
+
+    #[test]
+    fn load_propagates_parse_error() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: [\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+
+        let err = Config::load(None).unwrap_err();
+        match err {
+            ConfigError::Parse { path, .. } => {
+                assert_eq!(path, default_path);
+            }
+            other => panic!("expected parse error, got {other:?}"),
+        }
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn normalize_key_trims_and_standardizes_segments() {
+        assert_eq!(
+            normalize_key(" Defaults.Max-Iterations "),
+            Some("defaults.max_iterations".to_string())
+        );
+        assert_eq!(
+            normalize_key(" Logging.Log-Level "),
+            Some("logging.log_level".to_string())
+        );
+        assert_eq!(normalize_key("  "), None);
+    }
+
+    #[test]
+    fn normalize_key_handles_mixed_case_hyphenated_segments() {
+        assert_eq!(
+            normalize_key(" Defaults.Sub-Section.Log-Level "),
+            Some("defaults.sub_section.log_level".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_key_preserves_empty_segments() {
+        assert_eq!(
+            normalize_key("defaults..backend"),
+            Some("defaults..backend".to_string())
+        );
+        assert_eq!(
+            normalize_key("defaults. .backend"),
+            Some("defaults..backend".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_key_preserves_underscores_and_hyphen_mix() {
+        assert_eq!(
+            normalize_key(" Defaults.Auto_Worktree-Mode "),
+            Some("defaults.auto_worktree_mode".to_string())
+        );
+    }
+
+    #[test]
+    fn lookup_mapping_value_normalizes_case_and_hyphens() {
+        let mut map = Mapping::new();
+        map.insert(
+            Value::String("max_iterations".to_string()),
+            Value::String("10".to_string()),
+        );
+        map.insert(
+            Value::String("Log-Level".to_string()),
+            Value::String("info".to_string()),
+        );
+
+        let max_value = lookup_mapping_value(&map, "Max-Iterations").and_then(Value::as_str);
+        assert_eq!(max_value, Some("10"));
+
+        let log_value = lookup_mapping_value(&map, "log_level").and_then(Value::as_str);
+        assert_eq!(log_value, Some("info"));
+    }
+
+    #[test]
+    fn lookup_value_resolves_nested_mixed_case_and_hyphenated_keys() {
+        let value: Value = serde_yaml::from_str(
+            "Defaults:\n  Task-File: PRD.md\n  Sub-Section:\n    Mixed-Key: 12\n",
+        )
+        .unwrap();
+
+        let task_file = lookup_value(&value, "defaults.task-file").and_then(Value::as_str);
+        assert_eq!(task_file, Some("PRD.md"));
+
+        let nested_value =
+            lookup_value(&value, "DeFaUlts.Sub-Section.Mixed-Key").and_then(Value::as_i64);
+        assert_eq!(nested_value, Some(12));
+    }
+
+    #[test]
+    fn lookup_value_resolves_mixed_case_hyphenated_segments() {
+        let value: Value =
+            serde_yaml::from_str("Defaults:\n  Sub-Section:\n    Log-Level: warn\n").unwrap();
+
+        let level = lookup_value(&value, "defaults.sub-section.log-level").and_then(Value::as_str);
+        assert_eq!(level, Some("warn"));
+    }
+
+    #[test]
+    fn lookup_value_resolves_mixed_case_hyphenated_key() {
+        let value: Value = serde_yaml::from_str("Logging:\n  Log-Level: debug\n").unwrap();
+
+        let level = lookup_value(&value, "logging.log-level").and_then(Value::as_str);
+        assert_eq!(level, Some("debug"));
+    }
+
+    #[test]
+    fn lookup_value_returns_none_for_empty_segments() {
+        let value: Value = serde_yaml::from_str("defaults:\n  backend: claude\n").unwrap();
+
+        assert!(lookup_value(&value, "defaults..backend").is_none());
+        assert!(lookup_value(&value, "defaults. .backend").is_none());
+    }
+
+    #[test]
+    fn normalized_env_override_precedes_legacy_hyphenated() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 10\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_DEFAULTS_MAX_ITERATIONS", "42");
+        set_env("GRALPH_DEFAULTS_MAX-ITERATIONS", "24");
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("defaults.max-iterations").as_deref(), Some("42"));
+
+        remove_env("GRALPH_DEFAULTS_MAX-ITERATIONS");
+        remove_env("GRALPH_DEFAULTS_MAX_ITERATIONS");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn default_config_path_prefers_env_override() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let override_path = temp.path().join("override.yaml");
+        let config_dir = temp.path().join("config-root");
+        let installed_default = config_dir.join("config").join("default.yaml");
+
+        write_file(&override_path, "defaults:\n  backend: gemini\n");
+        write_file(&installed_default, "defaults:\n  backend: claude\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &override_path);
+        set_env("GRALPH_CONFIG_DIR", &config_dir);
+
+        let resolved = default_config_path();
+        assert_eq!(resolved, override_path);
+
+        remove_env("GRALPH_CONFIG_DIR");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn default_config_path_prefers_installed_default() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config_dir = temp.path().join("config-root");
+        let installed_default = config_dir.join("config").join("default.yaml");
+
+        write_file(&installed_default, "defaults:\n  backend: claude\n");
+        set_env("GRALPH_CONFIG_DIR", &config_dir);
+
+        let resolved = default_config_path();
+        assert_eq!(resolved, installed_default);
+
+        remove_env("GRALPH_CONFIG_DIR");
+    }
+
+    #[test]
+    fn default_config_path_uses_manifest_default_when_installed_missing() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config_dir = temp.path().join("config-root");
+        let manifest_default = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("config")
+            .join("default.yaml");
+
+        set_env("GRALPH_CONFIG_DIR", &config_dir);
+
+        let resolved = default_config_path();
+        assert_eq!(resolved, manifest_default);
+        assert!(manifest_default.exists());
+
+        remove_env("GRALPH_CONFIG_DIR");
+    }
+
+    #[test]
+    fn legacy_hyphenated_env_override_is_resolved() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(&default_path, "defaults:\n  auto_worktree: false\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_DEFAULTS_AUTO-WORKTREE", "true");
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(
+            config.get("defaults.auto-worktree").as_deref(),
+            Some("true")
+        );
+
+        remove_env("GRALPH_DEFAULTS_AUTO-WORKTREE");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn value_to_string_renders_sequences_and_tagged_values() {
+        let sequence: Value = serde_yaml::from_str("[one, 2, true]").unwrap();
+        assert_eq!(value_to_string(&sequence).as_deref(), Some("one,2,true"));
+
+        let tagged: Value = serde_yaml::from_str("!tagged false").unwrap();
+        assert_eq!(value_to_string(&tagged).as_deref(), Some("false"));
+    }
+
+    #[test]
+    fn value_to_string_handles_tagged_mixed_sequences() {
+        let sequence: Value = serde_yaml::from_str("[!tagged 2, null, ok]").unwrap();
+        assert_eq!(value_to_string(&sequence).as_deref(), Some("2,,ok"));
+    }
+
+    #[test]
+    fn value_to_string_handles_nested_sequences_with_tagged_values() {
+        let sequence: Value =
+            serde_yaml::from_str("[one, [!tagged 2, [false, !tagged true]], null]").unwrap();
+        assert_eq!(
+            value_to_string(&sequence).as_deref(),
+            Some("one,2,false,true,")
+        );
+    }
+
+    #[test]
+    fn value_to_string_handles_null_and_mixed_sequence() {
+        assert_eq!(value_to_string(&Value::Null).as_deref(), Some(""));
+
+        let sequence: Value = serde_yaml::from_str("[null, hello, 5, false]").unwrap();
+        assert_eq!(
+            value_to_string(&sequence).as_deref(),
+            Some(",hello,5,false")
+        );
+    }
+
+    #[test]
+    fn value_to_string_renders_sequence_with_mapping_entries() {
+        let sequence: Value = serde_yaml::from_str("[one, {key: value}, null]").unwrap();
+        assert_eq!(value_to_string(&sequence).as_deref(), Some("one,,"));
+    }
+
+    #[test]
+    fn value_to_string_returns_none_for_map_values() {
+        let mapping: Value = serde_yaml::from_str("key: value").unwrap();
+        assert!(matches!(mapping, Value::Mapping(_)));
+        assert!(value_to_string(&mapping).is_none());
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(32))]
+        #[test]
+        fn normalize_key_stability_matches_lookup(segments in prop::collection::vec(key_segment_strategy(), 1..4)) {
+            let raw_key = segments.join(".");
+            let normalized = normalize_key(&raw_key).expect("normalized key");
+            let mut current = Value::String("value".to_string());
+            for segment in normalized.split('.').rev() {
+                let mut map = Mapping::new();
+                map.insert(Value::String(segment.to_string()), current);
+                current = Value::Mapping(map);
+            }
+
+            let raw_lookup = lookup_value(&current, &raw_key).and_then(Value::as_str);
+            let normalized_lookup = lookup_value(&current, &normalized).and_then(Value::as_str);
+
+            prop_assert_eq!(raw_lookup, Some("value"));
+            prop_assert_eq!(normalized_lookup, Some("value"));
+        }
+
+        #[test]
+        fn lookup_value_matches_mixed_case_hyphenated_keys(segments in prop::collection::vec(key_segment_strategy(), 1..4)) {
+            let raw_key = segments.join(".");
+            let normalized = normalize_key(&raw_key).expect("normalized key");
+            let mut current = Value::String("value".to_string());
+            for segment in segments.iter().rev() {
+                let mut map = Mapping::new();
+                map.insert(Value::String(mixed_key_variant(segment)), current);
+                current = Value::Mapping(map);
+            }
+
+            let raw_lookup = lookup_value(&current, &raw_key).and_then(Value::as_str);
+            let normalized_lookup = lookup_value(&current, &normalized).and_then(Value::as_str);
+
+            prop_assert_eq!(raw_lookup, Some("value"));
+            prop_assert_eq!(normalized_lookup, Some("value"));
+        }
+
+        #[test]
+        fn value_to_string_mixed_sequences_render_csv(items in prop::collection::vec(seq_item_strategy(), 0..6)) {
+            let sequence = Value::Sequence(items.iter().map(SeqItem::to_value).collect());
+            let expected = items
+                .iter()
+                .map(SeqItem::expected_string)
+                .collect::<Vec<_>>()
+                .join(",");
+            let actual = value_to_string(&sequence);
+            prop_assert_eq!(actual.as_deref(), Some(expected.as_str()));
         }
     }
 
@@ -361,6 +839,61 @@ mod tests {
     }
 
     #[test]
+    fn merge_values_overrides_nested_mappings() {
+        let base: Value = serde_yaml::from_str(
+            "defaults:\n  backend: claude\n  nested:\n    level: info\n    enabled: true\n",
+        )
+        .unwrap();
+        let overlay: Value =
+            serde_yaml::from_str("defaults:\n  backend: gemini\n  nested:\n    enabled: false\n")
+                .unwrap();
+
+        let merged = merge_values(base, overlay);
+
+        assert_eq!(
+            lookup_value(&merged, "defaults.backend").and_then(Value::as_str),
+            Some("gemini")
+        );
+        assert_eq!(
+            lookup_value(&merged, "defaults.nested.level").and_then(Value::as_str),
+            Some("info")
+        );
+        assert_eq!(
+            lookup_value(&merged, "defaults.nested.enabled").and_then(Value::as_bool),
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn env_override_precedes_project_config() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+
+        let default_path = root.join("default.yaml");
+        let global_path = root.join("global.yaml");
+        let project_dir = root.join("project");
+        let project_path = project_dir.join(".gralph.yaml");
+
+        write_file(&default_path, "defaults:\n  backend: claude\n");
+        write_file(&global_path, "defaults:\n  backend: gemini\n");
+        write_file(&project_path, "defaults:\n  backend: opencode\n");
+
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+        set_env("GRALPH_PROJECT_CONFIG_NAME", ".gralph.yaml");
+        set_env("GRALPH_DEFAULTS_BACKEND", "codex");
+
+        let config = Config::load(Some(&project_dir)).unwrap();
+        assert_eq!(config.get("defaults.backend").as_deref(), Some("codex"));
+
+        remove_env("GRALPH_DEFAULTS_BACKEND");
+        remove_env("GRALPH_PROJECT_CONFIG_NAME");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
     fn env_override_wins() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -395,6 +928,169 @@ mod tests {
     }
 
     #[test]
+    fn legacy_env_override_takes_precedence_over_normalized() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 10\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_DEFAULTS_MAX_ITERATIONS", "42");
+        set_env("GRALPH_MAX_ITERATIONS", "77");
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("defaults.max_iterations").as_deref(), Some("77"));
+
+        remove_env("GRALPH_MAX_ITERATIONS");
+        remove_env("GRALPH_DEFAULTS_MAX_ITERATIONS");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn legacy_env_override_precedes_normalized_and_compat() {
+        let _guard = env_guard();
+        set_env("GRALPH_MAX_ITERATIONS", "legacy");
+        set_env("GRALPH_DEFAULTS_MAX_ITERATIONS", "normalized");
+        set_env("GRALPH_DEFAULTS_MAX-ITERATIONS", "compat");
+
+        let value = resolve_env_override("defaults.max-iterations", "defaults.max_iterations");
+        assert_eq!(value.as_deref(), Some("legacy"));
+
+        remove_env("GRALPH_DEFAULTS_MAX-ITERATIONS");
+        remove_env("GRALPH_DEFAULTS_MAX_ITERATIONS");
+        remove_env("GRALPH_MAX_ITERATIONS");
+    }
+
+    #[test]
+    fn legacy_env_override_precedes_compat_when_both_set() {
+        let _guard = env_guard();
+        set_env("GRALPH_MAX_ITERATIONS", "legacy");
+        set_env("GRALPH_DEFAULTS_MAX-ITERATIONS", "compat");
+
+        let value = resolve_env_override("defaults.max-iterations", "defaults.max_iterations");
+        assert_eq!(value.as_deref(), Some("legacy"));
+
+        remove_env("GRALPH_DEFAULTS_MAX-ITERATIONS");
+        remove_env("GRALPH_MAX_ITERATIONS");
+    }
+
+    #[test]
+    fn resolve_env_override_keeps_empty_values() {
+        let _guard = env_guard();
+        set_env("GRALPH_DEFAULTS_TASK_FILE", "");
+
+        let value = resolve_env_override("defaults.task_file", "defaults.task_file");
+        assert_eq!(value.as_deref(), Some(""));
+
+        remove_env("GRALPH_DEFAULTS_TASK_FILE");
+    }
+
+    #[test]
+    fn legacy_env_override_empty_value_precedes_normalized() {
+        let _guard = env_guard();
+        set_env("GRALPH_MAX_ITERATIONS", "");
+        set_env("GRALPH_DEFAULTS_MAX_ITERATIONS", "55");
+
+        let value = resolve_env_override("defaults.max_iterations", "defaults.max_iterations");
+        assert_eq!(value.as_deref(), Some(""));
+
+        remove_env("GRALPH_DEFAULTS_MAX_ITERATIONS");
+        remove_env("GRALPH_MAX_ITERATIONS");
+    }
+
+    #[test]
+    fn legacy_alias_empty_override_beats_normalized_and_config() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(&default_path, "defaults:\n  backend: claude\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_BACKEND", "");
+        set_env("GRALPH_DEFAULTS_BACKEND", "gemini");
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("defaults.backend").as_deref(), Some(""));
+
+        remove_env("GRALPH_DEFAULTS_BACKEND");
+        remove_env("GRALPH_BACKEND");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn normalized_env_override_precedes_compat_without_legacy_alias() {
+        let _guard = env_guard();
+        set_env("GRALPH_DEFAULTS_AUTO_WORKTREE", "normalized");
+        set_env("GRALPH_DEFAULTS_AUTO-WORKTREE", "compat");
+
+        let value = resolve_env_override("defaults.auto-worktree", "defaults.auto_worktree");
+        assert_eq!(value.as_deref(), Some("normalized"));
+
+        remove_env("GRALPH_DEFAULTS_AUTO-WORKTREE");
+        remove_env("GRALPH_DEFAULTS_AUTO_WORKTREE");
+    }
+
+    #[test]
+    fn normalized_empty_override_precedes_compat_for_mixed_key() {
+        let _guard = env_guard();
+        set_env("GRALPH_DEFAULTS_AUTO_WORKTREE_MODE", "");
+        set_env("GRALPH_DEFAULTS_AUTO-WORKTREE_MODE", "true");
+
+        let value =
+            resolve_env_override("defaults.auto-worktree_mode", "defaults.auto_worktree_mode");
+        assert_eq!(value.as_deref(), Some(""));
+
+        remove_env("GRALPH_DEFAULTS_AUTO-WORKTREE_MODE");
+        remove_env("GRALPH_DEFAULTS_AUTO_WORKTREE_MODE");
+    }
+
+    #[test]
+    fn normalized_empty_override_precedes_compat_for_hyphenated_key() {
+        let _guard = env_guard();
+        set_env("GRALPH_DEFAULTS_AUTO_WORKTREE", "");
+        set_env("GRALPH_DEFAULTS_AUTO-WORKTREE", "true");
+
+        let value = resolve_env_override("defaults.auto-worktree", "defaults.auto_worktree");
+        assert_eq!(value.as_deref(), Some(""));
+
+        remove_env("GRALPH_DEFAULTS_AUTO-WORKTREE");
+        remove_env("GRALPH_DEFAULTS_AUTO_WORKTREE");
+    }
+
+    #[test]
+    fn legacy_compat_env_override_keeps_empty_value() {
+        let _guard = env_guard();
+        set_env("GRALPH_DEFAULTS_AUTO-WORKTREE", "");
+
+        let value = resolve_env_override("defaults.auto-worktree", "defaults.auto_worktree");
+        assert_eq!(value.as_deref(), Some(""));
+
+        remove_env("GRALPH_DEFAULTS_AUTO-WORKTREE");
+    }
+
+    #[test]
+    fn env_override_precedence_handles_mixed_case_hyphenated_keys() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(&default_path, "defaults:\n  auto_worktree: false\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_DEFAULTS_AUTO_WORKTREE", "true");
+        set_env("GRALPH_DEFAULTS_AUTO-WORKTREE", "false");
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(
+            config.get(" Defaults.Auto-Worktree ").as_deref(),
+            Some("true")
+        );
+
+        remove_env("GRALPH_DEFAULTS_AUTO-WORKTREE");
+        remove_env("GRALPH_DEFAULTS_AUTO_WORKTREE");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
     fn default_config_env_override_used() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -407,6 +1103,44 @@ mod tests {
 
         let config = Config::load(None).unwrap();
         assert_eq!(config.get("defaults.backend").as_deref(), Some("gemini"));
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+    }
+
+    #[test]
+    fn key_normalization_resolves_hyphenated_keys() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("missing-global.yaml");
+
+        write_file(&default_path, "defaults:\n  max-iterations: 12\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("defaults.max_iterations").as_deref(), Some("12"));
+        assert!(config.exists("defaults.max-iterations"));
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+    }
+
+    #[test]
+    fn get_normalizes_case_and_hyphenated_segments() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("missing-global.yaml");
+
+        write_file(&default_path, "Logging:\n  Log-Level: INFO\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("logging.log-level").as_deref(), Some("INFO"));
+        assert_eq!(config.get(" Logging.Log-Level ").as_deref(), Some("INFO"));
 
         remove_env("GRALPH_DEFAULT_CONFIG");
         remove_env("GRALPH_GLOBAL_CONFIG");
@@ -426,6 +1160,156 @@ mod tests {
         assert_eq!(config.get("defaults.max_iterations").as_deref(), Some("99"));
 
         remove_env("GRALPH_CONFIG_DIR");
+    }
+
+    #[test]
+    fn config_paths_skips_missing_project_dir() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("global.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 1\n");
+        write_file(&global_path, "defaults:\n  backend: claude\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let missing_project = temp.path().join("missing-project");
+        let paths = config_paths(Some(&missing_project));
+        assert_eq!(paths, vec![default_path.clone(), global_path.clone()]);
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn config_paths_skips_project_when_project_dir_is_file() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("global.yaml");
+        let project_file = temp.path().join("project-file");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 1\n");
+        write_file(&global_path, "defaults:\n  backend: claude\n");
+        write_file(&project_file, "not-a-dir");
+
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let paths = config_paths(Some(&project_file));
+        assert_eq!(paths, vec![default_path.clone(), global_path.clone()]);
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn key_to_env_normalizes_dots_and_hyphens() {
+        assert_eq!(
+            key_to_env("defaults.max-Iterations"),
+            "DEFAULTS_MAX_ITERATIONS"
+        );
+    }
+
+    #[test]
+    fn key_to_env_legacy_preserves_hyphens() {
+        assert_eq!(
+            key_to_env_legacy("defaults.max-Iterations"),
+            "DEFAULTS_MAX-ITERATIONS"
+        );
+    }
+
+    #[test]
+    fn normalize_segment_trims_case_and_hyphens() {
+        assert_eq!(normalize_segment(" Max-Iterations "), "max_iterations");
+    }
+
+    #[test]
+    fn config_paths_include_project_with_custom_name() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("global.yaml");
+        let project_dir = temp.path().join("project");
+        let project_path = project_dir.join("custom.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 1\n");
+        write_file(&global_path, "defaults:\n  backend: claude\n");
+        write_file(&project_path, "defaults:\n  backend: gemini\n");
+
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+        set_env("GRALPH_PROJECT_CONFIG_NAME", "custom.yaml");
+
+        let paths = config_paths(Some(&project_dir));
+        assert_eq!(
+            paths,
+            vec![
+                default_path.clone(),
+                global_path.clone(),
+                project_path.clone()
+            ]
+        );
+
+        remove_env("GRALPH_PROJECT_CONFIG_NAME");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn config_paths_order_default_global_project() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        let default_path = root.join("default.yaml");
+        let global_path = root.join("global.yaml");
+        let project_dir = root.join("project");
+        let project_path = project_dir.join(".gralph.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 1\n");
+        write_file(&global_path, "defaults:\n  backend: claude\n");
+        write_file(&project_path, "defaults:\n  backend: gemini\n");
+
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let paths = config_paths(Some(&project_dir));
+        assert_eq!(
+            paths,
+            vec![
+                default_path.clone(),
+                global_path.clone(),
+                project_path.clone()
+            ]
+        );
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn config_paths_skip_missing_custom_project_config() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("global.yaml");
+        let project_dir = temp.path().join("project");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 1\n");
+        write_file(&global_path, "defaults:\n  backend: claude\n");
+        fs::create_dir_all(&project_dir).unwrap();
+
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+        set_env("GRALPH_PROJECT_CONFIG_NAME", "custom.yaml");
+
+        let paths = config_paths(Some(&project_dir));
+        assert_eq!(paths, vec![default_path.clone(), global_path.clone()]);
+
+        remove_env("GRALPH_PROJECT_CONFIG_NAME");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
     }
 
     #[test]
@@ -474,6 +1358,112 @@ mod tests {
     }
 
     #[test]
+    fn list_renders_sequences_and_null_values() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("missing-global.yaml");
+
+        write_file(
+            &default_path,
+            "defaults:\n  flags:\n    - one\n    - 2\n  empty: null\nlogging:\n  level: info\n",
+        );
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+        let list = config.list();
+        assert_eq!(
+            list,
+            vec![
+                ("defaults.empty".to_string(), "".to_string()),
+                ("defaults.flags".to_string(), "one,2".to_string()),
+                ("logging.level".to_string(), "info".to_string()),
+            ]
+        );
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn list_renders_tagged_and_null_values() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("missing-global.yaml");
+
+        write_file(
+            &default_path,
+            "defaults:\n  tagged: !tagged hello\n  flags:\n    - !tagged one\n    - null\n    - !tagged 2\nlogging:\n  level: info\n",
+        );
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+        let list = config.list();
+        assert_eq!(
+            list,
+            vec![
+                ("defaults.flags".to_string(), "one,,2".to_string()),
+                ("defaults.tagged".to_string(), "hello".to_string()),
+                ("logging.level".to_string(), "info".to_string()),
+            ]
+        );
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn list_renders_sequences_with_null_entries() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("missing-global.yaml");
+
+        write_file(
+            &default_path,
+            "defaults:\n  flags:\n    - one\n    - null\n    - two\n  empty: null\n",
+        );
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+        let list = config.list();
+        assert_eq!(
+            list,
+            vec![
+                ("defaults.empty".to_string(), "".to_string()),
+                ("defaults.flags".to_string(), "one,,two".to_string()),
+            ]
+        );
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn flatten_value_ignores_non_string_keys() {
+        let mut map = Mapping::new();
+        map.insert(
+            Value::Number(serde_yaml::Number::from(1)),
+            Value::String("one".to_string()),
+        );
+        map.insert(
+            Value::String("valid".to_string()),
+            Value::String("yes".to_string()),
+        );
+
+        let value = Value::Mapping(map);
+        let mut entries = BTreeMap::new();
+        flatten_value("", &value, &mut entries);
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries.get("valid").map(String::as_str), Some("yes"));
+    }
+
+    #[test]
     fn arrays_flatten_to_csv() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -495,6 +1485,24 @@ mod tests {
     }
 
     #[test]
+    fn get_renders_sequences_with_null_entries() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(
+            &default_path,
+            "defaults:\n  flags:\n    - one\n    - null\n    - two\n",
+        );
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("defaults.flags").as_deref(), Some("one,,two"));
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
     fn exists_returns_true_for_env_override() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -508,6 +1516,26 @@ mod tests {
         assert!(config.exists("test.flags"));
 
         remove_env("GRALPH_TEST_FLAGS");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn exists_returns_false_for_invalid_or_mapping_keys() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(
+            &default_path,
+            "defaults:\n  max_iterations: 5\nlogging:\n  level: info\n",
+        );
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+
+        let config = Config::load(None).unwrap();
+        assert!(!config.exists(" "));
+        assert!(!config.exists("defaults."));
+        assert!(!config.exists("defaults"));
+
         remove_env("GRALPH_DEFAULT_CONFIG");
     }
 }

@@ -1,11 +1,9 @@
-use super::{Backend, BackendError};
+use super::{spawn_with_retry, stream_command_output, Backend, BackendError};
 use serde_json::Value;
 use std::fs::{self, File};
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
-use std::thread;
 
 #[derive(Debug, Clone)]
 pub struct ClaudeBackend {
@@ -38,12 +36,14 @@ impl Default for ClaudeBackend {
 
 impl Backend for ClaudeBackend {
     fn check_installed(&self) -> bool {
-        Command::new(&self.command)
-            .arg("--version")
+        let mut cmd = Command::new(&self.command);
+        cmd.arg("--version")
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok()
+            .stderr(Stdio::null());
+        match spawn_with_retry(&mut cmd, "claude") {
+            Ok(mut child) => child.wait().map(|status| status.success()).unwrap_or(false),
+            Err(_) => false,
+        }
     }
 
     fn run_iteration(
@@ -83,31 +83,16 @@ impl Backend for ClaudeBackend {
             }
         }
 
-        let mut child = cmd
-            .spawn()
-            .map_err(|err| BackendError::Command(format!("failed to spawn claude: {}", err)))?;
-
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| BackendError::Command("failed to capture stdout".to_string()))?;
-        let stderr = child
-            .stderr
-            .take()
-            .ok_or_else(|| BackendError::Command("failed to capture stderr".to_string()))?;
-
-        let (tx, rx) = mpsc::channel();
-        let stdout_handle = spawn_reader(stdout, tx.clone());
-        let stderr_handle = spawn_reader(stderr, tx);
+        let child = spawn_with_retry(&mut cmd, "claude")?;
 
         let stdout_stream = io::stdout();
         let mut stdout_lock = stdout_stream.lock();
 
-        for line in rx {
+        stream_command_output(child, "claude", |line| {
             let trimmed = line.trim_end_matches(['\r', '\n']);
             let json_line = trimmed.trim_start();
             if !json_line.starts_with('{') {
-                continue;
+                return Ok(());
             }
             writeln!(output, "{}", json_line).map_err(|source| BackendError::Io {
                 path: output_file.to_path_buf(),
@@ -129,23 +114,8 @@ impl Backend for ClaudeBackend {
                     })?;
                 }
             }
-        }
-
-        let status = child
-            .wait()
-            .map_err(|err| BackendError::Command(format!("failed to wait for claude: {}", err)))?;
-
-        let _ = stdout_handle.join();
-        let _ = stderr_handle.join();
-
-        if !status.success() {
-            return Err(BackendError::Command(format!(
-                "claude exited with {}",
-                status
-            )));
-        }
-
-        Ok(())
+            Ok(())
+        })
     }
 
     fn parse_text(&self, response_file: &Path) -> Result<String, BackendError> {
@@ -176,29 +146,6 @@ impl Backend for ClaudeBackend {
     fn get_models(&self) -> Vec<String> {
         vec!["claude-opus-4-5".to_string()]
     }
-}
-
-fn spawn_reader<R: Read + Send + 'static>(
-    reader: R,
-    sender: mpsc::Sender<String>,
-) -> thread::JoinHandle<()> {
-    thread::spawn(move || {
-        let mut reader = BufReader::new(reader);
-        let mut buffer = Vec::new();
-        loop {
-            buffer.clear();
-            match reader.read_until(b'\n', &mut buffer) {
-                Ok(0) => break,
-                Ok(_) => {
-                    let line = String::from_utf8_lossy(&buffer).to_string();
-                    if sender.send(line).is_err() {
-                        break;
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-    })
 }
 
 fn extract_assistant_texts(value: &Value) -> Vec<String> {
@@ -233,10 +180,27 @@ fn extract_result_text(value: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use std::fs;
+    use std::io::Write;
+    use std::path::Path;
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+
+    #[cfg(unix)]
+    fn write_executable(path: &Path, script: &str) {
+        let dir = path.parent().unwrap();
+        let mut file = tempfile::Builder::new().tempfile_in(dir).unwrap();
+        file.write_all(script.as_bytes()).unwrap();
+        file.flush().unwrap();
+        file.as_file().sync_all().unwrap();
+        let temp_path = file.into_temp_path();
+        let mut perms = fs::metadata(&temp_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&temp_path, perms).unwrap();
+        temp_path.persist(path).unwrap();
+    }
 
     #[test]
     fn parse_text_returns_result_when_present() {
@@ -250,6 +214,406 @@ mod tests {
         assert_eq!(result, "done");
     }
 
+    #[test]
+    fn parse_text_ignores_invalid_json_lines_and_returns_result() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{invalid json}\n{\"type\":\"result\",\"result\":\"done\"}\n{still bad}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, "done");
+    }
+
+    #[test]
+    fn extract_assistant_texts_filters_by_role_and_content() {
+        let assistant = json!({
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "first"},
+                    {"type": "image", "source": "ignored"},
+                    {"type": "text", "text": "second"}
+                ]
+            }
+        });
+        let user = json!({
+            "type": "user",
+            "message": {"content": [{"type": "text", "text": "nope"}]}
+        });
+
+        assert_eq!(
+            extract_assistant_texts(&assistant),
+            vec!["first".to_string(), "second".to_string()]
+        );
+        assert!(extract_assistant_texts(&user).is_empty());
+    }
+
+    #[test]
+    fn extract_assistant_texts_handles_missing_or_non_text_content() {
+        let missing_content = json!({
+            "type": "assistant",
+            "message": {}
+        });
+        let non_array_content = json!({
+            "type": "assistant",
+            "message": {"content": "nope"}
+        });
+        let non_text_only = json!({
+            "type": "assistant",
+            "message": {"content": [{"type": "image", "source": "ignored"}]}
+        });
+        let mixed_missing_fields = json!({
+            "type": "assistant",
+            "message": {"content": [{"text": "missing type"}, {"type": "text"}]}
+        });
+
+        assert!(extract_assistant_texts(&missing_content).is_empty());
+        assert!(extract_assistant_texts(&non_array_content).is_empty());
+        assert!(extract_assistant_texts(&non_text_only).is_empty());
+        assert!(extract_assistant_texts(&mixed_missing_fields).is_empty());
+    }
+
+    #[test]
+    fn extract_assistant_texts_ignores_malformed_content_entries() {
+        let assistant = json!({
+            "type": "assistant",
+            "message": {
+                "content": [
+                    null,
+                    7,
+                    {"type": "text"},
+                    {"type": "text", "text": null},
+                    {"type": "text", "text": "valid"},
+                    {"type": "image", "text": "ignored"}
+                ]
+            }
+        });
+
+        assert_eq!(
+            extract_assistant_texts(&assistant),
+            vec!["valid".to_string()]
+        );
+    }
+
+    #[test]
+    fn extract_assistant_texts_handles_nulls_and_mixed_entry_types() {
+        let assistant = json!({
+            "type": "assistant",
+            "message": {
+                "content": [
+                    null,
+                    {"type": "text", "text": null},
+                    {"type": "image", "source": "ignored"},
+                    9,
+                    {"type": "text", "text": "first"},
+                    "raw",
+                    {"type": "text", "text": "second"}
+                ]
+            }
+        });
+
+        assert_eq!(
+            extract_assistant_texts(&assistant),
+            vec!["first".to_string(), "second".to_string()]
+        );
+    }
+
+    #[test]
+    fn extract_assistant_texts_skips_mismatched_types() {
+        let type_not_string = json!({
+            "type": 5,
+            "message": {"content": [{"type": "text", "text": "ignored"}]}
+        });
+        let missing_type = json!({
+            "message": {"content": [{"type": "text", "text": "ignored"}]}
+        });
+        let text_not_string = json!({
+            "type": "assistant",
+            "message": {"content": [{"type": "text", "text": 42}]}
+        });
+        let content_not_object = json!({
+            "type": "assistant",
+            "message": {"content": ["plain"]}
+        });
+
+        assert!(extract_assistant_texts(&type_not_string).is_empty());
+        assert!(extract_assistant_texts(&missing_type).is_empty());
+        assert!(extract_assistant_texts(&text_not_string).is_empty());
+        assert!(extract_assistant_texts(&content_not_object).is_empty());
+    }
+
+    #[test]
+    fn extract_assistant_texts_handles_malformed_stream_entries() {
+        let cases = vec![
+            json!(null),
+            json!("not-object"),
+            json!(["assistant"]),
+            json!({"type": "assistant", "message": "nope"}),
+            json!({"type": "assistant", "message": {"content": {"type": "text"}}}),
+        ];
+
+        for case in cases {
+            assert!(extract_assistant_texts(&case).is_empty());
+        }
+    }
+
+    #[test]
+    fn extract_assistant_texts_handles_null_message_fields() {
+        let null_message = json!({"type": "assistant", "message": null});
+        let null_content = json!({"type": "assistant", "message": {"content": null}});
+
+        assert!(extract_assistant_texts(&null_message).is_empty());
+        assert!(extract_assistant_texts(&null_content).is_empty());
+    }
+
+    #[test]
+    fn extract_result_text_requires_result_type() {
+        let result = json!({"type": "result", "result": "done"});
+        let missing_type = json!({"result": "done"});
+        let assistant = json!({"type": "assistant", "result": "ignored"});
+
+        assert_eq!(extract_result_text(&result), Some("done".to_string()));
+        assert_eq!(extract_result_text(&missing_type), None);
+        assert_eq!(extract_result_text(&assistant), None);
+    }
+
+    #[test]
+    fn extract_result_text_handles_missing_or_non_string_result() {
+        let missing_result = json!({"type": "result"});
+        let non_string_result = json!({"type": "result", "result": 123});
+
+        assert_eq!(extract_result_text(&missing_result), None);
+        assert_eq!(extract_result_text(&non_string_result), None);
+    }
+
+    #[test]
+    fn extract_result_text_ignores_malformed_stream_entries() {
+        let cases = vec![
+            json!(null),
+            json!("not-object"),
+            json!(["result"]),
+            json!({"type": 7, "result": "nope"}),
+            json!({"type": "result", "result": ["nope"]}),
+        ];
+
+        for case in cases {
+            assert_eq!(extract_result_text(&case), None);
+        }
+    }
+
+    #[test]
+    fn parse_text_returns_last_result_when_present() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{\"type\":\"result\",\"result\":\"first\"}\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\n{\"type\":\"result\",\"result\":\"second\"}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, "second");
+    }
+
+    #[test]
+    fn parse_text_returns_last_valid_result_with_interleaved_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\n{\"type\":\"result\"}\n{\"type\":\"result\",\"result\":\"first\"}\nnot-json\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"more\"}]}}\n{\"type\":\"result\",\"result\":\"second\"}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, "second");
+    }
+
+    #[test]
+    fn parse_text_keeps_last_valid_result_when_trailing_results_are_invalid() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{\"type\":\"result\",\"result\":\"first\"}\n{\"type\":\"result\"}\n{\"type\":\"result\",\"result\":null}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, "first");
+    }
+
+    #[test]
+    fn parse_text_returns_result_when_not_last() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{\"type\":\"result\",\"result\":\"first\"}\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\ntrailing\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, "first");
+    }
+
+    #[test]
+    fn parse_text_returns_raw_contents_without_result() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hi\"}]}}\nnot-json\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, contents);
+    }
+
+    #[test]
+    fn parse_text_returns_raw_contents_when_only_invalid_lines_exist() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "not-json\n{invalid json}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, contents);
+    }
+
+    #[test]
+    fn parse_text_falls_back_when_no_result_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, contents);
+    }
+
+    #[test]
+    fn parse_text_falls_back_when_only_non_result_entries_exist() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "null\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\n{\"type\":\"user\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hi\"}]}}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, contents);
+    }
+
+    #[test]
+    fn parse_text_falls_back_when_result_entries_missing_text() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{\"type\":\"result\"}\n{\"type\":\"result\",\"result\":null}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, contents);
+    }
+
+    #[test]
+    fn parse_text_falls_back_when_result_entries_are_malformed() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{\"type\":\"result\",\"result\":{\"text\":\"nope\"}}\n{\"type\":\"result\",\"result\":[1,2]}\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, contents);
+    }
+
+    #[test]
+    fn parse_text_returns_io_error_for_missing_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("missing.json");
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path);
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path: error_path, .. }) if error_path == path
+        ));
+    }
+
+    #[test]
+    fn parse_text_returns_io_error_for_directory_path() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("dir");
+        fs::create_dir(&path).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path);
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path: error_path, .. }) if error_path == path
+        ));
+    }
+
+    #[test]
+    fn run_iteration_rejects_empty_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_path = temp.path().join("output.json");
+        let backend = ClaudeBackend::with_command("claude".to_string());
+
+        let result = backend.run_iteration("   ", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::InvalidInput(message)) if message == "prompt is required"
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn check_installed_returns_true_when_command_succeeds() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("claude-ok");
+        let script = "#!/bin/sh\nexit 0\n";
+        write_executable(&script_path, script);
+
+        let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
+        assert!(backend.check_installed());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn check_installed_returns_false_when_command_fails() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("claude-fail");
+        let script = "#!/bin/sh\nexit 2\n";
+        write_executable(&script_path, script);
+
+        let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
+        assert!(!backend.check_installed());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_returns_io_when_output_dir_is_read_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_dir = temp.path().join("readonly");
+        fs::create_dir(&output_dir).unwrap();
+        let mut permissions = fs::metadata(&output_dir).unwrap().permissions();
+        permissions.set_mode(0o555);
+        fs::set_permissions(&output_dir, permissions).unwrap();
+
+        let output_path = output_dir.join("output.json");
+        let backend = ClaudeBackend::with_command("claude".to_string());
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path, .. }) if path == output_path
+        ));
+
+        let mut permissions = fs::metadata(&output_dir).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&output_dir, permissions).unwrap();
+    }
+
     #[cfg(unix)]
     #[test]
     fn run_iteration_writes_stream_to_output() {
@@ -257,10 +621,7 @@ mod tests {
         let script_path = temp.path().join("claude-mock");
         let output_path = temp.path().join("output.json");
         let script = "#!/bin/sh\necho '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"Hello\\nworld\"}]}}'\necho '{\"type\":\"result\",\"result\":\"done\"}'\n";
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
+        write_executable(&script_path, script);
 
         let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
         backend
@@ -270,5 +631,197 @@ mod tests {
         let output = fs::read_to_string(&output_path).unwrap();
         assert!(output.contains("\"type\":\"assistant\""));
         assert!(output.contains("\"type\":\"result\""));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_includes_model_flag_when_set() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("claude-mock");
+        let output_path = temp.path().join("output.json");
+        let script = r#"#!/bin/sh
+printf '{"type":"result","result":"'
+for arg in "$@"; do
+  printf '%s|' "$arg"
+done
+printf '"}\n'
+"#;
+        write_executable(&script_path, script);
+
+        let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("prompt", Some("model-x"), None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let value: Value = serde_json::from_str(output.trim()).unwrap();
+        let result = value
+            .get("result")
+            .and_then(|value| value.as_str())
+            .unwrap();
+        assert!(result.contains("--model|model-x|"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_orders_args_with_model() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("claude-mock");
+        let output_path = temp.path().join("output.json");
+        let script = r#"#!/bin/sh
+printf '{"type":"result","result":"'
+for arg in "$@"; do
+  printf '%s|' "$arg"
+done
+printf '"}\n'
+"#;
+        write_executable(&script_path, script);
+
+        let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration(
+                "final-prompt",
+                Some("model-a"),
+                None,
+                &output_path,
+                temp.path(),
+            )
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let value: Value = serde_json::from_str(output.trim()).unwrap();
+        let result = value
+            .get("result")
+            .and_then(|value| value.as_str())
+            .unwrap();
+        let args: Vec<&str> = result
+            .split('|')
+            .filter(|value| !value.is_empty())
+            .collect();
+        assert_eq!(
+            args,
+            vec![
+                "--dangerously-skip-permissions",
+                "--verbose",
+                "--print",
+                "--output-format",
+                "stream-json",
+                "-p",
+                "final-prompt",
+                "--model",
+                "model-a",
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_skips_empty_model_flag() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("claude-mock");
+        let output_path = temp.path().join("output.json");
+        let script = r#"#!/bin/sh
+printf '{"type":"result","result":"'
+for arg in "$@"; do
+  printf '%s|' "$arg"
+done
+printf '"}\n'
+"#;
+        write_executable(&script_path, script);
+
+        let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("prompt", Some("  "), None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let value: Value = serde_json::from_str(output.trim()).unwrap();
+        let result = value
+            .get("result")
+            .and_then(|value| value.as_str())
+            .unwrap();
+        let args: Vec<&str> = result
+            .split('|')
+            .filter(|value| !value.is_empty())
+            .collect();
+        assert!(!args.contains(&"--model"));
+        assert_eq!(args.last().copied(), Some("prompt"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_orders_args_without_model() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("claude-mock");
+        let output_path = temp.path().join("output.json");
+        let script = r#"#!/bin/sh
+printf '{"type":"result","result":"'
+for arg in "$@"; do
+  printf '%s|' "$arg"
+done
+printf '"}\n'
+"#;
+        write_executable(&script_path, script);
+
+        let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("plain-prompt", None, None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let value: Value = serde_json::from_str(output.trim()).unwrap();
+        let result = value
+            .get("result")
+            .and_then(|value| value.as_str())
+            .unwrap();
+        let args: Vec<&str> = result
+            .split('|')
+            .filter(|value| !value.is_empty())
+            .collect();
+        assert_eq!(
+            args,
+            vec![
+                "--dangerously-skip-permissions",
+                "--verbose",
+                "--print",
+                "--output-format",
+                "stream-json",
+                "-p",
+                "plain-prompt",
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_propagates_non_zero_exit() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("claude-mock");
+        let output_path = temp.path().join("output.json");
+        let script = "#!/bin/sh\nexit 2\n";
+        write_executable(&script_path, script);
+
+        let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message.contains("claude exited with")
+        ));
+    }
+
+    #[test]
+    fn run_iteration_reports_spawn_failure() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_path = temp.path().join("output.json");
+        let missing_command = temp.path().join("missing-claude");
+        let backend = ClaudeBackend::with_command(missing_command.to_string_lossy().to_string());
+
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message.contains("failed to spawn claude")
+        ));
     }
 }

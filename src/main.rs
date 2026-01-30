@@ -1,10 +1,14 @@
 mod cli;
+mod verifier;
+
+#[cfg(test)]
+mod test_support;
 
 use clap::Parser;
 use cli::{
     ASCII_BANNER, Cli, Command, ConfigArgs, ConfigCommand, InitArgs, LogsArgs, PrdArgs,
     PrdCheckArgs, PrdCommand, PrdCreateArgs, ResumeArgs, RunLoopArgs, ServerArgs, StartArgs,
-    StopArgs, WorktreeCommand, WorktreeCreateArgs, WorktreeFinishArgs,
+    StopArgs, VerifierArgs, WorktreeCommand, WorktreeCreateArgs, WorktreeFinishArgs,
 };
 use gralph_rs::backend::backend_from_name;
 use gralph_rs::config::Config;
@@ -51,6 +55,7 @@ fn dispatch(command: Command) -> Result<(), CliError> {
         Command::Worktree(args) => cmd_worktree(args),
         Command::Backends => cmd_backends(),
         Command::Config(args) => cmd_config(args),
+        Command::Verifier(args) => cmd_verifier(args),
         Command::Server(args) => cmd_server(args),
         Command::Version => cmd_version(),
         Command::Update => cmd_update(),
@@ -848,6 +853,27 @@ fn cmd_config_list() -> Result<(), CliError> {
     Ok(())
 }
 
+fn cmd_verifier(args: VerifierArgs) -> Result<(), CliError> {
+    let dir = args
+        .dir
+        .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    if !dir.is_dir() {
+        return Err(CliError::Message(format!(
+            "Directory does not exist: {}",
+            dir.display()
+        )));
+    }
+
+    let config = Config::load(Some(&dir)).map_err(|err| CliError::Message(err.to_string()))?;
+    verifier::run_verifier_pipeline(
+        &dir,
+        &config,
+        args.test_command,
+        args.coverage_command,
+        args.coverage_min,
+    )
+}
+
 fn cmd_server(args: ServerArgs) -> Result<(), CliError> {
     let mut config = ServerConfig::from_env();
     if let Some(host) = args.host {
@@ -987,6 +1013,25 @@ fn run_loop_with_state(args: RunLoopArgs) -> Result<(), CliError> {
         )
         .map_err(|err| CliError::Message(err.to_string()))?;
 
+    if outcome.status == LoopStatus::Complete && verifier::resolve_verifier_auto_run(&config) {
+        store
+            .set_session(
+                &args.name,
+                &[("status", "verifying"), ("last_task_count", "0")],
+            )
+            .map_err(|err| CliError::Message(err.to_string()))?;
+        if let Err(err) = verifier::run_verifier_pipeline(&args.dir, &config, None, None, None) {
+            let _ = store.set_session(&args.name, &[("status", "verify-failed")]);
+            return Err(err);
+        }
+        store
+            .set_session(
+                &args.name,
+                &[("status", "verified"), ("last_task_count", "0")],
+            )
+            .map_err(|err| CliError::Message(err.to_string()))?;
+    }
+
     notify_if_configured(&config, &args, &outcome, max_iterations)?;
     Ok(())
 }
@@ -1068,7 +1113,11 @@ const DEFAULT_SESSION_NAME: &str = "gralph";
 
 fn session_name(name: &Option<String>, dir: &Path) -> Result<String, CliError> {
     if let Some(name) = name {
-        return Ok(sanitize_session_name(name));
+        let sanitized = sanitize_session_name(name);
+        if sanitized.is_empty() {
+            return Ok(DEFAULT_SESSION_NAME.to_string());
+        }
+        return Ok(sanitized);
     }
     let canonical_name = dir.canonicalize().ok().and_then(|path| {
         path.file_name()
@@ -1258,6 +1307,7 @@ fn validate_task_id(id: &str) -> Result<(), CliError> {
     let prefix = parts.next().unwrap_or("");
     let number = parts.next().unwrap_or("");
     let valid = !prefix.is_empty()
+        && !number.is_empty()
         && number.chars().all(|c| c.is_ascii_digit())
         && prefix.chars().all(|c| c.is_ascii_alphabetic())
         && parts.next().is_none();
@@ -1320,7 +1370,7 @@ fn git_status_in_repo(
     }
 }
 
-fn ensure_git_clean(repo_root: &str) -> Result<(), CliError> {
+fn git_is_clean(repo_root: &str) -> Result<bool, CliError> {
     let output = ProcCommand::new("git")
         .arg("-C")
         .arg(repo_root)
@@ -1331,13 +1381,18 @@ fn ensure_git_clean(repo_root: &str) -> Result<(), CliError> {
     if !output.status.success() {
         return Err(CliError::Message("Unable to check git status".to_string()));
     }
-    if !output.stdout.is_empty() {
-        return Err(CliError::Message(
+    Ok(output.stdout.is_empty())
+}
+
+fn ensure_git_clean(repo_root: &str) -> Result<(), CliError> {
+    if git_is_clean(repo_root)? {
+        Ok(())
+    } else {
+        Err(CliError::Message(
             "Git working tree is dirty. Commit or stash changes before running worktree commands."
                 .to_string(),
-        ));
+        ))
     }
-    Ok(())
 }
 
 fn parse_bool_value(value: &str) -> Option<bool> {
@@ -1428,6 +1483,15 @@ fn create_worktree_at(repo_root: &str, branch: &str, worktree_path: &Path) -> Re
 }
 
 fn maybe_create_auto_worktree(args: &mut RunLoopArgs, config: &Config) -> Result<(), CliError> {
+    let timestamp = worktree_timestamp_slug();
+    maybe_create_auto_worktree_with_timestamp(args, config, &timestamp)
+}
+
+fn maybe_create_auto_worktree_with_timestamp(
+    args: &mut RunLoopArgs,
+    config: &Config,
+    timestamp: &str,
+) -> Result<(), CliError> {
     if !resolve_auto_worktree(config, args.no_worktree) {
         return Ok(());
     }
@@ -1461,7 +1525,23 @@ fn maybe_create_auto_worktree(args: &mut RunLoopArgs, config: &Config) -> Result
         );
         return Ok(());
     }
-    ensure_git_clean(&repo_root)?;
+    let clean = match git_is_clean(&repo_root) {
+        Ok(value) => value,
+        Err(err) => {
+            println!(
+                "Auto worktree skipped for {}: unable to check git status ({}).",
+                target_display, err
+            );
+            return Ok(());
+        }
+    };
+    if !clean {
+        println!(
+            "Auto worktree skipped for {}: repository is dirty.",
+            target_display
+        );
+        return Ok(());
+    }
 
     let worktrees_dir = PathBuf::from(&repo_root).join(".worktrees");
     fs::create_dir_all(&worktrees_dir).map_err(CliError::Io)?;
@@ -1478,8 +1558,7 @@ fn maybe_create_auto_worktree(args: &mut RunLoopArgs, config: &Config) -> Result
         .unwrap_or_else(|_| Path::new(""))
         .to_path_buf();
 
-    let timestamp = worktree_timestamp_slug();
-    let base_branch = auto_worktree_branch_name(&args.name, &timestamp);
+    let base_branch = auto_worktree_branch_name(&args.name, timestamp);
     let branch = ensure_unique_worktree_branch(&repo_root, &worktrees_dir, &base_branch);
     let worktree_path = worktrees_dir.join(&branch);
 
@@ -1898,6 +1977,7 @@ fn is_process_alive(pid: i64) -> bool {
 mod tests {
     use super::*;
     use clap::Parser;
+    use serde_json::json;
     use std::fs;
     use std::sync::Mutex;
 
@@ -1916,6 +1996,10 @@ mod tests {
             "GRALPH_CONFIG_DIR",
             "GRALPH_PROJECT_CONFIG_NAME",
             "GRALPH_DEFAULTS_AUTO_WORKTREE",
+            "GRALPH_STATE_DIR",
+            "GRALPH_STATE_FILE",
+            "GRALPH_LOCK_FILE",
+            "GRALPH_LOCK_TIMEOUT",
         ] {
             remove_env(key);
         }
@@ -1957,6 +2041,14 @@ mod tests {
         }
     }
 
+    fn set_state_env(root: &Path) -> PathBuf {
+        let state_dir = root.join("state");
+        set_env("GRALPH_STATE_DIR", &state_dir);
+        set_env("GRALPH_STATE_FILE", state_dir.join("state.json"));
+        set_env("GRALPH_LOCK_FILE", state_dir.join("state.lock"));
+        state_dir
+    }
+
     fn git_status_ok(dir: &Path, args: &[&str]) {
         let output = ProcCommand::new("git")
             .arg("-C")
@@ -1983,6 +2075,56 @@ mod tests {
         write_file(&path, contents);
         git_status_ok(dir, &["add", relative]);
         git_status_ok(dir, &["commit", "-m", "init"]);
+    }
+
+    fn is_semver(value: &str) -> bool {
+        let (core, build) = match value.split_once('+') {
+            Some((left, right)) => (left, Some(right)),
+            None => (value, None),
+        };
+        let (core, pre) = match core.split_once('-') {
+            Some((left, right)) => (left, Some(right)),
+            None => (core, None),
+        };
+        let mut parts = core.split('.');
+        let major = parts.next().unwrap_or("");
+        let minor = parts.next().unwrap_or("");
+        let patch = parts.next().unwrap_or("");
+        if parts.next().is_some() {
+            return false;
+        }
+        for part in [major, minor, patch] {
+            if part.is_empty() || !part.chars().all(|ch| ch.is_ascii_digit()) {
+                return false;
+            }
+        }
+        if let Some(pre) = pre {
+            if pre.is_empty() {
+                return false;
+            }
+            if !pre.split('.').all(|ident| {
+                !ident.is_empty()
+                    && ident
+                        .chars()
+                        .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+            }) {
+                return false;
+            }
+        }
+        if let Some(build) = build {
+            if build.is_empty() {
+                return false;
+            }
+            if !build.split('.').all(|ident| {
+                !ident.is_empty()
+                    && ident
+                        .chars()
+                        .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+            }) {
+                return false;
+            }
+        }
+        true
     }
 
     #[test]
@@ -2013,6 +2155,74 @@ mod tests {
 
         let resolved = resolve_prd_output(base, Some(output.clone()), true).unwrap();
         assert_eq!(resolved, output);
+    }
+
+    #[test]
+    fn cmd_config_set_writes_nested_keys_and_preserves_mappings() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("config.yaml");
+
+        write_file(
+            &config_path,
+            "defaults:\n  backend: claude\nlogging:\n  format:\n    color: true\n",
+        );
+        set_env("GRALPH_PROJECT_CONFIG_NAME", &config_path);
+
+        let args = cli::ConfigSetArgs {
+            key: "logging.level".to_string(),
+            value: "info".to_string(),
+        };
+        cmd_config_set(args).unwrap();
+
+        let args = cli::ConfigSetArgs {
+            key: "notifications.webhook".to_string(),
+            value: "https://example.test".to_string(),
+        };
+        cmd_config_set(args).unwrap();
+
+        let contents = fs::read_to_string(&config_path).unwrap();
+        let yaml: serde_yaml::Value = serde_yaml::from_str(&contents).unwrap();
+        let root = yaml.as_mapping().unwrap();
+
+        let defaults = root
+            .get(&serde_yaml::Value::String("defaults".to_string()))
+            .unwrap();
+        let defaults_map = defaults.as_mapping().unwrap();
+        assert_eq!(
+            defaults_map.get(&serde_yaml::Value::String("backend".to_string())),
+            Some(&serde_yaml::Value::String("claude".to_string()))
+        );
+
+        let logging = root
+            .get(&serde_yaml::Value::String("logging".to_string()))
+            .unwrap();
+        let logging_map = logging.as_mapping().unwrap();
+        assert_eq!(
+            logging_map.get(&serde_yaml::Value::String("level".to_string())),
+            Some(&serde_yaml::Value::String("info".to_string()))
+        );
+        let format = logging_map
+            .get(&serde_yaml::Value::String("format".to_string()))
+            .unwrap();
+        let format_map = format.as_mapping().unwrap();
+        assert_eq!(
+            format_map.get(&serde_yaml::Value::String("color".to_string())),
+            Some(&serde_yaml::Value::Bool(true))
+        );
+
+        let notifications = root
+            .get(&serde_yaml::Value::String("notifications".to_string()))
+            .unwrap();
+        let notifications_map = notifications.as_mapping().unwrap();
+        assert_eq!(
+            notifications_map.get(&serde_yaml::Value::String("webhook".to_string())),
+            Some(&serde_yaml::Value::String(
+                "https://example.test".to_string()
+            ))
+        );
+
+        clear_env_overrides();
     }
 
     #[test]
@@ -2056,6 +2266,123 @@ mod tests {
         let template = read_prd_template_with_manifest(project.path(), manifest.path()).unwrap();
 
         assert_eq!(template, DEFAULT_PRD_TEMPLATE);
+    }
+
+    #[test]
+    fn parse_bool_value_accepts_true_false_and_invalid() {
+        for value in ["true", "True", "1", "yes", "Y", "on", "  ON  "] {
+            assert_eq!(parse_bool_value(value), Some(true));
+        }
+        for value in ["false", "False", "0", "no", "N", "off", "  off  "] {
+            assert_eq!(parse_bool_value(value), Some(false));
+        }
+        for value in ["", "maybe", "truthy", "2"] {
+            assert_eq!(parse_bool_value(value), None);
+        }
+    }
+
+    #[test]
+    fn parse_bool_value_accepts_mixed_case_with_whitespace() {
+        assert_eq!(parse_bool_value("\tYeS\n"), Some(true));
+        assert_eq!(parse_bool_value("  oFf\t"), Some(false));
+    }
+
+    #[test]
+    fn version_constants_match_package() {
+        assert_eq!(version::VERSION, env!("CARGO_PKG_VERSION"));
+        assert_eq!(version::VERSION_TAG, format!("v{}", version::VERSION));
+    }
+
+    #[test]
+    fn version_constant_parses_as_semver() {
+        assert!(is_semver(version::VERSION));
+    }
+
+    #[test]
+    fn validate_task_id_accepts_valid_formats() {
+        for value in ["A-1", "COV-24", "cov-2", "Build-99"] {
+            assert!(validate_task_id(value).is_ok(), "expected valid: {value}");
+        }
+    }
+
+    #[test]
+    fn validate_task_id_rejects_invalid_formats() {
+        for value in [
+            "", "A", "A-", "-1", "1-2", "1A-2", "A--1", "A-1b", "A-1-2", "A_1",
+        ] {
+            assert!(
+                validate_task_id(value).is_err(),
+                "expected invalid: {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_task_id_reports_expected_error() {
+        let err = validate_task_id("A-1b").unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Invalid task ID format"));
+                assert!(message.contains("A-1b"));
+                assert!(message.contains("expected like A-1"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sanitize_session_name_replaces_invalid_chars() {
+        assert_eq!(
+            sanitize_session_name("My Session@2026!"),
+            "My-Session-2026-"
+        );
+        assert_eq!(sanitize_session_name("dev_env-1"), "dev_env-1");
+    }
+
+    #[test]
+    fn sanitize_session_name_handles_empty_and_whitespace() {
+        assert_eq!(sanitize_session_name(""), "");
+        assert_eq!(sanitize_session_name("   "), "---");
+        assert_eq!(sanitize_session_name("\t"), "-");
+        assert_eq!(sanitize_session_name("!!!"), "---");
+    }
+
+    #[test]
+    fn session_name_uses_explicit_name_and_sanitizes() {
+        let temp = tempfile::tempdir().unwrap();
+        let resolved = session_name(&Some("My Session@2026!".to_string()), temp.path()).unwrap();
+        assert_eq!(resolved, "My-Session-2026-");
+    }
+
+    #[test]
+    fn session_name_uses_whitespace_override() {
+        let temp = tempfile::tempdir().unwrap();
+        let resolved = session_name(&Some("   ".to_string()), temp.path()).unwrap();
+        assert_eq!(resolved, "---");
+    }
+
+    #[test]
+    fn session_name_uses_directory_basename() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path().join("My Session@2026!");
+        fs::create_dir_all(&dir).unwrap();
+        let resolved = session_name(&None, &dir).unwrap();
+        assert_eq!(resolved, "My-Session-2026-");
+    }
+
+    #[test]
+    fn session_name_uses_raw_basename_when_canonicalize_fails() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path().join("Missing Dir@2026!");
+        let resolved = session_name(&None, &dir).unwrap();
+        assert_eq!(resolved, "Missing-Dir-2026-");
+    }
+
+    #[test]
+    fn session_name_falls_back_for_empty_override() {
+        let temp = tempfile::tempdir().unwrap();
+        let resolved = session_name(&Some("".to_string()), temp.path()).unwrap();
+        assert_eq!(resolved, DEFAULT_SESSION_NAME);
     }
 
     #[test]
@@ -2144,12 +2471,329 @@ mod tests {
     }
 
     #[test]
+    fn read_readme_context_files_parses_section_and_dedupes() {
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join("README.md"),
+            "## Intro\n\nNothing here.\n\n## Context Files\n- `ARCHITECTURE.md` and `PROCESS.md`\n- `NOTES.txt`\n- `ARCHITECTURE.md`\n## Usage\n- `README.md`\n",
+        );
+
+        let entries = read_readme_context_files(temp.path());
+
+        assert_eq!(entries, vec!["ARCHITECTURE.md", "PROCESS.md"]);
+    }
+
+    #[test]
+    fn read_readme_context_files_skips_non_md_and_spaced_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join("README.md"),
+            "## Context Files\n- `ARCHITECTURE.md`\n- `NOTES.txt`\n- `Team Notes.md`\n- `PROCESS.md`\n",
+        );
+
+        let entries = read_readme_context_files(temp.path());
+
+        assert_eq!(entries, vec!["ARCHITECTURE.md", "PROCESS.md"]);
+    }
+
+    #[test]
+    fn resolve_init_context_files_uses_config_list_and_dedupes() {
+        let temp = tempfile::tempdir().unwrap();
+        let entries = resolve_init_context_files(
+            temp.path(),
+            Some("ARCHITECTURE.md, ,PROCESS.md,ARCHITECTURE.md"),
+        );
+
+        assert_eq!(entries, vec!["ARCHITECTURE.md", "PROCESS.md"]);
+    }
+
+    #[test]
+    fn resolve_init_context_files_falls_back_to_defaults() {
+        let temp = tempfile::tempdir().unwrap();
+        let entries = resolve_init_context_files(temp.path(), None);
+
+        let expected = default_context_files()
+            .iter()
+            .map(|value| value.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(entries, expected);
+    }
+
+    #[test]
+    fn build_context_file_list_includes_config_user_and_defaults() {
+        let temp = tempfile::tempdir().unwrap();
+        write_file(&temp.path().join("README.md"), "readme");
+        write_file(&temp.path().join("config/default.yaml"), "defaults: {}\n");
+        write_file(&temp.path().join("src/main.rs"), "fn main() {}\n");
+
+        let entries = build_context_file_list(
+            temp.path(),
+            Some("config/default.yaml,README.md"),
+            Some("README.md,missing.md"),
+        );
+
+        assert_eq!(
+            entries,
+            vec!["README.md", "config/default.yaml", "src/main.rs"]
+        );
+    }
+
+    #[test]
+    fn read_yaml_or_empty_returns_mapping_for_missing_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("missing.yaml");
+
+        let value = read_yaml_or_empty(&path).unwrap();
+
+        match value {
+            serde_yaml::Value::Mapping(map) => assert!(map.is_empty()),
+            other => panic!("expected mapping, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_yaml_or_empty_errors_on_invalid_yaml() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("broken.yaml");
+        write_file(&path, "defaults: [");
+
+        let err = read_yaml_or_empty(&path).unwrap_err();
+
+        match err {
+            CliError::Message(message) => assert!(message.contains("Failed to parse config")),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn set_yaml_value_sets_nested_keys_and_overwrites_non_mapping() {
+        let mut root = serde_yaml::Value::String("oops".to_string());
+
+        set_yaml_value(&mut root, "alpha.beta", "true");
+
+        let mapping = match root {
+            serde_yaml::Value::Mapping(map) => map,
+            other => panic!("expected mapping, got: {other:?}"),
+        };
+        let alpha = mapping
+            .get(&serde_yaml::Value::String("alpha".to_string()))
+            .unwrap();
+        let inner = match alpha {
+            serde_yaml::Value::Mapping(map) => map,
+            other => panic!("expected mapping, got: {other:?}"),
+        };
+        let beta_key = serde_yaml::Value::String("beta".to_string());
+        assert_eq!(inner.get(&beta_key), Some(&serde_yaml::Value::Bool(true)));
+    }
+
+    #[test]
+    fn parse_yaml_value_parses_bool_number_and_string() {
+        assert_eq!(parse_yaml_value("TRUE"), serde_yaml::Value::Bool(true));
+        assert_eq!(parse_yaml_value("false"), serde_yaml::Value::Bool(false));
+        match parse_yaml_value("42") {
+            serde_yaml::Value::Number(value) => assert_eq!(value.as_i64(), Some(42)),
+            other => panic!("expected number, got: {other:?}"),
+        }
+        match parse_yaml_value("-7") {
+            serde_yaml::Value::Number(value) => assert_eq!(value.as_i64(), Some(-7)),
+            other => panic!("expected number, got: {other:?}"),
+        }
+        assert_eq!(
+            parse_yaml_value("1.5"),
+            serde_yaml::Value::String("1.5".to_string())
+        );
+        assert_eq!(
+            parse_yaml_value("maybe"),
+            serde_yaml::Value::String("maybe".to_string())
+        );
+    }
+
+    #[test]
+    fn ensure_mapping_replaces_non_mapping_value() {
+        let mut value = serde_yaml::Value::String("oops".to_string());
+
+        let mapping = ensure_mapping(&mut value);
+
+        assert!(mapping.is_empty());
+        assert!(matches!(value, serde_yaml::Value::Mapping(_)));
+    }
+
+    #[test]
+    fn is_markdown_path_detects_extensions() {
+        assert!(is_markdown_path(Path::new("README.md")));
+        assert!(is_markdown_path(Path::new("notes.markdown")));
+        assert!(!is_markdown_path(Path::new("README.MD")));
+        assert!(!is_markdown_path(Path::new("README")));
+    }
+
+    #[test]
+    fn format_display_path_returns_relative_when_possible() {
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path();
+        let nested = base.join("docs/README.md");
+        let expected = nested
+            .strip_prefix(base)
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+
+        let display = format_display_path(&nested, base);
+
+        assert_eq!(display, expected);
+    }
+
+    #[test]
+    fn format_display_path_returns_full_when_outside_base() {
+        let temp = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        let base = temp.path();
+        let path = other.path().join("README.md");
+
+        let display = format_display_path(&path, base);
+
+        assert_eq!(display, path.to_string_lossy().to_string());
+    }
+
+    #[test]
+    fn resolve_log_file_prefers_session_entry_or_dir_fallback() {
+        let temp = tempfile::tempdir().unwrap();
+        let log_path = temp.path().join("custom.log");
+        let session = json!({
+            "log_file": log_path.to_string_lossy().to_string(),
+            "dir": temp.path().to_string_lossy().to_string(),
+        });
+
+        let resolved = resolve_log_file("demo", &session).unwrap();
+        assert_eq!(resolved, log_path);
+
+        let session = json!({
+            "log_file": "",
+            "dir": temp.path().to_string_lossy().to_string(),
+        });
+
+        let resolved = resolve_log_file("demo", &session).unwrap();
+        assert_eq!(resolved, temp.path().join(".gralph").join("demo.log"));
+    }
+
+    #[test]
+    fn resolve_log_file_falls_back_when_missing_log_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let session = json!({
+            "dir": temp.path().to_string_lossy().to_string(),
+        });
+
+        let resolved = resolve_log_file("demo", &session).unwrap();
+        assert_eq!(resolved, temp.path().join(".gralph").join("demo.log"));
+    }
+
+    #[test]
+    fn resolve_log_file_falls_back_for_whitespace_log_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let session = json!({
+            "log_file": "   ",
+            "dir": temp.path().to_string_lossy().to_string(),
+        });
+
+        let resolved = resolve_log_file("demo", &session).unwrap();
+        assert_eq!(resolved, temp.path().join(".gralph").join("demo.log"));
+    }
+
+    #[test]
+    fn resolve_log_file_errors_when_missing_dir() {
+        let session = json!({
+            "log_file": "",
+        });
+
+        let err = resolve_log_file("demo", &session).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Missing dir for session demo"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_logs_uses_session_log_file() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        set_state_env(temp.path());
+        let store = StateStore::new_from_env();
+        store.init_state().unwrap();
+        let log_path = temp.path().join("custom.log");
+        write_file(&log_path, "line one\nline two\n");
+        let log_path_string = log_path.to_string_lossy().to_string();
+        let dir_string = temp.path().to_string_lossy().to_string();
+        store
+            .set_session(
+                "demo",
+                &[("dir", &dir_string), ("log_file", &log_path_string)],
+            )
+            .unwrap();
+
+        let args = LogsArgs {
+            name: "demo".to_string(),
+            follow: false,
+        };
+        cmd_logs(args).unwrap();
+        clear_env_overrides();
+    }
+
+    #[test]
+    fn cmd_logs_falls_back_to_session_dir_log() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        set_state_env(temp.path());
+        let store = StateStore::new_from_env();
+        store.init_state().unwrap();
+        let project_dir = temp.path().join("project");
+        let log_path = project_dir.join(".gralph").join("demo.log");
+        write_file(&log_path, "line one\n");
+        let dir_string = project_dir.to_string_lossy().to_string();
+        store.set_session("demo", &[("dir", &dir_string)]).unwrap();
+
+        let args = LogsArgs {
+            name: "demo".to_string(),
+            follow: false,
+        };
+        cmd_logs(args).unwrap();
+        clear_env_overrides();
+    }
+
+    #[test]
     fn auto_worktree_branch_name_uses_session_and_timestamp() {
         let name = auto_worktree_branch_name("demo-app", "20260126-120000");
         assert_eq!(name, "prd-demo-app-20260126-120000");
 
         let empty = auto_worktree_branch_name("", "20260126-120000");
         assert_eq!(empty, "prd-20260126-120000");
+    }
+
+    #[test]
+    fn auto_worktree_branch_name_sanitizes_session_name() {
+        let name = auto_worktree_branch_name("My Session@2026!", "20260126-120000");
+        assert_eq!(name, "prd-My-Session-2026--20260126-120000");
+    }
+
+    #[test]
+    fn auto_worktree_branch_name_differs_by_timestamp() {
+        let first = auto_worktree_branch_name("demo-app", "20260126-120000");
+        let second = auto_worktree_branch_name("demo-app", "20260126-120001");
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn worktree_timestamp_slug_format_is_stable() {
+        let slug = worktree_timestamp_slug();
+
+        assert_eq!(slug.len(), 15);
+        assert_eq!(slug.chars().nth(8), Some('-'));
+        for (index, ch) in slug.chars().enumerate() {
+            if index == 8 {
+                continue;
+            }
+            assert!(ch.is_ascii_digit(), "expected digit at {index}, got {ch}");
+        }
     }
 
     #[test]
@@ -2179,6 +2823,17 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
+    fn session_name_falls_back_for_non_utf8_dir_name() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let raw = std::ffi::OsString::from_vec(vec![0xff, 0xfe]);
+        let dir = PathBuf::from(raw);
+        let resolved = session_name(&None, &dir).unwrap();
+        assert_eq!(resolved, DEFAULT_SESSION_NAME);
+    }
+
+    #[test]
     fn resolve_auto_worktree_defaults_true() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -2199,6 +2854,45 @@ mod tests {
 
         assert!(!resolve_auto_worktree(&config, false));
         assert!(!resolve_auto_worktree(&config, true));
+    }
+
+    #[test]
+    fn resolve_auto_worktree_disables_when_cli_override_set() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join(".gralph.yaml"),
+            "defaults:\n  auto_worktree: true\n",
+        );
+        let config = Config::load(Some(temp.path())).unwrap();
+
+        assert!(!resolve_auto_worktree(&config, true));
+    }
+
+    #[test]
+    fn resolve_auto_worktree_defaults_true_on_invalid_config_value() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join(".gralph.yaml"),
+            "defaults:\n  auto_worktree: maybe\n",
+        );
+        let config = Config::load(Some(temp.path())).unwrap();
+
+        assert!(resolve_auto_worktree(&config, false));
+    }
+
+    #[test]
+    fn resolve_auto_worktree_defaults_true_on_empty_config_value() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join(".gralph.yaml"),
+            "defaults:\n  auto_worktree: \"\"\n",
+        );
+        let config = Config::load(Some(temp.path())).unwrap();
+
+        assert!(resolve_auto_worktree(&config, false));
     }
 
     #[test]
@@ -2231,7 +2925,7 @@ mod tests {
     }
 
     #[test]
-    fn auto_worktree_errors_on_dirty_repo() {
+    fn auto_worktree_skips_dirty_repo() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
@@ -2239,14 +2933,37 @@ mod tests {
         write_file(&temp.path().join("README.md"), "dirty");
         let config = Config::load(Some(temp.path())).unwrap();
         let mut args = run_loop_args(temp.path().to_path_buf());
+        let original = args.dir.clone();
 
-        let err = maybe_create_auto_worktree(&mut args, &config).unwrap_err();
-        match err {
-            CliError::Message(message) => {
-                assert!(message.contains("Git working tree is dirty"));
-            }
-            _ => panic!("unexpected error type"),
-        }
+        maybe_create_auto_worktree(&mut args, &config).unwrap();
+
+        assert_eq!(args.dir, original);
+        assert!(!args.no_worktree);
+        assert!(!temp.path().join(".worktrees").exists());
+    }
+
+    #[test]
+    fn auto_worktree_creates_worktree_for_clean_repo() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let config = Config::load(Some(temp.path())).unwrap();
+        let mut args = run_loop_args(temp.path().to_path_buf());
+
+        maybe_create_auto_worktree(&mut args, &config).unwrap();
+
+        let worktrees_dir = temp.path().join(".worktrees");
+        let mut entries: Vec<PathBuf> = fs::read_dir(&worktrees_dir)
+            .unwrap()
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .collect();
+        assert_eq!(entries.len(), 1);
+        let worktree_path = entries.remove(0);
+        let expected = fs::canonicalize(&worktree_path).unwrap();
+        let actual = fs::canonicalize(&args.dir).unwrap();
+        assert_eq!(actual, expected);
+        assert!(args.no_worktree);
     }
 
     #[test]
@@ -2275,6 +2992,33 @@ mod tests {
     }
 
     #[test]
+    fn auto_worktree_handles_branch_and_path_collisions() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let config = Config::load(Some(temp.path())).unwrap();
+        let mut args = run_loop_args(temp.path().to_path_buf());
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let timestamp = "20260126-120000";
+        let base_branch = auto_worktree_branch_name(&args.name, timestamp);
+        git_status_ok(temp.path(), &["branch", base_branch.as_str()]);
+        fs::create_dir_all(worktrees_dir.join(&base_branch)).unwrap();
+        fs::create_dir_all(worktrees_dir.join(format!("{}-2", base_branch))).unwrap();
+
+        maybe_create_auto_worktree_with_timestamp(&mut args, &config, timestamp).unwrap();
+
+        let expected_branch = format!("{}-3", base_branch);
+        let expected_path = worktrees_dir.join(&expected_branch);
+        let expected = fs::canonicalize(&expected_path).unwrap();
+        let actual = fs::canonicalize(&args.dir).unwrap();
+        assert_eq!(actual, expected);
+        assert!(args.no_worktree);
+    }
+
+    #[test]
     fn ensure_unique_worktree_branch_handles_collisions() {
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
@@ -2291,6 +3035,195 @@ mod tests {
         );
 
         assert_eq!(branch, "prd-collision-3");
+    }
+
+    #[test]
+    fn ensure_unique_worktree_branch_handles_branch_only_collision() {
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+        git_status_ok(temp.path(), &["branch", "prd-collision"]);
+
+        let branch = ensure_unique_worktree_branch(
+            temp.path().to_str().unwrap(),
+            &worktrees_dir,
+            "prd-collision",
+        );
+
+        assert_eq!(branch, "prd-collision-2");
+    }
+
+    #[test]
+    fn ensure_unique_worktree_branch_handles_path_only_collision() {
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+        fs::create_dir_all(worktrees_dir.join("prd-collision")).unwrap();
+
+        let branch = ensure_unique_worktree_branch(
+            temp.path().to_str().unwrap(),
+            &worktrees_dir,
+            "prd-collision",
+        );
+
+        assert_eq!(branch, "prd-collision-2");
+    }
+
+    #[test]
+    fn ensure_unique_worktree_branch_returns_base_when_available() {
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+
+        let branch = ensure_unique_worktree_branch(
+            temp.path().to_str().unwrap(),
+            &worktrees_dir,
+            "prd-free",
+        );
+
+        assert_eq!(branch, "prd-free");
+    }
+
+    #[test]
+    fn create_worktree_at_rejects_existing_branch() {
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let branch = "task-C-1";
+        git_status_ok(temp.path(), &["branch", branch]);
+        let worktree_path = temp.path().join(".worktrees").join(branch);
+
+        let err =
+            create_worktree_at(temp.path().to_str().unwrap(), branch, &worktree_path).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Branch already exists"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn create_worktree_at_rejects_existing_path() {
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let branch = "task-C-2";
+        let worktree_path = temp.path().join(".worktrees").join(branch);
+        fs::create_dir_all(&worktree_path).unwrap();
+
+        let err =
+            create_worktree_at(temp.path().to_str().unwrap(), branch, &worktree_path).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Worktree path already exists"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_resume_errors_when_missing_dir() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        set_state_env(temp.path());
+        let store = StateStore::new_from_env();
+        store.init_state().unwrap();
+        store.set_session("demo", &[("status", "stopped")]).unwrap();
+
+        let args = ResumeArgs {
+            name: Some("demo".to_string()),
+        };
+        let err = cmd_resume(args).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Missing dir for session demo"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+        clear_env_overrides();
+    }
+
+    #[test]
+    fn join_or_none_returns_none_for_empty() {
+        let entries: Vec<String> = Vec::new();
+        assert_eq!(join_or_none(&entries), "None");
+    }
+
+    #[test]
+    fn join_or_none_joins_entries() {
+        let entries = vec!["one".to_string(), "two".to_string()];
+        assert_eq!(join_or_none(&entries), "one, two");
+    }
+
+    #[test]
+    fn init_template_for_path_selects_known_templates() {
+        let architecture = init_template_for_path(Path::new("ARCHITECTURE.md"));
+        assert_eq!(architecture, ARCHITECTURE_TEMPLATE);
+
+        let process = init_template_for_path(Path::new("process.md"));
+        assert_eq!(process, PROCESS_TEMPLATE);
+
+        let decisions = init_template_for_path(Path::new("DECISIONS.md"));
+        assert_eq!(decisions, DECISIONS_TEMPLATE);
+
+        let risk = init_template_for_path(Path::new("risk_register.md"));
+        assert_eq!(risk, RISK_REGISTER_TEMPLATE);
+
+        let changelog = init_template_for_path(Path::new("CHANGELOG.md"));
+        assert_eq!(changelog, CHANGELOG_TEMPLATE);
+    }
+
+    #[test]
+    fn generic_markdown_template_uses_stem_title() {
+        let template = generic_markdown_template(Path::new("docs/TEAM_NOTES.md"));
+        assert_eq!(template, "# TEAM NOTES\n\n## Overview\n\nTBD.\n");
+    }
+
+    #[test]
+    fn write_atomic_overwrites_target_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("notes.md");
+        write_file(&path, "old");
+
+        write_atomic(&path, "new", false).unwrap();
+
+        let contents = fs::read_to_string(&path).unwrap();
+        assert_eq!(contents, "new");
+    }
+
+    #[test]
+    fn add_context_entry_skips_missing_and_dedupes() {
+        let temp = tempfile::tempdir().unwrap();
+        let target_dir = temp.path();
+        write_file(&target_dir.join("README.md"), "readme");
+
+        let mut entries: Vec<String> = Vec::new();
+        let mut seen: BTreeMap<String, bool> = BTreeMap::new();
+
+        add_context_entry(target_dir, "README.md", &mut entries, &mut seen);
+        add_context_entry(target_dir, "README.md", &mut entries, &mut seen);
+        add_context_entry(target_dir, "missing.md", &mut entries, &mut seen);
+
+        assert_eq!(entries, vec!["README.md".to_string()]);
+    }
+
+    #[test]
+    fn write_allowed_context_writes_entries_to_temp_file() {
+        let entries = vec!["README.md".to_string(), "src/main.rs".to_string()];
+        let path = write_allowed_context(&entries).unwrap().unwrap();
+
+        let contents = fs::read_to_string(&path).unwrap();
+        assert!(contents.contains("README.md"));
+        assert!(contents.contains("src/main.rs"));
+
+        let _ = fs::remove_file(&path);
     }
 }
 

@@ -57,6 +57,7 @@ EXAMPLES:
   gralph init --dir .
   gralph worktree create C-1
   gralph worktree finish C-1
+  gralph verifier --dir .
   gralph server --host 0.0.0.0 --port 8080
 "#;
 
@@ -96,6 +97,8 @@ pub enum Command {
     Backends,
     #[command(about = "Manage configuration")]
     Config(ConfigArgs),
+    #[command(about = "Run verifier quality gates")]
+    Verifier(VerifierArgs),
     #[command(about = "Start status API server")]
     Server(ServerArgs),
     #[command(about = "Show version")]
@@ -282,6 +285,21 @@ pub struct WorktreeFinishArgs {
     pub id: String,
 }
 
+#[derive(Args, Debug, Clone)]
+pub struct VerifierArgs {
+    #[arg(
+        value_name = "DIR",
+        help = "Project directory to verify (default: current)"
+    )]
+    pub dir: Option<PathBuf>,
+    #[arg(long, help = "Override test command")]
+    pub test_command: Option<String>,
+    #[arg(long, help = "Override coverage command")]
+    pub coverage_command: Option<String>,
+    #[arg(long, help = "Minimum coverage percent (default: 90)")]
+    pub coverage_min: Option<f64>,
+}
+
 #[derive(Args, Debug)]
 pub struct ConfigArgs {
     #[command(subcommand)]
@@ -331,6 +349,7 @@ pub struct ServerArgs {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::error::ErrorKind;
 
     #[test]
     fn parse_update_command() {
@@ -338,6 +357,307 @@ mod tests {
         match cli.command {
             Some(Command::Update) => {}
             other => panic!("Expected update command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_start_defaults() {
+        let cli = Cli::parse_from(["gralph", "start", "."]);
+        match cli.command {
+            Some(Command::Start(args)) => {
+                assert_eq!(args.dir, PathBuf::from("."));
+                assert!(args.name.is_none());
+                assert!(args.max_iterations.is_none());
+                assert!(args.task_file.is_none());
+                assert!(args.completion_marker.is_none());
+                assert!(args.backend.is_none());
+                assert!(args.model.is_none());
+                assert!(args.variant.is_none());
+                assert!(args.prompt_template.is_none());
+                assert!(args.webhook.is_none());
+                assert!(!args.no_worktree);
+                assert!(!args.no_tmux);
+                assert!(!args.strict_prd);
+            }
+            other => panic!("Expected start command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_start_flags() {
+        let cli = Cli::parse_from([
+            "gralph",
+            "start",
+            ".",
+            "--name",
+            "myapp",
+            "--max-iterations",
+            "50",
+            "--task-file",
+            "PRD.md",
+            "--completion-marker",
+            "DONE",
+            "--backend",
+            "codex",
+            "--model",
+            "o3",
+            "--variant",
+            "mini",
+            "--prompt-template",
+            "prompt.txt",
+            "--webhook",
+            "https://example.com/hook",
+            "--no-worktree",
+            "--no-tmux",
+            "--strict-prd",
+        ]);
+        match cli.command {
+            Some(Command::Start(args)) => {
+                assert_eq!(args.dir, PathBuf::from("."));
+                assert_eq!(args.name.as_deref(), Some("myapp"));
+                assert_eq!(args.max_iterations, Some(50));
+                assert_eq!(args.task_file.as_deref(), Some("PRD.md"));
+                assert_eq!(args.completion_marker.as_deref(), Some("DONE"));
+                assert_eq!(args.backend.as_deref(), Some("codex"));
+                assert_eq!(args.model.as_deref(), Some("o3"));
+                assert_eq!(args.variant.as_deref(), Some("mini"));
+                assert_eq!(args.prompt_template, Some(PathBuf::from("prompt.txt")));
+                assert_eq!(args.webhook.as_deref(), Some("https://example.com/hook"));
+                assert!(args.no_worktree);
+                assert!(args.no_tmux);
+                assert!(args.strict_prd);
+            }
+            other => panic!("Expected start command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_run_loop_optional_flags() {
+        let cli = Cli::parse_from([
+            "gralph",
+            "run-loop",
+            ".",
+            "--name",
+            "session",
+            "--max-iterations",
+            "42",
+            "--task-file",
+            "PRD.md",
+            "--completion-marker",
+            "DONE",
+            "--backend",
+            "opencode",
+            "--model",
+            "gpt",
+            "--variant",
+            "fast",
+            "--prompt-template",
+            "prompt.md",
+            "--webhook",
+            "https://example.com/hook",
+            "--no-worktree",
+            "--strict-prd",
+        ]);
+        match cli.command {
+            Some(Command::RunLoop(args)) => {
+                assert_eq!(args.dir, PathBuf::from("."));
+                assert_eq!(args.name, "session");
+                assert_eq!(args.max_iterations, Some(42));
+                assert_eq!(args.task_file.as_deref(), Some("PRD.md"));
+                assert_eq!(args.completion_marker.as_deref(), Some("DONE"));
+                assert_eq!(args.backend.as_deref(), Some("opencode"));
+                assert_eq!(args.model.as_deref(), Some("gpt"));
+                assert_eq!(args.variant.as_deref(), Some("fast"));
+                assert_eq!(args.prompt_template, Some(PathBuf::from("prompt.md")));
+                assert_eq!(args.webhook.as_deref(), Some("https://example.com/hook"));
+                assert!(args.no_worktree);
+                assert!(args.strict_prd);
+            }
+            other => panic!("Expected run-loop command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_prd_create_options() {
+        let cli = Cli::parse_from([
+            "gralph",
+            "prd",
+            "create",
+            "--dir",
+            ".",
+            "--output",
+            "PRD.new.md",
+            "--goal",
+            "Ship it",
+            "--constraints",
+            "Fast",
+            "--context",
+            "ARCHITECTURE.md,PROCESS.md",
+            "--sources",
+            "https://example.com",
+            "--backend",
+            "claude",
+            "--model",
+            "sonnet",
+            "--variant",
+            "mini",
+            "--allow-missing-context",
+            "--multiline",
+            "--no-interactive",
+            "--force",
+        ]);
+        match cli.command {
+            Some(Command::Prd(args)) => match args.command {
+                PrdCommand::Create(args) => {
+                    assert_eq!(args.dir, Some(PathBuf::from(".")));
+                    assert_eq!(args.output, Some(PathBuf::from("PRD.new.md")));
+                    assert_eq!(args.goal.as_deref(), Some("Ship it"));
+                    assert_eq!(args.constraints.as_deref(), Some("Fast"));
+                    assert_eq!(args.context.as_deref(), Some("ARCHITECTURE.md,PROCESS.md"));
+                    assert_eq!(args.sources.as_deref(), Some("https://example.com"));
+                    assert_eq!(args.backend.as_deref(), Some("claude"));
+                    assert_eq!(args.model.as_deref(), Some("sonnet"));
+                    assert_eq!(args.variant.as_deref(), Some("mini"));
+                    assert!(args.allow_missing_context);
+                    assert!(args.multiline);
+                    assert!(args.no_interactive);
+                    assert!(!args.interactive);
+                    assert!(args.force);
+                }
+                other => panic!("Expected prd create command, got: {other:?}"),
+            },
+            other => panic!("Expected prd command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_prd_create_interactive_conflict() {
+        let err = Cli::try_parse_from([
+            "gralph",
+            "prd",
+            "create",
+            "--interactive",
+            "--no-interactive",
+        ])
+        .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn parse_verifier_defaults() {
+        let cli = Cli::parse_from(["gralph", "verifier"]);
+        match cli.command {
+            Some(Command::Verifier(args)) => {
+                assert!(args.dir.is_none());
+                assert!(args.test_command.is_none());
+                assert!(args.coverage_command.is_none());
+                assert!(args.coverage_min.is_none());
+            }
+            other => panic!("Expected verifier command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_verifier_overrides() {
+        let cli = Cli::parse_from([
+            "gralph",
+            "verifier",
+            ".",
+            "--test-command",
+            "cargo test --workspace",
+            "--coverage-command",
+            "cargo tarpaulin --workspace",
+            "--coverage-min",
+            "95.5",
+        ]);
+        match cli.command {
+            Some(Command::Verifier(args)) => {
+                assert_eq!(args.dir, Some(PathBuf::from(".")));
+                assert_eq!(args.test_command.as_deref(), Some("cargo test --workspace"));
+                assert_eq!(
+                    args.coverage_command.as_deref(),
+                    Some("cargo tarpaulin --workspace")
+                );
+                assert_eq!(args.coverage_min, Some(95.5));
+            }
+            other => panic!("Expected verifier command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_server_flags() {
+        let cli = Cli::parse_from([
+            "gralph", "server", "--host", "0.0.0.0", "--port", "9090", "--token", "secret",
+            "--open",
+        ]);
+        match cli.command {
+            Some(Command::Server(args)) => {
+                assert_eq!(args.host.as_deref(), Some("0.0.0.0"));
+                assert_eq!(args.port, Some(9090));
+                assert_eq!(args.token.as_deref(), Some("secret"));
+                assert!(args.open);
+            }
+            other => panic!("Expected server command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_config_commands() {
+        let get_cli = Cli::parse_from(["gralph", "config", "get", "core.backend"]);
+        match get_cli.command {
+            Some(Command::Config(args)) => match args.command {
+                Some(ConfigCommand::Get(args)) => {
+                    assert_eq!(args.key, "core.backend");
+                }
+                other => panic!("Expected config get command, got: {other:?}"),
+            },
+            other => panic!("Expected config command, got: {other:?}"),
+        }
+
+        let set_cli = Cli::parse_from(["gralph", "config", "set", "core.backend", "codex"]);
+        match set_cli.command {
+            Some(Command::Config(args)) => match args.command {
+                Some(ConfigCommand::Set(args)) => {
+                    assert_eq!(args.key, "core.backend");
+                    assert_eq!(args.value, "codex");
+                }
+                other => panic!("Expected config set command, got: {other:?}"),
+            },
+            other => panic!("Expected config command, got: {other:?}"),
+        }
+
+        let list_cli = Cli::parse_from(["gralph", "config", "list"]);
+        match list_cli.command {
+            Some(Command::Config(args)) => match args.command {
+                Some(ConfigCommand::List) => {}
+                other => panic!("Expected config list command, got: {other:?}"),
+            },
+            other => panic!("Expected config command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_worktree_ids() {
+        let create_cli = Cli::parse_from(["gralph", "worktree", "create", "C-1"]);
+        match create_cli.command {
+            Some(Command::Worktree(args)) => match args.command {
+                WorktreeCommand::Create(args) => {
+                    assert_eq!(args.id, "C-1");
+                }
+                other => panic!("Expected worktree create command, got: {other:?}"),
+            },
+            other => panic!("Expected worktree command, got: {other:?}"),
+        }
+
+        let finish_cli = Cli::parse_from(["gralph", "worktree", "finish", "C-2"]);
+        match finish_cli.command {
+            Some(Command::Worktree(args)) => match args.command {
+                WorktreeCommand::Finish(args) => {
+                    assert_eq!(args.id, "C-2");
+                }
+                other => panic!("Expected worktree finish command, got: {other:?}"),
+            },
+            other => panic!("Expected worktree command, got: {other:?}"),
         }
     }
 }

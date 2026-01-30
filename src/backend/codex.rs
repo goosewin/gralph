@@ -1,11 +1,8 @@
-use super::{Backend, BackendError};
-use std::env;
+use super::{command_in_path, spawn_with_retry, stream_command_output, Backend, BackendError};
 use std::fs::{self, File};
-use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::mpsc;
-use std::thread;
 
 #[derive(Debug, Clone)]
 pub struct CodexBackend {
@@ -71,27 +68,12 @@ impl Backend for CodexBackend {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        let mut child = cmd
-            .spawn()
-            .map_err(|err| BackendError::Command(format!("failed to spawn codex: {}", err)))?;
-
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| BackendError::Command("failed to capture stdout".to_string()))?;
-        let stderr = child
-            .stderr
-            .take()
-            .ok_or_else(|| BackendError::Command("failed to capture stderr".to_string()))?;
-
-        let (tx, rx) = mpsc::channel();
-        let stdout_handle = spawn_reader(stdout, tx.clone());
-        let stderr_handle = spawn_reader(stderr, tx);
+        let child = spawn_with_retry(&mut cmd, "codex")?;
 
         let stdout_stream = io::stdout();
         let mut stdout_lock = stdout_stream.lock();
 
-        for line in rx {
+        stream_command_output(child, "codex", |line| {
             output
                 .write_all(line.as_bytes())
                 .map_err(|source| BackendError::Io {
@@ -108,23 +90,8 @@ impl Backend for CodexBackend {
                 path: PathBuf::from("stdout"),
                 source,
             })?;
-        }
-
-        let status = child
-            .wait()
-            .map_err(|err| BackendError::Command(format!("failed to wait for codex: {}", err)))?;
-
-        let _ = stdout_handle.join();
-        let _ = stderr_handle.join();
-
-        if !status.success() {
-            return Err(BackendError::Command(format!(
-                "codex exited with {}",
-                status
-            )));
-        }
-
-        Ok(())
+            Ok(())
+        })
     }
 
     fn parse_text(&self, response_file: &Path) -> Result<String, BackendError> {
@@ -139,40 +106,66 @@ impl Backend for CodexBackend {
     }
 }
 
-fn command_in_path(command: &str) -> bool {
-    let Some(paths) = env::var_os("PATH") else {
-        return false;
-    };
-    env::split_paths(&paths).any(|dir| dir.join(command).is_file())
-}
-
-fn spawn_reader<R: Read + Send + 'static>(
-    reader: R,
-    sender: mpsc::Sender<String>,
-) -> thread::JoinHandle<()> {
-    thread::spawn(move || {
-        let mut reader = BufReader::new(reader);
-        let mut buffer = Vec::new();
-        loop {
-            buffer.clear();
-            match reader.read_until(b'\n', &mut buffer) {
-                Ok(0) => break,
-                Ok(_) => {
-                    let line = String::from_utf8_lossy(&buffer).to_string();
-                    if sender.send(line).is_err() {
-                        break;
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+    use std::ffi::{OsStr, OsString};
     use std::fs;
+
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    struct PathGuard {
+        original: Option<OsString>,
+    }
+
+    impl PathGuard {
+        fn set(value: Option<&OsStr>) -> Self {
+            let original = env::var_os("PATH");
+            match value {
+                Some(value) => unsafe {
+                    env::set_var("PATH", value);
+                },
+                None => unsafe {
+                    env::remove_var("PATH");
+                },
+            }
+            Self { original }
+        }
+    }
+
+    impl Drop for PathGuard {
+        fn drop(&mut self) {
+            match self.original.as_ref() {
+                Some(value) => unsafe {
+                    env::set_var("PATH", value);
+                },
+                None => unsafe {
+                    env::remove_var("PATH");
+                },
+            }
+        }
+    }
+
+    #[test]
+    fn command_accessor_returns_custom_command() {
+        let backend = CodexBackend::with_command("codex-custom");
+
+        assert_eq!(backend.command(), "codex-custom");
+    }
+
+    #[test]
+    fn parse_text_returns_empty_string_for_empty_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("empty.txt");
+        fs::write(&path, "").unwrap();
+
+        let backend = CodexBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+
+        assert!(result.is_empty());
+    }
 
     #[test]
     fn parse_text_returns_raw_contents() {
@@ -183,5 +176,370 @@ mod tests {
         let backend = CodexBackend::new();
         let result = backend.parse_text(&path).unwrap();
         assert_eq!(result, "hello codex\n");
+    }
+
+    #[test]
+    fn parse_text_returns_io_error_for_invalid_utf8() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("invalid.txt");
+        fs::write(&path, [0xff, 0xfe, 0xfd]).unwrap();
+
+        let backend = CodexBackend::new();
+        let result = backend.parse_text(&path);
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path: error_path, source })
+                if error_path == path && source.kind() == io::ErrorKind::InvalidData
+        ));
+    }
+
+    #[test]
+    fn check_installed_reflects_path_entries() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        let command_name = "codex-stub";
+        {
+            let _guard = PathGuard::set(None);
+            let backend = CodexBackend::with_command(command_name.to_string());
+            assert!(!backend.check_installed());
+        }
+
+        {
+            let _guard = PathGuard::set(Some(OsStr::new("")));
+            let backend = CodexBackend::with_command(command_name.to_string());
+            assert!(!backend.check_installed());
+        }
+
+        let _guard = PathGuard::set(Some(temp.path().as_os_str()));
+        let backend = CodexBackend::with_command(command_name.to_string());
+        assert!(!backend.check_installed());
+
+        fs::write(temp.path().join(command_name), "stub").unwrap();
+        assert!(backend.check_installed());
+    }
+
+    #[test]
+    fn parse_text_returns_io_error_for_missing_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let missing_path = temp.path().join("missing.txt");
+        let backend = CodexBackend::new();
+
+        let result = backend.parse_text(&missing_path);
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path, .. }) if path == missing_path
+        ));
+    }
+
+    #[test]
+    fn parse_text_returns_io_error_for_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir_path = temp.path().join("codex-dir");
+        fs::create_dir(&dir_path).unwrap();
+        let backend = CodexBackend::new();
+
+        let result = backend.parse_text(&dir_path);
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path, .. }) if path == dir_path
+        ));
+    }
+
+    #[test]
+    fn run_iteration_rejects_empty_prompt() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_path = temp.path().join("output.txt");
+        let backend = CodexBackend::with_command("codex".to_string());
+
+        let result = backend.run_iteration("   ", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::InvalidInput(message)) if message == "prompt is required"
+        ));
+    }
+
+    #[test]
+    fn run_iteration_reports_missing_command() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_path = temp.path().join("output.txt");
+        let missing_command = temp.path().join("missing-codex");
+        let backend = CodexBackend::with_command(missing_command.to_string_lossy().to_string());
+
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message.contains("failed to spawn codex")
+        ));
+    }
+
+    #[test]
+    fn run_iteration_returns_io_when_output_path_is_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_dir = temp.path().join("output-dir");
+        fs::create_dir(&output_dir).unwrap();
+        let backend = CodexBackend::with_command("codex".to_string());
+
+        let result = backend.run_iteration("prompt", None, None, &output_dir, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path, .. }) if path == output_dir
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_returns_io_when_output_dir_is_read_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_dir = temp.path().join("readonly");
+        fs::create_dir(&output_dir).unwrap();
+        let mut permissions = fs::metadata(&output_dir).unwrap().permissions();
+        permissions.set_mode(0o555);
+        fs::set_permissions(&output_dir, permissions).unwrap();
+
+        let output_path = output_dir.join("output.txt");
+        let backend = CodexBackend::with_command("codex".to_string());
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path, .. }) if path == output_path
+        ));
+
+        let mut permissions = fs::metadata(&output_dir).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&output_dir, permissions).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_reports_non_zero_exit() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("codex-fail");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf 'boom\\n'\nexit 2\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = CodexBackend::with_command(script_path.to_string_lossy().to_string());
+        let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message.contains("codex exited with")
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_includes_quiet_auto_approve_and_model() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("codex-mock");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf '%s\\n' \"$@\"\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = CodexBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("prompt", Some("model-x"), None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let args: Vec<&str> = output.lines().collect();
+        assert_eq!(
+            args,
+            vec!["--quiet", "--auto-approve", "--model", "model-x", "prompt"]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_preserves_prompt_with_spaces_and_model() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("codex-mock");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf '%s\\n' \"$@\"\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = CodexBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration(
+                "prompt with spaces",
+                Some("model-z"),
+                None,
+                &output_path,
+                temp.path(),
+            )
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let args: Vec<&str> = output.lines().collect();
+        assert_eq!(
+            args,
+            vec![
+                "--quiet",
+                "--auto-approve",
+                "--model",
+                "model-z",
+                "prompt with spaces",
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_keeps_prompt_last_and_flags_first() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("codex-mock");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf '%s\\n' \"$@\"\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = CodexBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration(
+                "final-prompt",
+                Some("model-y"),
+                None,
+                &output_path,
+                temp.path(),
+            )
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let args: Vec<&str> = output.lines().collect();
+        assert_eq!(args.first().copied(), Some("--quiet"));
+        assert_eq!(args.get(1).copied(), Some("--auto-approve"));
+        assert_eq!(args.last().copied(), Some("final-prompt"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_includes_quiet_auto_approve_without_model() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("codex-mock");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf '%s\\n' \"$@\"\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = CodexBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("prompt", None, None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let args: Vec<&str> = output.lines().collect();
+        assert_eq!(args, vec!["--quiet", "--auto-approve", "prompt"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_keeps_prompt_last_without_model() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("codex-mock");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf '%s\\n' \"$@\"\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = CodexBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("prompt with spaces", None, None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let args: Vec<&str> = output.lines().collect();
+        assert_eq!(
+            args,
+            vec!["--quiet", "--auto-approve", "prompt with spaces"]
+        );
+        assert!(!args.iter().any(|arg| *arg == "--model"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_skips_empty_model() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("codex-mock");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf 'args:'\nfor arg in \"$@\"; do\n  printf '%s|' \"$arg\"\ndone\nprintf '\\n'\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = CodexBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("prompt", Some("  "), None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        assert!(output.contains("args:--quiet|--auto-approve|prompt|"));
+        assert!(!output.contains("--model"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_skips_whitespace_model_and_keeps_prompt_last() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("codex-mock");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf '%s\\n' \"$@\"\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = CodexBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("prompt", Some("   "), None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let args: Vec<&str> = output.lines().collect();
+        assert_eq!(args, vec!["--quiet", "--auto-approve", "prompt"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_skips_empty_string_model() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("codex-mock");
+        let output_path = temp.path().join("output.txt");
+        let script = "#!/bin/sh\nprintf '%s\\n' \"$@\"\n";
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = CodexBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("prompt", Some(""), None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let args: Vec<&str> = output.lines().collect();
+        assert_eq!(args, vec!["--quiet", "--auto-approve", "prompt"]);
     }
 }

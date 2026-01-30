@@ -16,23 +16,27 @@
    - RISK_REGISTER.md (if new risk found)
    - ARCHITECTURE.md (delta update)
 5) Run checklist + verification:
-   - `cargo test --workspace`
-   - `cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*`
-     (confirm coverage >= 90%)
+    - `cargo build --workspace`
+    - `cargo test --workspace`
+    - `cargo tarpaulin --workspace --fail-under 60`
+      (must compile and run to completion)
    - CI/CD preflight matches `.github/workflows/ci.yml`
    - Worktree is clean
-6) Use Graphite CLI (`gt`) for PR creation and stacking. Run `gt` inside the
-   active worktree so stacks map to the correct checkout and branch.
-7) Merge worktree back and remove it.
+6) On loop completion, `gralph` runs `gralph verifier` automatically unless
+   `verifier.auto_run` is false. The verifier runs tests, coverage, and static
+   checks, creates a PR via `gh` (using the repo template), and waits for the
+   configured review gate (greptile by default) plus green checks.
+   - If auto-run is disabled, run `gralph verifier` manually in the worktree.
+7) Verifier merges the PR via `gh` after the review gate passes.
 
 ## Last PRD Todo Gate
 - Ensure you are on a new task branch/worktree; never finish the last PRD task
   on main.
 - Run `cargo test --workspace` and confirm coverage >= 90% with:
-  `cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*`
+- Run `cargo test --workspace` and `cargo tarpaulin --workspace --fail-under 60`
 - Ensure CI/CD will pass (run the same checks as `.github/workflows/ci.yml` or
   confirm a green CI run).
-- Open a PR with Graphite CLI (`gt`) before merging the final task.
+- Open a PR with `gh` before merging the final task and ensure the review gate passes.
 
 ## Guardrails
 - Any task lacking Context Bundle or DoD is invalid.
@@ -40,5 +44,9 @@
 - New risks must be added to RISK_REGISTER.md with mitigation.
 - Rust CLI is the source of truth; do not reintroduce shell scripts.
 - Test coverage must remain >= 90%.
-- Final PRD task requires a PR and green CI before merge.
-- Use Graphite CLI (`gt`) for PRs and stacking.
+- The soft coverage target (`verifier.coverage_warn`) is a warning-only signal set to 80 percent; it does not block merges or change `verifier.coverage_min`.
+- It was raised after coverage stayed stable for at least two consecutive cycles.
+- Final PRD task requires a PR, review gate approval, and green CI before merge.
+- Use `gh` for PR creation, review checks, and merges.
+- Commit messages must be lower-case conventional commits (for example: `feat: add verifier pipeline`).
+- Env var mutation in tests must use the local helpers guarded by `ENV_LOCK`; never call `std::env::set_var` or `std::env::remove_var` directly.

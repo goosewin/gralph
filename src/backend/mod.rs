@@ -1,6 +1,12 @@
+use std::env;
 use std::error::Error;
 use std::fmt;
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
+use std::process::{Child, Command};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 pub mod claude;
 pub mod codex;
@@ -74,9 +80,182 @@ impl Error for BackendError {
     }
 }
 
+pub(crate) fn command_in_path(command: &str) -> bool {
+    let command_path = Path::new(command);
+    if command_path.is_absolute() {
+        return command_path.is_file();
+    }
+    let Some(paths) = env::var_os("PATH") else {
+        return false;
+    };
+    env::split_paths(&paths).any(|dir| {
+        if !dir.is_absolute() || !dir.is_dir() {
+            return false;
+        }
+        dir.join(command).is_file()
+    })
+}
+
+pub(crate) fn stream_command_output<F>(
+    mut child: Child,
+    backend_label: &str,
+    mut on_line: F,
+) -> Result<(), BackendError>
+where
+    F: FnMut(String) -> Result<(), BackendError>,
+{
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| BackendError::Command("failed to capture stdout".to_string()))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| BackendError::Command("failed to capture stderr".to_string()))?;
+
+    let (tx, rx) = mpsc::channel();
+    let stdout_handle = spawn_reader(stdout, tx.clone());
+    let stderr_handle = spawn_reader(stderr, tx);
+
+    for line in rx {
+        on_line(line)?;
+    }
+
+    let status = child.wait().map_err(|err| {
+        BackendError::Command(format!("failed to wait for {}: {}", backend_label, err))
+    })?;
+
+    let _ = stdout_handle.join();
+    let _ = stderr_handle.join();
+
+    if !status.success() {
+        return Err(BackendError::Command(format!(
+            "{} exited with {}",
+            backend_label, status
+        )));
+    }
+
+    Ok(())
+}
+
+pub(crate) fn spawn_with_retry(
+    cmd: &mut Command,
+    backend_label: &str,
+) -> Result<Child, BackendError> {
+    let mut attempts = 0;
+    loop {
+        match cmd.spawn() {
+            Ok(child) => return Ok(child),
+            Err(err) => {
+                if is_executable_busy(&err) && attempts < 3 {
+                    attempts += 1;
+                    thread::sleep(Duration::from_millis(10 * attempts));
+                    continue;
+                }
+                return Err(BackendError::Command(format!(
+                    "failed to spawn {}: {}",
+                    backend_label, err
+                )));
+            }
+        }
+    }
+}
+
+fn is_executable_busy(err: &std::io::Error) -> bool {
+    #[cfg(unix)]
+    {
+        err.raw_os_error() == Some(libc::ETXTBSY)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = err;
+        false
+    }
+}
+
+fn spawn_reader<R: Read + Send + 'static>(
+    reader: R,
+    sender: mpsc::Sender<String>,
+) -> thread::JoinHandle<()> {
+    thread::spawn(move || {
+        let mut reader = BufReader::new(reader);
+        let mut buffer = Vec::new();
+        loop {
+            buffer.clear();
+            match reader.read_until(b'\n', &mut buffer) {
+                Ok(0) => break,
+                Ok(_) => {
+                    let line = String::from_utf8_lossy(&buffer).to_string();
+                    if sender.send(line).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::{OsStr, OsString};
+    use std::fs;
+    use std::io::{self, Cursor};
+    use std::path::{Path, PathBuf};
+
+    #[cfg(unix)]
+    use std::process::{Command, Stdio};
+
+    struct PathGuard {
+        original: Option<OsString>,
+    }
+
+    impl PathGuard {
+        fn set(value: Option<&OsStr>) -> Self {
+            let original = env::var_os("PATH");
+            match value {
+                Some(value) => unsafe {
+                    env::set_var("PATH", value);
+                },
+                None => unsafe {
+                    env::remove_var("PATH");
+                },
+            }
+            Self { original }
+        }
+    }
+
+    impl Drop for PathGuard {
+        fn drop(&mut self) {
+            match self.original.as_ref() {
+                Some(value) => unsafe {
+                    env::set_var("PATH", value);
+                },
+                None => unsafe {
+                    env::remove_var("PATH");
+                },
+            }
+        }
+    }
+
+    struct CurrentDirGuard {
+        original: PathBuf,
+    }
+
+    impl CurrentDirGuard {
+        fn set(path: &Path) -> Self {
+            let original = env::current_dir().unwrap();
+            env::set_current_dir(path).unwrap();
+            Self { original }
+        }
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            let _ = env::set_current_dir(&self.original);
+        }
+    }
 
     #[test]
     fn backend_selection_returns_expected_type() {
@@ -85,7 +264,24 @@ mod tests {
         for name in cases {
             assert!(backend_from_name(name).is_ok(), "{} should resolve", name);
         }
-        assert!(backend_from_name("unknown").is_err());
+        let err = match backend_from_name("unknown") {
+            Ok(_) => panic!("expected unknown backend error"),
+            Err(err) => err,
+        };
+        assert_eq!(err, "Unknown backend: unknown");
+    }
+
+    #[test]
+    fn backend_from_name_reports_invalid_names() {
+        let cases = ["", "Claude", "claude ", " opencode"];
+
+        for name in cases {
+            let err = match backend_from_name(name) {
+                Ok(_) => panic!("expected unknown backend error"),
+                Err(err) => err,
+            };
+            assert_eq!(err, format!("Unknown backend: {}", name));
+        }
     }
 
     #[test]
@@ -110,5 +306,485 @@ mod tests {
             assert!(!models.is_empty(), "{} models should be non-empty", name);
             assert_eq!(models, expected_models, "{} models should be stable", name);
         }
+    }
+
+    #[test]
+    fn backend_error_display_and_source_for_io() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("missing-file");
+        let source = io::Error::new(io::ErrorKind::Other, "disk full");
+        let source_message = source.to_string();
+        let error = BackendError::Io {
+            path: path.clone(),
+            source,
+        };
+
+        assert_eq!(
+            error.to_string(),
+            format!("backend io error at {}: {}", path.display(), source_message)
+        );
+        let error_source = error.source().expect("io error source");
+        assert_eq!(error_source.to_string(), source_message);
+    }
+
+    #[test]
+    fn backend_error_display_and_source_for_json() {
+        let source = serde_json::from_str::<serde_json::Value>("{").unwrap_err();
+        let source_message = source.to_string();
+        let error = BackendError::Json { source };
+
+        assert_eq!(
+            error.to_string(),
+            format!("backend json error: {}", source_message)
+        );
+        let error_source = error.source().expect("json error source");
+        assert_eq!(error_source.to_string(), source_message);
+    }
+
+    #[test]
+    fn backend_error_display_and_source_for_invalid_input() {
+        let error = BackendError::InvalidInput("missing prompt".to_string());
+
+        assert_eq!(error.to_string(), "backend input error: missing prompt");
+        assert!(error.source().is_none());
+    }
+
+    #[test]
+    fn backend_error_display_and_source_for_command() {
+        let error = BackendError::Command("missing binary".to_string());
+
+        assert_eq!(error.to_string(), "backend command error: missing binary");
+        assert!(error.source().is_none());
+    }
+
+    #[test]
+    fn command_in_path_handles_missing_and_empty_path() {
+        let _lock = crate::test_support::env_lock();
+        let dir_temp = tempfile::tempdir().unwrap();
+        let file_temp = tempfile::tempdir().unwrap();
+        let command_name = "gralph-test-command";
+        fs::create_dir(dir_temp.path().join(command_name)).unwrap();
+        fs::write(file_temp.path().join(command_name), "stub").unwrap();
+
+        let _guard = PathGuard::set(None);
+        assert!(!command_in_path(command_name));
+
+        unsafe {
+            env::set_var("PATH", "");
+        }
+        assert!(!command_in_path(command_name));
+
+        unsafe {
+            env::set_var("PATH", dir_temp.path());
+        }
+        assert!(!command_in_path(command_name));
+
+        unsafe {
+            env::set_var("PATH", file_temp.path());
+        }
+        assert!(command_in_path(command_name));
+    }
+
+    #[test]
+    fn command_in_path_ignores_current_dir_when_path_empty() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        let command_name = "gralph-current-dir-command";
+        fs::write(temp.path().join(command_name), "stub").unwrap();
+
+        let _dir_guard = CurrentDirGuard::set(temp.path());
+        let _guard = PathGuard::set(None);
+        unsafe {
+            env::set_var("PATH", "");
+        }
+
+        assert!(!command_in_path(command_name));
+    }
+
+    #[test]
+    fn command_in_path_ignores_empty_segments_and_missing_dirs() {
+        let _lock = crate::test_support::env_lock();
+        let command_name = "gralph-empty-segment-command";
+        let temp_dir = tempfile::tempdir().unwrap();
+        let command_dir = temp_dir.path().join("bin");
+        let missing_dir = temp_dir.path().join("missing");
+        fs::create_dir(&command_dir).unwrap();
+        fs::write(command_dir.join(command_name), "stub").unwrap();
+
+        let empty = OsString::new();
+        let combined = env::join_paths([
+            missing_dir.as_os_str(),
+            empty.as_os_str(),
+            command_dir.as_os_str(),
+        ])
+        .unwrap();
+        let _guard = PathGuard::set(Some(combined.as_os_str()));
+
+        assert!(command_in_path(command_name));
+    }
+
+    #[test]
+    fn command_in_path_ignores_file_entries_and_uses_directory_entries() {
+        let _lock = crate::test_support::env_lock();
+        let command_name = "gralph-path-command";
+        let command_dir = tempfile::tempdir().unwrap();
+        let file_entry_dir = tempfile::tempdir().unwrap();
+        let file_entry = file_entry_dir.path().join("not-a-dir");
+        let command_path = command_dir.path().join(command_name);
+        fs::write(&file_entry, "stub").unwrap();
+        fs::write(&command_path, "stub").unwrap();
+
+        let _guard = PathGuard::set(None);
+        unsafe {
+            env::set_var("PATH", &file_entry);
+        }
+        assert!(!command_in_path(command_name));
+
+        let combined = env::join_paths([file_entry.as_path(), command_dir.path()]).unwrap();
+        unsafe {
+            env::set_var("PATH", &combined);
+        }
+        assert!(command_in_path(command_name));
+    }
+
+    #[test]
+    fn command_in_path_ignores_relative_path_entries() {
+        let _lock = crate::test_support::env_lock();
+        let command_name = "gralph-relative-command";
+        let cwd = env::current_dir().unwrap();
+        let command_dir = tempfile::tempdir_in(&cwd).unwrap();
+        let command_path = command_dir.path().join(command_name);
+        fs::write(&command_path, "stub").unwrap();
+        let relative_dir = command_dir.path().strip_prefix(&cwd).unwrap();
+
+        let _guard = PathGuard::set(None);
+        unsafe {
+            env::set_var("PATH", relative_dir);
+        }
+        assert!(!command_in_path(command_name));
+
+        let combined = env::join_paths([relative_dir, command_dir.path()]).unwrap();
+        unsafe {
+            env::set_var("PATH", &combined);
+        }
+        assert!(command_in_path(command_name));
+    }
+
+    #[test]
+    fn command_in_path_accepts_absolute_paths_with_relative_segments() {
+        let _lock = crate::test_support::env_lock();
+        let command_name = "gralph-relative-segment-command";
+        let temp_dir = tempfile::tempdir().unwrap();
+        let bin_dir = temp_dir.path().join("bin");
+        let nested_dir = temp_dir.path().join("nested");
+        fs::create_dir_all(&bin_dir).unwrap();
+        fs::create_dir_all(&nested_dir).unwrap();
+        fs::write(bin_dir.join(command_name), "stub").unwrap();
+
+        let path_with_parent = nested_dir.join("..").join("bin");
+        let path_with_current = bin_dir.join(".");
+        let combined =
+            env::join_paths([path_with_parent.as_path(), path_with_current.as_path()]).unwrap();
+        let _guard = PathGuard::set(Some(combined.as_os_str()));
+
+        assert!(command_in_path(command_name));
+    }
+
+    #[test]
+    fn command_in_path_returns_false_for_missing_directories_only() {
+        let _lock = crate::test_support::env_lock();
+        let command_name = "gralph-missing-dir-command";
+        let temp_dir = tempfile::tempdir().unwrap();
+        let missing_dir = temp_dir.path().join("missing");
+
+        let _guard = PathGuard::set(None);
+        unsafe {
+            env::set_var("PATH", &missing_dir);
+        }
+
+        assert!(!command_in_path(command_name));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_returns_ok_on_success() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("printf 'stdout-line\\n'; printf 'stderr-line\\n' 1>&2")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert!(lines.iter().any(|line| line.contains("stdout-line")));
+        assert!(lines.iter().any(|line| line.contains("stderr-line")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_reads_trailing_line_without_newline() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("printf 'first-line\\nsecond-line'")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert_eq!(lines, vec!["first-line\n", "second-line"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_handles_stderr_only_output() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("printf 'stderr-only\\n' 1>&2")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert_eq!(lines, vec!["stderr-only\n"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_handles_stderr_closed_early() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("exec 2>&-; printf 'stdout-line\\n'; exit 0")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert_eq!(lines, vec!["stdout-line\n"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_handles_stdout_closed_early() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("exec 1>&-; printf 'stderr-line\\n' 1>&2; exit 0")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert_eq!(lines, vec!["stderr-line\n"]);
+    }
+
+    #[test]
+    fn spawn_reader_exits_when_receiver_closed() {
+        let reader = Cursor::new(b"first-line\nsecond-line\n".to_vec());
+        let (tx, rx) = mpsc::channel();
+        drop(rx);
+
+        let handle = spawn_reader(reader, tx);
+
+        assert!(handle.join().is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_handles_empty_output_on_success() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("exit 0")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert!(lines.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_handles_child_exit_before_channel_close() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("printf 'early-line\\n'; exit 0")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert_eq!(lines, vec!["early-line\n"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_propagates_on_line_error() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("printf 'stdout-line\\n'")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let result = stream_command_output(child, "stub", |_| {
+            Err(BackendError::Command("line failed".to_string()))
+        });
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message == "line failed"
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_propagates_mid_stream_error() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("printf 'first-line\\nsecond-line\\nthird-line\\n'")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let mut lines = Vec::new();
+        let result = stream_command_output(child, "stub", |line| {
+            lines.push(line);
+            if lines.len() == 2 {
+                return Err(BackendError::Command("callback failed".to_string()));
+            }
+            Ok(())
+        });
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message == "callback failed"
+        ));
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("first-line"));
+        assert!(lines[1].contains("second-line"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_reports_non_zero_exit() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("printf 'stderr-line\\n' 1>&2; exit 2")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let result = stream_command_output(child, "stub", |_| Ok(()));
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message.contains("stub exited with")
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_reports_non_zero_exit_without_output() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("exit 1")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let result = stream_command_output(child, "stub", |_| Ok(()));
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message.contains("stub exited with")
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_errors_when_stdout_missing() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("exit 0")
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let result = stream_command_output(child, "stub", |_| Ok(()));
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message == "failed to capture stdout"
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stream_command_output_errors_when_stderr_missing() {
+        let child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg("exit 0")
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+
+        let result = stream_command_output(child, "stub", |_| Ok(()));
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Command(message)) if message == "failed to capture stderr"
+        ));
     }
 }

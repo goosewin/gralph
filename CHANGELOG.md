@@ -12,11 +12,169 @@ CI=<status/link>; PR=<link if final PRD task>
 ## [Unreleased]
 
 ### Added
+- PROMPT-1 Require lower-case conventional commits in the default prompt template.
+- VER-1 Add verifier command for tests and coverage gates.
+- DOC-1 Document verifier workflow, review gate, and commit conventions.
+- COV-1 Expand core loop validation, prompt template fallback, and raw output logging coverage.
+- COV-2 Expand state store lock acquisition and io error-path coverage.
+- COV-2 Expand PRD validation and sanitization coverage.
+- COV-2 Expand state store env override coverage.
+- COV-2 Add state store cleanup and parse_value edge case tests.
+- COV-STATE-1 Add state store lock path, cleanup error-path, and parse_value edge-case tests.
+- COV-STATE-1 Expand state store tmp write collision, malformed cleanup, and lock timeout tests.
+- COV-3 Add OpenCode backend run_iteration argument and env coverage.
+- COV-3 Expand state store edge-case coverage.
+- COV-3 Expand PRD validation and sanitization coverage.
+- COV-3 Add PRD base override and sanitize proptests.
+- COV-3 Add PRD task block parsing and sanitization invariants.
+- COV-PRD-1 Expand PRD validation and sanitize invariants.
+- COV-PRD-1 Add PRD sanitize fallback and context validation proptests.
+- COV-PRD-1 Add PRD sanitize context filtering and stray unchecked invariants.
+- COV-PRD-1 Add canonicalize fallback and absolute context sanitize tests.
+- COV-4 Expand verifier helper coverage for auto-run defaults, command parsing, PR base resolution, template lookup, static checks, and review gate parsing.
+- COV-VER-1 Expand verifier parsing edge cases for empty commands and check rollups.
+- COV-VER-1 Add verifier review gate parsing and static check invalid config tests.
+- COV-5 Add Codex backend run_iteration flag validation tests.
+- COV-5 Expand config normalization and override tests.
+- COV-5 Cover config env override conflicts and empty values.
+- COV-5 Add config path edge-case and key existence tests.
+- COV-5 Expand backend utility PATH and stream coverage.
+- COV-6 Expand CLI helper coverage in main.
+- COV-6 Expand Claude backend parsing and argument tests.
+- COV-7 Expand server auth and CORS error-path coverage.
+- COV-7 Expand OpenCode backend env flags, argument ordering, and error-path tests.
+- COV-8 Expand notification formatting helper and payload coverage.
+- COV-8 Expand Gemini backend tests for headless flags and parse_text errors.
+- COV-BACKEND-GEMINI-1 Add Gemini adapter edge-case tests.
+- COV-9 Expand backend module utility coverage.
+- COV-9 Add notify validation and failure formatting tests.
+- COV-9 Cover update version env and archive PATH error cases.
+- COV-9 Expand Codex backend tests for flag ordering and error paths.
+- COV-10 Add property-based tests for task parsing invariants.
+- COV-10 Expand Claude backend parsing and install tests.
+- COV-10 Expand Claude backend parsing fallback coverage.
+- COV-10 Expand backend helper streaming and PATH scanning coverage.
+- COV-10 Expand config env precedence and list rendering coverage.
+- COV-11 Expand backend module error formatting coverage.
+- COV-11 Expand Claude adapter parsing coverage for invalid stream entries.
+- COV-11 Expand OpenCode backend run_iteration tests.
+- COV-11 Expand OpenCode backend command ordering and env coverage.
+- COV-11 Expand server CORS, auth, and session enrichment tests.
+- COV-12 Expand Gemini backend command and error coverage.
+- COV-12 Expand Claude adapter error-path coverage.
+- COV-BACKEND-CLAUDE-1 Cover Claude adapter parse fallbacks and malformed content.
+- COV-BACKEND-CLAUDE-1 Add Claude stream entry tests for missing type handling.
+- COV-12 Expand OpenCode adapter coverage.
+- COV-12 Expand notification formatting boundary and timeout default tests.
+- COV-13 Expand OpenCode adapter error-path coverage.
+- COV-13 Expand Codex backend command and error coverage.
+- COV-13 Expand Gemini adapter error-path coverage.
+- COV-13 Add CLI helper tests for session naming fallbacks.
+- COV-14 Expand Gemini adapter error-path coverage.
+- COV-14 Expand update/install error-path coverage.
+- COV-14 Add property-based tests for task block termination and unchecked parsing.
+- COV-14 Expand Codex adapter coverage for parse_text and PATH edge cases.
+- COV-15 Expand Codex adapter error-path coverage.
+- COV-15 Add verifier command parsing and review gate tests.
+- COV-15 Expand task parsing edge-case tests.
+- COV-15 Add CRLF and tabbed task parsing invariants.
+- COV-15 Add task parsing heading and CRLF unchecked tests.
+- COV-15 Expand env_lock contention and panic recovery tests.
+- COV-16 Add env_lock safety tests for test_support helpers.
+- COV-TEST-SUPPORT-1 Expand env lock contention and poison recovery tests.
+- COV-TESTSUPPORT-1 Expand env_lock contention release and restore sequencing tests.
+- COV-TEST-SUPPORT-1 Add env_lock sequential drop and panic scope restore tests.
+- COV-16 Expand update workflow parsing and install error coverage.
+- COV-17 Expand Claude backend parsing and failure path coverage.
+- COV-18 Expand Codex backend installation and error coverage.
+- COV-19 Expand Gemini backend command and error coverage.
+- COV-20 Expand OpenCode backend env and failure coverage.
+- COV-21 Expand backend module utility coverage.
+- COV-22 Expand config loader and override coverage.
+- COV-23 Expand core loop validation and completion coverage.
+- COV-24 Expand main CLI helper coverage.
+- COV-MAIN-1 Cover CLI and worktree error paths.
+- COV-MAIN-1 Add CLI helper tests for auto worktree defaults and timestamp slug.
+- COV-MAIN-1 Add CLI helper tests for bool parsing, task ID errors, and branch uniqueness.
+- COV-25 Expand notification formatting and HTTP error coverage.
+- COV-26 Expand PRD sanitization and stack summary coverage.
+- COV-27 Expand server auth, CORS, and session enrichment coverage.
+- COV-28 Expand state store normalization coverage.
+- COV-29 Expand task parsing edge coverage.
+- COV-TASK-1 Add task parsing boundary tests for CRLF/tabbed separators and H2 termination near-misses.
+- COV-30 Expand update parsing and extraction coverage.
+- COV-CORE-1 Expand core loop prompt template and retention edge coverage.
+- COV-CORE-1 Add core loop parse failure coverage and completion invariants.
+- COV-CORE-1 Add property tests for prompt rendering and context normalization.
+- COV-CORE-1 Cover prompt template placeholder replacement invariants.
+- COV-CORE-1 Cover core loop completion edge cases for zero tasks and trailing whitespace.
+- COV90-CORE-1 Add core loop tests for error paths, callbacks, and completion invariants.
+- COV90-STATE-1 Add state store recovery and parse_value edge-case tests.
+- COV90-STATE-1 Expand state store write failure and cleanup coverage.
+- COV90-PRD-1 Add property-based PRD validation and sanitize invariants.
+- COV90-PRD-1 Cover PRD absolute context acceptance and fallback selection tests.
+- COV90-TASK-1 Add property tests for task parsing boundaries.
+- COV90-CONFIG-1 Expand config merge precedence, env compat empty override, and list rendering tests.
+- COV90-CI-1 Document soft coverage warning target and staged plan.
+- COV90-CI-1 Add soft coverage warning target in verifier config and docs.
+- COV90-CI-2 Raise soft coverage warning target to 80 percent (warning-only).
+- COV-CI-1 Set initial soft coverage warning target to 65 to 70 percent.
+- COV-CI-2 Raise soft coverage warning target to 80 percent and update docs.
+- COV90-VER-1 Add verifier parsing, review gate, and gh error handling tests.
+- COV90-VERIFIER-1 Expand verifier static check parsing and PR creation error coverage.
+- COV90-MAIN-1 Add CLI helper tests for session naming and worktree branch formatting.
+- COV90-VERSION-1 Add version constant tests.
+- COV90-LIB-1 Add lib crate wiring coverage.
+- COV90-SERVER-1 Expand server edge-case coverage for CORS origins, stale sessions, and missing stop targets.
+- COV90-BACKEND-MOD-1 Add backend module PATH and streaming tests.
+- COV90-BACKEND-CLAUDE-1 Expand Claude backend parsing and error tests.
+- COV90-BACKEND-CLAUDE-1 Add Claude backend ordering and fallback tests.
+- COV90-BACKEND-OPENCODE-1 Expand OpenCode backend env flag ordering and no-flag prompt tests.
+- COV90-BACKEND-GEMINI-1 Expand Gemini backend command and error tests.
+- COV90-BACKEND-CODEX-1 Expand Codex backend flag ordering, model skipping, and exit propagation tests.
+- COV90-NOTIFY-1 Add notify payload formatting, duration edge-case, and HTTP status tests.
+- COV90-NOTIFY-1 Add notify_failed unknown and empty reason payload coverage.
+- COV90-UPDATE-1 Add update workflow error path tests.
+- COV90-UPDATE-1 Expand update workflow coverage for version formats, tar failures, and permission errors.
+- COV90-TESTSUPPORT-1 Add env_lock stress and recovery tests.
+- COV90-TESTSUPPORT-1 Verify env_lock restore after guard drop.
+- COV90-CLI-1 Add CLI parsing tests for run-loop, verifier defaults, and PRD conflicts.
+- COV-9 Expand update check and archive error coverage.
+- COV-31 Expand verifier parsing and static check coverage.
+- COV-VER-1 Add verifier parsing tests for coverage tokens, review gate parsing, and static checks.
+- COV-VERIFIER-1 Cover verifier parsing and static checks.
+- COV-3 Expand verifier parsing and gate evaluation coverage.
+- COV-5 Expand server session enrichment and stop flow coverage.
+- COV-CONFIG-1 Add config normalization, env precedence, list rendering, and value_to_string property tests.
+- COV-CONFIG-1 Expand config path ordering, env empty override, and normalize_key lookup property coverage.
+- COV-SERVER-1 Expand server CORS mismatch and stale session coverage.
+- COV-NOTIFY-1 Expand notification timeout defaults, duration boundaries, unknown reason, and webhook type detection tests.
+- COV-UPDATE-1 Expand update workflow error-path coverage for release download overrides and unsupported targets.
+- COV-UPDATE-1 Add resolve_install_version tests for empty env values and invalid tags.
+- COV-UPDATE-1 Add update version parsing and override trim tests.
+- COV-UPDATE-1 Add update platform and extract_archive PATH error message tests.
+- COV-BACKEND-MOD-1 Expand backend helper streaming, PATH relative-segment handling, and invalid backend name error coverage.
+- COV-BACKEND-CLAUDE-1 Add Claude adapter error-path tests.
+- COV-BACKEND-CLAUDE-1 Add Claude adapter argument ordering coverage.
+- COV-BACKEND-OPENCODE-1 Expand OpenCode adapter coverage for env flags, arg ordering, model/variant trimming, mixed stdout/stderr capture, and invalid UTF-8 parsing.
+- COV-BACKEND-CODEX-1 Expand Codex adapter arg ordering, output path, and error coverage.
+- COV-CONFIG-1 Add config lookup proptest and nested sequence rendering tests.
+- COV-SERVER-1 Add server CORS invalid origin, stale pid stop, and unreadable task file tests.
 
 ### Fixed
+- WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.
+- REF-1 Consolidate shared backend execution helpers.
+- REF-2 Unify task block parsing helpers across core and PRD validation.
+- REF-3 Centralize config merge precedence and normalize override lookup.
+- REF-4 Centralize server auth and error responses.
+- REF-5 Reduce duplication in notification payload formatting.
+- REF-6 Modularize verifier pipeline helpers into a dedicated module.
+- REF-7 Update shared docs and module map for refactor outcomes.
+- COV-5 Align verifier coverage command with the 90 percent gate.
+- COV-6 Normalize absolute context path comparisons and isolate config env override tests.
 
 ### Verification
-- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
+- Verification: Tests=cargo test --workspace; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
 
 ## [0.2.2]
 
