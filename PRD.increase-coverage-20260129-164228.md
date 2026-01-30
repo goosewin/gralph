@@ -219,7 +219,7 @@ Keep coverage as a warning-only signal for now. After stability, introduce a sof
   * Add tests for skipping empty model and preserving prompts with spaces.
   * Add tests for parse_text invalid UTF-8 and missing files.
 - **Dependencies** COV-BACKEND-MOD-1
-- [ ] COV-BACKEND-CODEX-1 Expand Codex adapter tests
+- [x] COV-BACKEND-CODEX-1 Expand Codex adapter tests
 ### Task COV-TEST-SUPPORT-1
 
 - **ID** COV-TEST-SUPPORT-1
