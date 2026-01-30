@@ -230,10 +230,8 @@ pub(super) fn cmd_resume(args: ResumeArgs, deps: &Deps) -> Result<(), CliError> 
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
         let pid = session.get("pid").and_then(|v| v.as_i64()).unwrap_or(0);
-        let should_resume = status == "stale"
-            || status == "stopped"
-            || status == "failed"
-            || (status == "running" && !deps.process().is_alive(pid));
+        let pid_alive = status == "running" && pid > 0 && deps.process().is_alive(pid);
+        let should_resume = should_resume_session(status, pid, pid_alive);
         if !should_resume {
             continue;
         }
@@ -367,6 +365,73 @@ fn should_validate_prd(strict_prd: bool) -> bool {
     strict_prd
 }
 
+fn should_resume_session(status: &str, pid: i64, pid_alive: bool) -> bool {
+    if matches!(status, "stale" | "stopped" | "failed") {
+        return true;
+    }
+    if status == "running" {
+        return pid <= 0 || !pid_alive;
+    }
+    false
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutcomeStatusPlan {
+    Final {
+        status: &'static str,
+    },
+    Verify {
+        initial_status: &'static str,
+        verifying_status: &'static str,
+        verified_status: &'static str,
+        verify_failed_status: &'static str,
+    },
+}
+
+impl OutcomeStatusPlan {
+    fn initial_status(&self) -> &'static str {
+        match self {
+            OutcomeStatusPlan::Final { status } => status,
+            OutcomeStatusPlan::Verify { initial_status, .. } => initial_status,
+        }
+    }
+}
+
+fn outcome_status_plan(status: LoopStatus, auto_run_verifier: bool) -> OutcomeStatusPlan {
+    if status == LoopStatus::Complete && auto_run_verifier {
+        OutcomeStatusPlan::Verify {
+            initial_status: status.as_str(),
+            verifying_status: "verifying",
+            verified_status: "verified",
+            verify_failed_status: "verify-failed",
+        }
+    } else {
+        OutcomeStatusPlan::Final {
+            status: status.as_str(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NotificationDecision {
+    Complete,
+    Failed { reason: &'static str },
+}
+
+fn notification_decision(
+    status: LoopStatus,
+    notify_on_complete: bool,
+) -> Option<NotificationDecision> {
+    match status {
+        LoopStatus::Complete => notify_on_complete.then_some(NotificationDecision::Complete),
+        LoopStatus::Failed => Some(NotificationDecision::Failed { reason: "error" }),
+        LoopStatus::MaxIterations => Some(NotificationDecision::Failed {
+            reason: "max_iterations",
+        }),
+        LoopStatus::Running => None,
+    }
+}
+
 fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
     let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
     maybe_check_for_update();
@@ -454,31 +519,39 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
     )
     .map_err(|err| CliError::Message(err.to_string()))?;
 
+    let auto_run_verifier = verifier::resolve_verifier_auto_run(&config);
+    let status_plan = outcome_status_plan(outcome.status, auto_run_verifier);
     store
         .set_session(
             &args.name,
             &[
-                ("status", outcome.status.as_str()),
+                ("status", status_plan.initial_status()),
                 ("last_task_count", &outcome.remaining_tasks.to_string()),
             ],
         )
         .map_err(|err| CliError::Message(err.to_string()))?;
 
-    if outcome.status == LoopStatus::Complete && verifier::resolve_verifier_auto_run(&config) {
+    if let OutcomeStatusPlan::Verify {
+        verifying_status,
+        verified_status,
+        verify_failed_status,
+        ..
+    } = status_plan
+    {
         store
             .set_session(
                 &args.name,
-                &[("status", "verifying"), ("last_task_count", "0")],
+                &[("status", verifying_status), ("last_task_count", "0")],
             )
             .map_err(|err| CliError::Message(err.to_string()))?;
         if let Err(err) = verifier::run_verifier_pipeline(&args.dir, &config, None, None, None) {
-            let _ = store.set_session(&args.name, &[("status", "verify-failed")]);
+            let _ = store.set_session(&args.name, &[("status", verify_failed_status)]);
             return Err(err);
         }
         store
             .set_session(
                 &args.name,
-                &[("status", "verified"), ("last_task_count", "0")],
+                &[("status", verified_status), ("last_task_count", "0")],
             )
             .map_err(|err| CliError::Message(err.to_string()))?;
     }
@@ -502,35 +575,29 @@ fn notify_if_configured(
         return Ok(());
     };
 
-    match outcome.status {
-        LoopStatus::Complete => {
-            let on_complete = config
-                .get("notifications.on_complete")
-                .map(|v| v == "true")
-                .unwrap_or(true);
-            if on_complete {
-                notifier
-                    .notify_complete(
-                        &args.name,
-                        &webhook,
-                        Some(&args.dir.to_string_lossy()),
-                        Some(outcome.iterations),
-                        Some(outcome.duration_secs),
-                        None,
-                    )
-                    .map_err(|err| CliError::Message(err.to_string()))?;
-            }
+    let on_complete = config
+        .get("notifications.on_complete")
+        .map(|v| v == "true")
+        .unwrap_or(true);
+    match notification_decision(outcome.status, on_complete) {
+        Some(NotificationDecision::Complete) => {
+            notifier
+                .notify_complete(
+                    &args.name,
+                    &webhook,
+                    Some(&args.dir.to_string_lossy()),
+                    Some(outcome.iterations),
+                    Some(outcome.duration_secs),
+                    None,
+                )
+                .map_err(|err| CliError::Message(err.to_string()))?;
         }
-        LoopStatus::Failed | LoopStatus::MaxIterations => {
+        Some(NotificationDecision::Failed { reason }) => {
             notifier
                 .notify_failed(
                     &args.name,
                     &webhook,
-                    Some(match outcome.status {
-                        LoopStatus::Failed => "error",
-                        LoopStatus::MaxIterations => "max_iterations",
-                        _ => "error",
-                    }),
+                    Some(reason),
                     Some(&args.dir.to_string_lossy()),
                     Some(outcome.iterations),
                     Some(max_iterations),
@@ -540,7 +607,7 @@ fn notify_if_configured(
                 )
                 .map_err(|err| CliError::Message(err.to_string()))?;
         }
-        LoopStatus::Running => {}
+        None => {}
     }
 
     Ok(())
@@ -892,5 +959,75 @@ mod tests {
     fn should_validate_prd_matches_flag() {
         assert!(should_validate_prd(true));
         assert!(!should_validate_prd(false));
+    }
+
+    #[test]
+    fn should_resume_session_handles_status_and_pid() {
+        for status in ["stale", "stopped", "failed"] {
+            assert!(should_resume_session(status, 123, true));
+            assert!(should_resume_session(status, 0, false));
+        }
+
+        assert!(should_resume_session("running", 0, false));
+        assert!(should_resume_session("running", 123, false));
+        assert!(!should_resume_session("running", 123, true));
+        assert!(!should_resume_session("complete", 123, false));
+        assert!(!should_resume_session("unknown", 0, false));
+    }
+
+    #[test]
+    fn outcome_status_plan_handles_complete_with_auto_run() {
+        let plan = outcome_status_plan(LoopStatus::Complete, true);
+        match plan {
+            OutcomeStatusPlan::Verify {
+                initial_status,
+                verifying_status,
+                verified_status,
+                verify_failed_status,
+            } => {
+                assert_eq!(initial_status, "complete");
+                assert_eq!(verifying_status, "verifying");
+                assert_eq!(verified_status, "verified");
+                assert_eq!(verify_failed_status, "verify-failed");
+            }
+            OutcomeStatusPlan::Final { .. } => panic!("expected verify plan"),
+        }
+    }
+
+    #[test]
+    fn outcome_status_plan_handles_failed_and_max_iterations() {
+        let plan = outcome_status_plan(LoopStatus::Failed, true);
+        assert_eq!(plan, OutcomeStatusPlan::Final { status: "failed" });
+
+        let plan = outcome_status_plan(LoopStatus::MaxIterations, true);
+        assert_eq!(
+            plan,
+            OutcomeStatusPlan::Final {
+                status: "max_iterations",
+            }
+        );
+
+        let plan = outcome_status_plan(LoopStatus::Complete, false);
+        assert_eq!(plan, OutcomeStatusPlan::Final { status: "complete" });
+    }
+
+    #[test]
+    fn notification_decision_maps_statuses() {
+        assert_eq!(
+            notification_decision(LoopStatus::Complete, true),
+            Some(NotificationDecision::Complete)
+        );
+        assert_eq!(notification_decision(LoopStatus::Complete, false), None);
+        assert_eq!(
+            notification_decision(LoopStatus::Failed, true),
+            Some(NotificationDecision::Failed { reason: "error" })
+        );
+        assert_eq!(
+            notification_decision(LoopStatus::MaxIterations, true),
+            Some(NotificationDecision::Failed {
+                reason: "max_iterations"
+            })
+        );
+        assert_eq!(notification_decision(LoopStatus::Running, true), None);
     }
 }

@@ -71,7 +71,7 @@ The verifier pipeline must continue to run tests, parse coverage output, enforce
   * Tests cover resume decisions for stale, stopped, failed, and dead-pid running sessions.
   * Tests cover status updates and notification selection for complete, failed, and max_iterations outcomes.
 - **Dependencies** LS-1
-- [ ] LS-2 Isolate session lifecycle decisions and add transition tests
+- [x] LS-2 Isolate session lifecycle decisions and add transition tests
 ---
 
 ### Task VER-1
