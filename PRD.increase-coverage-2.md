@@ -74,7 +74,7 @@ Each task block must contain exactly one unchecked task line.
   * Add or extend unit tests in `src/lib.rs` or `src/cli.rs` for refactored entrypoint helpers.
   * Verify coverage with `cargo tarpaulin --workspace --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*`.
 - **Dependencies** MR-1
-- [ ] COV-1 Add tests to raise coverage to 70 percent
+- [x] COV-1 Add tests to raise coverage to 70 percent
 ---
 
 ## Success Criteria
