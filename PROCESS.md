@@ -16,9 +16,10 @@
    - RISK_REGISTER.md (if new risk found)
    - ARCHITECTURE.md (delta update)
 5) Run checklist + verification:
-   - `cargo test --workspace`
-   - `cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*`
-     (confirm coverage >= 90%)
+    - `cargo build --workspace`
+    - `cargo test --workspace`
+    - `cargo tarpaulin --workspace --fail-under 60`
+      (must compile and run to completion)
    - CI/CD preflight matches `.github/workflows/ci.yml`
    - Worktree is clean
 6) On loop completion, `gralph` runs `gralph verifier` automatically unless
@@ -32,7 +33,7 @@
 - Ensure you are on a new task branch/worktree; never finish the last PRD task
   on main.
 - Run `cargo test --workspace` and confirm coverage >= 90% with:
-  `cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*`
+- Run `cargo test --workspace` and `cargo tarpaulin --workspace --fail-under 60`
 - Ensure CI/CD will pass (run the same checks as `.github/workflows/ci.yml` or
   confirm a green CI run).
 - Open a PR with `gh` before merging the final task and ensure the review gate passes.
@@ -43,8 +44,8 @@
 - New risks must be added to RISK_REGISTER.md with mitigation.
 - Rust CLI is the source of truth; do not reintroduce shell scripts.
 - Test coverage must remain >= 90%.
-- The soft coverage target (`verifier.coverage_warn`) is a warning-only signal set to 70 percent; it does not block merges or change `verifier.coverage_min`.
-- Plan to raise the warning target to 75 to 80 percent after coverage stabilizes for two consecutive cycles.
+- The soft coverage target (`verifier.coverage_warn`) is a warning-only signal set to 80 percent; it does not block merges or change `verifier.coverage_min`.
+- It was raised after coverage stayed stable for at least two consecutive cycles.
 - Final PRD task requires a PR, review gate approval, and green CI before merge.
 - Use `gh` for PR creation, review checks, and merges.
 - Commit messages must be lower-case conventional commits (for example: `feat: add verifier pipeline`).

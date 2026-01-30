@@ -285,7 +285,7 @@ Each task block must contain exactly one unchecked task line.
   * Update README and PROCESS to reflect new target and stability criteria.
   * Confirm warning-only behavior remains unchanged.
 - **Dependencies** COV-CI-1
-- [ ] COV-CI-2 Raise soft coverage warning target to 75-80 percent
+- [x] COV-CI-2 Raise soft coverage warning target to 75-80 percent
 ---
 
 ## Success Criteria
