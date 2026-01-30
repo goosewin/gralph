@@ -13,6 +13,14 @@ mod verifier;
 
 pub mod app;
 pub use app::{exit_code_for, run, Deps};
+use clap::Parser;
+use std::process::ExitCode;
+
+pub fn cli_entrypoint() -> ExitCode {
+    let cli = cli::Cli::parse();
+    let deps = Deps::real();
+    exit_code_for(run(cli, &deps))
+}
 
 #[cfg(test)]
 mod test_support;
