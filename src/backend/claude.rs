@@ -192,14 +192,15 @@ mod tests {
     #[cfg(unix)]
     fn write_executable(path: &Path, script: &str) {
         let dir = path.parent().unwrap();
-        let mut file = tempfile::NamedTempFile::new_in(dir).unwrap();
+        let mut file = tempfile::Builder::new().tempfile_in(dir).unwrap();
         file.write_all(script.as_bytes()).unwrap();
         file.flush().unwrap();
-        let mut perms = file.as_file().metadata().unwrap().permissions();
-        perms.set_mode(0o755);
-        file.as_file().set_permissions(perms).unwrap();
         file.as_file().sync_all().unwrap();
-        file.persist(path).unwrap();
+        let temp_path = file.into_temp_path();
+        let mut perms = fs::metadata(&temp_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&temp_path, perms).unwrap();
+        temp_path.persist(path).unwrap();
     }
 
     #[test]

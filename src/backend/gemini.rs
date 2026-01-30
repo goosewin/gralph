@@ -114,10 +114,25 @@ mod tests {
     use std::env;
     use std::ffi::{OsStr, OsString};
     use std::fs;
-    use std::io;
+    use std::io::{self, Write};
+    use std::path::Path;
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+
+    #[cfg(unix)]
+    fn write_executable(path: &Path, script: &str) {
+        let dir = path.parent().unwrap();
+        let mut file = tempfile::Builder::new().tempfile_in(dir).unwrap();
+        file.write_all(script.as_bytes()).unwrap();
+        file.flush().unwrap();
+        file.as_file().sync_all().unwrap();
+        let temp_path = file.into_temp_path();
+        let mut perms = fs::metadata(&temp_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&temp_path, perms).unwrap();
+        temp_path.persist(path).unwrap();
+    }
 
     struct PathGuard {
         original: Option<OsString>,
@@ -357,10 +372,7 @@ mod tests {
         let script_path = temp.path().join("gemini-mock");
         let output_path = temp.path().join("output.txt");
         let script = "#!/bin/sh\nprintf 'args:'\nfor arg in \"$@\"; do\n  printf '%s|' \"$arg\"\ndone\nprintf '\\n'\n";
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
+        write_executable(&script_path, script);
 
         let backend = GeminiBackend::with_command(script_path.to_string_lossy().to_string());
         backend
@@ -378,10 +390,7 @@ mod tests {
         let script_path = temp.path().join("gemini-mock");
         let output_path = temp.path().join("output.txt");
         let script = "#!/bin/sh\nprintf '%s\\n' \"$@\"\n";
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
+        write_executable(&script_path, script);
 
         let backend = GeminiBackend::with_command(script_path.to_string_lossy().to_string());
         backend
@@ -409,10 +418,7 @@ mod tests {
         let script_path = temp.path().join("gemini-mock");
         let output_path = temp.path().join("output.txt");
         let script = "#!/bin/sh\nprintf '%s\\n' \"$@\"\n";
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
+        write_executable(&script_path, script);
 
         let backend = GeminiBackend::with_command(script_path.to_string_lossy().to_string());
         backend
@@ -432,10 +438,7 @@ mod tests {
         let script_path = temp.path().join("gemini-mock");
         let output_path = temp.path().join("output.txt");
         let script = "#!/bin/sh\nprintf 'args:'\nfor arg in \"$@\"; do\n  printf '%s|' \"$arg\"\ndone\nprintf '\\n'\n";
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
+        write_executable(&script_path, script);
 
         let backend = GeminiBackend::with_command(script_path.to_string_lossy().to_string());
         backend
@@ -454,10 +457,7 @@ mod tests {
         let script_path = temp.path().join("gemini-fail");
         let output_path = temp.path().join("output.txt");
         let script = "#!/bin/sh\nprintf 'boom\\n'\nexit 3\n";
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
+        write_executable(&script_path, script);
 
         let backend = GeminiBackend::with_command(script_path.to_string_lossy().to_string());
         let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
