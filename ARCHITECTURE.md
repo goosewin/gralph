@@ -4,8 +4,8 @@ This document captures the high-level structure of gralph. It is a living summar
 
 ## Modules
 
-`src/main.rs` is the thin CLI entrypoint. It parses args, builds `Deps`, calls `app::run`, and maps results to exit codes.
-`src/lib.rs` exposes `run`, `Deps`, and helper wiring for the binary entrypoint.
+`src/main.rs` is the thin CLI entrypoint. It delegates to `cli_entrypoint` in `src/lib.rs` and returns its `ExitCode`.
+`src/lib.rs` exposes `run`, `Deps`, and the `cli_entrypoint` helper that parses args, builds real deps, runs the app, and maps results to exit codes.
 `src/app.rs` owns the `run` entrypoint, dependency seams, and command dispatch.
 `src/app/loop_session.rs` implements start/run-loop/stop/status/logs/resume handlers with `Deps`.
 `src/app/prd_init.rs` implements `gralph prd` and `gralph init` plus PRD/template helpers.
@@ -27,8 +27,9 @@ This document captures the high-level structure of gralph. It is a living summar
 
 ## Runtime Flow
 
-`src/main.rs` parses CLI arguments, builds real dependencies, and calls
-`app::run`. The `run` entrypoint dispatches to command handlers. The
+`src/main.rs` calls `cli_entrypoint` in `src/lib.rs`, which parses CLI
+arguments, builds real dependencies, and calls `app::run`. The `run`
+entrypoint dispatches to command handlers. The
 start/run-loop paths optionally create a worktree, load configuration,
 validate PRDs (when strict), and invoke `core::run_loop_with_clock`.
 Each iteration builds the prompt, invokes the backend, parses the result,

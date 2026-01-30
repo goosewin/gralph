@@ -67,7 +67,7 @@ Each task block must contain exactly one unchecked task line.
   * `ARCHITECTURE.md` reflects the new entrypoint helper location and flow.
   * `CHANGELOG.md` includes an Unreleased MR-2 entry and verification line format.
 - **Dependencies** MR-1
-- [ ] MR-2 Document entrypoint refactor and verification
+- [x] MR-2 Document entrypoint refactor and verification
 ---
 
 ### Task COV-1
