@@ -83,7 +83,7 @@ impl Backend for ClaudeBackend {
             }
         }
 
-        let mut child = spawn_with_retry(&mut cmd, "claude")?;
+        let child = spawn_with_retry(&mut cmd, "claude")?;
 
         let stdout_stream = io::stdout();
         let mut stdout_lock = stdout_stream.lock();

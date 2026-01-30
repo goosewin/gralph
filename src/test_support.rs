@@ -11,7 +11,7 @@ mod tests {
     use super::*;
     use std::env;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, Barrier, mpsc};
+    use std::sync::{mpsc, Arc, Barrier};
     use std::thread;
     use std::time::Duration;
 
@@ -275,21 +275,17 @@ mod tests {
             let _guard = env_lock();
             env::var_os(key)
         };
-        let mut last_value = None;
-
         for idx in 0..5 {
+            let value = format!("multi-drop-{idx}");
             {
                 let _guard = env_lock();
-                let value = format!("multi-drop-{idx}");
                 set_env(key, &value);
                 assert_eq!(env::var(key).as_deref(), Ok(value.as_str()));
-                last_value = Some(value);
             }
 
             {
                 let _guard = env_lock();
-                let expected = last_value.as_deref().expect("last value set");
-                assert_eq!(env::var(key).as_deref(), Ok(expected));
+                assert_eq!(env::var(key).as_deref(), Ok(value.as_str()));
             }
         }
 

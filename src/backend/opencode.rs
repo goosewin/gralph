@@ -76,7 +76,7 @@ impl Backend for OpenCodeBackend {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        let mut child = spawn_with_retry(&mut cmd, "opencode")?;
+        let child = spawn_with_retry(&mut cmd, "opencode")?;
 
         let stdout_stream = io::stdout();
         let mut stdout_lock = stdout_stream.lock();
