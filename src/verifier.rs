@@ -1,4 +1,4 @@
-use crate::{CliError, git_output_in_dir, join_or_none, normalize_csv, parse_bool_value};
+use crate::{git_output_in_dir, join_or_none, normalize_csv, parse_bool_value, CliError};
 use gralph_rs::config::Config;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -9,7 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const DEFAULT_TEST_COMMAND: &str = "cargo test --workspace";
-const DEFAULT_COVERAGE_COMMAND: &str = "cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*";
+const DEFAULT_COVERAGE_COMMAND: &str = "cargo tarpaulin --workspace --fail-under 90 --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*";
 const DEFAULT_COVERAGE_MIN: f64 = 90.0;
 const DEFAULT_COVERAGE_WARN: f64 = 70.0;
 const DEFAULT_PR_BASE: &str = "main";
@@ -389,13 +389,16 @@ fn run_verifier_pr_create(dir: &Path, config: &Config) -> Result<Option<String>,
         ));
     }
 
-    let template_path = resolve_pr_template_path(&repo_root)?;
+    let template_path = resolve_pr_template_path(&repo_root);
     let base = resolve_verifier_pr_base(config, &repo_root)?;
     let title = resolve_verifier_pr_title(config)?;
 
     ensure_gh_authenticated(&repo_root)?;
 
-    let output = run_gh_pr_create(&repo_root, &template_path, branch, &base, &title)?;
+    if template_path.is_none() {
+        println!("No PR template found; using empty body.");
+    }
+    let output = run_gh_pr_create(&repo_root, template_path.as_deref(), branch, &base, &title)?;
     let pr_url = extract_pr_url(&output);
     if let Some(url) = pr_url.as_deref() {
         println!("PR created: {}", url);
@@ -949,6 +952,10 @@ fn parse_review_issue_count(body: &str) -> Option<usize> {
             if let Some(value) = parse_first_usize(line) {
                 return Some(value);
             }
+            if line.contains("none") || line.contains("zero") {
+                return Some(0);
+            }
+            return Some(1);
         }
     }
     None
@@ -1122,7 +1129,7 @@ fn resolve_verifier_pr_title(config: &Config) -> Result<String, CliError> {
     Ok(title.trim().to_string())
 }
 
-fn resolve_pr_template_path(repo_root: &Path) -> Result<PathBuf, CliError> {
+fn resolve_pr_template_path(repo_root: &Path) -> Option<PathBuf> {
     let candidates = [
         repo_root.join(".github").join("pull_request_template.md"),
         repo_root.join(".github").join("PULL_REQUEST_TEMPLATE.md"),
@@ -1131,12 +1138,10 @@ fn resolve_pr_template_path(repo_root: &Path) -> Result<PathBuf, CliError> {
     ];
     for path in candidates {
         if path.is_file() {
-            return Ok(path);
+            return Some(path);
         }
     }
-    Err(CliError::Message(
-        "PR template not found in repository.".to_string(),
-    ))
+    None
 }
 
 fn ensure_gh_authenticated(dir: &Path) -> Result<(), CliError> {
@@ -1167,32 +1172,56 @@ fn ensure_gh_authenticated(dir: &Path) -> Result<(), CliError> {
 
 fn run_gh_pr_create(
     repo_root: &Path,
-    template_path: &Path,
+    template_path: Option<&Path>,
     head: &str,
     base: &str,
     title: &str,
 ) -> Result<String, CliError> {
-    println!(
-        "$ gh pr create --base {} --head {} --title {} --body-file {}",
-        base,
-        head,
-        title,
-        template_path.display()
-    );
-    let output = ProcCommand::new("gh")
-        .arg("pr")
-        .arg("create")
-        .arg("--base")
-        .arg(base)
-        .arg("--head")
-        .arg(head)
-        .arg("--title")
-        .arg(title)
-        .arg("--body-file")
-        .arg(template_path)
-        .current_dir(repo_root)
-        .output()
-        .map_err(map_gh_error)?;
+    let output = match template_path {
+        Some(template_path) => {
+            println!(
+                "$ gh pr create --base {} --head {} --title {} --body-file {}",
+                base,
+                head,
+                title,
+                template_path.display()
+            );
+            ProcCommand::new("gh")
+                .arg("pr")
+                .arg("create")
+                .arg("--base")
+                .arg(base)
+                .arg("--head")
+                .arg(head)
+                .arg("--title")
+                .arg(title)
+                .arg("--body-file")
+                .arg(template_path)
+                .current_dir(repo_root)
+                .output()
+                .map_err(map_gh_error)?
+        }
+        None => {
+            println!(
+                "$ gh pr create --base {} --head {} --title {} --body ''",
+                base, head, title
+            );
+            ProcCommand::new("gh")
+                .arg("pr")
+                .arg("create")
+                .arg("--base")
+                .arg(base)
+                .arg("--head")
+                .arg(head)
+                .arg("--title")
+                .arg(title)
+                .arg("--body")
+                .arg("")
+                .current_dir(repo_root)
+                .output()
+                .map_err(map_gh_error)?
+        }
+    };
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     if !output.status.success() {
@@ -2100,7 +2129,7 @@ mod tests {
         assert_eq!(program, "cargo");
         assert!(args.starts_with(&["tarpaulin".to_string()]));
         assert!(args.contains(&"--fail-under".to_string()));
-        assert!(args.contains(&"60".to_string()));
+        assert!(args.contains(&"90".to_string()));
         assert!(args.contains(&"src/backend/*".to_string()));
     }
 
@@ -2238,15 +2267,10 @@ mod tests {
     }
 
     #[test]
-    fn resolve_pr_template_path_errors_when_missing() {
+    fn resolve_pr_template_path_returns_none_when_missing() {
         let temp = tempfile::tempdir().unwrap();
-        let err = resolve_pr_template_path(temp.path()).unwrap_err();
-        match err {
-            CliError::Message(message) => {
-                assert!(message.contains("PR template not found"));
-            }
-            other => panic!("expected message error, got {other:?}"),
-        }
+        let resolved = resolve_pr_template_path(temp.path());
+        assert!(resolved.is_none());
     }
 
     #[test]
@@ -2313,7 +2337,8 @@ mod tests {
         let template = temp.path().join("PULL_REQUEST_TEMPLATE.md");
         fs::write(&template, "template\n").unwrap();
 
-        let err = run_gh_pr_create(temp.path(), &template, "feature", "main", "title").unwrap_err();
+        let err =
+            run_gh_pr_create(temp.path(), Some(&template), "feature", "main", "title").unwrap_err();
         match err {
             CliError::Message(message) => {
                 assert!(message.contains("gh pr create failed: create failed"));
@@ -2334,7 +2359,8 @@ mod tests {
         let template = temp.path().join("pull_request_template.md");
         fs::write(&template, "template\n").unwrap();
 
-        let err = run_gh_pr_create(temp.path(), &template, "feature", "main", "title").unwrap_err();
+        let err =
+            run_gh_pr_create(temp.path(), Some(&template), "feature", "main", "title").unwrap_err();
         match err {
             CliError::Message(message) => {
                 assert!(message.contains("gh pr create failed."));
@@ -2474,6 +2500,19 @@ mod tests {
     #[test]
     fn parse_review_issue_count_handles_explicit_zero() {
         assert_eq!(parse_review_issue_count("Issues: 0"), Some(0));
+    }
+
+    #[test]
+    fn parse_review_issue_count_handles_none_text() {
+        assert_eq!(parse_review_issue_count("Issues: none"), Some(0));
+    }
+
+    #[test]
+    fn parse_review_issue_count_assumes_issue_when_number_missing() {
+        assert_eq!(
+            parse_review_issue_count("Issues found: pending triage"),
+            Some(1)
+        );
     }
 
     #[test]
