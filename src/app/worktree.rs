@@ -24,15 +24,6 @@ impl Worktree {
     ) -> Result<(), CliError> {
         maybe_create_auto_worktree(args, config)
     }
-
-    pub(crate) fn maybe_create_auto_worktree_with_timestamp(
-        &self,
-        args: &mut RunLoopArgs,
-        config: &Config,
-        timestamp: &str,
-    ) -> Result<(), CliError> {
-        maybe_create_auto_worktree_with_timestamp(args, config, timestamp)
-    }
 }
 
 fn cmd_worktree_create(args: WorktreeCreateArgs) -> Result<(), CliError> {
@@ -186,16 +177,24 @@ fn git_status_in_repo(
     repo_root: &str,
     args: impl IntoIterator<Item = impl AsRef<OsStr>>,
 ) -> Result<(), CliError> {
-    let status = ProcCommand::new("git")
+    let output = ProcCommand::new("git")
         .arg("-C")
         .arg(repo_root)
         .args(args)
-        .status()
+        .output()
         .map_err(CliError::Io)?;
-    if status.success() {
+    if output.status.success() {
         Ok(())
     } else {
-        Err(CliError::Message("git command failed".to_string()))
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let combined = format!("{}{}", stdout, stderr);
+        let trimmed = combined.trim();
+        if trimmed.is_empty() {
+            Err(CliError::Message("git command failed".to_string()))
+        } else {
+            Err(CliError::Message(trimmed.to_string()))
+        }
     }
 }
 

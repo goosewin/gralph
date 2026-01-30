@@ -335,7 +335,7 @@ pub fn run_loop<B: Backend + ?Sized>(
     session_name: Option<&str>,
     prompt_template: Option<&str>,
     config: Option<&Config>,
-    mut state_callback: Option<&mut dyn FnMut(Option<&str>, u32, LoopStatus, usize)>,
+    state_callback: Option<&mut dyn FnMut(Option<&str>, u32, LoopStatus, usize)>,
 ) -> Result<LoopOutcome, CoreError> {
     run_loop_with_clock(
         backend,
@@ -809,6 +809,7 @@ fn format_duration(duration_secs: u64) -> String {
     format!("{} ({}s)", parts.join(" "), duration_secs)
 }
 
+#[cfg(test)]
 fn cleanup_old_logs(log_dir: &Path, config: Option<&Config>) -> Result<(), CoreError> {
     cleanup_old_logs_with_clock(log_dir, config, &SystemClock)
 }
@@ -859,10 +860,6 @@ fn cleanup_old_logs_with_clock(
         }
     }
     Ok(())
-}
-
-fn create_temp_file(prefix: &str) -> Result<PathBuf, CoreError> {
-    create_temp_file_with_clock(prefix, &SystemClock)
 }
 
 fn create_temp_file_with_clock(prefix: &str, clock: &dyn Clock) -> Result<PathBuf, CoreError> {

@@ -1,4 +1,3 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -40,12 +39,6 @@ impl EnvGuard {
     fn set(&self, key: &str, value: impl AsRef<OsStr>) {
         unsafe {
             env::set_var(key, value);
-        }
-    }
-
-    fn remove(&self, key: &str) {
-        unsafe {
-            env::remove_var(key);
         }
     }
 }
@@ -98,7 +91,7 @@ fn cli_help_shows_overview() {
     let temp = tempfile::tempdir().unwrap();
     let _guard = prepare_env(temp.path());
 
-    let mut cmd = Command::cargo_bin("gralph").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("gralph");
     cmd.arg("--help");
 
     cmd.assert()
@@ -112,7 +105,7 @@ fn cli_rejects_invalid_args() {
     let temp = tempfile::tempdir().unwrap();
     let _guard = prepare_env(temp.path());
 
-    let mut cmd = Command::cargo_bin("gralph").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("gralph");
     cmd.arg("--definitely-invalid");
 
     cmd.assert()
@@ -127,7 +120,7 @@ fn cli_init_writes_context_files() {
     let target = temp_path(temp.path(), "project");
     fs::create_dir_all(&target).unwrap();
 
-    let mut cmd = Command::cargo_bin("gralph").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("gralph");
     cmd.args(["init", "--dir"])
         .arg(&target)
         .current_dir(temp.path());
@@ -146,7 +139,7 @@ fn cli_prd_check_reports_missing_file() {
     let _guard = prepare_env(temp.path());
     let missing = temp_path(temp.path(), "missing.md");
 
-    let mut cmd = Command::cargo_bin("gralph").unwrap();
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("gralph");
     cmd.args(["prd", "check"]).arg(&missing);
 
     cmd.assert()

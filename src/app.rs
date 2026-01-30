@@ -1,12 +1,10 @@
 use crate::backend::backend_from_name;
 use crate::cli::{
-    self, Cli, Command, ConfigArgs, ConfigCommand, RunLoopArgs, ServerArgs, VerifierArgs,
-    ASCII_BANNER,
+    self, Cli, Command, ConfigArgs, ConfigCommand, ServerArgs, VerifierArgs, ASCII_BANNER,
 };
 use crate::config::Config;
 use crate::core;
 use crate::notify;
-use crate::prd;
 use crate::server::{self, ServerConfig};
 use crate::state::StateStore;
 use crate::update;
@@ -85,6 +83,8 @@ impl ProcessRunner for RealProcessRunner {
             .arg("kill-session")
             .arg("-t")
             .arg(session)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .status();
     }
 
@@ -154,23 +154,7 @@ impl Deps {
         }
     }
 
-    pub(crate) fn with_parts(
-        worktree: worktree::Worktree,
-        fs: Box<dyn FileSystem>,
-        process: Box<dyn ProcessRunner>,
-        clock: Box<dyn core::Clock>,
-        notifier: Box<dyn notify::Notifier>,
-    ) -> Self {
-        Self {
-            worktree,
-            fs,
-            process,
-            clock,
-            notifier,
-        }
-    }
-
-    pub fn worktree(&self) -> &worktree::Worktree {
+    pub(crate) fn worktree(&self) -> &worktree::Worktree {
         &self.worktree
     }
 
@@ -579,7 +563,7 @@ pub(crate) fn join_or_none(entries: &[String]) -> String {
 mod tests {
     use super::worktree;
     use super::*;
-    use crate::cli::InitArgs;
+    use crate::cli::{InitArgs, RunLoopArgs};
     use clap::Parser;
     use serde_json::json;
     use std::collections::BTreeMap;
