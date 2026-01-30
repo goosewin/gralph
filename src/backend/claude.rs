@@ -498,6 +498,18 @@ mod tests {
     }
 
     #[test]
+    fn parse_text_falls_back_when_result_entries_are_malformed() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("stream.json");
+        let contents = "{\"type\":\"result\",\"result\":{\"text\":\"nope\"}}\n{\"type\":\"result\",\"result\":[1,2]}\n{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\n";
+        fs::write(&path, contents).unwrap();
+
+        let backend = ClaudeBackend::new();
+        let result = backend.parse_text(&path).unwrap();
+        assert_eq!(result, contents);
+    }
+
+    #[test]
     fn parse_text_returns_io_error_for_missing_file() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("missing.json");
@@ -738,6 +750,53 @@ printf '"}\n'
             .collect();
         assert!(!args.contains(&"--model"));
         assert_eq!(args.last().copied(), Some("prompt"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_iteration_orders_args_without_model() {
+        let temp = tempfile::tempdir().unwrap();
+        let script_path = temp.path().join("claude-mock");
+        let output_path = temp.path().join("output.json");
+        let script = r#"#!/bin/sh
+printf '{"type":"result","result":"'
+for arg in "$@"; do
+  printf '%s|' "$arg"
+done
+printf '"}\n'
+"#;
+        fs::write(&script_path, script).unwrap();
+        let mut perms = fs::metadata(&script_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script_path, perms).unwrap();
+
+        let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
+        backend
+            .run_iteration("plain-prompt", None, None, &output_path, temp.path())
+            .expect("run_iteration should succeed");
+
+        let output = fs::read_to_string(&output_path).unwrap();
+        let value: Value = serde_json::from_str(output.trim()).unwrap();
+        let result = value
+            .get("result")
+            .and_then(|value| value.as_str())
+            .unwrap();
+        let args: Vec<&str> = result
+            .split('|')
+            .filter(|value| !value.is_empty())
+            .collect();
+        assert_eq!(
+            args,
+            vec![
+                "--dangerously-skip-permissions",
+                "--verbose",
+                "--print",
+                "--output-format",
+                "stream-json",
+                "-p",
+                "plain-prompt",
+            ]
+        );
     }
 
     #[cfg(unix)]

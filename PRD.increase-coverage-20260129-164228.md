@@ -186,7 +186,7 @@ Keep coverage as a warning-only signal for now. After stability, introduce a sof
   * Add tests for extract_assistant_texts with mixed content types and nulls.
   * Add tests for run_iteration model flag ordering and prompt placement.
 - **Dependencies** COV-BACKEND-MOD-1
-- [ ] COV-BACKEND-CLAUDE-1 Add Claude adapter parsing and ordering tests
+- [x] COV-BACKEND-CLAUDE-1 Add Claude adapter parsing and ordering tests
 ### Task COV-BACKEND-OPENCODE-1
 
 - **ID** COV-BACKEND-OPENCODE-1
