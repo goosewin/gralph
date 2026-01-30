@@ -98,7 +98,7 @@ Keep coverage as a warning-only signal for now. After stability, introduce a sof
   * Add tests for cleanup_stale with malformed sessions and non-object entries.
   * Cover lock timeout boundaries with short timeouts and contention simulation.
 - **Dependencies** None
-- [ ] COV-STATE-1 Expand state store error-path coverage
+- [x] COV-STATE-1 Expand state store error-path coverage
 ### Task COV-VER-1
 
 - **ID** COV-VER-1

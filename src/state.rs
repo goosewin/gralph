@@ -418,7 +418,7 @@ mod tests {
     use std::os::unix::io::FromRawFd;
     use std::path::Path;
     use std::process::Command;
-    use std::sync::{Arc, Mutex};
+    use std::sync::{mpsc, Arc, Mutex};
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
@@ -493,6 +493,33 @@ mod tests {
         thread::sleep(Duration::from_millis(100));
         let result = store.with_lock(|| Ok(()));
         assert!(matches!(result, Err(StateError::LockTimeout { .. })));
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn lock_timeout_zero_expires_immediately() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = Arc::new(store_for_test(temp.path(), Duration::from_millis(0)));
+        store.init_state().unwrap();
+
+        let (tx, rx) = mpsc::channel();
+        let blocker = Arc::clone(&store);
+        let handle = thread::spawn(move || {
+            blocker
+                .with_lock(|| {
+                    tx.send(()).unwrap();
+                    thread::sleep(Duration::from_millis(200));
+                    Ok(())
+                })
+                .unwrap();
+        });
+
+        rx.recv_timeout(Duration::from_secs(1)).unwrap();
+        let result = store.with_lock(|| Ok(()));
+        assert!(matches!(
+            result,
+            Err(StateError::LockTimeout { timeout }) if timeout == Duration::from_millis(0)
+        ));
         handle.join().unwrap();
     }
 
@@ -597,6 +624,25 @@ mod tests {
         let tmp_file = store
             .state_file
             .with_extension(format!("tmp.{}", std::process::id()));
+
+        let err = store.write_state(&empty_state()).unwrap_err();
+        match err {
+            StateError::Io { path, .. } => {
+                assert_eq!(path, tmp_file);
+            }
+            other => panic!("expected Io, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn write_state_fails_on_tmp_file_collision() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        fs::create_dir_all(&store.state_dir).unwrap();
+        let tmp_file = store
+            .state_file
+            .with_extension(format!("tmp.{}", std::process::id()));
+        fs::create_dir_all(&tmp_file).unwrap();
 
         let err = store.write_state(&empty_state()).unwrap_err();
         match err {
@@ -887,6 +933,66 @@ mod tests {
         assert_eq!(
             missing_status.get("pid").and_then(|value| value.as_i64()),
             Some(12)
+        );
+    }
+
+    #[test]
+    fn cleanup_stale_skips_malformed_session_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        store.init_state().unwrap();
+
+        let mut sessions = BTreeMap::new();
+        sessions.insert(
+            "arrayy".to_string(),
+            Value::Array(vec![Value::String("oops".to_string())]),
+        );
+        sessions.insert("booly".to_string(), Value::Bool(true));
+        sessions.insert(
+            "status-bool".to_string(),
+            Value::Object(Map::from_iter([
+                ("status".to_string(), Value::Bool(true)),
+                ("pid".to_string(), Value::Number(999999.into())),
+            ])),
+        );
+        sessions.insert(
+            "pid-float".to_string(),
+            Value::Object(Map::from_iter([
+                ("status".to_string(), Value::String("running".to_string())),
+                (
+                    "pid".to_string(),
+                    Value::Number(serde_json::Number::from_f64(12.5).unwrap()),
+                ),
+            ])),
+        );
+        let state = StateData { sessions };
+        store.write_state(&state).unwrap();
+
+        let cleaned = store.cleanup_stale(CleanupMode::Mark).unwrap();
+        assert!(cleaned.is_empty());
+
+        let reloaded = store.read_state().unwrap();
+        assert!(matches!(
+            reloaded.sessions.get("arrayy"),
+            Some(Value::Array(_))
+        ));
+        assert!(matches!(
+            reloaded.sessions.get("booly"),
+            Some(Value::Bool(true))
+        ));
+        let status_bool = reloaded.sessions.get("status-bool").unwrap();
+        assert_eq!(
+            status_bool.get("status").and_then(|value| value.as_bool()),
+            Some(true)
+        );
+        let pid_float = reloaded.sessions.get("pid-float").unwrap();
+        assert!(pid_float
+            .get("pid")
+            .and_then(|value| value.as_f64())
+            .is_some());
+        assert_eq!(
+            pid_float.get("status").and_then(|value| value.as_str()),
+            Some("running")
         );
     }
 
@@ -1338,6 +1444,13 @@ mod tests {
             other => panic!("expected InvalidState, got {other:?}"),
         }
         let err = validate_state_content("   ").unwrap_err();
+        match err {
+            StateError::InvalidState(message) => {
+                assert!(message.contains("empty state"));
+            }
+            other => panic!("expected InvalidState, got {other:?}"),
+        }
+        let err = validate_state_content("\n\t").unwrap_err();
         match err {
             StateError::InvalidState(message) => {
                 assert!(message.contains("empty state"));
