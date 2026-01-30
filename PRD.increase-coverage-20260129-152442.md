@@ -207,7 +207,7 @@ Each task block must contain exactly one unchecked task line.
   * Add tests for skipping whitespace-only model values.
   * Add tests for parse_text invalid UTF-8 and directory path errors.
 - **Dependencies** COV-VER-1
-- [ ] COV-BACKEND-GEMINI-1 Expand Gemini backend command and error coverage
+- [x] COV-BACKEND-GEMINI-1 Expand Gemini backend command and error coverage
 ---
 
 ### Task COV-BACKEND-CODEX-1
