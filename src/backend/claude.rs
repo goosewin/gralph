@@ -36,13 +36,14 @@ impl Default for ClaudeBackend {
 
 impl Backend for ClaudeBackend {
     fn check_installed(&self) -> bool {
-        Command::new(&self.command)
-            .arg("--version")
+        let mut cmd = Command::new(&self.command);
+        cmd.arg("--version")
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|status| status.success())
-            .unwrap_or(false)
+            .stderr(Stdio::null());
+        match spawn_with_retry(&mut cmd, "claude") {
+            Ok(mut child) => child.wait().map(|status| status.success()).unwrap_or(false),
+            Err(_) => false,
+        }
     }
 
     fn run_iteration(
