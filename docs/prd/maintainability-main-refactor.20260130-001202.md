@@ -139,7 +139,7 @@ Commands and tests align with CI expectations and coverage remains at or above 9
   * Auto worktree logic still respects clean repo checks and subdir mapping.
   * Main no longer calls git or worktree helpers directly.
 - **Dependencies** MD-2
-- [ ] MD-4 Move worktree and git helpers into app module
+- [x] MD-4 Move worktree and git helpers into app module
 ### Task MD-5
 
 - **ID** MD-5

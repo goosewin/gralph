@@ -27,7 +27,8 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
     let session_name = super::session_name(&args.name, &args.dir)?;
     let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
     let mut run_args = run_loop_args_from_start(args, session_name)?;
-    super::maybe_create_auto_worktree(&mut run_args, &config)?;
+    deps.worktree()
+        .maybe_create_auto_worktree(&mut run_args, &config)?;
     if no_tmux {
         return run_loop_with_state(run_args, deps);
     }
@@ -83,7 +84,8 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
 
 pub(super) fn cmd_run_loop(mut args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
     let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
-    super::maybe_create_auto_worktree(&mut args, &config)?;
+    deps.worktree()
+        .maybe_create_auto_worktree(&mut args, &config)?;
     run_loop_with_state(args, deps)
 }
 
