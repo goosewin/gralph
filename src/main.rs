@@ -2883,6 +2883,19 @@ mod tests {
     }
 
     #[test]
+    fn resolve_auto_worktree_defaults_true_on_empty_config_value() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join(".gralph.yaml"),
+            "defaults:\n  auto_worktree: \"\"\n",
+        );
+        let config = Config::load(Some(temp.path())).unwrap();
+
+        assert!(resolve_auto_worktree(&config, false));
+    }
+
+    #[test]
     fn auto_worktree_skips_non_git_directory() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -3022,6 +3035,24 @@ mod tests {
         );
 
         assert_eq!(branch, "prd-collision-3");
+    }
+
+    #[test]
+    fn ensure_unique_worktree_branch_handles_branch_only_collision() {
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+        git_status_ok(temp.path(), &["branch", "prd-collision"]);
+
+        let branch = ensure_unique_worktree_branch(
+            temp.path().to_str().unwrap(),
+            &worktrees_dir,
+            "prd-collision",
+        );
+
+        assert_eq!(branch, "prd-collision-2");
     }
 
     #[test]

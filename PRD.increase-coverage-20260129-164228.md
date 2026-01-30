@@ -131,7 +131,7 @@ Keep coverage as a warning-only signal for now. After stability, introduce a sof
   * Add tests for auto worktree branch naming and uniqueness helpers with collisions.
   * Add tests for parse_bool_value and resolve_auto_worktree handling invalid inputs.
 - **Dependencies** COV-CORE-1
-- [ ] COV-MAIN-1 Add CLI helper and worktree utility coverage
+- [x] COV-MAIN-1 Add CLI helper and worktree utility coverage
 ### Task COV-SERVER-1
 
 - **ID** COV-SERVER-1
