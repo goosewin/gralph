@@ -60,6 +60,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-12 Expand Gemini backend command and error coverage.
 - COV-12 Expand Claude adapter error-path coverage.
 - COV-BACKEND-CLAUDE-1 Cover Claude adapter parse fallbacks and malformed content.
+- COV-BACKEND-CLAUDE-1 Add Claude stream entry tests for missing type handling.
 - COV-12 Expand OpenCode adapter coverage.
 - COV-12 Expand notification formatting boundary and timeout default tests.
 - COV-13 Expand OpenCode adapter error-path coverage.

@@ -311,6 +311,9 @@ mod tests {
             "type": 5,
             "message": {"content": [{"type": "text", "text": "ignored"}]}
         });
+        let missing_type = json!({
+            "message": {"content": [{"type": "text", "text": "ignored"}]}
+        });
         let text_not_string = json!({
             "type": "assistant",
             "message": {"content": [{"type": "text", "text": 42}]}
@@ -321,6 +324,7 @@ mod tests {
         });
 
         assert!(extract_assistant_texts(&type_not_string).is_empty());
+        assert!(extract_assistant_texts(&missing_type).is_empty());
         assert!(extract_assistant_texts(&text_not_string).is_empty());
         assert!(extract_assistant_texts(&content_not_object).is_empty());
     }
@@ -352,9 +356,11 @@ mod tests {
     #[test]
     fn extract_result_text_requires_result_type() {
         let result = json!({"type": "result", "result": "done"});
+        let missing_type = json!({"result": "done"});
         let assistant = json!({"type": "assistant", "result": "ignored"});
 
         assert_eq!(extract_result_text(&result), Some("done".to_string()));
+        assert_eq!(extract_result_text(&missing_type), None);
         assert_eq!(extract_result_text(&assistant), None);
     }
 

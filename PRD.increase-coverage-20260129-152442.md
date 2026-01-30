@@ -181,7 +181,7 @@ Each task block must contain exactly one unchecked task line.
   * Add tests for parse_text returning last valid result vs raw contents fallback.
   * Add tests for run_iteration model flag ordering and skipping empty model values.
 - **Dependencies** COV-VER-1
-- [ ] COV-BACKEND-CLAUDE-1 Expand Claude backend parsing and arg ordering coverage
+- [x] COV-BACKEND-CLAUDE-1 Expand Claude backend parsing and arg ordering coverage
 ---
 
 ### Task COV-BACKEND-OPENCODE-1
