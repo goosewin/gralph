@@ -161,7 +161,7 @@ Commands and tests align with CI expectations and coverage remains at or above 9
   * Tests use temp dirs and env overrides to avoid touching user state.
   * `Cargo.toml` dev-dependencies updated accordingly.
 - **Dependencies** MD-1
-- [ ] MD-6 Add CLI integration tests with assert_cmd
+- [x] MD-6 Add CLI integration tests with assert_cmd
 ### Task MD-7
 
 - **ID** MD-7
