@@ -2,6 +2,7 @@ pub mod backend;
 pub mod cli;
 pub mod config;
 pub mod core;
+mod entrypoint;
 pub mod notify;
 pub mod prd;
 pub mod server;
@@ -13,22 +14,8 @@ mod verifier;
 
 pub mod app;
 pub use app::{exit_code_for, run, Deps};
-use clap::Parser;
-use std::process::ExitCode;
-
-pub fn cli_entrypoint() -> ExitCode {
-    cli_entrypoint_from(std::env::args_os())
-}
-
-fn cli_entrypoint_from<I, T>(args: I) -> ExitCode
-where
-    I: IntoIterator<Item = T>,
-    T: Into<std::ffi::OsString> + Clone,
-{
-    let cli = cli::Cli::parse_from(args);
-    let deps = Deps::real();
-    exit_code_for(run(cli, &deps))
-}
+pub use entrypoint::cli_entrypoint;
+pub(crate) use entrypoint::cli_entrypoint_from;
 
 #[cfg(test)]
 mod test_support;

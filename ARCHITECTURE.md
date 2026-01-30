@@ -4,8 +4,9 @@ This document captures the high-level structure of gralph. It is a living summar
 
 ## Modules
 
-`src/main.rs` is the thin CLI entrypoint. It delegates to `cli_entrypoint` in `src/lib.rs` and returns its `ExitCode`.
-`src/lib.rs` exposes `run`, `Deps`, and the `cli_entrypoint` helper that parses args, builds real deps, runs the app, and maps results to exit codes.
+`src/main.rs` is the thin CLI entrypoint. It delegates to `cli_entrypoint` re-exported from `src/lib.rs` and returns its `ExitCode`.
+`src/entrypoint.rs` owns the CLI entrypoint helper that parses args, builds real deps, runs the app, and maps results to exit codes.
+`src/lib.rs` exposes `run`, `Deps`, and the entrypoint helper for external callers.
 `src/app.rs` owns the `run` entrypoint, dependency seams, and command dispatch.
 `src/app/loop_session.rs` implements start/run-loop/stop/status/logs/resume handlers with `Deps`.
 `src/app/prd_init.rs` implements `gralph prd` and `gralph init` plus PRD/template helpers.
