@@ -194,7 +194,7 @@ Each task block must contain exactly one unchecked task line.
   * Add tests for run_iteration with model and variant combinations, including empty values.
   * Add tests for parse_text invalid UTF-8 and missing file paths.
 - **Dependencies** COV-VER-1
-- [ ] COV-BACKEND-OPENCODE-1 Expand OpenCode backend env and output coverage
+- [x] COV-BACKEND-OPENCODE-1 Expand OpenCode backend env and output coverage
 ---
 
 ### Task COV-BACKEND-GEMINI-1
