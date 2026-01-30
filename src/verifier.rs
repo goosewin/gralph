@@ -2677,6 +2677,23 @@ mod tests {
     }
 
     #[test]
+    fn evaluate_review_gate_passes_with_numeric_rating_scale() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "APPROVED",
+                    "body": "Rating: 9",
+                    "submittedAt": "2024-01-06T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(_)));
+    }
+
+    #[test]
     fn evaluate_review_gate_fails_on_issue_budget() {
         let settings = base_review_settings();
         let pr_view = json!({
@@ -2685,6 +2702,23 @@ mod tests {
                     "author": { "login": "greptile" },
                     "state": "APPROVED",
                     "body": "Rating: 9/10\nIssues: 2",
+                    "submittedAt": "2024-01-05T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Failed(message) if message.contains("issue")));
+    }
+
+    #[test]
+    fn evaluate_review_gate_fails_on_issue_without_number() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "APPROVED",
+                    "body": "Rating: 9/10\nIssues found: pending triage",
                     "submittedAt": "2024-01-05T00:00:00Z"
                 }
             ]
@@ -3047,6 +3081,27 @@ mod tests {
         assert!(
             matches!(decision, GateDecision::Failed(message) if message.contains("checks failed"))
         );
+    }
+
+    #[test]
+    fn evaluate_check_gate_fails_when_pending_and_failed() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "IN_PROGRESS",
+                    "conclusion": ""
+                },
+                {
+                    "name": "lint",
+                    "status": "COMPLETED",
+                    "conclusion": "FAILURE"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Failed(message) if message.contains("lint")));
     }
 
     #[test]

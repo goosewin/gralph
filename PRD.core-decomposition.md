@@ -95,7 +95,7 @@ The verifier pipeline must continue to run tests, parse coverage output, enforce
   * Tests cover rating parsing for fractions, percentages, and 0-10 scales.
   * Tests cover check rollup states for pending, failed, and passed decisions.
 - **Dependencies** VER-1
-- [ ] VER-2 Add review gate and check gate decision tests
+- [x] VER-2 Add review gate and check gate decision tests
 ---
 
 ### Task PRD-1
