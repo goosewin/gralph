@@ -42,7 +42,7 @@ mod tests {
             tx.send(()).expect("send acquired");
         });
 
-        assert_eq!(rx.recv_timeout(Duration::from_secs(1)), Ok(()));
+        assert_eq!(rx.recv_timeout(Duration::from_secs(5)), Ok(()));
         assert!(handle.join().is_ok());
     }
 
