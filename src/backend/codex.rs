@@ -279,6 +279,21 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn run_iteration_returns_io_when_output_path_is_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let output_dir = temp.path().join("output-dir");
+        fs::create_dir(&output_dir).unwrap();
+        let backend = CodexBackend::with_command("codex".to_string());
+
+        let result = backend.run_iteration("prompt", None, None, &output_dir, temp.path());
+
+        assert!(matches!(
+            result,
+            Err(BackendError::Io { path, .. }) if path == output_dir
+        ));
+    }
+
     #[cfg(unix)]
     #[test]
     fn run_iteration_returns_io_when_output_dir_is_read_only() {

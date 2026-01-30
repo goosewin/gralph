@@ -220,7 +220,7 @@ Each task block must contain exactly one unchecked task line.
   * Add tests for skipping empty model values and keeping prompt last.
   * Add tests for parse_text invalid UTF-8 and directory path errors.
 - **Dependencies** COV-VER-1
-- [ ] COV-BACKEND-CODEX-1 Expand Codex backend flag ordering and error coverage
+- [x] COV-BACKEND-CODEX-1 Expand Codex backend flag ordering and error coverage
 ---
 
 ### Task COV-TASK-1
