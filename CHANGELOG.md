@@ -151,6 +151,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-UPDATE-1 Expand update workflow error-path coverage for release download overrides and unsupported targets.
 - COV-UPDATE-1 Add resolve_install_version tests for empty env values and invalid tags.
 - COV-UPDATE-1 Add update version parsing and override trim tests.
+- COV-UPDATE-1 Add update platform and extract_archive PATH error message tests.
 - COV-BACKEND-MOD-1 Expand backend helper streaming and PATH edge coverage for stderr-only and early-close cases.
 - COV-BACKEND-CLAUDE-1 Add Claude adapter error-path tests.
 - COV-BACKEND-CLAUDE-1 Add Claude adapter argument ordering coverage.

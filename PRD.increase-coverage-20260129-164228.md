@@ -164,7 +164,7 @@ Keep coverage as a warning-only signal for now. After stability, introduce a sof
   * Add tests for detect_platform_for with unsupported OS and arch combinations.
   * Add tests for extract_archive error messaging when tar fails or PATH is empty.
 - **Dependencies** None
-- [ ] COV-UPDATE-1 Expand update workflow error-path tests
+- [x] COV-UPDATE-1 Expand update workflow error-path tests
 ### Task COV-BACKEND-MOD-1
 
 - **ID** COV-BACKEND-MOD-1

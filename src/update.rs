@@ -799,6 +799,15 @@ mod tests {
     }
 
     #[test]
+    fn resolve_install_version_rejects_invalid_gralph_version_env() {
+        let _lock = crate::test_support::env_lock();
+        let _guard = EnvGuard::set("GRALPH_VERSION", "not-a-version");
+        let raw = env::var("GRALPH_VERSION").expect("env set");
+        let result = resolve_install_version(&raw);
+        assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
     fn resolve_install_version_rejects_invalid_version() {
         let result = resolve_install_version("1.2");
         assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
@@ -893,6 +902,15 @@ mod tests {
     }
 
     #[test]
+    fn detect_platform_for_rejects_unknown_arch_on_macos() {
+        let result = detect_platform_for("macos", "mips");
+        assert!(matches!(
+            result,
+            Err(UpdateError::UnsupportedPlatform(value)) if value == "macos-mips"
+        ));
+    }
+
+    #[test]
     fn resolve_in_path_finds_binary() {
         let _lock = crate::test_support::env_lock();
         let temp = tempdir().expect("tempdir");
@@ -970,6 +988,23 @@ mod tests {
         let _guard = PathGuard::set(Some(OsStr::new("")));
         let result = extract_archive(&archive_path, temp.path());
         assert!(matches!(result, Err(UpdateError::CommandFailed(_))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_archive_reports_failure_message_with_empty_path() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempdir().expect("tempdir");
+        let archive_path = temp.path().join("gralph.tar.gz");
+        fs::write(&archive_path, "not a tar").expect("write invalid");
+        let _guard = PathGuard::set(Some(OsStr::new("")));
+        let result = extract_archive(&archive_path, temp.path());
+        match result {
+            Err(UpdateError::CommandFailed(message)) => {
+                assert!(message.starts_with("Failed to extract archive:"));
+            }
+            other => panic!("expected command failed, got {other:?}"),
+        }
     }
 
     #[cfg(unix)]
