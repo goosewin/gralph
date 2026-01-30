@@ -175,7 +175,7 @@ Keep coverage as a warning-only signal for now. After stability, introduce a sof
   * Add tests for command_in_path with relative path segments and non-directory entries.
   * Add tests for backend_from_name error messages on invalid names.
 - **Dependencies** None
-- [ ] COV-BACKEND-MOD-1 Expand backend helper utility coverage
+- [x] COV-BACKEND-MOD-1 Expand backend helper utility coverage
 ### Task COV-BACKEND-CLAUDE-1
 
 - **ID** COV-BACKEND-CLAUDE-1

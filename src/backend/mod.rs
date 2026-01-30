@@ -232,6 +232,16 @@ mod tests {
     }
 
     #[test]
+    fn backend_from_name_reports_invalid_names() {
+        let cases = ["", "Claude", "claude ", " opencode"];
+
+        for name in cases {
+            let err = backend_from_name(name).expect_err("expected unknown backend error");
+            assert_eq!(err, format!("Unknown backend: {}", name));
+        }
+    }
+
+    #[test]
     fn backend_models_are_non_empty_and_stable() {
         let cases = [
             ("claude", vec!["claude-opus-4-5".to_string()]),
@@ -414,6 +424,26 @@ mod tests {
         unsafe {
             env::set_var("PATH", &combined);
         }
+        assert!(command_in_path(command_name));
+    }
+
+    #[test]
+    fn command_in_path_accepts_absolute_paths_with_relative_segments() {
+        let _lock = crate::test_support::env_lock();
+        let command_name = "gralph-relative-segment-command";
+        let temp_dir = tempfile::tempdir().unwrap();
+        let bin_dir = temp_dir.path().join("bin");
+        let nested_dir = temp_dir.path().join("nested");
+        fs::create_dir_all(&bin_dir).unwrap();
+        fs::create_dir_all(&nested_dir).unwrap();
+        fs::write(bin_dir.join(command_name), "stub").unwrap();
+
+        let path_with_parent = nested_dir.join("..").join("bin");
+        let path_with_current = bin_dir.join(".");
+        let combined =
+            env::join_paths([path_with_parent.as_path(), path_with_current.as_path()]).unwrap();
+        let _guard = PathGuard::set(Some(combined.as_os_str()));
+
         assert!(command_in_path(command_name));
     }
 

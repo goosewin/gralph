@@ -152,7 +152,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-UPDATE-1 Add resolve_install_version tests for empty env values and invalid tags.
 - COV-UPDATE-1 Add update version parsing and override trim tests.
 - COV-UPDATE-1 Add update platform and extract_archive PATH error message tests.
-- COV-BACKEND-MOD-1 Expand backend helper streaming and PATH edge coverage for stderr-only and early-close cases.
+- COV-BACKEND-MOD-1 Expand backend helper streaming, PATH relative-segment handling, and invalid backend name error coverage.
 - COV-BACKEND-CLAUDE-1 Add Claude adapter error-path tests.
 - COV-BACKEND-CLAUDE-1 Add Claude adapter argument ordering coverage.
 - COV-BACKEND-OPENCODE-1 Expand OpenCode adapter coverage for env flags, arg ordering, model/variant trimming, mixed stdout/stderr capture, and invalid UTF-8 parsing.
