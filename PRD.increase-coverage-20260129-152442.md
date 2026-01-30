@@ -259,7 +259,7 @@ Each task block must contain exactly one unchecked task line.
   * Add tests for resolve_install_version honoring GRALPH_VERSION and test release overrides.
   * Add tests for extract_archive failures and install_binary permission denied behavior.
 - **Dependencies** COV-VER-1
-- [ ] COV-UPDATE-1 Expand update flow error-path coverage
+- [x] COV-UPDATE-1 Expand update flow error-path coverage
 ---
 
 ### Task COV-CI-1

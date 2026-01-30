@@ -575,6 +575,16 @@ mod tests {
     }
 
     #[test]
+    fn parse_version_rejects_non_numeric_segments() {
+        let major = Version::parse("x.2.3");
+        assert!(matches!(major, Err(UpdateError::InvalidVersion(_))));
+        let minor = Version::parse("1.y.3");
+        assert!(matches!(minor, Err(UpdateError::InvalidVersion(_))));
+        let patch = Version::parse("1.2.z");
+        assert!(matches!(patch, Err(UpdateError::InvalidVersion(_))));
+    }
+
+    #[test]
     fn parse_version_rejects_empty_input() {
         let result = Version::parse(" ");
         assert!(matches!(result, Err(UpdateError::InvalidVersion(_))));
@@ -807,6 +817,14 @@ mod tests {
         let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "v2.0.0");
         let resolved = resolve_install_version("latest").expect("resolved");
         assert_eq!(resolved, "2.0.0");
+    }
+
+    #[test]
+    fn resolve_install_version_latest_trims_override() {
+        let _lock = crate::test_support::env_lock();
+        let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "  v2.3.4  ");
+        let resolved = resolve_install_version("latest").expect("resolved");
+        assert_eq!(resolved, "2.3.4");
     }
 
     #[test]
