@@ -1,0 +1,3 @@
+verifier:
+  coverage_min: 70
+  coverage_warn: 80
