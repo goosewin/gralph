@@ -128,7 +128,7 @@ Commands and tests align with CI expectations and coverage remains at or above 9
   * `gralph prd create` and `gralph prd check` outputs and errors are unchanged.
   * `gralph init` scaffolding behavior remains consistent with README/config defaults.
 - **Dependencies** MD-1
-- [ ] MD-3 Extract PRD and init command handlers
+- [x] MD-3 Extract PRD and init command handlers
 ### Task MD-4
 
 - **ID** MD-4
