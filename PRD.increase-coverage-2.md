@@ -64,7 +64,7 @@ Each task block must contain exactly one unchecked task line.
   * Add a changelog entry tagged with this task ID.
   * Ensure documentation remains ASCII-only and consistent with module layout.
 - **Dependencies** MR-1
-- [ ] DOC-1 Update shared docs for refactor and coverage recovery
+- [x] DOC-1 Update shared docs for refactor and coverage recovery
 ### Task COV-1
 
 - **ID** COV-1

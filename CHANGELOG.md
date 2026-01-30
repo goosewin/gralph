@@ -12,6 +12,7 @@ CI=<status/link>; PR=<link if final PRD task>
 ## [Unreleased]
 
 ### Changed
+- DOC-1 Record entrypoint refactor and coverage recovery notes in shared docs.
 - MD-2 Extract loop and session command handlers into the app loop session module.
 - MD-3 Move PRD and init command handlers into the app PRD module.
 - MD-4 Move worktree and git helpers into the app worktree module.
