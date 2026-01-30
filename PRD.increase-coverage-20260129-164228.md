@@ -208,7 +208,7 @@ Keep coverage as a warning-only signal for now. After stability, introduce a sof
   * Add tests for parse_text invalid UTF-8 and missing file paths.
   * Add tests for run_iteration failure propagation on non-zero exit.
 - **Dependencies** COV-BACKEND-MOD-1
-- [ ] COV-BACKEND-GEMINI-1 Expand Gemini adapter tests
+- [x] COV-BACKEND-GEMINI-1 Expand Gemini adapter tests
 ### Task COV-BACKEND-CODEX-1
 
 - **ID** COV-BACKEND-CODEX-1
