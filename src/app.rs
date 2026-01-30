@@ -4,6 +4,8 @@ use crate::cli::{
     ASCII_BANNER,
 };
 use crate::config::Config;
+use crate::core;
+use crate::notify;
 use crate::prd;
 use crate::server::{self, ServerConfig};
 use crate::state::StateStore;
@@ -14,7 +16,7 @@ use std::env;
 use std::ffi::OsStr;
 use std::fmt::Display;
 use std::fs;
-use std::io;
+use std::io::{self, Read, Seek};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -34,20 +36,154 @@ use prd_init::{
     RISK_REGISTER_TEMPLATE,
 };
 
-#[derive(Default)]
+pub(crate) trait FileSystem: Send + Sync {
+    fn read_to_string(&self, path: &Path) -> io::Result<String>;
+    fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Seek>>;
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct RealFileSystem;
+
+impl FileSystem for RealFileSystem {
+    fn read_to_string(&self, path: &Path) -> io::Result<String> {
+        fs::read_to_string(path)
+    }
+
+    fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Seek>> {
+        let file = fs::File::open(path)?;
+        Ok(Box::new(file))
+    }
+}
+
+pub(crate) trait ProcessRunner: Send + Sync {
+    fn current_exe(&self) -> io::Result<PathBuf>;
+    fn spawn(&self, cmd: &mut std::process::Command) -> io::Result<std::process::Child>;
+    fn kill_tmux_session(&self, session: &str);
+    fn kill_pid(&self, pid: i64);
+    fn pid(&self) -> u32;
+    fn is_alive(&self, pid: i64) -> bool;
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub(crate) struct RealProcessRunner;
+
+impl ProcessRunner for RealProcessRunner {
+    fn current_exe(&self) -> io::Result<PathBuf> {
+        env::current_exe()
+    }
+
+    fn spawn(&self, cmd: &mut std::process::Command) -> io::Result<std::process::Child> {
+        cmd.spawn()
+    }
+
+    fn kill_tmux_session(&self, session: &str) {
+        let _ = std::process::Command::new("tmux")
+            .arg("kill-session")
+            .arg("-t")
+            .arg(session)
+            .status();
+    }
+
+    fn kill_pid(&self, pid: i64) {
+        if pid <= 0 {
+            return;
+        }
+        #[cfg(unix)]
+        {
+            let _ = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
+        }
+        #[cfg(windows)]
+        {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &pid.to_string(), "/F"])
+                .status();
+        }
+    }
+
+    fn pid(&self) -> u32 {
+        std::process::id()
+    }
+
+    fn is_alive(&self, pid: i64) -> bool {
+        if pid <= 0 {
+            return false;
+        }
+        #[cfg(unix)]
+        {
+            let result = unsafe { libc::kill(pid as i32, 0) };
+            if result == 0 {
+                return true;
+            }
+            let err = io::Error::last_os_error();
+            return err.kind() == io::ErrorKind::PermissionDenied;
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = pid;
+            false
+        }
+    }
+}
+
 pub struct Deps {
     worktree: worktree::Worktree,
+    fs: Box<dyn FileSystem>,
+    process: Box<dyn ProcessRunner>,
+    clock: Box<dyn core::Clock>,
+    notifier: Box<dyn notify::Notifier>,
+}
+
+impl Default for Deps {
+    fn default() -> Self {
+        Self::real()
+    }
 }
 
 impl Deps {
     pub fn real() -> Self {
         Self {
             worktree: worktree::Worktree::default(),
+            fs: Box::new(RealFileSystem),
+            process: Box::new(RealProcessRunner),
+            clock: Box::new(core::SystemClock),
+            notifier: Box::new(notify::RealNotifier),
+        }
+    }
+
+    pub(crate) fn with_parts(
+        worktree: worktree::Worktree,
+        fs: Box<dyn FileSystem>,
+        process: Box<dyn ProcessRunner>,
+        clock: Box<dyn core::Clock>,
+        notifier: Box<dyn notify::Notifier>,
+    ) -> Self {
+        Self {
+            worktree,
+            fs,
+            process,
+            clock,
+            notifier,
         }
     }
 
     pub fn worktree(&self) -> &worktree::Worktree {
         &self.worktree
+    }
+
+    pub(crate) fn fs(&self) -> &dyn FileSystem {
+        self.fs.as_ref()
+    }
+
+    pub(crate) fn process(&self) -> &dyn ProcessRunner {
+        self.process.as_ref()
+    }
+
+    pub(crate) fn clock(&self) -> &dyn core::Clock {
+        self.clock.as_ref()
+    }
+
+    pub(crate) fn notifier(&self) -> &dyn notify::Notifier {
+        self.notifier.as_ref()
     }
 
     pub fn state_store(&self) -> StateStore {

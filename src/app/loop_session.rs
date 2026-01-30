@@ -1,4 +1,4 @@
-use super::{CliError, Deps};
+use super::{CliError, Deps, FileSystem, ProcessRunner};
 use crate::backend::backend_from_name;
 use crate::cli::{LogsArgs, ResumeArgs, RunLoopArgs, StartArgs, StopArgs};
 use crate::config::Config;
@@ -8,12 +8,9 @@ use crate::prd;
 use crate::state::{CleanupMode, StateStore};
 use crate::update;
 use crate::verifier;
-use std::env;
-use std::fs;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcCommand, Stdio};
-use std::thread;
 use std::time::Duration;
 
 pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
@@ -33,13 +30,13 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
         return run_loop_with_state(run_args, deps);
     }
 
-    let child = spawn_run_loop(&run_args)?;
+    let child = spawn_run_loop(&run_args, deps.process())?;
 
     let store = deps.state_store();
     store
         .init_state()
         .map_err(|err| CliError::Message(err.to_string()))?;
-    let now = chrono::Local::now().to_rfc3339();
+    let now = format_rfc3339(deps.clock());
     let task_file = run_args
         .task_file
         .clone()
@@ -101,7 +98,7 @@ pub(super) fn cmd_stop(args: StopArgs, deps: &Deps) -> Result<(), CliError> {
             .map_err(|err| CliError::Message(err.to_string()))?;
         for session in sessions {
             if let Some(name) = session.get("name").and_then(|v| v.as_str()) {
-                stop_session(&store, name, &session)?;
+                stop_session(&store, name, &session, deps.process())?;
             }
         }
         println!("Stopped running sessions.");
@@ -116,7 +113,7 @@ pub(super) fn cmd_stop(args: StopArgs, deps: &Deps) -> Result<(), CliError> {
         .map_err(|err| CliError::Message(err.to_string()))?
         .ok_or_else(|| CliError::Message(format!("Session not found: {}", name)))?;
 
-    stop_session(&store, &name, &session)?;
+    stop_session(&store, &name, &session, deps.process())?;
     println!("Stopped session: {}", name);
     Ok(())
 }
@@ -199,9 +196,9 @@ pub(super) fn cmd_logs(args: LogsArgs, deps: &Deps) -> Result<(), CliError> {
     }
 
     if args.follow {
-        follow_log(&log_file)?;
+        follow_log(&log_file, deps.fs(), deps.clock())?;
     } else {
-        print_tail(&log_file, 200)?;
+        print_tail(&log_file, 200, deps.fs())?;
     }
     Ok(())
 }
@@ -236,7 +233,7 @@ pub(super) fn cmd_resume(args: ResumeArgs, deps: &Deps) -> Result<(), CliError> 
         let should_resume = status == "stale"
             || status == "stopped"
             || status == "failed"
-            || (status == "running" && !is_process_alive(pid));
+            || (status == "running" && !deps.process().is_alive(pid));
         if !should_resume {
             continue;
         }
@@ -288,7 +285,7 @@ pub(super) fn cmd_resume(args: ResumeArgs, deps: &Deps) -> Result<(), CliError> 
             no_worktree: true,
             strict_prd: false,
         };
-        let child = spawn_run_loop(&run_args)?;
+        let child = spawn_run_loop(&run_args, deps.process())?;
         store
             .set_session(
                 name,
@@ -320,6 +317,11 @@ fn maybe_check_for_update() {
             eprintln!("Warning: update check failed: {}", err);
         }
     }
+}
+
+fn format_rfc3339(clock: &dyn core::Clock) -> String {
+    let datetime: chrono::DateTime<chrono::Local> = clock.now().into();
+    datetime.to_rfc3339()
 }
 
 fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
@@ -359,7 +361,7 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
     }
 
     let prompt_template = match &args.prompt_template {
-        Some(path) => Some(fs::read_to_string(path).map_err(CliError::Io)?),
+        Some(path) => Some(deps.fs().read_to_string(path).map_err(CliError::Io)?),
         None => None,
     };
 
@@ -375,7 +377,7 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
     store
         .init_state()
         .map_err(|err| CliError::Message(err.to_string()))?;
-    let now = chrono::Local::now().to_rfc3339();
+    let now = format_rfc3339(deps.clock());
     let remaining = core::count_remaining_tasks(&args.dir.join(&task_file));
     let log_file = args.dir.join(".gralph").join(format!("{}.log", args.name));
 
@@ -385,7 +387,7 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
             &[
                 ("dir", &args.dir.to_string_lossy()),
                 ("task_file", &task_file),
-                ("pid", &std::process::id().to_string()),
+                ("pid", &deps.process().pid().to_string()),
                 ("tmux_session", ""),
                 ("started_at", &now),
                 ("iteration", "1"),
@@ -415,7 +417,7 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
             );
         };
 
-    let outcome = core::run_loop(
+    let outcome = core::run_loop_with_clock(
         &*backend,
         &args.dir,
         Some(&task_file),
@@ -427,6 +429,7 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
         prompt_template.as_deref(),
         Some(&config),
         Some(&mut callback),
+        deps.clock(),
     )
     .map_err(|err| CliError::Message(err.to_string()))?;
 
@@ -459,7 +462,7 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
             .map_err(|err| CliError::Message(err.to_string()))?;
     }
 
-    notify_if_configured(&config, &args, &outcome, max_iterations)?;
+    notify_if_configured(&config, &args, &outcome, max_iterations, deps.notifier())?;
     Ok(())
 }
 
@@ -468,6 +471,7 @@ fn notify_if_configured(
     args: &RunLoopArgs,
     outcome: &core::LoopOutcome,
     max_iterations: u32,
+    notifier: &dyn notify::Notifier,
 ) -> Result<(), CliError> {
     let webhook = args
         .webhook
@@ -484,34 +488,36 @@ fn notify_if_configured(
                 .map(|v| v == "true")
                 .unwrap_or(true);
             if on_complete {
-                notify::notify_complete(
+                notifier
+                    .notify_complete(
+                        &args.name,
+                        &webhook,
+                        Some(&args.dir.to_string_lossy()),
+                        Some(outcome.iterations),
+                        Some(outcome.duration_secs),
+                        None,
+                    )
+                    .map_err(|err| CliError::Message(err.to_string()))?;
+            }
+        }
+        LoopStatus::Failed | LoopStatus::MaxIterations => {
+            notifier
+                .notify_failed(
                     &args.name,
                     &webhook,
+                    Some(match outcome.status {
+                        LoopStatus::Failed => "error",
+                        LoopStatus::MaxIterations => "max_iterations",
+                        _ => "error",
+                    }),
                     Some(&args.dir.to_string_lossy()),
                     Some(outcome.iterations),
+                    Some(max_iterations),
+                    Some(outcome.remaining_tasks as u32),
                     Some(outcome.duration_secs),
                     None,
                 )
                 .map_err(|err| CliError::Message(err.to_string()))?;
-            }
-        }
-        LoopStatus::Failed | LoopStatus::MaxIterations => {
-            notify::notify_failed(
-                &args.name,
-                &webhook,
-                Some(match outcome.status {
-                    LoopStatus::Failed => "error",
-                    LoopStatus::MaxIterations => "max_iterations",
-                    _ => "error",
-                }),
-                Some(&args.dir.to_string_lossy()),
-                Some(outcome.iterations),
-                Some(max_iterations),
-                Some(outcome.remaining_tasks as u32),
-                Some(outcome.duration_secs),
-                None,
-            )
-            .map_err(|err| CliError::Message(err.to_string()))?;
         }
         LoopStatus::Running => {}
     }
@@ -536,8 +542,11 @@ fn run_loop_args_from_start(args: StartArgs, name: String) -> Result<RunLoopArgs
     })
 }
 
-fn spawn_run_loop(args: &RunLoopArgs) -> Result<std::process::Child, CliError> {
-    let exe = env::current_exe().map_err(CliError::Io)?;
+fn spawn_run_loop(
+    args: &RunLoopArgs,
+    process: &dyn ProcessRunner,
+) -> Result<std::process::Child, CliError> {
+    let exe = process.current_exe().map_err(CliError::Io)?;
     let mut cmd = ProcCommand::new(exe);
     cmd.arg("run-loop")
         .arg(args.dir.to_string_lossy().as_ref())
@@ -577,8 +586,9 @@ fn spawn_run_loop(args: &RunLoopArgs) -> Result<std::process::Child, CliError> {
 
     cmd.stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
+        .stderr(Stdio::null());
+    process
+        .spawn(&mut cmd)
         .map_err(|err| CliError::Message(format!("Failed to start loop: {}", err)))
 }
 
@@ -586,29 +596,15 @@ fn stop_session(
     store: &StateStore,
     name: &str,
     session: &serde_json::Value,
+    process: &dyn ProcessRunner,
 ) -> Result<(), CliError> {
     if let Some(tmux) = session.get("tmux_session").and_then(|v| v.as_str()) {
         if !tmux.trim().is_empty() {
-            let _ = ProcCommand::new("tmux")
-                .arg("kill-session")
-                .arg("-t")
-                .arg(tmux)
-                .status();
+            process.kill_tmux_session(tmux);
         }
     }
     let pid = session.get("pid").and_then(|v| v.as_i64()).unwrap_or(0);
-    if pid > 0 {
-        #[cfg(unix)]
-        {
-            let _ = unsafe { libc::kill(pid as i32, libc::SIGTERM) };
-        }
-        #[cfg(windows)]
-        {
-            let _ = std::process::Command::new("taskkill")
-                .args(["/PID", &pid.to_string(), "/F"])
-                .status();
-        }
-    }
+    process.kill_pid(pid);
     store
         .set_session(
             name,
@@ -636,8 +632,8 @@ pub(super) fn resolve_log_file(
         .join(format!("{}.log", name)))
 }
 
-fn follow_log(path: &Path) -> Result<(), CliError> {
-    let mut file = fs::File::open(path).map_err(CliError::Io)?;
+fn follow_log(path: &Path, fs: &dyn FileSystem, clock: &dyn core::Clock) -> Result<(), CliError> {
+    let mut file = fs.open_read(path).map_err(CliError::Io)?;
     let mut pos = file.seek(SeekFrom::End(0)).map_err(CliError::Io)?;
     loop {
         let mut buffer = String::new();
@@ -648,12 +644,12 @@ fn follow_log(path: &Path) -> Result<(), CliError> {
             io::stdout().flush().map_err(CliError::Io)?;
             pos += bytes as u64;
         }
-        thread::sleep(Duration::from_millis(500));
+        clock.sleep(Duration::from_millis(500));
     }
 }
 
-fn print_tail(path: &Path, lines: usize) -> Result<(), CliError> {
-    let contents = fs::read_to_string(path).map_err(CliError::Io)?;
+fn print_tail(path: &Path, lines: usize, fs: &dyn FileSystem) -> Result<(), CliError> {
+    let contents = fs.read_to_string(path).map_err(CliError::Io)?;
     let total: Vec<&str> = contents.lines().collect();
     let start = total.len().saturating_sub(lines);
     for line in &total[start..] {
@@ -688,25 +684,5 @@ fn print_table(headers: &[&str], rows: &[Vec<String>]) {
             print!("{:width$}  ", col, width = widths[index]);
         }
         println!();
-    }
-}
-
-fn is_process_alive(pid: i64) -> bool {
-    if pid <= 0 {
-        return false;
-    }
-    #[cfg(unix)]
-    {
-        let result = unsafe { libc::kill(pid as i32, 0) };
-        if result == 0 {
-            return true;
-        }
-        let err = io::Error::last_os_error();
-        return err.kind() == io::ErrorKind::PermissionDenied;
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = pid;
-        false
     }
 }

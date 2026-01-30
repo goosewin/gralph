@@ -150,7 +150,7 @@ Commands and tests align with CI expectations and coverage remains at or above 9
   * Time-based behavior (sleep, timestamps) is injectable.
   * Dependencies stay small and avoid over-abstracting.
 - **Dependencies** MD-1
-- [ ] MD-5 Introduce dependency seams for side effects
+- [x] MD-5 Introduce dependency seams for side effects
 ### Task MD-6
 
 - **ID** MD-6
