@@ -272,7 +272,7 @@ Each task block must contain exactly one unchecked task line.
   * Update README and PROCESS to describe warning-only target and no merge block.
   * Record staged plan to raise the warning target after stabilization.
 - **Dependencies** COV-UPDATE-1
-- [ ] COV-CI-1 Add soft coverage warning target at 65-70 percent
+- [x] COV-CI-1 Add soft coverage warning target at 65-70 percent
 ---
 
 ### Task COV-CI-2

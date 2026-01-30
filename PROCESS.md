@@ -43,7 +43,8 @@
 - New risks must be added to RISK_REGISTER.md with mitigation.
 - Rust CLI is the source of truth; do not reintroduce shell scripts.
 - Test coverage must remain >= 90%.
-- The soft coverage target (`verifier.coverage_warn`) is a warning-only signal set to 65 to 70 percent.
+- The soft coverage target (`verifier.coverage_warn`) is a warning-only signal set to 70 percent; it does not block merges or change `verifier.coverage_min`.
+- Plan to raise the warning target to 75 to 80 percent after coverage stabilizes for two consecutive cycles.
 - Final PRD task requires a PR, review gate approval, and green CI before merge.
 - Use `gh` for PR creation, review checks, and merges.
 - Commit messages must be lower-case conventional commits (for example: `feat: add verifier pipeline`).
