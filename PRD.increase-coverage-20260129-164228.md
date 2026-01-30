@@ -109,7 +109,7 @@ Keep coverage as a warning-only signal for now. After stability, introduce a sof
   * Add tests for review gate parsing when gh JSON fields are missing or malformed.
   * Validate static check settings parsing for invalid numeric and boolean values.
 - **Dependencies** COV-CORE-1
-- [ ] COV-VER-1 Add verifier parsing and gate evaluation tests
+- [x] COV-VER-1 Add verifier parsing and gate evaluation tests
 ### Task COV-CONFIG-1
 
 - **ID** COV-CONFIG-1

@@ -2121,6 +2121,24 @@ mod tests {
     }
 
     #[test]
+    fn parse_verifier_command_handles_mixed_quotes() {
+        let (program, args) =
+            parse_verifier_command("cargo test --features 'foo bar' --profile \"dev profile\"")
+                .unwrap();
+        assert_eq!(program, "cargo");
+        assert_eq!(
+            args,
+            vec![
+                "test".to_string(),
+                "--features".to_string(),
+                "foo bar".to_string(),
+                "--profile".to_string(),
+                "dev profile".to_string(),
+            ]
+        );
+    }
+
+    #[test]
     fn resolve_verifier_coverage_min_rejects_out_of_range() {
         let config = Config::load(None).unwrap();
         let err = resolve_verifier_coverage_min(Some(120.0), &config).unwrap_err();
@@ -2356,6 +2374,12 @@ mod tests {
     }
 
     #[test]
+    fn extract_coverage_percent_handles_mixed_output_formats() {
+        let output = "Line Coverage: 70.1%\nLLVM Coverage: 71.2% (123/173)\nCoverage Results: 82.0% (line 81.5%)\nTotal coverage: 83.0%";
+        assert_eq!(extract_coverage_percent(output), Some(81.5));
+    }
+
+    #[test]
     fn extract_coverage_percent_handles_multiple_percent_tokens() {
         let output = "Coverage Results: 80.0% (line 82.4%)";
         assert_eq!(extract_coverage_percent(output), Some(82.4));
@@ -2475,6 +2499,29 @@ mod tests {
         let settings = base_review_settings();
         let pr_view = json!({
             "reviews": []
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Pending(message) if message.contains("waiting")));
+    }
+
+    #[test]
+    fn evaluate_review_gate_handles_non_array_reviews() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "reviews": "unexpected"
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Pending(message) if message.contains("waiting")));
+    }
+
+    #[test]
+    fn evaluate_review_gate_handles_missing_review_fields() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "reviews": [
+                { "author": {}, "state": null, "body": null, "submittedAt": null },
+                { "author": { "login": 42 }, "state": 7, "body": {}, "createdAt": [] }
+            ]
         });
         let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
         assert!(matches!(decision, GateDecision::Pending(message) if message.contains("waiting")));
@@ -2758,6 +2805,47 @@ mod tests {
     }
 
     #[test]
+    fn resolve_static_check_settings_rejects_invalid_bool() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  static_checks:\n    enabled: maybe\n");
+        let err = resolve_static_check_settings(&config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("static_checks.enabled"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_static_check_settings_rejects_invalid_numeric() {
+        let _guard = env_guard();
+        let config =
+            load_project_config("verifier:\n  static_checks:\n    max_comment_lines: nope\n");
+        let err = resolve_static_check_settings(&config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("max_comment_lines"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_static_check_settings_rejects_below_minimum() {
+        let _guard = env_guard();
+        let config =
+            load_project_config("verifier:\n  static_checks:\n    duplicate_block_lines: 1\n");
+        let err = resolve_static_check_settings(&config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("duplicate_block_lines"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn run_verifier_static_checks_reports_violations() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
@@ -2793,6 +2881,31 @@ mod tests {
         assert!(
             matches!(decision, GateDecision::Pending(message) if message.contains("checks pending"))
         );
+    }
+
+    #[test]
+    fn evaluate_check_gate_handles_missing_check_fields() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                { "name": null, "status": null, "conclusion": null },
+                { "context": 123 }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(
+            matches!(decision, GateDecision::Pending(message) if message.contains("checks pending"))
+        );
+    }
+
+    #[test]
+    fn evaluate_check_gate_handles_malformed_rollup() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": "unexpected"
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(message) if message.contains("no checks")));
     }
 
     #[test]
