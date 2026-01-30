@@ -153,7 +153,7 @@ Keep coverage as a warning-only signal for now. After stability, introduce a sof
   * Add tests for format_duration boundary values and message formatting for unknown reasons.
   * Add tests for webhook type detection with mixed-case and query params.
 - **Dependencies** None
-- [ ] COV-NOTIFY-1 Expand notification formatting and timeout tests
+- [x] COV-NOTIFY-1 Expand notification formatting and timeout tests
 ### Task COV-UPDATE-1
 
 - **ID** COV-UPDATE-1

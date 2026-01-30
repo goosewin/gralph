@@ -739,6 +739,18 @@ mod tests {
     }
 
     #[test]
+    fn detect_webhook_type_handles_mixed_case_query_params() {
+        assert_eq!(
+            detect_webhook_type("https://Discord.com/API/Webhooks/123?Wait=true"),
+            WebhookType::Discord
+        );
+        assert_eq!(
+            detect_webhook_type("https://Hooks.Slack.com/services/123?Mode=Test"),
+            WebhookType::Slack
+        );
+    }
+
+    #[test]
     fn format_discord_complete_payload_fields() {
         let payload =
             format_discord_complete("alpha", "./demo", "7", "2m 4s", "2026-01-26T10:11:12Z")
