@@ -3,9 +3,10 @@ use std::error::Error;
 use std::fmt;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
-use std::process::Child;
+use std::process::{Child, Command};
 use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 
 pub mod claude;
 pub mod codex;
@@ -135,6 +136,41 @@ where
     }
 
     Ok(())
+}
+
+pub(crate) fn spawn_with_retry(
+    cmd: &mut Command,
+    backend_label: &str,
+) -> Result<Child, BackendError> {
+    let mut attempts = 0;
+    loop {
+        match cmd.spawn() {
+            Ok(child) => return Ok(child),
+            Err(err) => {
+                if is_executable_busy(&err) && attempts < 3 {
+                    attempts += 1;
+                    thread::sleep(Duration::from_millis(10 * attempts));
+                    continue;
+                }
+                return Err(BackendError::Command(format!(
+                    "failed to spawn {}: {}",
+                    backend_label, err
+                )));
+            }
+        }
+    }
+}
+
+fn is_executable_busy(err: &std::io::Error) -> bool {
+    #[cfg(unix)]
+    {
+        err.raw_os_error() == Some(libc::ETXTBSY)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = err;
+        false
+    }
 }
 
 fn spawn_reader<R: Read + Send + 'static>(

@@ -1,4 +1,4 @@
-use super::{command_in_path, stream_command_output, Backend, BackendError};
+use super::{command_in_path, spawn_with_retry, stream_command_output, Backend, BackendError};
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -68,9 +68,7 @@ impl Backend for CodexBackend {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        let mut child = cmd
-            .spawn()
-            .map_err(|err| BackendError::Command(format!("failed to spawn codex: {}", err)))?;
+        let mut child = spawn_with_retry(&mut cmd, "codex")?;
 
         let stdout_stream = io::stdout();
         let mut stdout_lock = stdout_stream.lock();

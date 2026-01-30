@@ -1,4 +1,4 @@
-use super::{stream_command_output, Backend, BackendError};
+use super::{spawn_with_retry, stream_command_output, Backend, BackendError};
 use serde_json::Value;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
@@ -82,9 +82,7 @@ impl Backend for ClaudeBackend {
             }
         }
 
-        let mut child = cmd
-            .spawn()
-            .map_err(|err| BackendError::Command(format!("failed to spawn claude: {}", err)))?;
+        let mut child = spawn_with_retry(&mut cmd, "claude")?;
 
         let stdout_stream = io::stdout();
         let mut stdout_lock = stdout_stream.lock();
