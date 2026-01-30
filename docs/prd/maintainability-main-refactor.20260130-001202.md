@@ -117,7 +117,7 @@ Commands and tests align with CI expectations and coverage remains at or above 9
   * Session state writes remain in `src/state.rs` and are invoked via the new module.
   * Main no longer owns these handlers.
 - **Dependencies** MD-1
-- [ ] MD-2 Extract loop and session commands into app module
+- [x] MD-2 Extract loop and session commands into app module
 ### Task MD-3
 
 - **ID** MD-3

@@ -11,6 +11,12 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ## [Unreleased]
 
+### Changed
+- MD-2 Extract loop and session command handlers into the app loop session module.
+
+### Verification
+- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
+
 ## [0.2.3]
 
 ### Added
