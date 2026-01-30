@@ -246,7 +246,7 @@ Each task block must contain exactly one unchecked task line.
   * Add tests for serialized access under high contention with barriers.
   * Add tests that env_lock restores original env values after guard drop.
 - **Dependencies** COV-VER-1
-- [ ] COV-TEST-SUPPORT-1 Expand env_lock reliability coverage
+- [x] COV-TEST-SUPPORT-1 Expand env_lock reliability coverage
 ---
 
 ### Task COV-UPDATE-1
