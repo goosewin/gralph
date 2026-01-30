@@ -80,6 +80,10 @@ impl Error for BackendError {
 }
 
 pub(crate) fn command_in_path(command: &str) -> bool {
+    let command_path = Path::new(command);
+    if command_path.is_absolute() {
+        return command_path.is_file();
+    }
     let Some(paths) = env::var_os("PATH") else {
         return false;
     };

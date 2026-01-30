@@ -952,6 +952,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn extract_archive_rejects_invalid_or_empty_input() {
+        let _lock = crate::test_support::env_lock();
         let temp = tempdir().expect("tempdir");
         let archive_path = temp.path().join("gralph.tar.gz");
         fs::write(&archive_path, "").expect("write empty");
@@ -966,6 +967,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn extract_archive_reports_tar_failure_message() {
+        let _lock = crate::test_support::env_lock();
         let temp = tempdir().expect("tempdir");
         let archive_path = temp.path().join("gralph.tar.gz");
         fs::write(&archive_path, "not a tar").expect("write invalid");
@@ -1030,6 +1032,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn extract_archive_reports_failure_for_missing_target_dir() {
+        let _lock = crate::test_support::env_lock();
         let temp = tempdir().expect("tempdir");
         let archive_path = temp.path().join("gralph.tar.gz");
         fs::write(&archive_path, "not a tar").expect("write invalid");
@@ -1041,6 +1044,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn extract_archive_reports_failure_when_target_is_file() {
+        let _lock = crate::test_support::env_lock();
         let temp = tempdir().expect("tempdir");
         let archive_path = temp.path().join("gralph.tar.gz");
         fs::write(&archive_path, "not a tar").expect("write invalid");

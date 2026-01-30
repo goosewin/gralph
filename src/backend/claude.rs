@@ -1,4 +1,4 @@
-use super::{Backend, BackendError, stream_command_output};
+use super::{stream_command_output, Backend, BackendError};
 use serde_json::Value;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
@@ -182,7 +182,7 @@ fn extract_result_text(value: &Value) -> Option<String> {
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::fs::{self, File};
+    use std::fs;
     use std::io::Write;
     use std::path::Path;
 
@@ -191,14 +191,15 @@ mod tests {
 
     #[cfg(unix)]
     fn write_executable(path: &Path, script: &str) {
-        let mut file = File::create(path).unwrap();
+        let dir = path.parent().unwrap();
+        let mut file = tempfile::NamedTempFile::new_in(dir).unwrap();
         file.write_all(script.as_bytes()).unwrap();
-        file.sync_all().unwrap();
-        drop(file);
-
-        let mut perms = fs::metadata(path).unwrap().permissions();
+        file.flush().unwrap();
+        let mut perms = file.as_file().metadata().unwrap().permissions();
         perms.set_mode(0o755);
-        fs::set_permissions(path, perms).unwrap();
+        file.as_file().set_permissions(perms).unwrap();
+        file.as_file().sync_all().unwrap();
+        file.persist(path).unwrap();
     }
 
     #[test]
