@@ -269,6 +269,40 @@ mod tests {
     }
 
     #[test]
+    fn env_lock_reacquires_after_multiple_sequential_drops() {
+        let key = "GRALPH_ENV_LOCK_MULTI_DROP_TEST";
+        let original = {
+            let _guard = env_lock();
+            env::var_os(key)
+        };
+        let mut last_value = None;
+
+        for idx in 0..5 {
+            {
+                let _guard = env_lock();
+                let value = format!("multi-drop-{idx}");
+                set_env(key, &value);
+                assert_eq!(env::var(key).as_deref(), Ok(value.as_str()));
+                last_value = Some(value);
+            }
+
+            {
+                let _guard = env_lock();
+                let expected = last_value.as_deref().expect("last value set");
+                assert_eq!(env::var(key).as_deref(), Ok(expected));
+            }
+        }
+
+        let _guard = env_lock();
+        if let Some(value) = &original {
+            set_env(key, value);
+        } else {
+            remove_env(key);
+        }
+        assert_eq!(env::var_os(key), original);
+    }
+
+    #[test]
     fn env_lock_recovers_after_repeated_panics_across_threads() {
         const THREADS: usize = 6;
         const ROUNDS: usize = 4;
@@ -307,6 +341,33 @@ mod tests {
         assert_eq!(recovered.load(Ordering::SeqCst), THREADS * ROUNDS);
         let _guard = env_lock();
         remove_env("GRALPH_ENV_LOCK_POISON_RECOVER_TEST");
+    }
+
+    #[test]
+    fn env_lock_restores_env_after_panic_in_guarded_scope() {
+        let key = "GRALPH_ENV_LOCK_PANIC_SCOPE_TEST";
+        let original = {
+            let _guard = env_lock();
+            env::var_os(key)
+        };
+
+        let key_owned = key.to_string();
+        let handle = thread::spawn(move || {
+            let _guard = env_lock();
+            set_env(&key_owned, "panic-scope");
+            panic!("panic in guarded scope");
+        });
+
+        assert!(handle.join().is_err());
+
+        let _guard = env_lock();
+        assert_eq!(env::var(key).as_deref(), Ok("panic-scope"));
+        if let Some(value) = &original {
+            set_env(key, value);
+        } else {
+            remove_env(key);
+        }
+        assert_eq!(env::var_os(key), original);
     }
 
     #[test]
@@ -350,6 +411,40 @@ mod tests {
         }
 
         assert_eq!(max_active.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn env_lock_enforces_serialization_under_contention() {
+        const THREADS: usize = 6;
+        const ITERATIONS: usize = 8;
+        let barrier = Arc::new(Barrier::new(THREADS));
+        let active = Arc::new(AtomicUsize::new(0));
+        let overlaps = Arc::new(AtomicUsize::new(0));
+        let mut handles = Vec::with_capacity(THREADS);
+
+        for _ in 0..THREADS {
+            let barrier = Arc::clone(&barrier);
+            let active = Arc::clone(&active);
+            let overlaps = Arc::clone(&overlaps);
+            handles.push(thread::spawn(move || {
+                barrier.wait();
+                for _ in 0..ITERATIONS {
+                    let _guard = env_lock();
+                    let now = active.fetch_add(1, Ordering::SeqCst) + 1;
+                    if now > 1 {
+                        overlaps.fetch_add(1, Ordering::SeqCst);
+                    }
+                    thread::sleep(Duration::from_millis(1));
+                    active.fetch_sub(1, Ordering::SeqCst);
+                }
+            }));
+        }
+
+        for handle in handles {
+            assert!(handle.join().is_ok());
+        }
+
+        assert_eq!(overlaps.load(Ordering::SeqCst), 0);
     }
 
     #[test]

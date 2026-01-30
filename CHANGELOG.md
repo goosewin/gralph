@@ -83,6 +83,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-16 Add env_lock safety tests for test_support helpers.
 - COV-TEST-SUPPORT-1 Expand env lock contention and poison recovery tests.
 - COV-TESTSUPPORT-1 Expand env_lock contention release and restore sequencing tests.
+- COV-TEST-SUPPORT-1 Add env_lock sequential drop and panic scope restore tests.
 - COV-16 Expand update workflow parsing and install error coverage.
 - COV-17 Expand Claude backend parsing and failure path coverage.
 - COV-18 Expand Codex backend installation and error coverage.

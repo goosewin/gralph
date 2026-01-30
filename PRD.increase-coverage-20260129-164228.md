@@ -230,7 +230,7 @@ Keep coverage as a warning-only signal for now. After stability, introduce a sof
   * Add tests for env_lock ensuring env restoration after panic in guarded scopes.
   * Add tests for env_lock contention with multiple threads and enforced serialization.
 - **Dependencies** None
-- [ ] COV-TEST-SUPPORT-1 Expand env_lock coverage and resilience tests
+- [x] COV-TEST-SUPPORT-1 Expand env_lock coverage and resilience tests
 ---
 
 ## Success Criteria
