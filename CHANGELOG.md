@@ -11,6 +11,8 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ## [Unreleased]
 
+## [0.2.3]
+
 ### Added
 - PROMPT-1 Require lower-case conventional commits in the default prompt template.
 - VER-1 Add verifier command for tests and coverage gates.
