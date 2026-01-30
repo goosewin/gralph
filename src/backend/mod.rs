@@ -236,7 +236,10 @@ mod tests {
         let cases = ["", "Claude", "claude ", " opencode"];
 
         for name in cases {
-            let err = backend_from_name(name).expect_err("expected unknown backend error");
+            let err = match backend_from_name(name) {
+                Ok(_) => panic!("expected unknown backend error"),
+                Err(err) => err,
+            };
             assert_eq!(err, format!("Unknown backend: {}", name));
         }
     }

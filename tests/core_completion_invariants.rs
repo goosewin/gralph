@@ -1,4 +1,4 @@
-use gralph::core::check_completion;
+use gralph_rs::core::check_completion;
 use proptest::prelude::*;
 use proptest::string::string_regex;
 use std::fs;

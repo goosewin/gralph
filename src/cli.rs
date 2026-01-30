@@ -562,7 +562,6 @@ mod tests {
         let cli = Cli::parse_from([
             "gralph",
             "verifier",
-            "--dir",
             ".",
             "--test-command",
             "cargo test --workspace",
