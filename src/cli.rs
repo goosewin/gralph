@@ -361,6 +361,24 @@ mod tests {
     }
 
     #[test]
+    fn parse_status_command() {
+        let cli = Cli::parse_from(["gralph", "status"]);
+        match cli.command {
+            Some(Command::Status) => {}
+            other => panic!("Expected status command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_version_command() {
+        let cli = Cli::parse_from(["gralph", "version"]);
+        match cli.command {
+            Some(Command::Version) => {}
+            other => panic!("Expected version command, got: {other:?}"),
+        }
+    }
+
+    #[test]
     fn parse_start_defaults() {
         let cli = Cli::parse_from(["gralph", "start", "."]);
         match cli.command {

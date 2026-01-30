@@ -17,7 +17,15 @@ use clap::Parser;
 use std::process::ExitCode;
 
 pub fn cli_entrypoint() -> ExitCode {
-    let cli = cli::Cli::parse();
+    cli_entrypoint_from(std::env::args_os())
+}
+
+fn cli_entrypoint_from<I, T>(args: I) -> ExitCode
+where
+    I: IntoIterator<Item = T>,
+    T: Into<std::ffi::OsString> + Clone,
+{
+    let cli = cli::Cli::parse_from(args);
     let deps = Deps::real();
     exit_code_for(run(cli, &deps))
 }
@@ -27,7 +35,9 @@ mod test_support;
 
 #[cfg(test)]
 mod tests {
+    use super::cli_entrypoint_from;
     use crate::{backend, config, core, notify, prd, server, state, task, update, version};
+    use std::process::ExitCode;
 
     #[test]
     fn lib_wiring_resolves_backend() {
@@ -47,5 +57,17 @@ mod tests {
         let _ = update::check_for_update;
         let _ = version::VERSION;
         let _ = version::VERSION_TAG;
+    }
+
+    #[test]
+    fn cli_entrypoint_from_runs_intro_without_args() {
+        let code = cli_entrypoint_from(["gralph"]);
+        assert_eq!(code, ExitCode::SUCCESS);
+    }
+
+    #[test]
+    fn cli_entrypoint_from_runs_version_command() {
+        let code = cli_entrypoint_from(["gralph", "version"]);
+        assert_eq!(code, ExitCode::SUCCESS);
     }
 }

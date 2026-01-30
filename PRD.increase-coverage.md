@@ -80,7 +80,7 @@ Each task block must contain exactly one unchecked task line.
   * `cargo test --workspace` passes.
   * `cargo tarpaulin --workspace --exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*` reports >= 70.
 - **Dependencies** MR-1
-- [ ] COV-1 Add tests to raise coverage to 70
+- [x] COV-1 Add tests to raise coverage to 70
 ---
 
 ## Success Criteria
