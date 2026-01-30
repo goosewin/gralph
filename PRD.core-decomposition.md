@@ -83,7 +83,7 @@ The verifier pipeline must continue to run tests, parse coverage output, enforce
   * Tests cover "coverage results" priority and fallback percent extraction.
   * Tests cover command parsing errors for empty or whitespace-only commands.
 - **Dependencies** None
-- [ ] VER-1 Extract verifier parsing helpers and add coverage tests
+- [x] VER-1 Extract verifier parsing helpers and add coverage tests
 ---
 
 ### Task VER-2

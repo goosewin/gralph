@@ -20,6 +20,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - MR-2 Document the lib entrypoint helper and main delegation flow.
 - LS-1 Extract loop setting helpers and add config precedence tests.
 - LS-2 Isolate session lifecycle decisions and add transition tests.
+- VER-1 Extract verifier parsing helpers and add coverage parsing tests.
 
 ### Verification
 - Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened

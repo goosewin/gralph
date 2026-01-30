@@ -191,9 +191,13 @@ fn run_verifier_command(label: &str, dir: &Path, command: &str) -> Result<String
     Ok(format!("{}{}", stdout, stderr))
 }
 
+fn parse_verifier_command_tokens(command: &str) -> Result<Vec<String>, CliError> {
+    shell_words::split(command)
+        .map_err(|err| CliError::Message(format!("Failed to parse command: {}", err)))
+}
+
 fn parse_verifier_command(command: &str) -> Result<(String, Vec<String>), CliError> {
-    let parts = shell_words::split(command)
-        .map_err(|err| CliError::Message(format!("Failed to parse command: {}", err)))?;
+    let parts = parse_verifier_command_tokens(command)?;
     if parts.is_empty() {
         return Err(CliError::Message(
             "Verifier command cannot be empty.".to_string(),
@@ -210,28 +214,39 @@ fn parse_verifier_command(command: &str) -> Result<(String, Vec<String>), CliErr
     Ok((program, args))
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CoverageLineKind {
+    Results,
+    LineCoverage,
+    Coverage,
+}
+
 fn extract_coverage_percent(output: &str) -> Option<f64> {
     let mut fallback = None;
     for line in output.lines() {
-        let lower = line.to_ascii_lowercase();
-        if lower.contains("coverage results") {
-            if let Some(value) = parse_percent_from_line(line) {
-                return Some(value);
-            }
-        }
-        if lower.contains("line coverage") {
-            if let Some(value) = parse_percent_from_line(line) {
-                fallback = Some(value);
-            }
+        let Some((kind, value)) = coverage_percent_from_line(line) else {
             continue;
-        }
-        if lower.contains("coverage") {
-            if let Some(value) = parse_percent_from_line(line) {
-                fallback = Some(value);
-            }
+        };
+        match kind {
+            CoverageLineKind::Results => return Some(value),
+            CoverageLineKind::LineCoverage | CoverageLineKind::Coverage => fallback = Some(value),
         }
     }
     fallback
+}
+
+fn coverage_percent_from_line(line: &str) -> Option<(CoverageLineKind, f64)> {
+    let lower = line.to_ascii_lowercase();
+    if lower.contains("coverage results") {
+        return parse_percent_from_line(line).map(|value| (CoverageLineKind::Results, value));
+    }
+    if lower.contains("line coverage") {
+        return parse_percent_from_line(line).map(|value| (CoverageLineKind::LineCoverage, value));
+    }
+    if lower.contains("coverage") {
+        return parse_percent_from_line(line).map(|value| (CoverageLineKind::Coverage, value));
+    }
+    None
 }
 
 fn parse_percent_from_line(line: &str) -> Option<f64> {
@@ -2275,6 +2290,17 @@ mod tests {
     #[test]
     fn parse_verifier_command_rejects_empty_input() {
         let err = parse_verifier_command("  ").unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("cannot be empty"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_verifier_command_rejects_empty_string() {
+        let err = parse_verifier_command("").unwrap_err();
         match err {
             CliError::Message(message) => {
                 assert!(message.contains("cannot be empty"));
