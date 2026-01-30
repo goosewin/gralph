@@ -1,4 +1,4 @@
-use crate::{git_output_in_dir, join_or_none, normalize_csv, parse_bool_value, CliError};
+use crate::app::{git_output_in_dir, join_or_none, normalize_csv, parse_bool_value, CliError};
 use gralph_rs::config::Config;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;

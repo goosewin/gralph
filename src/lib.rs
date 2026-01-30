@@ -1,4 +1,5 @@
 pub mod backend;
+pub mod cli;
 pub mod config;
 pub mod core;
 pub mod notify;
@@ -8,6 +9,10 @@ pub mod state;
 pub mod task;
 pub mod update;
 pub mod version;
+mod verifier;
+
+pub mod app;
+pub use app::{exit_code_for, run, Deps};
 
 #[cfg(test)]
 mod test_support;
