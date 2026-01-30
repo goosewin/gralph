@@ -1728,7 +1728,9 @@ mod tests {
         .unwrap();
 
         let prompt = backend.prompt.borrow().clone().unwrap();
-        assert!(prompt.contains("Context Files (read these first):\nARCHITECTURE.md\nPROCESS.md\n"));
+        assert!(
+            prompt.contains("Context Files (read these first):\nARCHITECTURE.md\nPROCESS.md\n")
+        );
 
         remove_env("GRALPH_GLOBAL_CONFIG");
         remove_env("GRALPH_DEFAULT_CONFIG");

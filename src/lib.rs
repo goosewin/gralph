@@ -14,9 +14,7 @@ mod test_support;
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        backend, config, core, notify, prd, server, state, task, update, version,
-    };
+    use crate::{backend, config, core, notify, prd, server, state, task, update, version};
 
     #[test]
     fn lib_wiring_resolves_backend() {

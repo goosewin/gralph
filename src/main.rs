@@ -6,9 +6,9 @@ mod test_support;
 
 use clap::Parser;
 use cli::{
-    Cli, Command, ConfigArgs, ConfigCommand, InitArgs, LogsArgs, PrdArgs, PrdCheckArgs, PrdCommand,
-    PrdCreateArgs, ResumeArgs, RunLoopArgs, ServerArgs, StartArgs, StopArgs, VerifierArgs,
-    WorktreeCommand, WorktreeCreateArgs, WorktreeFinishArgs, ASCII_BANNER,
+    ASCII_BANNER, Cli, Command, ConfigArgs, ConfigCommand, InitArgs, LogsArgs, PrdArgs,
+    PrdCheckArgs, PrdCommand, PrdCreateArgs, ResumeArgs, RunLoopArgs, ServerArgs, StartArgs,
+    StopArgs, VerifierArgs, WorktreeCommand, WorktreeCreateArgs, WorktreeFinishArgs,
 };
 use gralph_rs::backend::backend_from_name;
 use gralph_rs::config::Config;

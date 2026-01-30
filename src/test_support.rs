@@ -11,7 +11,7 @@ mod tests {
     use super::*;
     use std::env;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{mpsc, Arc, Barrier};
+    use std::sync::{Arc, Barrier, mpsc};
     use std::thread;
     use std::time::Duration;
 

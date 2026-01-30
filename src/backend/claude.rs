@@ -1,4 +1,4 @@
-use super::{stream_command_output, Backend, BackendError};
+use super::{Backend, BackendError, stream_command_output};
 use serde_json::Value;
 use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
@@ -430,8 +430,7 @@ mod tests {
     fn parse_text_keeps_last_valid_result_when_trailing_results_are_invalid() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("stream.json");
-        let contents =
-            "{\"type\":\"result\",\"result\":\"first\"}\n{\"type\":\"result\"}\n{\"type\":\"result\",\"result\":null}\n";
+        let contents = "{\"type\":\"result\",\"result\":\"first\"}\n{\"type\":\"result\"}\n{\"type\":\"result\",\"result\":null}\n";
         fs::write(&path, contents).unwrap();
 
         let backend = ClaudeBackend::new();

@@ -871,10 +871,7 @@ mod tests {
             max_body_bytes: 4096,
         };
         let mut headers = HeaderMap::new();
-        headers.insert(
-            axum::http::header::ORIGIN,
-            "http://[::1]".parse().unwrap(),
-        );
+        headers.insert(axum::http::header::ORIGIN, "http://[::1]".parse().unwrap());
 
         assert_eq!(
             resolve_cors_origin(&headers, &config),
@@ -2046,7 +2043,10 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn enrich_session_keeps_running_when_pid_is_alive() {
-        let mut child = std::process::Command::new("sleep").arg("2").spawn().unwrap();
+        let mut child = std::process::Command::new("sleep")
+            .arg("2")
+            .spawn()
+            .unwrap();
         let pid = child.id() as i64;
 
         let session = json!({

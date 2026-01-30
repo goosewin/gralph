@@ -432,7 +432,7 @@ mod tests {
     use std::os::unix::io::FromRawFd;
     use std::path::Path;
     use std::process::Command;
-    use std::sync::{mpsc, Arc, Mutex};
+    use std::sync::{Arc, Mutex, mpsc};
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
@@ -1000,10 +1000,12 @@ mod tests {
             Some(true)
         );
         let pid_float = reloaded.sessions.get("pid-float").unwrap();
-        assert!(pid_float
-            .get("pid")
-            .and_then(|value| value.as_f64())
-            .is_some());
+        assert!(
+            pid_float
+                .get("pid")
+                .and_then(|value| value.as_f64())
+                .is_some()
+        );
         assert_eq!(
             pid_float.get("status").and_then(|value| value.as_str()),
             Some("running")

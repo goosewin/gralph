@@ -63,8 +63,7 @@ fn claude_run_iteration_orders_args_and_places_model_flag() {
 fn claude_parse_text_falls_back_to_raw_when_no_result_entries() {
     let temp = tempfile::tempdir().unwrap();
     let output_path = temp.path().join("claude.raw");
-    let contents =
-        "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\nnot-json\n";
+    let contents = "{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"hello\"}]}}\nnot-json\n";
     fs::write(&output_path, contents).unwrap();
 
     let backend = ClaudeBackend::new();

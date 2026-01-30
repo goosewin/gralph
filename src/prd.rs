@@ -1289,10 +1289,11 @@ mod tests {
         fs::write(&prd, "").unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(err
-            .messages
-            .iter()
-            .any(|line| line.contains("Task file is empty")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| line.contains("Task file is empty"))
+        );
     }
 
     #[test]
@@ -1311,10 +1312,11 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(err
-            .messages
-            .iter()
-            .any(|line| line.contains("Missing required field: DoD")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| line.contains("Missing required field: DoD"))
+        );
     }
 
     #[test]
@@ -1329,9 +1331,11 @@ mod tests {
 
         let errors = validate_task_block(block, Path::new("prd.md"), false, Some(base));
 
-        assert!(errors
-            .iter()
-            .any(|line| line.contains("Missing required field: DoD")));
+        assert!(
+            errors
+                .iter()
+                .any(|line| line.contains("Missing required field: DoD"))
+        );
     }
 
     #[test]
@@ -1347,10 +1351,11 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(err
-            .messages
-            .iter()
-            .any(|line| { line.contains("Missing required field: Context Bundle") }));
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| { line.contains("Missing required field: Context Bundle") })
+        );
     }
 
     #[test]
@@ -1369,10 +1374,11 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(err
-            .messages
-            .iter()
-            .any(|line| line.contains("Multiple unchecked task lines")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| line.contains("Multiple unchecked task lines"))
+        );
     }
 
     #[test]
@@ -1387,9 +1393,11 @@ mod tests {
 
         let errors = validate_task_block(block, Path::new("prd.md"), false, Some(base));
 
-        assert!(errors
-            .iter()
-            .any(|line| line.contains("Multiple unchecked task lines")));
+        assert!(
+            errors
+                .iter()
+                .any(|line| line.contains("Multiple unchecked task lines"))
+        );
     }
 
     #[test]
@@ -1407,9 +1415,11 @@ mod tests {
 
         let errors = validate_task_block(&block, Path::new("prd.md"), false, Some(base));
 
-        assert!(errors
-            .iter()
-            .any(|line| line.contains("Context Bundle path outside repo")));
+        assert!(
+            errors
+                .iter()
+                .any(|line| line.contains("Context Bundle path outside repo"))
+        );
         assert!(!errors.iter().any(|line| line.contains("path not found")));
     }
 
@@ -1447,12 +1457,16 @@ mod tests {
 
         let errors = validate_task_block(&block, Path::new("prd.md"), false, Some(base));
 
-        assert!(errors
-            .iter()
-            .any(|line| line.contains("Context Bundle path not found")));
-        assert!(!errors
-            .iter()
-            .any(|line| line.contains("Context Bundle path outside repo")));
+        assert!(
+            errors
+                .iter()
+                .any(|line| line.contains("Context Bundle path not found"))
+        );
+        assert!(
+            !errors
+                .iter()
+                .any(|line| line.contains("Context Bundle path outside repo"))
+        );
     }
 
     #[test]
@@ -1471,10 +1485,11 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(err
-            .messages
-            .iter()
-            .any(|line| line.contains("Unchecked task line outside task block")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| line.contains("Unchecked task line outside task block"))
+        );
     }
 
     #[test]
@@ -1490,10 +1505,11 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(err
-            .messages
-            .iter()
-            .any(|line| line.contains("Context Bundle path not found")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| line.contains("Context Bundle path not found"))
+        );
     }
 
     #[test]
@@ -1512,10 +1528,11 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(err
-            .messages
-            .iter()
-            .any(|line| line.contains("Open Questions section is not allowed")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| line.contains("Open Questions section is not allowed"))
+        );
     }
 
     #[test]
@@ -1775,10 +1792,11 @@ mod tests {
         fs::write(&prd, contents).unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(err
-            .messages
-            .iter()
-            .any(|line| line.contains("Context Bundle path outside repo")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| line.contains("Context Bundle path outside repo"))
+        );
     }
 
     #[test]
@@ -1795,14 +1813,16 @@ mod tests {
         fs::write(&prd, contents).unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(err
-            .messages
-            .iter()
-            .any(|line| line.contains("Context Bundle path not found")));
-        assert!(!err
-            .messages
-            .iter()
-            .any(|line| line.contains("Context Bundle path outside repo")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| line.contains("Context Bundle path not found"))
+        );
+        assert!(
+            !err.messages
+                .iter()
+                .any(|line| line.contains("Context Bundle path outside repo"))
+        );
     }
 
     #[test]
@@ -1824,10 +1844,11 @@ mod tests {
         .unwrap();
 
         let err = prd_validate_file(&prd, false, None).unwrap_err();
-        assert!(err
-            .messages
-            .iter()
-            .any(|line| line.contains("Context Bundle path not found")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| line.contains("Context Bundle path not found"))
+        );
         assert!(prd_validate_file(&prd, false, Some(&repo_root)).is_ok());
     }
 
@@ -1870,10 +1891,11 @@ mod tests {
         fs::write(&prd, contents).unwrap();
 
         let err = prd_validate_file(&prd, false, Some(&repo_root)).unwrap_err();
-        assert!(err
-            .messages
-            .iter()
-            .any(|line| line.contains("Context Bundle path outside repo")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|line| line.contains("Context Bundle path outside repo"))
+        );
     }
 
     #[test]
