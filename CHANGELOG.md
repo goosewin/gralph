@@ -98,7 +98,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-27 Expand server auth, CORS, and session enrichment coverage.
 - COV-28 Expand state store normalization coverage.
 - COV-29 Expand task parsing edge coverage.
-- COV-TASK-1 Add task parsing boundary tests for CRLF and tabbed spacing.
+- COV-TASK-1 Add task parsing boundary tests for CRLF/tabbed separators and H2 termination near-misses.
 - COV-30 Expand update parsing and extraction coverage.
 - COV-CORE-1 Expand core loop prompt template and retention edge coverage.
 - COV-CORE-1 Add core loop parse failure coverage and completion invariants.

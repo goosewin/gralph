@@ -400,6 +400,41 @@ mod tests {
         }
 
         #[test]
+        fn prop_task_blocks_from_contents_handles_tabbed_headers_and_separators_with_crlf(
+            header_tabs in tab_prefix_strategy(),
+            separator_tabs in tab_prefix_strategy(),
+            separator_trailing in whitespace_strategy(),
+            id in task_id_strategy(),
+            body in prop::collection::vec(safe_line_strategy(), 0..4),
+            suffix in prop::collection::vec(noise_line_strategy(), 0..3)
+        ) {
+            let header = format!("{}### Task {}", header_tabs, id);
+            let separator = format!("{}---{}", separator_tabs, separator_trailing);
+            let mut lines = Vec::new();
+            lines.push(header.clone());
+            let mut expected = header;
+
+            for line in body {
+                lines.push(line.clone());
+                expected.push('\n');
+                expected.push_str(&line);
+            }
+
+            lines.push(separator);
+            lines.extend(suffix.iter().cloned());
+
+            let contents = lines.join("\r\n");
+            let blocks_out = task_blocks_from_contents(&contents);
+
+            prop_assert_eq!(blocks_out.len(), 1);
+            prop_assert_eq!(&blocks_out[0], &expected);
+            prop_assert!(!blocks_out[0].lines().any(|line| line.trim() == "---"));
+            for line in suffix.iter() {
+                prop_assert!(!blocks_out[0].lines().any(|block_line| block_line == line));
+            }
+        }
+
+        #[test]
         fn prop_task_blocks_from_contents_terminates_on_h2_heading(
             header_leading in whitespace_strategy(),
             heading_leading in whitespace_strategy(),
@@ -547,6 +582,40 @@ mod tests {
             }
 
             let blocks_out = task_blocks_from_contents(&contents);
+            prop_assert_eq!(blocks_out.len(), 1);
+            prop_assert_eq!(&blocks_out[0], &expected);
+        }
+
+        #[test]
+        fn prop_task_blocks_from_contents_ignores_tabbed_h2_near_miss_with_crlf(
+            header_leading in whitespace_strategy(),
+            id in task_id_strategy(),
+            body in prop::collection::vec(safe_line_strategy(), 0..3),
+            near_miss in tabbed_heading_near_miss_strategy(),
+            suffix in prop::collection::vec(safe_line_strategy(), 1..3)
+        ) {
+            let header = format!("{}### Task {}", header_leading, id);
+            let mut lines = Vec::new();
+            lines.push(header.clone());
+            let mut expected = header;
+
+            for line in &body {
+                lines.push(line.clone());
+                expected.push('\n');
+                expected.push_str(line);
+            }
+
+            lines.push(near_miss.clone());
+            expected.push('\n');
+            expected.push_str(&near_miss);
+
+            lines.extend(suffix.iter().cloned());
+            expected.push('\n');
+            expected.push_str(&suffix.join("\n"));
+
+            let contents = lines.join("\r\n");
+            let blocks_out = task_blocks_from_contents(&contents);
+
             prop_assert_eq!(blocks_out.len(), 1);
             prop_assert_eq!(&blocks_out[0], &expected);
         }
@@ -886,6 +955,21 @@ mod tests {
             tail in string_regex(r"[^\n]{0,12}").unwrap()
         ) {
             let line = format!("{}{}{}", leading, prefix, tail);
+            prop_assert!(!is_unchecked_line(&line));
+        }
+
+        #[test]
+        fn prop_is_unchecked_line_rejects_tabbed_near_miss_variants(
+            leading in whitespace_strategy(),
+            tail in string_regex(r"[^\n]{0,12}").unwrap(),
+            variant in prop_oneof![
+                Just("-\t[ ]".to_string()),
+                Just("- [\t]".to_string()),
+                Just("-\t [ ]".to_string()),
+                Just("- [\t ]".to_string())
+            ]
+        ) {
+            let line = format!("{}{}{}", leading, variant, tail);
             prop_assert!(!is_unchecked_line(&line));
         }
     }

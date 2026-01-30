@@ -87,7 +87,7 @@ Keep coverage as a warning-only signal for now. After stability, introduce a sof
   * Add tests ensuring H2 headings terminate blocks only when valid and non-empty.
   * Verify near-miss patterns do not terminate blocks or create unchecked matches.
 - **Dependencies** COV-PRD-1
-- [ ] COV-TASK-1 Add property-based task parsing boundary coverage
+- [x] COV-TASK-1 Add property-based task parsing boundary coverage
 ### Task COV-STATE-1
 
 - **ID** COV-STATE-1
