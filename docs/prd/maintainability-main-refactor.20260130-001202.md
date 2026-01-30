@@ -172,7 +172,7 @@ Commands and tests align with CI expectations and coverage remains at or above 9
   * `CHANGELOG.md` includes a task-tagged entry with verification note.
   * Changes align with PROCESS guardrails.
 - **Dependencies** MD-2, MD-3, MD-4, MD-5, MD-6
-- [ ] MD-7 Update architecture docs and changelog
+- [x] MD-7 Update architecture docs and changelog
 ### Task MD-8
 
 - **ID** MD-8
