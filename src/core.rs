@@ -1125,6 +1125,28 @@ mod tests {
     }
 
     #[test]
+    fn check_completion_accepts_trailing_whitespace_with_zero_tasks() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "").unwrap();
+
+        let result = "<promise>COMPLETE</promise>   \n";
+        let complete = check_completion(&path, result, "COMPLETE").unwrap();
+        assert!(complete);
+    }
+
+    #[test]
+    fn check_completion_rejects_zero_tasks_without_promise_line() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        fs::write(&path, "").unwrap();
+
+        let result = "All done\n";
+        let complete = check_completion(&path, result, "COMPLETE").unwrap();
+        assert!(!complete);
+    }
+
+    #[test]
     fn check_completion_uses_last_non_empty_line() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("PRD.md");
@@ -1746,6 +1768,33 @@ mod tests {
         let result = run_iteration(
             &backend,
             &project_file,
+            "PRD.md",
+            1,
+            1,
+            "COMPLETE",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message))
+                if message.contains("project directory does not exist")
+        ));
+    }
+
+    #[test]
+    fn run_iteration_rejects_missing_project_dir() {
+        let temp = tempfile::tempdir().unwrap();
+        let missing_dir = temp.path().join("missing-dir");
+
+        let backend = TestBackend::new();
+        let result = run_iteration(
+            &backend,
+            &missing_dir,
             "PRD.md",
             1,
             1,
@@ -2465,17 +2514,20 @@ mod tests {
                 context_files.as_deref(),
             );
 
-            prop_assert!(rendered.contains(&format!("File:{}", task_file)));
-            prop_assert!(rendered.contains(&format!("Marker:{}", completion_marker)));
-            prop_assert!(rendered.contains(&format!(
-                "Iter:{}/{}",
-                iteration, max_iterations
-            )));
-            prop_assert!(rendered.contains(&format!("Block:{}", task_block)));
+            let expected_file = format!("File:{}", task_file);
+            let expected_marker = format!("Marker:{}", completion_marker);
+            let expected_iter = format!("Iter:{}/{}", iteration, max_iterations);
+            let expected_block = format!("Block:{}", task_block);
+
+            prop_assert!(rendered.contains(&expected_file));
+            prop_assert!(rendered.contains(&expected_marker));
+            prop_assert!(rendered.contains(&expected_iter));
+            prop_assert!(rendered.contains(&expected_block));
 
             match context_files.as_deref() {
                 Some(context) if !context.is_empty() => {
-                    prop_assert!(rendered.contains(&format!("Ctx:{}", context)));
+                    let expected_ctx = format!("Ctx:{}", context);
+                    prop_assert!(rendered.contains(&expected_ctx));
                     prop_assert!(rendered.contains("Context Files (read these first):"));
                     prop_assert!(rendered.contains(context));
                 }
@@ -2485,13 +2537,19 @@ mod tests {
                 }
             }
 
-            prop_assert!(!rendered.contains("{task_file}"));
-            prop_assert!(!rendered.contains("{completion_marker}"));
-            prop_assert!(!rendered.contains("{iteration}"));
-            prop_assert!(!rendered.contains("{max_iterations}"));
-            prop_assert!(!rendered.contains("{task_block}"));
-            prop_assert!(!rendered.contains("{context_files}"));
-            prop_assert!(!rendered.contains("{context_files_section}"));
+            let placeholders = [
+                "{task_file}",
+                "{completion_marker}",
+                "{iteration}",
+                "{max_iterations}",
+                "{task_block}",
+                "{context_files}",
+                "{context_files_section}",
+            ];
+
+            for placeholder in placeholders {
+                prop_assert!(!rendered.contains(placeholder));
+            }
         }
 
     }

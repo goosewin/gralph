@@ -103,6 +103,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-CORE-1 Add core loop parse failure coverage and completion invariants.
 - COV-CORE-1 Add property tests for prompt rendering and context normalization.
 - COV-CORE-1 Cover prompt template placeholder replacement invariants.
+- COV-CORE-1 Cover core loop completion edge cases for zero tasks and trailing whitespace.
 - COV90-CORE-1 Add core loop tests for error paths, callbacks, and completion invariants.
 - COV90-STATE-1 Add state store recovery and parse_value edge-case tests.
 - COV90-STATE-1 Expand state store write failure and cleanup coverage.
