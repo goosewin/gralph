@@ -2793,6 +2793,40 @@ mod tests {
     }
 
     #[test]
+    fn canonicalize_for_compare_uses_canonical_parent_when_missing_file() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let missing = base.join("missing.md");
+
+        let expected_parent = base.canonicalize().unwrap();
+        let expected = expected_parent.join("missing.md");
+
+        let compare = canonicalize_for_compare(&missing);
+
+        assert_eq!(compare, expected);
+    }
+
+    #[test]
+    fn canonicalize_for_compare_returns_original_when_parent_missing() {
+        let temp = tempdir().unwrap();
+        let missing = temp.path().join("missing").join("file.md");
+
+        let compare = canonicalize_for_compare(&missing);
+
+        assert_eq!(compare, missing);
+    }
+
+    #[test]
+    fn resolve_base_dir_falls_back_to_override_when_canonicalize_fails() {
+        let temp = tempdir().unwrap();
+        let override_path = temp.path().join("missing-root");
+
+        let resolved = resolve_base_dir(Path::new("prd.md"), Some(&override_path));
+
+        assert_eq!(resolved, Some(override_path));
+    }
+
+    #[test]
     fn sanitize_task_block_rebuilds_context_and_dedupes_unchecked_lines() {
         let temp = tempdir().unwrap();
         let base = temp.path();
@@ -2841,6 +2875,26 @@ mod tests {
         assert!(sanitized.contains("- [ ] X-3 Keep"));
         assert!(sanitized.contains("- X-3 Drop"));
         assert!(!sanitized.contains("- [ ] X-3 Drop"));
+    }
+
+    #[test]
+    fn sanitize_task_block_keeps_absolute_context_inside_base_dir_without_allowed_list() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        let inside = docs.join("keep.md");
+        fs::write(&inside, "ok").unwrap();
+
+        let block = format!(
+            "### Task X-3A\n- **ID** X-3A\n- **Context Bundle** `{}`\n- **DoD** Confirm sanitize.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] X-3A Keep\n",
+            inside.display()
+        );
+
+        let sanitized = sanitize_task_block(&block, Some(base), None);
+
+        assert!(sanitized.contains("- **Context Bundle** `docs/keep.md`"));
+        assert!(!sanitized.contains(base.to_string_lossy().as_ref()));
     }
 
     #[test]

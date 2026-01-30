@@ -76,7 +76,7 @@ Keep coverage as a warning-only signal for now. After stability, introduce a sof
   * Add proptest for stray unchecked line detection and Open Questions removal invariants.
   * Cover absolute path handling when base_dir is set and when canonicalization fails.
 - **Dependencies** None
-- [ ] COV-PRD-1 Expand PRD validation and sanitize invariants
+- [x] COV-PRD-1 Expand PRD validation and sanitize invariants
 ### Task COV-TASK-1
 
 - **ID** COV-TASK-1
