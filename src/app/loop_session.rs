@@ -324,38 +324,59 @@ fn format_rfc3339(clock: &dyn core::Clock) -> String {
     datetime.to_rfc3339()
 }
 
-fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
-    let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
-    maybe_check_for_update();
-    let task_file = args
-        .task_file
+fn resolve_task_file(args: &RunLoopArgs, config: &Config) -> String {
+    args.task_file
         .clone()
         .or_else(|| config.get("defaults.task_file"))
-        .unwrap_or_else(|| "PRD.md".to_string());
-    let max_iterations = args
-        .max_iterations
+        .unwrap_or_else(|| "PRD.md".to_string())
+}
+
+fn resolve_max_iterations(args: &RunLoopArgs, config: &Config) -> u32 {
+    args.max_iterations
         .or_else(|| {
             config
                 .get("defaults.max_iterations")
-                .and_then(|v| v.parse().ok())
+                .and_then(|value| value.parse().ok())
         })
-        .unwrap_or(30);
-    let completion_marker = args
-        .completion_marker
+        .unwrap_or(30)
+}
+
+fn resolve_completion_marker(args: &RunLoopArgs, config: &Config) -> String {
+    args.completion_marker
         .clone()
         .or_else(|| config.get("defaults.completion_marker"))
-        .unwrap_or_else(|| "COMPLETE".to_string());
-    let backend_name = args
-        .backend
+        .unwrap_or_else(|| "COMPLETE".to_string())
+}
+
+fn resolve_backend_name(args: &RunLoopArgs, config: &Config) -> String {
+    args.backend
         .clone()
         .or_else(|| config.get("defaults.backend"))
-        .unwrap_or_else(|| "claude".to_string());
+        .unwrap_or_else(|| "claude".to_string())
+}
+
+fn resolve_model(args: &RunLoopArgs, config: &Config, backend_name: &str) -> Option<String> {
     let mut model = args.model.clone().or_else(|| config.get("defaults.model"));
     if model.as_deref().unwrap_or("").is_empty() && backend_name == "opencode" {
         model = config.get("opencode.default_model");
     }
+    model
+}
 
-    if args.strict_prd {
+fn should_validate_prd(strict_prd: bool) -> bool {
+    strict_prd
+}
+
+fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
+    let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
+    maybe_check_for_update();
+    let task_file = resolve_task_file(&args, &config);
+    let max_iterations = resolve_max_iterations(&args, &config);
+    let completion_marker = resolve_completion_marker(&args, &config);
+    let backend_name = resolve_backend_name(&args, &config);
+    let model = resolve_model(&args, &config, &backend_name);
+
+    if should_validate_prd(args.strict_prd) {
         prd::prd_validate_file(&args.dir.join(&task_file), false, Some(&args.dir))
             .map_err(|err| CliError::Message(err.to_string()))?;
     }
@@ -684,5 +705,192 @@ fn print_table(headers: &[&str], rows: &[Vec<String>]) {
             print!("{:width$}  ", col, width = widths[index]);
         }
         println!();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn env_guard() -> std::sync::MutexGuard<'static, ()> {
+        let guard = crate::test_support::env_lock();
+        clear_env_overrides();
+        guard
+    }
+
+    fn clear_env_overrides() {
+        for key in [
+            "GRALPH_DEFAULT_CONFIG",
+            "GRALPH_GLOBAL_CONFIG",
+            "GRALPH_CONFIG_DIR",
+            "GRALPH_PROJECT_CONFIG_NAME",
+            "GRALPH_DEFAULTS_MAX_ITERATIONS",
+            "GRALPH_DEFAULTS_TASK_FILE",
+            "GRALPH_DEFAULTS_COMPLETION_MARKER",
+            "GRALPH_DEFAULTS_BACKEND",
+            "GRALPH_DEFAULTS_MODEL",
+            "GRALPH_MAX_ITERATIONS",
+            "GRALPH_TASK_FILE",
+            "GRALPH_COMPLETION_MARKER",
+            "GRALPH_BACKEND",
+            "GRALPH_MODEL",
+        ] {
+            remove_env(key);
+        }
+    }
+
+    fn set_env(key: &str, value: impl AsRef<std::ffi::OsStr>) {
+        unsafe {
+            env::set_var(key, value);
+        }
+    }
+
+    fn remove_env(key: &str) {
+        unsafe {
+            env::remove_var(key);
+        }
+    }
+
+    fn write_file(path: &Path, contents: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(path, contents).unwrap();
+    }
+
+    fn load_config(contents: &str) -> Config {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("default.yaml");
+        write_file(&config_path, contents);
+        let missing_global = temp.path().join("missing-global.yaml");
+
+        set_env("GRALPH_DEFAULT_CONFIG", &config_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &missing_global);
+
+        let config = Config::load(None).unwrap();
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+
+        config
+    }
+
+    fn base_args() -> RunLoopArgs {
+        RunLoopArgs {
+            dir: PathBuf::from("."),
+            name: "session".to_string(),
+            max_iterations: None,
+            task_file: None,
+            completion_marker: None,
+            backend: None,
+            model: None,
+            variant: None,
+            prompt_template: None,
+            webhook: None,
+            no_worktree: false,
+            strict_prd: false,
+        }
+    }
+
+    #[test]
+    fn resolve_task_file_prefers_cli_config_then_default() {
+        let _guard = env_guard();
+        let config = load_config("defaults:\n  task_file: Config.md\n");
+        let mut args = base_args();
+
+        args.task_file = Some("CLI.md".to_string());
+        assert_eq!(resolve_task_file(&args, &config), "CLI.md");
+
+        args.task_file = None;
+        assert_eq!(resolve_task_file(&args, &config), "Config.md");
+
+        let config = load_config("defaults:\n  backend: claude\n");
+        assert_eq!(resolve_task_file(&args, &config), "PRD.md");
+    }
+
+    #[test]
+    fn resolve_max_iterations_prefers_cli_config_then_default() {
+        let _guard = env_guard();
+        let config = load_config("defaults:\n  max_iterations: 12\n");
+        let mut args = base_args();
+
+        args.max_iterations = Some(55);
+        assert_eq!(resolve_max_iterations(&args, &config), 55);
+
+        args.max_iterations = None;
+        assert_eq!(resolve_max_iterations(&args, &config), 12);
+
+        let config = load_config("defaults:\n  max_iterations: nope\n");
+        assert_eq!(resolve_max_iterations(&args, &config), 30);
+    }
+
+    #[test]
+    fn resolve_completion_marker_prefers_cli_config_then_default() {
+        let _guard = env_guard();
+        let config = load_config("defaults:\n  completion_marker: DONE\n");
+        let mut args = base_args();
+
+        args.completion_marker = Some("FINISH".to_string());
+        assert_eq!(resolve_completion_marker(&args, &config), "FINISH");
+
+        args.completion_marker = None;
+        assert_eq!(resolve_completion_marker(&args, &config), "DONE");
+
+        let config = load_config("defaults:\n  backend: claude\n");
+        assert_eq!(resolve_completion_marker(&args, &config), "COMPLETE");
+    }
+
+    #[test]
+    fn resolve_backend_prefers_cli_config_then_default() {
+        let _guard = env_guard();
+        let config = load_config("defaults:\n  backend: gemini\n");
+        let mut args = base_args();
+
+        args.backend = Some("codex".to_string());
+        assert_eq!(resolve_backend_name(&args, &config), "codex");
+
+        args.backend = None;
+        assert_eq!(resolve_backend_name(&args, &config), "gemini");
+
+        let config = load_config("defaults:\n  task_file: PRD.md\n");
+        assert_eq!(resolve_backend_name(&args, &config), "claude");
+    }
+
+    #[test]
+    fn resolve_model_prefers_cli_or_config_and_opencode_default() {
+        let _guard = env_guard();
+        let config = load_config(
+            "defaults:\n  model: config-model\n  backend: opencode\nopencode:\n  default_model: opencode-default\n",
+        );
+        let mut args = base_args();
+
+        args.model = Some("cli-model".to_string());
+        assert_eq!(
+            resolve_model(&args, &config, "opencode").as_deref(),
+            Some("cli-model")
+        );
+
+        args.model = None;
+        assert_eq!(
+            resolve_model(&args, &config, "claude").as_deref(),
+            Some("config-model")
+        );
+
+        let config = load_config(
+            "defaults:\n  model: \"\"\n  backend: opencode\nopencode:\n  default_model: opencode-default\n",
+        );
+        assert_eq!(
+            resolve_model(&args, &config, "opencode").as_deref(),
+            Some("opencode-default")
+        );
+    }
+
+    #[test]
+    fn should_validate_prd_matches_flag() {
+        assert!(should_validate_prd(true));
+        assert!(!should_validate_prd(false));
     }
 }
