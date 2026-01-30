@@ -214,6 +214,12 @@ mod tests {
     }
 
     #[test]
+    fn is_task_header_accepts_tab_leading_whitespace() {
+        assert!(is_task_header("\t### Task COV-13"));
+        assert!(is_task_header("\t \t### Task COV-13"));
+    }
+
+    #[test]
     fn is_unchecked_line_accepts_leading_whitespace() {
         assert!(is_unchecked_line("   - [ ] Edge case"));
     }
@@ -248,6 +254,12 @@ mod tests {
     fn is_task_block_end_accepts_tabbed_separator_and_heading() {
         assert!(is_task_block_end("\t---\t"));
         assert!(is_task_block_end("\t## Notes"));
+    }
+
+    #[test]
+    fn is_task_block_end_accepts_crlf_lines() {
+        assert!(is_task_block_end("---\r"));
+        assert!(is_task_block_end("## Notes\r"));
     }
 
     #[test]

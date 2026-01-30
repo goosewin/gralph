@@ -233,7 +233,7 @@ Each task block must contain exactly one unchecked task line.
   * Add unit tests for is_task_block_end and is_task_header near-miss spacing and tab edge cases.
   * Add tests for is_unchecked_line with mixed whitespace and invalid spacing.
 - **Dependencies** COV-VER-1
-- [ ] COV-TASK-1 Cover task parsing boundary conditions
+- [x] COV-TASK-1 Cover task parsing boundary conditions
 ---
 
 ### Task COV-TEST-SUPPORT-1
