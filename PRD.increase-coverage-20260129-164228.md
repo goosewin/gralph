@@ -197,7 +197,7 @@ Keep coverage as a warning-only signal for now. After stability, introduce a sof
   * Add tests for OPENCODE_EXPERIMENTAL_LSP_TOOL env usage and prompt placement.
   * Add tests for parse_text invalid UTF-8 and directory paths.
 - **Dependencies** COV-BACKEND-MOD-1
-- [ ] COV-BACKEND-OPENCODE-1 Expand OpenCode adapter coverage
+- [x] COV-BACKEND-OPENCODE-1 Expand OpenCode adapter coverage
 ### Task COV-BACKEND-GEMINI-1
 
 - **ID** COV-BACKEND-GEMINI-1
