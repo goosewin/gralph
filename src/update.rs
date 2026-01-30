@@ -645,6 +645,7 @@ mod tests {
 
     #[test]
     fn check_for_update_returns_none_when_latest_is_current() {
+        let _lock = crate::test_support::env_lock();
         let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", version::VERSION_TAG);
         let result = check_for_update(version::VERSION).expect("check");
         assert!(result.is_none());
@@ -690,6 +691,7 @@ mod tests {
 
     #[test]
     fn fetch_latest_release_tag_reports_missing_tag_from_local_server() {
+        let _lock = crate::test_support::env_lock();
         let (url, handle) = start_release_server(r#"{ "name": "release" }"#);
         let _guard = EnvGuard::set("GRALPH_TEST_RELEASE_URL", &url);
         let result = fetch_latest_release_tag();
@@ -823,6 +825,7 @@ mod tests {
 
     #[test]
     fn resolve_install_version_latest_uses_override() {
+        let _lock = crate::test_support::env_lock();
         let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "v2.0.0");
         let resolved = resolve_install_version("latest").expect("resolved");
         assert_eq!(resolved, "2.0.0");
