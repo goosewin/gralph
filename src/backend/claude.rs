@@ -182,10 +182,24 @@ fn extract_result_text(value: &Value) -> Option<String> {
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::fs;
+    use std::fs::{self, File};
+    use std::io::Write;
+    use std::path::Path;
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
+
+    #[cfg(unix)]
+    fn write_executable(path: &Path, script: &str) {
+        let mut file = File::create(path).unwrap();
+        file.write_all(script.as_bytes()).unwrap();
+        file.sync_all().unwrap();
+        drop(file);
+
+        let mut perms = fs::metadata(path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(path, perms).unwrap();
+    }
 
     #[test]
     fn parse_text_returns_result_when_present() {
@@ -558,10 +572,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let script_path = temp.path().join("claude-ok");
         let script = "#!/bin/sh\nexit 0\n";
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
+        write_executable(&script_path, script);
 
         let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
         assert!(backend.check_installed());
@@ -573,10 +584,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let script_path = temp.path().join("claude-fail");
         let script = "#!/bin/sh\nexit 2\n";
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
+        write_executable(&script_path, script);
 
         let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
         assert!(!backend.check_installed());
@@ -613,10 +621,7 @@ mod tests {
         let script_path = temp.path().join("claude-mock");
         let output_path = temp.path().join("output.json");
         let script = "#!/bin/sh\necho '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"Hello\\nworld\"}]}}'\necho '{\"type\":\"result\",\"result\":\"done\"}'\n";
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
+        write_executable(&script_path, script);
 
         let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
         backend
@@ -641,10 +646,7 @@ for arg in "$@"; do
 done
 printf '"}\n'
 "#;
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
+        write_executable(&script_path, script);
 
         let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
         backend
@@ -673,10 +675,7 @@ for arg in "$@"; do
 done
 printf '"}\n'
 "#;
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
+        write_executable(&script_path, script);
 
         let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
         backend
@@ -728,10 +727,7 @@ for arg in "$@"; do
 done
 printf '"}\n'
 "#;
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
+        write_executable(&script_path, script);
 
         let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
         backend
@@ -765,10 +761,7 @@ for arg in "$@"; do
 done
 printf '"}\n'
 "#;
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
+        write_executable(&script_path, script);
 
         let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
         backend
@@ -806,10 +799,7 @@ printf '"}\n'
         let script_path = temp.path().join("claude-mock");
         let output_path = temp.path().join("output.json");
         let script = "#!/bin/sh\nexit 2\n";
-        fs::write(&script_path, script).unwrap();
-        let mut perms = fs::metadata(&script_path).unwrap().permissions();
-        perms.set_mode(0o755);
-        fs::set_permissions(&script_path, perms).unwrap();
+        write_executable(&script_path, script);
 
         let backend = ClaudeBackend::with_command(script_path.to_string_lossy().to_string());
         let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());

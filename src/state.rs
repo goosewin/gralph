@@ -338,6 +338,20 @@ fn default_state_dir() -> PathBuf {
 }
 
 fn acquire_lock(file: &File, timeout: Duration) -> Result<(), StateError> {
+    let metadata = file.metadata().map_err(|source| StateError::Io {
+        path: PathBuf::from("state.lock"),
+        source,
+    })?;
+    if !metadata.is_file() {
+        return Err(StateError::Io {
+            path: PathBuf::from("state.lock"),
+            source: std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "state lock is not a regular file",
+            ),
+        });
+    }
+
     let start = Instant::now();
     loop {
         match file.try_lock_exclusive() {
