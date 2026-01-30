@@ -792,6 +792,22 @@ mod tests {
     }
 
     #[test]
+    fn resolve_cors_origin_returns_none_for_invalid_origin_header_in_open_mode() {
+        let config = ServerConfig {
+            host: "0.0.0.0".to_string(),
+            port: 8080,
+            token: None,
+            open: true,
+            max_body_bytes: 4096,
+        };
+        let mut headers = HeaderMap::new();
+        let value = HeaderValue::from_bytes(b"http://example.com/\xFF").unwrap();
+        headers.insert(axum::http::header::ORIGIN, value);
+
+        assert_eq!(resolve_cors_origin(&headers, &config), None);
+    }
+
+    #[test]
     fn resolve_cors_origin_rejects_wildcard_host_origin() {
         let config = ServerConfig {
             host: "0.0.0.0".to_string(),
@@ -843,6 +859,27 @@ mod tests {
         );
 
         assert_eq!(resolve_cors_origin(&headers, &config), None);
+    }
+
+    #[test]
+    fn resolve_cors_origin_allows_ipv6_localhost_for_wildcard_host() {
+        let config = ServerConfig {
+            host: "::".to_string(),
+            port: 8080,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::ORIGIN,
+            "http://[::1]".parse().unwrap(),
+        );
+
+        assert_eq!(
+            resolve_cors_origin(&headers, &config),
+            Some("http://[::1]".to_string())
+        );
     }
 
     #[test]
@@ -1686,6 +1723,53 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn stop_endpoint_marks_stopped_when_tmux_session_empty_and_pid_stale() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+        store
+            .set_session(
+                "alpha",
+                &[
+                    ("status", "running"),
+                    ("pid", &dead_pid().to_string()),
+                    ("tmux_session", "  "),
+                ],
+            )
+            .unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state.clone());
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/stop/alpha")
+                    .method("POST")
+                    .header(axum::http::header::AUTHORIZATION, "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let session = state.store.get_session("alpha").unwrap().unwrap();
+        assert_eq!(
+            session.get("status").and_then(|v| v.as_str()),
+            Some("stopped")
+        );
+    }
+
     #[tokio::test]
     async fn stop_endpoint_unknown_session_returns_not_found() {
         let temp = tempfile::tempdir().unwrap();
@@ -2087,6 +2171,28 @@ mod tests {
             "pid": 0,
             "dir": temp.path().to_string_lossy(),
             "task_file": "tasks.md",
+        });
+        let enriched = enrich_session(session);
+        assert_eq!(enriched["current_remaining"], 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn enrich_session_returns_zero_when_default_task_file_unreadable() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let task_path = temp.path().join("PRD.md");
+        fs::write(&task_path, "- [ ] First\n- [x] Done\n").unwrap();
+        let mut permissions = fs::metadata(&task_path).unwrap().permissions();
+        permissions.set_mode(0o000);
+        fs::set_permissions(&task_path, permissions).unwrap();
+
+        let session = json!({
+            "name": "alpha",
+            "status": "idle",
+            "pid": 0,
+            "dir": temp.path().to_string_lossy(),
         });
         let enriched = enrich_session(session);
         assert_eq!(enriched["current_remaining"], 0);

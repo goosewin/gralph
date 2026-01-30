@@ -157,6 +157,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-BACKEND-OPENCODE-1 Expand OpenCode adapter coverage for env flags, arg ordering, model/variant trimming, mixed stdout/stderr capture, and invalid UTF-8 parsing.
 - COV-BACKEND-CODEX-1 Expand Codex adapter arg ordering, output path, and error coverage.
 - COV-CONFIG-1 Add config lookup proptest and nested sequence rendering tests.
+- COV-SERVER-1 Add server CORS invalid origin, stale pid stop, and unreadable task file tests.
 
 ### Fixed
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.

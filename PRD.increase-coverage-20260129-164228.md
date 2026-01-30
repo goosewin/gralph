@@ -142,7 +142,7 @@ Keep coverage as a warning-only signal for now. After stability, introduce a sof
   * Add tests for stop_handler behavior when tmux session is empty and pid is stale.
   * Add tests for enrich_session when task file is missing or unreadable.
 - **Dependencies** COV-STATE-1
-- [ ] COV-SERVER-1 Expand server CORS and stop flow coverage
+- [x] COV-SERVER-1 Expand server CORS and stop flow coverage
 ### Task COV-NOTIFY-1
 
 - **ID** COV-NOTIFY-1
