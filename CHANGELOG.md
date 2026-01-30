@@ -173,6 +173,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-SERVER-1 Add server CORS invalid origin, stale pid stop, and unreadable task file tests.
 
 ### Fixed
+- MD-8 Fix verifier config import, public CLI error type, and file reader trait alias.
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.
 - REF-1 Consolidate shared backend execution helpers.
 - REF-2 Unify task block parsing helpers across core and PRD validation.
@@ -194,7 +195,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - Windows installer: fix Join-Path usage when piping to iex.
 
 ### Verification
-- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
+- Verification: Tests=cargo test --workspace; Coverage=65.49% (>= 90%); CI=not-run; PR=not-opened
 
 ## [0.2.1]
 

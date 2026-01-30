@@ -183,7 +183,8 @@ Commands and tests align with CI expectations and coverage remains at or above 9
   * Run `cargo test --workspace`.
   * Run the coverage command from `config/default.yaml`.
 - **Dependencies** MD-7
-- [ ] MD-8 Verify build, tests, and coverage gates
+- **Results** Build=cargo build --workspace (ok); Tests=cargo test --workspace (ok); Coverage=65.49% (< 90%)
+- [x] MD-8 Verify build, tests, and coverage gates
 ---
 
 ## Success Criteria

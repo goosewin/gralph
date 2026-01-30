@@ -1,6 +1,6 @@
 use crate::app::worktree::git_output_in_dir;
 use crate::app::{join_or_none, normalize_csv, parse_bool_value, CliError};
-use gralph_rs::config::Config;
+use crate::config::Config;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::{self, Write};

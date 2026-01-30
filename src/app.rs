@@ -38,8 +38,12 @@ use prd_init::{
 
 pub(crate) trait FileSystem: Send + Sync {
     fn read_to_string(&self, path: &Path) -> io::Result<String>;
-    fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Seek>>;
+    fn open_read(&self, path: &Path) -> io::Result<Box<dyn ReadSeek>>;
 }
+
+pub(crate) trait ReadSeek: Read + Seek {}
+
+impl<T: Read + Seek> ReadSeek for T {}
 
 #[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct RealFileSystem;
@@ -49,7 +53,7 @@ impl FileSystem for RealFileSystem {
         fs::read_to_string(path)
     }
 
-    fn open_read(&self, path: &Path) -> io::Result<Box<dyn Read + Seek>> {
+    fn open_read(&self, path: &Path) -> io::Result<Box<dyn ReadSeek>> {
         let file = fs::File::open(path)?;
         Ok(Box::new(file))
     }
@@ -230,7 +234,7 @@ fn dispatch(command: Command, deps: &Deps) -> Result<(), CliError> {
 }
 
 #[derive(Debug)]
-pub(crate) enum CliError {
+pub enum CliError {
     Message(String),
     Io(io::Error),
 }
