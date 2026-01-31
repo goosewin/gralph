@@ -1,4 +1,4 @@
-use super::{parse_bool_value, sanitize_session_name, CliError};
+use super::{CliError, parse_bool_value, sanitize_session_name};
 use crate::cli::{self, RunLoopArgs, WorktreeCommand, WorktreeCreateArgs, WorktreeFinishArgs};
 use crate::config::Config;
 use std::ffi::OsStr;
@@ -337,6 +337,7 @@ pub(super) fn maybe_create_auto_worktree_with_timestamp(
                     "Auto worktree skipped for {}: not a git repository.",
                     target_display
                 );
+                print_auto_worktree_hint();
                 return Ok(());
             }
             return Err(CliError::Message(message));
@@ -346,6 +347,7 @@ pub(super) fn maybe_create_auto_worktree_with_timestamp(
                 "Auto worktree skipped for {}: git unavailable ({}).",
                 target_display, err
             );
+            print_auto_worktree_hint();
             return Ok(());
         }
     };
@@ -354,6 +356,7 @@ pub(super) fn maybe_create_auto_worktree_with_timestamp(
             "Auto worktree skipped for {}: repository has no commits.",
             target_display
         );
+        print_auto_worktree_hint();
         return Ok(());
     }
     let clean = match git_is_clean(&repo_root) {
@@ -363,6 +366,7 @@ pub(super) fn maybe_create_auto_worktree_with_timestamp(
                 "Auto worktree skipped for {}: unable to check git status ({}).",
                 target_display, err
             );
+            print_auto_worktree_hint();
             return Ok(());
         }
     };
@@ -371,6 +375,7 @@ pub(super) fn maybe_create_auto_worktree_with_timestamp(
             "Auto worktree skipped for {}: repository is dirty.",
             target_display
         );
+        print_auto_worktree_hint();
         return Ok(());
     }
 
@@ -407,4 +412,10 @@ pub(super) fn maybe_create_auto_worktree_with_timestamp(
     };
     args.no_worktree = true;
     Ok(())
+}
+
+fn print_auto_worktree_hint() {
+    println!(
+        "Hint: use --no-worktree or set defaults.auto_worktree: false to disable auto worktrees."
+    );
 }

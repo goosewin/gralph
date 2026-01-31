@@ -258,6 +258,19 @@ impl StateStore {
         })
     }
 
+    pub fn purge_all(&self) -> Result<Vec<String>, StateError> {
+        self.with_lock(|| {
+            self.init_state()?;
+            let mut state = self.read_state()?;
+            let names = state.sessions.keys().cloned().collect::<Vec<_>>();
+            if !names.is_empty() {
+                state.sessions.clear();
+                self.write_state(&state)?;
+            }
+            Ok(names)
+        })
+    }
+
     fn with_lock<T>(&self, op: impl FnOnce() -> Result<T, StateError>) -> Result<T, StateError> {
         if !self.state_dir.exists() {
             fs::create_dir_all(&self.state_dir).map_err(|source| StateError::Io {
@@ -821,6 +834,25 @@ mod tests {
         let cleaned = store.cleanup_stale(CleanupMode::Remove).unwrap();
         assert_eq!(cleaned, vec!["stale-remove".to_string()]);
         assert!(store.get_session("stale-remove").unwrap().is_none());
+    }
+
+    #[test]
+    fn purge_all_clears_state() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        store.init_state().unwrap();
+
+        store
+            .set_session("alpha", &[("status", "running"), ("pid", "999999")])
+            .unwrap();
+        store
+            .set_session("beta", &[("status", "complete"), ("pid", "0")])
+            .unwrap();
+
+        let purged = store.purge_all().unwrap();
+        assert_eq!(purged, vec!["alpha".to_string(), "beta".to_string()]);
+        let sessions = store.list_sessions().unwrap();
+        assert!(sessions.is_empty());
     }
 
     #[test]

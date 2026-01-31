@@ -1,6 +1,8 @@
 use super::{CliError, Deps, FileSystem, ProcessRunner};
 use crate::backend::backend_from_name;
-use crate::cli::{LogsArgs, ResumeArgs, RunLoopArgs, StartArgs, StopArgs};
+use crate::cli::{
+    CleanupArgs, LogsArgs, ResumeArgs, RunLoopArgs, StartArgs, StatusArgs, StepArgs, StopArgs,
+};
 use crate::config::Config;
 use crate::core::{self, LoopStatus};
 use crate::notify;
@@ -8,6 +10,9 @@ use crate::prd;
 use crate::state::{CleanupMode, StateStore};
 use crate::update;
 use crate::verifier;
+use serde_json::{Map, Value};
+use std::env;
+use std::fs;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcCommand, Stdio};
@@ -19,6 +24,9 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
             "Directory does not exist: {}",
             args.dir.display()
         )));
+    }
+    if args.dry_run {
+        return cmd_start_dry_run(args, deps);
     }
     let no_tmux = args.no_tmux;
     let session_name = super::session_name(&args.name, &args.dir)?;
@@ -51,6 +59,7 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
         .dir
         .join(".gralph")
         .join(format!("{}.log", run_args.name));
+    let raw_log_file = core::raw_log_path(&log_file);
 
     store
         .set_session(
@@ -67,6 +76,7 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
                 ("last_task_count", &remaining.to_string()),
                 ("completion_marker", &completion_marker),
                 ("log_file", &log_file.to_string_lossy()),
+                ("raw_log_file", &raw_log_file.to_string_lossy()),
                 ("backend", run_args.backend.as_deref().unwrap_or("claude")),
                 ("model", run_args.model.as_deref().unwrap_or("")),
                 ("variant", run_args.variant.as_deref().unwrap_or("")),
@@ -76,7 +86,70 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
         .map_err(|err| CliError::Message(err.to_string()))?;
 
     println!("Gralph loop started in background (PID: {}).", child.id());
+    println!("Logs: {}", log_file.display());
+    println!(
+        "Tail logs: gralph logs {} --follow (or tail -f {}).",
+        run_args.name,
+        log_file.display()
+    );
+    println!("Run in foreground with --no-tmux to stream output.");
     Ok(())
+}
+
+fn cmd_start_dry_run(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
+    let session_name = super::session_name(&args.name, &args.dir)?;
+    let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
+    let run_args = run_loop_args_from_start(args, session_name)?;
+    let task_file = resolve_task_file(&run_args, &config);
+    let max_iterations = resolve_max_iterations(&run_args, &config);
+    let completion_marker = resolve_completion_marker(&run_args, &config);
+
+    if should_validate_prd(run_args.strict_prd) {
+        prd::prd_validate_file(&run_args.dir.join(&task_file), false, Some(&run_args.dir))
+            .map_err(|err| CliError::Message(err.to_string()))?;
+    }
+
+    let prompt_template = match &run_args.prompt_template {
+        Some(path) => Some(deps.fs().read_to_string(path).map_err(CliError::Io)?),
+        None => None,
+    };
+
+    let rendered = core::render_iteration_prompt(
+        &run_args.dir,
+        &task_file,
+        1,
+        max_iterations,
+        &completion_marker,
+        prompt_template.as_deref(),
+        Some(&config),
+    )
+    .map_err(|err| CliError::Message(err.to_string()))?;
+
+    println!("Next task block:");
+    if let Some(block) = rendered.task_block {
+        println!("{}", block);
+    } else {
+        println!("(none)");
+    }
+    println!();
+    println!("Resolved prompt:");
+    println!("{}", rendered.prompt);
+    Ok(())
+}
+
+pub(super) fn cmd_step(args: StepArgs, deps: &Deps) -> Result<(), CliError> {
+    if !args.dir.is_dir() {
+        return Err(CliError::Message(format!(
+            "Directory does not exist: {}",
+            args.dir.display()
+        )));
+    }
+    let session_name = super::session_name(&args.name, &args.dir)?;
+    let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
+    let mut run_args = run_loop_args_from_step(args, session_name)?;
+    deps.worktree()
+        .maybe_create_auto_worktree(&mut run_args, &config)?;
+    run_single_iteration(run_args, &config, deps)
 }
 
 pub(super) fn cmd_run_loop(mut args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
@@ -118,7 +191,7 @@ pub(super) fn cmd_stop(args: StopArgs, deps: &Deps) -> Result<(), CliError> {
     Ok(())
 }
 
-pub(super) fn cmd_status(deps: &Deps) -> Result<(), CliError> {
+pub(super) fn cmd_status(args: StatusArgs, deps: &Deps) -> Result<(), CliError> {
     let store = deps.state_store();
     store
         .init_state()
@@ -129,21 +202,37 @@ pub(super) fn cmd_status(deps: &Deps) -> Result<(), CliError> {
         .list_sessions()
         .map_err(|err| CliError::Message(err.to_string()))?;
     if sessions.is_empty() {
-        println!("No sessions found.");
+        if args.json {
+            let output = serde_json::json!({"sessions": []});
+            let rendered =
+                serde_json::to_string(&output).map_err(|err| CliError::Message(err.to_string()))?;
+            println!("{}", rendered);
+        } else {
+            println!("No sessions found.");
+        }
+        return Ok(());
+    }
+
+    let enriched = sessions
+        .into_iter()
+        .map(|session| enrich_status_session(session, deps.process()))
+        .collect::<Vec<_>>();
+
+    if args.json {
+        let output = serde_json::json!({"sessions": enriched});
+        let rendered =
+            serde_json::to_string(&output).map_err(|err| CliError::Message(err.to_string()))?;
+        println!("{}", rendered);
         return Ok(());
     }
 
     let mut rows = Vec::new();
-    for session in sessions {
+    for session in &enriched {
         let name = session
             .get("name")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
         let dir = session.get("dir").and_then(|v| v.as_str()).unwrap_or("");
-        let task_file = session
-            .get("task_file")
-            .and_then(|v| v.as_str())
-            .unwrap_or("PRD.md");
         let iteration = session
             .get("iteration")
             .and_then(|v| v.as_u64())
@@ -156,14 +245,10 @@ pub(super) fn cmd_status(deps: &Deps) -> Result<(), CliError> {
             .get("status")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
-        let remaining = if dir.is_empty() {
-            session
-                .get("last_task_count")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0)
-        } else {
-            core::count_remaining_tasks(&PathBuf::from(dir).join(task_file)) as u64
-        };
+        let remaining = session
+            .get("current_remaining")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
 
         rows.push(vec![
             name.to_string(),
@@ -175,6 +260,198 @@ pub(super) fn cmd_status(deps: &Deps) -> Result<(), CliError> {
     }
 
     print_table(&["NAME", "DIR", "ITERATION", "STATUS", "REMAINING"], &rows);
+    if args.verbose {
+        print_status_verbose(&enriched);
+    }
+    Ok(())
+}
+
+fn enrich_status_session(session: Value, process: &dyn ProcessRunner) -> Value {
+    let mut map = match session.as_object() {
+        Some(map) => map.clone(),
+        None => Map::new(),
+    };
+    let name_raw = map.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let dir = map.get("dir").and_then(|v| v.as_str()).unwrap_or("");
+    let task_file = map
+        .get("task_file")
+        .and_then(|v| v.as_str())
+        .unwrap_or("PRD.md");
+    let mut status = map
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+    let pid = map.get("pid").and_then(|v| v.as_i64()).unwrap_or(0);
+    let mut is_alive = false;
+    if status == "running" && pid > 0 {
+        if process.is_alive(pid) {
+            is_alive = true;
+        } else {
+            status = "stale".to_string();
+        }
+    }
+
+    let remaining = if dir.is_empty() {
+        map.get("last_task_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as i64
+    } else {
+        core::count_remaining_tasks(&PathBuf::from(dir).join(task_file)) as i64
+    };
+
+    let log_file = resolve_status_log_file(&map, name_raw, dir);
+    let raw_log_file = resolve_status_raw_log_file(&map, log_file.as_ref());
+    let last_task_id = if dir.is_empty() {
+        None
+    } else {
+        prd::prd_next_task_id(&PathBuf::from(dir).join(task_file))
+    };
+    let last_log = log_file
+        .as_ref()
+        .and_then(|path| core::last_log_line(path.as_path()));
+    let last_error = log_file
+        .as_ref()
+        .and_then(|path| core::last_error_line(path.as_path()));
+
+    map.insert(
+        "current_remaining".to_string(),
+        Value::Number(remaining.into()),
+    );
+    map.insert("is_alive".to_string(), Value::Bool(is_alive));
+    map.insert("status".to_string(), Value::String(status));
+    map.insert(
+        "log_file".to_string(),
+        log_file
+            .as_ref()
+            .map(|path| Value::String(path.to_string_lossy().to_string()))
+            .unwrap_or(Value::Null),
+    );
+    map.insert(
+        "raw_log_file".to_string(),
+        raw_log_file
+            .as_ref()
+            .map(|path| Value::String(path.to_string_lossy().to_string()))
+            .unwrap_or(Value::Null),
+    );
+    map.insert(
+        "last_task_id".to_string(),
+        last_task_id.map(Value::String).unwrap_or(Value::Null),
+    );
+    map.insert(
+        "last_log_line".to_string(),
+        last_log.map(Value::String).unwrap_or(Value::Null),
+    );
+    map.insert(
+        "last_error".to_string(),
+        last_error.map(Value::String).unwrap_or(Value::Null),
+    );
+    Value::Object(map)
+}
+
+fn resolve_status_log_file(map: &Map<String, Value>, name: &str, dir: &str) -> Option<PathBuf> {
+    if let Some(path) = map.get("log_file").and_then(|value| value.as_str()) {
+        if !path.trim().is_empty() {
+            return Some(PathBuf::from(path));
+        }
+    }
+    if dir.is_empty() || name.is_empty() {
+        return None;
+    }
+    Some(
+        PathBuf::from(dir)
+            .join(".gralph")
+            .join(format!("{}.log", name)),
+    )
+}
+
+fn resolve_status_raw_log_file(
+    map: &Map<String, Value>,
+    log_file: Option<&PathBuf>,
+) -> Option<PathBuf> {
+    if let Some(path) = map.get("raw_log_file").and_then(|value| value.as_str()) {
+        if !path.trim().is_empty() {
+            return Some(PathBuf::from(path));
+        }
+    }
+    log_file.map(|path| core::raw_log_path(path.as_path()))
+}
+
+fn print_status_verbose(sessions: &[Value]) {
+    for session in sessions {
+        let name = session
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let log_file = session
+            .get("log_file")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let raw_log_file = session
+            .get("raw_log_file")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let last_error = session
+            .get("last_error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        println!();
+        println!("{}:", name);
+        println!(
+            "  log_file: {}",
+            if log_file.is_empty() {
+                "none"
+            } else {
+                log_file
+            }
+        );
+        println!(
+            "  raw_log_file: {}",
+            if raw_log_file.is_empty() {
+                "none"
+            } else {
+                raw_log_file
+            }
+        );
+        println!(
+            "  last_error: {}",
+            if last_error.is_empty() {
+                "none"
+            } else {
+                last_error
+            }
+        );
+    }
+}
+
+pub(super) fn cmd_cleanup(args: CleanupArgs, deps: &Deps) -> Result<(), CliError> {
+    let store = deps.state_store();
+    store
+        .init_state()
+        .map_err(|err| CliError::Message(err.to_string()))?;
+
+    if args.purge {
+        let purged = store
+            .purge_all()
+            .map_err(|err| CliError::Message(err.to_string()))?;
+        print_cleanup_result("Purged", "No sessions found.", &purged);
+        return Ok(());
+    }
+
+    let mode = if args.remove {
+        CleanupMode::Remove
+    } else {
+        CleanupMode::Mark
+    };
+    let cleaned = store
+        .cleanup_stale(mode)
+        .map_err(|err| CliError::Message(err.to_string()))?;
+    let action = match mode {
+        CleanupMode::Mark => "Marked",
+        CleanupMode::Remove => "Removed",
+    };
+    print_cleanup_result(action, "No stale sessions found.", &cleaned);
     Ok(())
 }
 
@@ -187,10 +464,15 @@ pub(super) fn cmd_logs(args: LogsArgs, deps: &Deps) -> Result<(), CliError> {
         .get_session(&args.name)
         .map_err(|err| CliError::Message(err.to_string()))?
         .ok_or_else(|| CliError::Message(format!("Session not found: {}", args.name)))?;
-    let log_file = resolve_log_file(&args.name, &session)?;
+    let log_file = if args.raw {
+        resolve_raw_log_file(&args.name, &session)?
+    } else {
+        resolve_log_file(&args.name, &session)?
+    };
     if !log_file.is_file() {
         return Err(CliError::Message(format!(
-            "Log file does not exist: {}",
+            "{} does not exist: {}",
+            if args.raw { "Raw log file" } else { "Log file" },
             log_file.display()
         )));
     }
@@ -317,6 +599,23 @@ fn maybe_check_for_update() {
     }
 }
 
+fn should_check_for_update(config: &Config) -> bool {
+    if let Ok(value) = env::var("GRALPH_NO_UPDATE_CHECK") {
+        if value.trim().is_empty() {
+            return false;
+        }
+        if let Some(parsed) = super::parse_bool_value(&value) {
+            return !parsed;
+        }
+        return false;
+    }
+    config
+        .get("defaults.check_updates")
+        .as_deref()
+        .and_then(super::parse_bool_value)
+        .unwrap_or(true)
+}
+
 fn format_rfc3339(clock: &dyn core::Clock) -> String {
     let datetime: chrono::DateTime<chrono::Local> = clock.now().into();
     datetime.to_rfc3339()
@@ -434,7 +733,9 @@ fn notification_decision(
 
 fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
     let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
-    maybe_check_for_update();
+    if should_check_for_update(&config) {
+        maybe_check_for_update();
+    }
     let task_file = resolve_task_file(&args, &config);
     let max_iterations = resolve_max_iterations(&args, &config);
     let completion_marker = resolve_completion_marker(&args, &config);
@@ -466,6 +767,7 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
     let now = format_rfc3339(deps.clock());
     let remaining = core::count_remaining_tasks(&args.dir.join(&task_file));
     let log_file = args.dir.join(".gralph").join(format!("{}.log", args.name));
+    let raw_log_file = core::raw_log_path(&log_file);
 
     store
         .set_session(
@@ -482,6 +784,7 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
                 ("last_task_count", &remaining.to_string()),
                 ("completion_marker", &completion_marker),
                 ("log_file", &log_file.to_string_lossy()),
+                ("raw_log_file", &raw_log_file.to_string_lossy()),
                 ("backend", &backend_name),
                 ("model", model.as_deref().unwrap_or("")),
                 ("variant", args.variant.as_deref().unwrap_or("")),
@@ -519,7 +822,7 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
     )
     .map_err(|err| CliError::Message(err.to_string()))?;
 
-    let auto_run_verifier = verifier::resolve_verifier_auto_run(&config);
+    let auto_run_verifier = verifier::resolve_verifier_auto_run(&config, &args.dir);
     let status_plan = outcome_status_plan(outcome.status, auto_run_verifier);
     store
         .set_session(
@@ -557,6 +860,66 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
     }
 
     notify_if_configured(&config, &args, &outcome, max_iterations, deps.notifier())?;
+    Ok(())
+}
+
+fn run_single_iteration(args: RunLoopArgs, config: &Config, deps: &Deps) -> Result<(), CliError> {
+    let task_file = resolve_task_file(&args, config);
+    let max_iterations = resolve_max_iterations(&args, config);
+    let completion_marker = resolve_completion_marker(&args, config);
+    let backend_name = resolve_backend_name(&args, config);
+    let model = resolve_model(&args, config, &backend_name);
+
+    if should_validate_prd(args.strict_prd) {
+        prd::prd_validate_file(&args.dir.join(&task_file), false, Some(&args.dir))
+            .map_err(|err| CliError::Message(err.to_string()))?;
+    }
+
+    let prompt_template = match &args.prompt_template {
+        Some(path) => Some(deps.fs().read_to_string(path).map_err(CliError::Io)?),
+        None => None,
+    };
+
+    let backend = backend_from_name(&backend_name).map_err(CliError::Message)?;
+    if !backend.check_installed() {
+        return Err(CliError::Message(format!(
+            "Backend is not installed: {}",
+            backend_name
+        )));
+    }
+
+    let gralph_dir = args.dir.join(".gralph");
+    fs::create_dir_all(&gralph_dir).map_err(CliError::Io)?;
+    let log_file = gralph_dir.join(format!("{}.log", args.name));
+
+    let iteration_result = core::run_iteration(
+        &*backend,
+        &args.dir,
+        &task_file,
+        1,
+        max_iterations,
+        &completion_marker,
+        model.as_deref(),
+        args.variant.as_deref(),
+        Some(&log_file),
+        prompt_template.as_deref(),
+        Some(config),
+    )
+    .map_err(|err| CliError::Message(err.to_string()))?;
+
+    let remaining = core::count_remaining_tasks(&args.dir.join(&task_file));
+    println!("Step completed. Remaining tasks: {}", remaining);
+
+    let complete = core::check_completion(
+        &args.dir.join(&task_file),
+        &iteration_result.result,
+        &completion_marker,
+    )
+    .map_err(|err| CliError::Message(err.to_string()))?;
+    if complete {
+        println!("Completion promise detected.");
+    }
+
     Ok(())
 }
 
@@ -625,6 +988,23 @@ fn run_loop_args_from_start(args: StartArgs, name: String) -> Result<RunLoopArgs
         variant: args.variant,
         prompt_template: args.prompt_template,
         webhook: args.webhook,
+        no_worktree: args.no_worktree,
+        strict_prd: args.strict_prd,
+    })
+}
+
+fn run_loop_args_from_step(args: StepArgs, name: String) -> Result<RunLoopArgs, CliError> {
+    Ok(RunLoopArgs {
+        dir: args.dir,
+        name,
+        max_iterations: args.max_iterations,
+        task_file: args.task_file,
+        completion_marker: args.completion_marker,
+        backend: args.backend,
+        model: args.model,
+        variant: args.variant,
+        prompt_template: args.prompt_template,
+        webhook: None,
         no_worktree: args.no_worktree,
         strict_prd: args.strict_prd,
     })
@@ -720,6 +1100,19 @@ pub(super) fn resolve_log_file(
         .join(format!("{}.log", name)))
 }
 
+pub(super) fn resolve_raw_log_file(
+    name: &str,
+    session: &serde_json::Value,
+) -> Result<PathBuf, CliError> {
+    if let Some(path) = session.get("raw_log_file").and_then(|v| v.as_str()) {
+        if !path.trim().is_empty() {
+            return Ok(PathBuf::from(path));
+        }
+    }
+    let log_file = resolve_log_file(name, session)?;
+    Ok(core::raw_log_path(&log_file))
+}
+
 fn follow_log(path: &Path, fs: &dyn FileSystem, clock: &dyn core::Clock) -> Result<(), CliError> {
     let mut file = fs.open_read(path).map_err(CliError::Io)?;
     let mut pos = file.seek(SeekFrom::End(0)).map_err(CliError::Io)?;
@@ -744,6 +1137,23 @@ fn print_tail(path: &Path, lines: usize, fs: &dyn FileSystem) -> Result<(), CliE
         println!("{}", line);
     }
     Ok(())
+}
+
+fn print_cleanup_result(action: &str, empty_message: &str, sessions: &[String]) {
+    if sessions.is_empty() {
+        println!("{}", empty_message);
+        return;
+    }
+    if sessions.len() <= 10 {
+        println!(
+            "{} {} session(s): {}",
+            action,
+            sessions.len(),
+            sessions.join(", ")
+        );
+    } else {
+        println!("{} {} sessions.", action, sessions.len());
+    }
 }
 
 fn print_table(headers: &[&str], rows: &[Vec<String>]) {
@@ -780,7 +1190,9 @@ mod tests {
     use super::*;
     use std::env;
     use std::fs;
+    use std::io;
     use std::path::{Path, PathBuf};
+    use std::process::{Child, Command};
 
     struct EnvGuard {
         _lock: std::sync::MutexGuard<'static, ()>,
@@ -897,6 +1309,32 @@ mod tests {
         }
     }
 
+    struct TestProcessRunner {
+        alive: bool,
+    }
+
+    impl ProcessRunner for TestProcessRunner {
+        fn current_exe(&self) -> io::Result<PathBuf> {
+            Ok(PathBuf::from("/bin/true"))
+        }
+
+        fn spawn(&self, _cmd: &mut Command) -> io::Result<Child> {
+            Err(io::Error::new(io::ErrorKind::Other, "not used"))
+        }
+
+        fn kill_tmux_session(&self, _session: &str) {}
+
+        fn kill_pid(&self, _pid: i64) {}
+
+        fn pid(&self) -> u32 {
+            0
+        }
+
+        fn is_alive(&self, _pid: i64) -> bool {
+            self.alive
+        }
+    }
+
     #[test]
     fn resolve_task_file_prefers_cli_config_then_default() {
         let _guard = env_guard();
@@ -911,6 +1349,49 @@ mod tests {
 
         let config = load_config("defaults:\n  backend: claude\n");
         assert_eq!(resolve_task_file(&args, &config), "PRD.md");
+    }
+
+    #[test]
+    fn enrich_status_session_includes_log_and_task_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        let log_path = temp.path().join(".gralph").join("alpha.log");
+        write_file(&log_path, "Ok\nIteration failed: bad\n");
+        let prd_path = temp.path().join("PRD.md");
+        write_file(
+            &prd_path,
+            "# PRD\n\n### Task UX-4\n- **ID** UX-4\n- [ ] Do\n",
+        );
+
+        let session = serde_json::json!({
+            "name": "alpha",
+            "status": "running",
+            "pid": 123,
+            "dir": temp.path().to_string_lossy(),
+            "task_file": "PRD.md",
+            "log_file": log_path.to_string_lossy(),
+        });
+        let enriched = enrich_status_session(session, &TestProcessRunner { alive: true });
+        let expected_raw = core::raw_log_path(&log_path).to_string_lossy().to_string();
+
+        assert_eq!(enriched["last_task_id"], "UX-4");
+        assert_eq!(enriched["last_error"], "Iteration failed: bad");
+        assert_eq!(enriched["last_log_line"], "Iteration failed: bad");
+        assert_eq!(
+            enriched["raw_log_file"].as_str(),
+            Some(expected_raw.as_str())
+        );
+    }
+
+    #[test]
+    fn print_status_verbose_handles_missing_values() {
+        let session = serde_json::json!({
+            "name": "alpha",
+            "log_file": Value::Null,
+            "raw_log_file": Value::Null,
+            "last_error": Value::Null,
+        });
+
+        print_status_verbose(&[session]);
     }
 
     #[test]

@@ -10,7 +10,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
 
-use crate::core::count_remaining_tasks;
+use crate::core::{count_remaining_tasks, last_error_line, last_log_line, raw_log_path};
+use crate::prd;
 use crate::state::{StateError, StateStore};
 
 #[derive(Debug, Clone)]
@@ -285,6 +286,10 @@ fn enrich_session(session: Value) -> Value {
         Some(map) => map.clone(),
         None => Map::new(),
     };
+    let name = map
+        .get("name")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
     let dir = map
         .get("dir")
         .and_then(|value| value.as_str())
@@ -315,13 +320,81 @@ fn enrich_session(session: Value) -> Value {
         count_remaining_tasks(&path) as i64
     };
 
+    let log_file = resolve_log_file_for_session(&map, name, dir);
+    let raw_log_file = resolve_raw_log_file_for_session(&map, log_file.as_ref());
+    let last_task_id = if dir.is_empty() {
+        None
+    } else {
+        prd::prd_next_task_id(&PathBuf::from(dir).join(task_file))
+    };
+    let last_log = log_file.as_ref().and_then(|path| last_log_line(path));
+    let last_error = log_file.as_ref().and_then(|path| last_error_line(path));
+
     map.insert(
         "current_remaining".to_string(),
         Value::Number(remaining.into()),
     );
     map.insert("is_alive".to_string(), Value::Bool(is_alive));
     map.insert("status".to_string(), Value::String(status));
+    map.insert(
+        "log_file".to_string(),
+        log_file
+            .as_ref()
+            .map(|path| Value::String(path.to_string_lossy().to_string()))
+            .unwrap_or(Value::Null),
+    );
+    map.insert(
+        "raw_log_file".to_string(),
+        raw_log_file
+            .as_ref()
+            .map(|path| Value::String(path.to_string_lossy().to_string()))
+            .unwrap_or(Value::Null),
+    );
+    map.insert(
+        "last_task_id".to_string(),
+        last_task_id.map(Value::String).unwrap_or(Value::Null),
+    );
+    map.insert(
+        "last_log_line".to_string(),
+        last_log.map(Value::String).unwrap_or(Value::Null),
+    );
+    map.insert(
+        "last_error".to_string(),
+        last_error.map(Value::String).unwrap_or(Value::Null),
+    );
     Value::Object(map)
+}
+
+fn resolve_log_file_for_session(
+    map: &Map<String, Value>,
+    name: &str,
+    dir: &str,
+) -> Option<PathBuf> {
+    if let Some(path) = map.get("log_file").and_then(|value| value.as_str()) {
+        if !path.trim().is_empty() {
+            return Some(PathBuf::from(path));
+        }
+    }
+    if dir.is_empty() || name.is_empty() {
+        return None;
+    }
+    Some(
+        PathBuf::from(dir)
+            .join(".gralph")
+            .join(format!("{}.log", name)),
+    )
+}
+
+fn resolve_raw_log_file_for_session(
+    map: &Map<String, Value>,
+    log_file: Option<&PathBuf>,
+) -> Option<PathBuf> {
+    if let Some(path) = map.get("raw_log_file").and_then(|value| value.as_str()) {
+        if !path.trim().is_empty() {
+            return Some(PathBuf::from(path));
+        }
+    }
+    log_file.map(|path| raw_log_path(path.as_path()))
 }
 
 fn stop_session(_name: &str, session: &Value) {

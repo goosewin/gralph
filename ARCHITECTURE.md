@@ -7,7 +7,8 @@ This document captures the high-level structure of gralph. It is a living summar
 `src/main.rs` is the thin CLI entrypoint. It delegates to `cli_entrypoint` re-exported from `src/lib.rs` and returns its `ExitCode`.
 `src/entrypoint.rs` owns the CLI entrypoint helper that parses args, builds real deps, runs the app, and maps results to exit codes.
 `src/lib.rs` exposes `run`, `Deps`, and the entrypoint helper for external callers.
-`src/app.rs` owns the `run` entrypoint, dependency seams, and command dispatch.
+`src/app.rs` owns the `run` entrypoint, dependency seams, command dispatch, and
+doctor diagnostics.
 `src/app/loop_session.rs` implements start/run-loop/stop/status/logs/resume handlers with `Deps`.
 `src/app/prd_init.rs` implements `gralph prd` and `gralph init` plus PRD/template helpers.
 `src/app/worktree.rs` implements worktree commands and auto-worktree flow.
@@ -40,6 +41,11 @@ final status to logs, and optionally sends notifications. When completion
 succeeds and `verifier.auto_run` is true, the verifier pipeline runs in the
 active worktree to execute tests, coverage, and static checks, open a PR
 via `gh`, wait for the configured review gate, and merge after approvals.
+By default the review gate requires explicit approval (`verifier.review.require_approval: true`);
+disable it to allow auto-merge without an approval requirement.
+Verifier defaults are stack-aware: Rust/Cargo keeps the default auto-run and
+command settings, while non-Rust or unknown stacks default `verifier.auto_run`
+to false and require explicit verifier commands.
 
 ## Storage
 

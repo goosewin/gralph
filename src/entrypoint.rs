@@ -1,4 +1,4 @@
-use crate::app::{exit_code_for, run, Deps};
+use crate::app::{Deps, exit_code_for, run};
 use crate::cli;
 use clap::Parser;
 use std::process::ExitCode;

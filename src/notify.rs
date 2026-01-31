@@ -1143,10 +1143,12 @@ mod tests {
 
         assert_eq!(attachment["color"], "#57F287");
         assert_eq!(blocks[0]["text"]["text"], "✅ Gralph Complete");
-        assert!(blocks[1]["text"]["text"]
-            .as_str()
-            .unwrap()
-            .contains("session"));
+        assert!(
+            blocks[1]["text"]["text"]
+                .as_str()
+                .unwrap()
+                .contains("session")
+        );
         assert_eq!(fields[0]["text"], "*Project:*\n`repo`");
         assert_eq!(fields[1]["text"], "*Iterations:*\n4");
         assert_eq!(fields[2]["text"], "*Duration:*\n1m 2s");

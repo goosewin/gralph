@@ -18,8 +18,21 @@ const ROOT_AFTER_HELP: &str = r#"START OPTIONS:
   --prompt-template   Path to custom prompt template file
   --webhook           Notification webhook URL
   --no-worktree       Disable automatic worktree creation
-  --no-tmux           Run in foreground (blocks)
+  --no-tmux           Run in foreground (blocks; logs in .gralph/<session>.log)
   --strict-prd        Validate PRD before starting the loop
+  --dry-run           Print the next task block and resolved prompt
+
+STEP OPTIONS:
+  --name, -n          Session name (default: directory name)
+  --max-iterations    Max iterations before giving up (default: 30)
+  --task-file, -f     Task file path (default: PRD.md)
+  --completion-marker Completion promise text (default: COMPLETE)
+  --backend, -b       AI backend (default: claude). See `gralph backends`
+  --model, -m         Model override (format depends on backend)
+  --variant           Model variant override (backend-specific)
+  --prompt-template   Path to custom prompt template file
+  --no-worktree       Disable automatic worktree creation
+  --strict-prd        Validate PRD before running the step
 
 PRD OPTIONS:
   --dir               Project directory (default: current)
@@ -47,12 +60,23 @@ SERVER OPTIONS:
   --token, -t           Authentication token (required for non-localhost)
   --open                Disable token requirement (use with caution)
 
+DOCTOR OPTIONS:
+  --dir                 Project directory to check (default: current)
+
+CLEANUP OPTIONS:
+  --remove              Delete stale sessions from state
+  --purge               Delete all sessions from state (explicit opt-in)
+
 EXAMPLES:
   gralph start .
   gralph start ~/project --name myapp --max-iterations 50
+  gralph start . --dry-run
+  gralph step .
   gralph status
   gralph logs myapp --follow
   gralph stop myapp
+  gralph doctor --dir .
+  gralph cleanup
   gralph prd create --dir . --output PRD.new.md --goal "Add a billing dashboard"
   gralph init --dir .
   gralph worktree create C-1
@@ -79,10 +103,16 @@ pub struct Cli {
 pub enum Command {
     #[command(about = "Start a new gralph loop")]
     Start(StartArgs),
+    #[command(about = "Run exactly one iteration")]
+    Step(StepArgs),
     #[command(about = "Stop a running loop")]
     Stop(StopArgs),
     #[command(about = "Show status of all loops")]
-    Status,
+    Status(StatusArgs),
+    #[command(about = "Clean up stale sessions")]
+    Cleanup(CleanupArgs),
+    #[command(about = "Run local diagnostics")]
+    Doctor(DoctorArgs),
     #[command(about = "View logs for a loop")]
     Logs(LogsArgs),
     #[command(about = "Resume crashed/stopped loops")]
@@ -133,9 +163,41 @@ pub struct StartArgs {
     pub webhook: Option<String>,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Disable automatic worktree creation")]
     pub no_worktree: bool,
-    #[arg(long, action = clap::ArgAction::SetTrue, help = "Run in foreground (blocks)")]
+    #[arg(
+        long,
+        action = clap::ArgAction::SetTrue,
+        help = "Run in foreground (blocks; logs in .gralph/<session>.log)"
+    )]
     pub no_tmux: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Validate PRD before starting the loop")]
+    pub strict_prd: bool,
+    #[arg(long, action = clap::ArgAction::SetTrue, help = "Print the next task block and resolved prompt")]
+    pub dry_run: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct StepArgs {
+    #[arg(value_name = "DIR", help = "Project directory to run the step in")]
+    pub dir: PathBuf,
+    #[arg(short, long, help = "Session name (default: directory name)")]
+    pub name: Option<String>,
+    #[arg(long, help = "Max iterations before giving up (default: 30)")]
+    pub max_iterations: Option<u32>,
+    #[arg(short = 'f', long, help = "Task file path (default: PRD.md)")]
+    pub task_file: Option<String>,
+    #[arg(long, help = "Completion promise text (default: COMPLETE)")]
+    pub completion_marker: Option<String>,
+    #[arg(short = 'b', long, help = "AI backend (default: claude)")]
+    pub backend: Option<String>,
+    #[arg(short = 'm', long, help = "Model override (format depends on backend)")]
+    pub model: Option<String>,
+    #[arg(long, help = "Model variant override (backend-specific)")]
+    pub variant: Option<String>,
+    #[arg(long, help = "Path to custom prompt template file")]
+    pub prompt_template: Option<PathBuf>,
+    #[arg(long, action = clap::ArgAction::SetTrue, help = "Disable automatic worktree creation")]
+    pub no_worktree: bool,
+    #[arg(long, action = clap::ArgAction::SetTrue, help = "Validate PRD before running the step")]
     pub strict_prd: bool,
 }
 
@@ -176,11 +238,35 @@ pub struct StopArgs {
 }
 
 #[derive(Args, Debug)]
+pub struct StatusArgs {
+    #[arg(long, action = clap::ArgAction::SetTrue, conflicts_with = "verbose", help = "Print JSON output")]
+    pub json: bool,
+    #[arg(long, action = clap::ArgAction::SetTrue, conflicts_with = "json", help = "Show log paths and last error line")]
+    pub verbose: bool,
+}
+
+#[derive(Args, Debug)]
 pub struct LogsArgs {
     #[arg(value_name = "NAME", help = "Session name")]
     pub name: String,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Follow log output")]
     pub follow: bool,
+    #[arg(long, action = clap::ArgAction::SetTrue, help = "Show raw backend output")]
+    pub raw: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct DoctorArgs {
+    #[arg(long, help = "Project directory to check (default: current)")]
+    pub dir: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct CleanupArgs {
+    #[arg(long, action = clap::ArgAction::SetTrue, conflicts_with = "purge", help = "Delete stale sessions")]
+    pub remove: bool,
+    #[arg(long, action = clap::ArgAction::SetTrue, conflicts_with = "remove", help = "Delete all sessions (explicit opt-in)")]
+    pub purge: bool,
 }
 
 #[derive(Args, Debug)]
@@ -364,8 +450,87 @@ mod tests {
     fn parse_status_command() {
         let cli = Cli::parse_from(["gralph", "status"]);
         match cli.command {
-            Some(Command::Status) => {}
+            Some(Command::Status(args)) => {
+                assert!(!args.json);
+                assert!(!args.verbose);
+            }
             other => panic!("Expected status command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_status_json_flag() {
+        let cli = Cli::parse_from(["gralph", "status", "--json"]);
+        match cli.command {
+            Some(Command::Status(args)) => {
+                assert!(args.json);
+                assert!(!args.verbose);
+            }
+            other => panic!("Expected status command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_doctor_defaults() {
+        let cli = Cli::parse_from(["gralph", "doctor"]);
+        match cli.command {
+            Some(Command::Doctor(args)) => {
+                assert!(args.dir.is_none());
+            }
+            other => panic!("Expected doctor command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_cleanup_defaults() {
+        let cli = Cli::parse_from(["gralph", "cleanup"]);
+        match cli.command {
+            Some(Command::Cleanup(args)) => {
+                assert!(!args.remove);
+                assert!(!args.purge);
+            }
+            other => panic!("Expected cleanup command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_cleanup_remove() {
+        let cli = Cli::parse_from(["gralph", "cleanup", "--remove"]);
+        match cli.command {
+            Some(Command::Cleanup(args)) => {
+                assert!(args.remove);
+                assert!(!args.purge);
+            }
+            other => panic!("Expected cleanup command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_cleanup_purge() {
+        let cli = Cli::parse_from(["gralph", "cleanup", "--purge"]);
+        match cli.command {
+            Some(Command::Cleanup(args)) => {
+                assert!(!args.remove);
+                assert!(args.purge);
+            }
+            other => panic!("Expected cleanup command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_cleanup_conflict() {
+        let err = Cli::try_parse_from(["gralph", "cleanup", "--remove", "--purge"]).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn parse_doctor_dir() {
+        let cli = Cli::parse_from(["gralph", "doctor", "--dir", "."]);
+        match cli.command {
+            Some(Command::Doctor(args)) => {
+                assert_eq!(args.dir, Some(PathBuf::from(".")));
+            }
+            other => panic!("Expected doctor command, got: {other:?}"),
         }
     }
 
@@ -396,6 +561,7 @@ mod tests {
                 assert!(!args.no_worktree);
                 assert!(!args.no_tmux);
                 assert!(!args.strict_prd);
+                assert!(!args.dry_run);
             }
             other => panic!("Expected start command, got: {other:?}"),
         }
@@ -444,8 +610,84 @@ mod tests {
                 assert!(args.no_worktree);
                 assert!(args.no_tmux);
                 assert!(args.strict_prd);
+                assert!(!args.dry_run);
             }
             other => panic!("Expected start command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_start_dry_run() {
+        let cli = Cli::parse_from(["gralph", "start", ".", "--dry-run"]);
+        match cli.command {
+            Some(Command::Start(args)) => {
+                assert!(args.dry_run);
+            }
+            other => panic!("Expected start command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_step_defaults() {
+        let cli = Cli::parse_from(["gralph", "step", "."]);
+        match cli.command {
+            Some(Command::Step(args)) => {
+                assert_eq!(args.dir, PathBuf::from("."));
+                assert!(args.name.is_none());
+                assert!(args.max_iterations.is_none());
+                assert!(args.task_file.is_none());
+                assert!(args.completion_marker.is_none());
+                assert!(args.backend.is_none());
+                assert!(args.model.is_none());
+                assert!(args.variant.is_none());
+                assert!(args.prompt_template.is_none());
+                assert!(!args.no_worktree);
+                assert!(!args.strict_prd);
+            }
+            other => panic!("Expected step command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_step_flags() {
+        let cli = Cli::parse_from([
+            "gralph",
+            "step",
+            ".",
+            "--name",
+            "myapp",
+            "--max-iterations",
+            "50",
+            "--task-file",
+            "PRD.md",
+            "--completion-marker",
+            "DONE",
+            "--backend",
+            "codex",
+            "--model",
+            "o3",
+            "--variant",
+            "mini",
+            "--prompt-template",
+            "prompt.txt",
+            "--no-worktree",
+            "--strict-prd",
+        ]);
+        match cli.command {
+            Some(Command::Step(args)) => {
+                assert_eq!(args.dir, PathBuf::from("."));
+                assert_eq!(args.name.as_deref(), Some("myapp"));
+                assert_eq!(args.max_iterations, Some(50));
+                assert_eq!(args.task_file.as_deref(), Some("PRD.md"));
+                assert_eq!(args.completion_marker.as_deref(), Some("DONE"));
+                assert_eq!(args.backend.as_deref(), Some("codex"));
+                assert_eq!(args.model.as_deref(), Some("o3"));
+                assert_eq!(args.variant.as_deref(), Some("mini"));
+                assert_eq!(args.prompt_template, Some(PathBuf::from("prompt.txt")));
+                assert!(args.no_worktree);
+                assert!(args.strict_prd);
+            }
+            other => panic!("Expected step command, got: {other:?}"),
         }
     }
 

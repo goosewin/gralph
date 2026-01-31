@@ -4,6 +4,7 @@ defaults:
   task_file: PRD.md
   completion_marker: COMPLETE
   auto_worktree: true
+  check_updates: true
   context_files: ARCHITECTURE.md, DECISIONS.md, CHANGELOG.md, RISK_REGISTER.md, PROCESS.md
   # Backend: claude, opencode, gemini, or codex
   backend: claude
@@ -30,7 +31,7 @@ verifier:
     max_issues: 0
     poll_seconds: 20
     timeout_seconds: 1800
-    require_approval: false
+    require_approval: true
     require_checks: true
     merge_method: merge
 

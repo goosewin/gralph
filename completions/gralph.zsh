@@ -44,11 +44,33 @@ _arguments "${_arguments_options[@]}" : \
 '--prompt-template=[Path to custom prompt template file]:PROMPT_TEMPLATE:_files' \
 '--webhook=[Notification webhook URL]:WEBHOOK:_default' \
 '--no-worktree[Disable automatic worktree creation]' \
-'--no-tmux[Run in foreground (blocks)]' \
+'--no-tmux[Run in foreground (blocks; logs in .gralph/<session>.log)]' \
 '--strict-prd[Validate PRD before starting the loop]' \
+'--dry-run[Print the next task block and resolved prompt]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':dir -- Project directory to run the loop in:_files' \
+&& ret=0
+;;
+(step)
+_arguments "${_arguments_options[@]}" : \
+'-n+[Session name (default\: directory name)]:NAME:_default' \
+'--name=[Session name (default\: directory name)]:NAME:_default' \
+'--max-iterations=[Max iterations before giving up (default\: 30)]:MAX_ITERATIONS:_default' \
+'-f+[Task file path (default\: PRD.md)]:TASK_FILE:_default' \
+'--task-file=[Task file path (default\: PRD.md)]:TASK_FILE:_default' \
+'--completion-marker=[Completion promise text (default\: COMPLETE)]:COMPLETION_MARKER:_default' \
+'-b+[AI backend (default\: claude)]:BACKEND:_default' \
+'--backend=[AI backend (default\: claude)]:BACKEND:_default' \
+'-m+[Model override (format depends on backend)]:MODEL:_default' \
+'--model=[Model override (format depends on backend)]:MODEL:_default' \
+'--variant=[Model variant override (backend-specific)]:VARIANT:_default' \
+'--prompt-template=[Path to custom prompt template file]:PROMPT_TEMPLATE:_files' \
+'--no-worktree[Disable automatic worktree creation]' \
+'--strict-prd[Validate PRD before running the step]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':dir -- Project directory to run the step in:_files' \
 && ret=0
 ;;
 (stop)
@@ -62,6 +84,23 @@ _arguments "${_arguments_options[@]}" : \
 ;;
 (status)
 _arguments "${_arguments_options[@]}" : \
+'(--verbose)--json[Print JSON output]' \
+'(--json)--verbose[Show log paths and last error line]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(cleanup)
+_arguments "${_arguments_options[@]}" : \
+'(--purge)--remove[Delete stale sessions]' \
+'(--remove)--purge[Delete all sessions (explicit opt-in)]' \
+'-h[Print help]' \
+'--help[Print help]' \
+&& ret=0
+;;
+(doctor)
+_arguments "${_arguments_options[@]}" : \
+'--dir=[Project directory to check (default\: current)]:DIR:_files' \
 '-h[Print help]' \
 '--help[Print help]' \
 && ret=0
@@ -69,6 +108,7 @@ _arguments "${_arguments_options[@]}" : \
 (logs)
 _arguments "${_arguments_options[@]}" : \
 '--follow[Follow log output]' \
+'--raw[Show raw backend output]' \
 '-h[Print help]' \
 '--help[Print help]' \
 ':name -- Session name:_default' \
@@ -372,11 +412,23 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(step)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (stop)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
 (status)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(cleanup)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(doctor)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -509,8 +561,11 @@ esac
 _gralph_commands() {
     local commands; commands=(
 'start:Start a new gralph loop' \
+'step:Run exactly one iteration' \
 'stop:Stop a running loop' \
 'status:Show status of all loops' \
+'cleanup:Clean up stale sessions' \
+'doctor:Run local diagnostics' \
 'logs:View logs for a loop' \
 'resume:Resume crashed/stopped loops' \
 'init:Initialize shared context files' \
@@ -531,6 +586,11 @@ _gralph_commands() {
 _gralph__backends_commands() {
     local commands; commands=()
     _describe -t commands 'gralph backends commands' commands "$@"
+}
+(( $+functions[_gralph__cleanup_commands] )) ||
+_gralph__cleanup_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph cleanup commands' commands "$@"
 }
 (( $+functions[_gralph__config_commands] )) ||
 _gralph__config_commands() {
@@ -587,12 +647,20 @@ _gralph__config__set_commands() {
     local commands; commands=()
     _describe -t commands 'gralph config set commands' commands "$@"
 }
+(( $+functions[_gralph__doctor_commands] )) ||
+_gralph__doctor_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph doctor commands' commands "$@"
+}
 (( $+functions[_gralph__help_commands] )) ||
 _gralph__help_commands() {
     local commands; commands=(
 'start:Start a new gralph loop' \
+'step:Run exactly one iteration' \
 'stop:Stop a running loop' \
 'status:Show status of all loops' \
+'cleanup:Clean up stale sessions' \
+'doctor:Run local diagnostics' \
 'logs:View logs for a loop' \
 'resume:Resume crashed/stopped loops' \
 'init:Initialize shared context files' \
@@ -613,6 +681,11 @@ _gralph__help_commands() {
 _gralph__help__backends_commands() {
     local commands; commands=()
     _describe -t commands 'gralph help backends commands' commands "$@"
+}
+(( $+functions[_gralph__help__cleanup_commands] )) ||
+_gralph__help__cleanup_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph help cleanup commands' commands "$@"
 }
 (( $+functions[_gralph__help__config_commands] )) ||
 _gralph__help__config_commands() {
@@ -637,6 +710,11 @@ _gralph__help__config__list_commands() {
 _gralph__help__config__set_commands() {
     local commands; commands=()
     _describe -t commands 'gralph help config set commands' commands "$@"
+}
+(( $+functions[_gralph__help__doctor_commands] )) ||
+_gralph__help__doctor_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph help doctor commands' commands "$@"
 }
 (( $+functions[_gralph__help__help_commands] )) ||
 _gralph__help__help_commands() {
@@ -695,6 +773,11 @@ _gralph__help__start_commands() {
 _gralph__help__status_commands() {
     local commands; commands=()
     _describe -t commands 'gralph help status commands' commands "$@"
+}
+(( $+functions[_gralph__help__step_commands] )) ||
+_gralph__help__step_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph help step commands' commands "$@"
 }
 (( $+functions[_gralph__help__stop_commands] )) ||
 _gralph__help__stop_commands() {
@@ -811,6 +894,11 @@ _gralph__start_commands() {
 _gralph__status_commands() {
     local commands; commands=()
     _describe -t commands 'gralph status commands' commands "$@"
+}
+(( $+functions[_gralph__step_commands] )) ||
+_gralph__step_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph step commands' commands "$@"
 }
 (( $+functions[_gralph__stop_commands] )) ||
 _gralph__stop_commands() {

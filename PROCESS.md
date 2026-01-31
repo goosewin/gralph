@@ -23,11 +23,19 @@
    - CI/CD preflight matches `.github/workflows/ci.yml`
    - Worktree is clean
 6) On loop completion, `gralph` runs `gralph verifier` automatically unless
-   `verifier.auto_run` is false. The verifier runs tests, coverage, and static
-   checks, creates a PR via `gh` (using the repo template), and waits for the
-   configured review gate (greptile by default) plus green checks.
-   - If auto-run is disabled, run `gralph verifier` manually in the worktree.
+    `verifier.auto_run` is false. The verifier runs tests, coverage, and static
+    checks, creates a PR via `gh` (using the repo template), and waits for the
+    configured review gate (greptile by default) plus green checks.
+    - By default the review gate requires explicit approval; set
+      `verifier.review.require_approval: false` to allow auto-merge without an
+      approval requirement.
+    - If auto-run is disabled, run `gralph verifier` manually in the worktree.
 7) Verifier merges the PR via `gh` after the review gate passes.
+
+## Cleanup
+`gralph cleanup` marks stale sessions by default (running sessions with dead PIDs)
+using the state store. Use `--remove` to delete stale sessions from state. Use
+`--purge` to delete all sessions from state; it is explicit opt-in.
 
 ## Last PRD Todo Gate
 - Ensure you are on a new task branch/worktree; never finish the last PRD task
@@ -44,6 +52,8 @@
 - New risks must be added to RISK_REGISTER.md with mitigation.
 - Rust CLI is the source of truth; do not reintroduce shell scripts.
 - Test coverage must remain >= 90%.
+- Update checks are best-effort; disable with `defaults.check_updates: false` or `GRALPH_NO_UPDATE_CHECK=1`.
+- Background runs write logs to `.gralph/<session>.log`; tail with `gralph logs <name> --follow`.
 - The soft coverage target (`verifier.coverage_warn`) is a warning-only signal set to 80 percent; it does not block merges or change `verifier.coverage_min`.
 - It was raised after coverage stayed stable for at least two consecutive cycles.
 - Final PRD task requires a PR, review gate approval, and green CI before merge.

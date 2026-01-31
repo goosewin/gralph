@@ -96,6 +96,83 @@ pub struct LoopOutcome {
     pub duration_secs: u64,
 }
 
+#[derive(Debug, Clone)]
+pub struct PromptRender {
+    pub prompt: String,
+    pub task_block: Option<String>,
+}
+
+pub fn render_iteration_prompt(
+    project_dir: &Path,
+    task_file: &str,
+    iteration: u32,
+    max_iterations: u32,
+    completion_marker: &str,
+    prompt_template: Option<&str>,
+    config: Option<&Config>,
+) -> Result<PromptRender, CoreError> {
+    if project_dir.as_os_str().is_empty() {
+        return Err(CoreError::InvalidInput(
+            "project_dir is required".to_string(),
+        ));
+    }
+    if iteration == 0 {
+        return Err(CoreError::InvalidInput(
+            "iteration number is required".to_string(),
+        ));
+    }
+    if max_iterations == 0 {
+        return Err(CoreError::InvalidInput(
+            "max_iterations is required".to_string(),
+        ));
+    }
+
+    if !project_dir.is_dir() {
+        return Err(CoreError::InvalidInput(format!(
+            "project directory does not exist: {}",
+            project_dir.display()
+        )));
+    }
+
+    let full_task_path = project_dir.join(task_file);
+    if !full_task_path.is_file() {
+        return Err(CoreError::InvalidInput(format!(
+            "task file does not exist: {}",
+            full_task_path.display()
+        )));
+    }
+
+    let resolved_template = resolve_prompt_template(project_dir, prompt_template)?;
+    let mut task_block = get_next_unchecked_task_block(&full_task_path)?;
+    if task_block.is_none() {
+        let remaining = count_remaining_tasks(&full_task_path);
+        if remaining > 0 {
+            task_block = first_unchecked_line(&full_task_path)?;
+        }
+    }
+
+    let context_files = config
+        .and_then(|cfg| cfg.get("defaults.context_files"))
+        .unwrap_or_default();
+    let normalized_context_files = normalize_context_files(&context_files);
+
+    let prompt = render_prompt_template(
+        &resolved_template,
+        task_file,
+        completion_marker,
+        iteration,
+        max_iterations,
+        task_block.as_deref(),
+        if normalized_context_files.is_empty() {
+            None
+        } else {
+            Some(normalized_context_files.as_str())
+        },
+    );
+
+    Ok(PromptRender { prompt, task_block })
+}
+
 pub fn run_iteration<B: Backend + ?Sized>(
     backend: &B,
     project_dir: &Path,
@@ -180,33 +257,16 @@ pub fn run_iteration_with_clock<B: Backend + ?Sized>(
 
     let raw_output_file = log_file.map(|path| raw_log_path(path));
 
-    let resolved_template = resolve_prompt_template(project_dir, prompt_template)?;
-    let mut task_block = get_next_unchecked_task_block(&full_task_path)?;
-    if task_block.is_none() {
-        let remaining = count_remaining_tasks(&full_task_path);
-        if remaining > 0 {
-            task_block = first_unchecked_line(&full_task_path)?;
-        }
-    }
-
-    let context_files = config
-        .and_then(|cfg| cfg.get("defaults.context_files"))
-        .unwrap_or_default();
-    let normalized_context_files = normalize_context_files(&context_files);
-
-    let prompt = render_prompt_template(
-        &resolved_template,
+    let prompt = render_iteration_prompt(
+        project_dir,
         task_file,
-        completion_marker,
         iteration,
         max_iterations,
-        task_block.as_deref(),
-        if normalized_context_files.is_empty() {
-            None
-        } else {
-            Some(normalized_context_files.as_str())
-        },
-    );
+        completion_marker,
+        prompt_template,
+        config,
+    )?
+    .prompt;
 
     let backend_result = backend.run_iteration(&prompt, model, variant, &tmpfile, project_dir);
 
@@ -768,13 +828,42 @@ fn log_message(log_file: Option<&Path>, message: &str) -> Result<(), CoreError> 
     Ok(())
 }
 
-fn raw_log_path(log_file: &Path) -> PathBuf {
+pub(crate) fn raw_log_path(log_file: &Path) -> PathBuf {
     let log_str = log_file.to_string_lossy();
     if log_str.ends_with(".log") {
         PathBuf::from(log_str.trim_end_matches(".log")).with_extension("raw.log")
     } else {
         PathBuf::from(format!("{}.raw.log", log_str))
     }
+}
+
+pub fn last_log_line(log_file: &Path) -> Option<String> {
+    if log_file.as_os_str().is_empty() || !log_file.is_file() {
+        return None;
+    }
+    let contents = fs::read_to_string(log_file).ok()?;
+    let mut last = None;
+    for line in contents.lines() {
+        if !line.trim().is_empty() {
+            last = Some(line.to_string());
+        }
+    }
+    last
+}
+
+pub fn last_error_line(log_file: &Path) -> Option<String> {
+    if log_file.as_os_str().is_empty() || !log_file.is_file() {
+        return None;
+    }
+    let contents = fs::read_to_string(log_file).ok()?;
+    let mut last = None;
+    for line in contents.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("Error:") || trimmed.starts_with("Iteration failed:") {
+            last = Some(line.to_string());
+        }
+    }
+    last
 }
 
 fn copy_if_exists(from: &Path, to: &Path) -> Result<(), CoreError> {
@@ -1577,6 +1666,30 @@ mod tests {
     }
 
     #[test]
+    fn last_log_line_returns_last_non_empty_line() {
+        let temp = tempfile::tempdir().unwrap();
+        let log_path = temp.path().join("session.log");
+        fs::write(&log_path, "first\n\nsecond\n").unwrap();
+
+        let last = last_log_line(&log_path);
+        assert_eq!(last.as_deref(), Some("second"));
+    }
+
+    #[test]
+    fn last_error_line_returns_last_matching_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let log_path = temp.path().join("session.log");
+        fs::write(
+            &log_path,
+            "Starting\nError: backend produced no output.\nIteration failed: bad output\n",
+        )
+        .unwrap();
+
+        let last = last_error_line(&log_path);
+        assert_eq!(last.as_deref(), Some("Iteration failed: bad output"));
+    }
+
+    #[test]
     fn raw_log_path_rewrites_log_extension() {
         let path = Path::new("/tmp/session.log");
         let raw = raw_log_path(path);
@@ -1819,7 +1932,9 @@ mod tests {
         .unwrap();
 
         let prompt = backend.prompt.borrow().clone().unwrap();
-        assert!(prompt.contains("Context Files (read these first):\nARCHITECTURE.md\nPROCESS.md\n"));
+        assert!(
+            prompt.contains("Context Files (read these first):\nARCHITECTURE.md\nPROCESS.md\n")
+        );
 
         remove_env("GRALPH_GLOBAL_CONFIG");
         remove_env("GRALPH_DEFAULT_CONFIG");

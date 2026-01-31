@@ -19,8 +19,14 @@ _gralph() {
             gralph,backends)
                 cmd="gralph__backends"
                 ;;
+            gralph,cleanup)
+                cmd="gralph__cleanup"
+                ;;
             gralph,config)
                 cmd="gralph__config"
+                ;;
+            gralph,doctor)
+                cmd="gralph__doctor"
                 ;;
             gralph,help)
                 cmd="gralph__help"
@@ -48,6 +54,9 @@ _gralph() {
                 ;;
             gralph,status)
                 cmd="gralph__status"
+                ;;
+            gralph,step)
+                cmd="gralph__step"
                 ;;
             gralph,stop)
                 cmd="gralph__stop"
@@ -91,8 +100,14 @@ _gralph() {
             gralph__help,backends)
                 cmd="gralph__help__backends"
                 ;;
+            gralph__help,cleanup)
+                cmd="gralph__help__cleanup"
+                ;;
             gralph__help,config)
                 cmd="gralph__help__config"
+                ;;
+            gralph__help,doctor)
+                cmd="gralph__help__doctor"
                 ;;
             gralph__help,help)
                 cmd="gralph__help__help"
@@ -120,6 +135,9 @@ _gralph() {
                 ;;
             gralph__help,status)
                 cmd="gralph__help__status"
+                ;;
+            gralph__help,step)
+                cmd="gralph__help__step"
                 ;;
             gralph__help,stop)
                 cmd="gralph__help__stop"
@@ -200,7 +218,7 @@ _gralph() {
 
     case "${cmd}" in
         gralph)
-            opts="-h -V --help --version start stop status logs resume init prd worktree backends config verifier server version update run-loop help"
+            opts="-h -V --help --version start step stop status cleanup doctor logs resume init prd worktree backends config verifier server version update run-loop help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -215,6 +233,20 @@ _gralph() {
             ;;
         gralph__backends)
             opts="-h --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__cleanup)
+            opts="-h --remove --purge --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -353,8 +385,26 @@ _gralph() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        gralph__doctor)
+            opts="-h --dir --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --dir)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         gralph__help)
-            opts="start stop status logs resume init prd worktree backends config verifier server version update run-loop help"
+            opts="start step stop status cleanup doctor logs resume init prd worktree backends config verifier server version update run-loop help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -368,6 +418,20 @@ _gralph() {
             return 0
             ;;
         gralph__help__backends)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__cleanup)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -426,6 +490,20 @@ _gralph() {
         gralph__help__config__set)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__doctor)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -591,6 +669,20 @@ _gralph() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        gralph__help__step)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         gralph__help__stop)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
@@ -708,7 +800,7 @@ _gralph() {
             return 0
             ;;
         gralph__logs)
-            opts="-h --follow --help <NAME>"
+            opts="-h --follow --raw --help <NAME>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -970,7 +1062,7 @@ _gralph() {
             return 0
             ;;
         gralph__start)
-            opts="-n -f -b -m -h --name --max-iterations --task-file --completion-marker --backend --model --variant --prompt-template --webhook --no-worktree --no-tmux --strict-prd --help <DIR>"
+            opts="-n -f -b -m -h --name --max-iterations --task-file --completion-marker --backend --model --variant --prompt-template --webhook --no-worktree --no-tmux --strict-prd --dry-run --help <DIR>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1036,12 +1128,74 @@ _gralph() {
             return 0
             ;;
         gralph__status)
-            opts="-h --help"
+            opts="-h --json --verbose --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__step)
+            opts="-n -f -b -m -h --name --max-iterations --task-file --completion-marker --backend --model --variant --prompt-template --no-worktree --strict-prd --help <DIR>"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --name)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -n)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --max-iterations)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --task-file)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -f)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --completion-marker)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --backend)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -b)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --model)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -m)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --variant)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --prompt-template)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 *)
                     COMPREPLY=()
                     ;;
