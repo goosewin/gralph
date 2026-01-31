@@ -152,7 +152,7 @@ Each task block must contain exactly one unchecked task line.
   * Rust defaults remain unchanged from `config/default.yaml`.
   * README and ARCHITECTURE describe stack-aware behavior.
 - **Dependencies** None
-- [ ] UX-6 Make verifier defaults stack-aware
+- [x] UX-6 Make verifier defaults stack-aware
 ---
 
 ### Task UX-7

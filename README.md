@@ -116,6 +116,10 @@ waits for review criteria (greptile by default), and merges only when reviews an
 checks meet thresholds. When `verifier.auto_run` is true, it runs automatically
 after loop completion; otherwise run `gralph verifier` manually. Configure the
 review gate under `verifier.review.*` and ensure `gh auth login` is complete.
+Verifier defaults are stack-aware: Rust/Cargo keeps the default cargo commands and
+auto-run behavior, while non-Rust or unknown stacks default `verifier.auto_run`
+to false and require explicit `verifier.test_command` and
+`verifier.coverage_command` (or CLI flags).
 Soft coverage warning target is controlled by `verifier.coverage_warn` (default 80).
 It is warning-only, does not change `verifier.coverage_min`, and never blocks
 merges. The target was staged from 65 to 70 percent during ramp-up, then raised

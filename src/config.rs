@@ -48,17 +48,26 @@ impl Error for ConfigError {
 #[derive(Debug, Clone)]
 pub struct Config {
     merged: Value,
+    user_overrides: Value,
 }
 
 impl Config {
     pub fn load(project_dir: Option<&Path>) -> Result<Self, ConfigError> {
         let mut merged = Value::Mapping(Mapping::new());
+        let mut user_overrides = Value::Mapping(Mapping::new());
+        let default_path = default_config_path();
         // Merge precedence: default < global < project (later overrides earlier).
         for path in config_paths(project_dir) {
             let value = read_yaml(&path)?;
-            merged = merge_values(merged, value);
+            merged = merge_values(merged, value.clone());
+            if path != default_path {
+                user_overrides = merge_values(user_overrides, value);
+            }
         }
-        Ok(Self { merged })
+        Ok(Self {
+            merged,
+            user_overrides,
+        })
     }
 
     pub fn get(&self, key: &str) -> Option<String> {
@@ -67,6 +76,14 @@ impl Config {
             return Some(value);
         }
         lookup_value(&self.merged, &normalized).and_then(value_to_string)
+    }
+
+    pub fn get_user(&self, key: &str) -> Option<String> {
+        let normalized = normalize_key(key)?;
+        if let Some(value) = resolve_env_override(key, &normalized) {
+            return Some(value);
+        }
+        lookup_value(&self.user_overrides, &normalized).and_then(value_to_string)
     }
 
     pub fn get_or(&self, key: &str, default: &str) -> String {
@@ -1344,14 +1361,12 @@ mod tests {
 
         let config = Config::load(None).unwrap();
         let list = config.list();
-        assert!(
-            list.iter()
-                .any(|(key, value)| key == "defaults.max_iterations" && value == "5")
-        );
-        assert!(
-            list.iter()
-                .any(|(key, value)| key == "logging.level" && value == "info")
-        );
+        assert!(list
+            .iter()
+            .any(|(key, value)| key == "defaults.max_iterations" && value == "5"));
+        assert!(list
+            .iter()
+            .any(|(key, value)| key == "logging.level" && value == "info"));
 
         remove_env("GRALPH_GLOBAL_CONFIG");
         remove_env("GRALPH_DEFAULT_CONFIG");

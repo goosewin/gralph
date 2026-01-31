@@ -795,7 +795,7 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
     )
     .map_err(|err| CliError::Message(err.to_string()))?;
 
-    let auto_run_verifier = verifier::resolve_verifier_auto_run(&config);
+    let auto_run_verifier = verifier::resolve_verifier_auto_run(&config, &args.dir);
     let status_plan = outcome_status_plan(outcome.status, auto_run_verifier);
     store
         .set_session(

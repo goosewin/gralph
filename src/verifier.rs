@@ -1,6 +1,7 @@
 use crate::app::worktree::git_output_in_dir;
 use crate::app::{join_or_none, normalize_csv, parse_bool_value, CliError};
 use crate::config::Config;
+use crate::prd;
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::{self, Write};
@@ -31,6 +32,50 @@ const DEFAULT_REVIEW_REQUIRE_CHECKS: bool = true;
 const DEFAULT_REVIEW_MERGE_METHOD: &str = "merge";
 const DEFAULT_VERIFIER_AUTO_RUN: bool = true;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum VerifierStackDefaults {
+    Rust,
+    NonRust,
+}
+
+impl VerifierStackDefaults {
+    fn from_dir(dir: &Path) -> Self {
+        let root = stack_root_for_detection(dir);
+        let detection = prd::prd_detect_stack(&root);
+        if is_rust_stack(&detection) {
+            VerifierStackDefaults::Rust
+        } else {
+            VerifierStackDefaults::NonRust
+        }
+    }
+
+    fn uses_rust_defaults(self) -> bool {
+        matches!(self, VerifierStackDefaults::Rust)
+    }
+
+    fn requires_explicit_commands(self) -> bool {
+        matches!(self, VerifierStackDefaults::NonRust)
+    }
+}
+
+fn stack_root_for_detection(dir: &Path) -> PathBuf {
+    if let Ok(root) = git_output_in_dir(dir, ["rev-parse", "--show-toplevel"]) {
+        let trimmed = root.trim();
+        if !trimmed.is_empty() {
+            let path = PathBuf::from(trimmed);
+            if path.is_dir() {
+                return path;
+            }
+        }
+    }
+    dir.to_path_buf()
+}
+
+fn is_rust_stack(detection: &prd::StackDetection) -> bool {
+    detection.ids.iter().any(|id| id == "Rust")
+        || detection.tools.iter().any(|tool| tool == "Cargo")
+}
+
 pub(crate) fn run_verifier_pipeline(
     dir: &Path,
     config: &Config,
@@ -38,17 +83,31 @@ pub(crate) fn run_verifier_pipeline(
     coverage_command: Option<String>,
     coverage_min: Option<f64>,
 ) -> Result<(), CliError> {
+    let stack_defaults = VerifierStackDefaults::from_dir(dir);
+    let require_explicit = stack_defaults.requires_explicit_commands();
+    let default_test_command = if stack_defaults.uses_rust_defaults() {
+        DEFAULT_TEST_COMMAND
+    } else {
+        ""
+    };
+    let default_coverage_command = if stack_defaults.uses_rust_defaults() {
+        DEFAULT_COVERAGE_COMMAND
+    } else {
+        ""
+    };
     let test_command = resolve_verifier_command(
         test_command,
         config,
         "verifier.test_command",
-        DEFAULT_TEST_COMMAND,
+        default_test_command,
+        require_explicit,
     )?;
     let coverage_command = resolve_verifier_command(
         coverage_command,
         config,
         "verifier.coverage_command",
-        DEFAULT_COVERAGE_COMMAND,
+        default_coverage_command,
+        require_explicit,
     )?;
     let coverage_min = resolve_verifier_coverage_min(coverage_min, config)?;
     let coverage_warn = resolve_verifier_coverage_warn(config)?;
@@ -80,12 +139,22 @@ pub(crate) fn run_verifier_pipeline(
     Ok(())
 }
 
-pub(crate) fn resolve_verifier_auto_run(config: &Config) -> bool {
-    config
-        .get("verifier.auto_run")
+pub(crate) fn resolve_verifier_auto_run(config: &Config, dir: &Path) -> bool {
+    if let Some(value) = config
+        .get_user("verifier.auto_run")
         .as_deref()
         .and_then(parse_bool_value)
-        .unwrap_or(DEFAULT_VERIFIER_AUTO_RUN)
+    {
+        return value;
+    }
+    if VerifierStackDefaults::from_dir(dir).uses_rust_defaults() {
+        return config
+            .get("verifier.auto_run")
+            .as_deref()
+            .and_then(parse_bool_value)
+            .unwrap_or(DEFAULT_VERIFIER_AUTO_RUN);
+    }
+    false
 }
 
 fn resolve_verifier_command(
@@ -93,12 +162,26 @@ fn resolve_verifier_command(
     config: &Config,
     key: &str,
     default: &str,
+    require_explicit: bool,
 ) -> Result<String, CliError> {
     let from_args = arg_value.filter(|value| !value.trim().is_empty());
-    let from_config = config.get(key).filter(|value| !value.trim().is_empty());
-    let command = from_args
-        .or(from_config)
-        .unwrap_or_else(|| default.to_string());
+    let from_config = if require_explicit {
+        config
+            .get_user(key)
+            .filter(|value| !value.trim().is_empty())
+    } else {
+        config.get(key).filter(|value| !value.trim().is_empty())
+    };
+    let command = match from_args.or(from_config) {
+        Some(value) => value,
+        None if require_explicit => {
+            return Err(CliError::Message(format!(
+                "Verifier command for {} must be set for non-Rust stacks.",
+                key
+            )));
+        }
+        None => default.to_string(),
+    };
     let trimmed = command.trim();
     if trimmed.is_empty() {
         return Err(CliError::Message(format!(
@@ -2093,8 +2176,8 @@ mod tests {
     #[test]
     fn resolve_verifier_command_rejects_empty_default() {
         let config = load_project_config("verifier:\n  test_command: \"\"\n");
-        let err =
-            resolve_verifier_command(None, &config, "verifier.test_command", " ").unwrap_err();
+        let err = resolve_verifier_command(None, &config, "verifier.test_command", " ", false)
+            .unwrap_err();
         match err {
             CliError::Message(message) => {
                 assert!(message.contains("empty"));
@@ -2111,6 +2194,7 @@ mod tests {
             &config,
             "verifier.test_command",
             DEFAULT_TEST_COMMAND,
+            false,
         )
         .unwrap();
         assert_eq!(command, "custom --flag");
@@ -2121,18 +2205,44 @@ mod tests {
         let _guard = env_guard();
         let config =
             load_project_config("verifier:\n  test_command: \"  \"\n  coverage_command: \"\"\n");
-        let test_command =
-            resolve_verifier_command(None, &config, "verifier.test_command", DEFAULT_TEST_COMMAND)
-                .unwrap();
+        let test_command = resolve_verifier_command(
+            None,
+            &config,
+            "verifier.test_command",
+            DEFAULT_TEST_COMMAND,
+            false,
+        )
+        .unwrap();
         let coverage_command = resolve_verifier_command(
             None,
             &config,
             "verifier.coverage_command",
             DEFAULT_COVERAGE_COMMAND,
+            false,
         )
         .unwrap();
         assert_eq!(test_command, DEFAULT_TEST_COMMAND);
         assert_eq!(coverage_command, DEFAULT_COVERAGE_COMMAND);
+    }
+
+    #[test]
+    fn resolve_verifier_command_requires_explicit_for_non_rust() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  test_command: \"\"\n");
+        let err = resolve_verifier_command(
+            None,
+            &config,
+            "verifier.test_command",
+            DEFAULT_TEST_COMMAND,
+            true,
+        )
+        .unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("must be set"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
     }
 
     #[test]
@@ -2232,15 +2342,34 @@ mod tests {
     }
 
     #[test]
-    fn resolve_verifier_auto_run_defaults_when_missing() {
+    fn resolve_verifier_auto_run_defaults_true_for_rust() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        fs::write(&default_path, "defaults:\n  max_iterations: 30\n").unwrap();
+        fs::write(
+            temp.path().join("Cargo.toml"),
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+
+        let config = Config::load(Some(temp.path())).unwrap();
+        assert!(resolve_verifier_auto_run(&config, temp.path()));
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn resolve_verifier_auto_run_defaults_false_for_non_rust() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         let default_path = temp.path().join("default.yaml");
         fs::write(&default_path, "defaults:\n  max_iterations: 30\n").unwrap();
         set_env("GRALPH_DEFAULT_CONFIG", &default_path);
 
-        let config = Config::load(None).unwrap();
-        assert!(resolve_verifier_auto_run(&config));
+        let config = Config::load(Some(temp.path())).unwrap();
+        assert!(!resolve_verifier_auto_run(&config, temp.path()));
 
         remove_env("GRALPH_DEFAULT_CONFIG");
     }
@@ -2248,8 +2377,14 @@ mod tests {
     #[test]
     fn resolve_verifier_auto_run_respects_override() {
         let _guard = env_guard();
-        let config = load_project_config("verifier:\n  auto_run: false\n");
-        assert!(!resolve_verifier_auto_run(&config));
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(
+            temp.path().join(".gralph.yaml"),
+            "verifier:\n  auto_run: true\n",
+        )
+        .unwrap();
+        let config = Config::load(Some(temp.path())).unwrap();
+        assert!(resolve_verifier_auto_run(&config, temp.path()));
     }
 
     #[test]
