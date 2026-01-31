@@ -906,6 +906,7 @@ fn validate_task_block(
     errors
 }
 
+#[cfg(test)]
 fn sanitize_task_block(
     block: &str,
     base_dir: Option<&Path>,
@@ -3134,10 +3135,11 @@ mod tests {
         fs::create_dir_all(&docs).unwrap();
         fs::write(docs.join("keep.md"), "ok").unwrap();
 
-        let allowed = base.join("allowed.txt");
-        fs::write(&allowed, "docs/missing.md\n\ndocs/keep.md\n").unwrap();
+        let allowed_path = base.join("allowed.txt");
+        fs::write(&allowed_path, "docs/missing.md\n\ndocs/keep.md\n").unwrap();
 
-        let fallback = pick_fallback_context(Some(base), Some(&allowed));
+        let allowed = load_allowed_context(Some(&allowed_path));
+        let fallback = pick_fallback_context(Some(base), &allowed);
 
         assert_eq!(fallback, Some("docs/keep.md".to_string()));
     }
