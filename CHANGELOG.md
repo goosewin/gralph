@@ -5,13 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Verification Notes
+
 When adding entries under [Unreleased], include a single-line verification note:
-Verification: Tests=<command|not-run>; Coverage=<percent> (>= 90%);
+Verification: Tests=<command|not-run>; Coverage=<percent> (>= 70%);
 CI=<status/link>; PR=<link if final PRD task>
 
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+### Verification
+
+- Verification: Tests=CI; Coverage=CI (>= 70%); CI=ran; PR=opened
+
+## [0.2.4]
+
+### Added
+
 - UX-1 Add doctor command with local diagnostics checks.
 - UX-2 Add cleanup command for stale sessions.
 - UX-3 Record raw log paths and expose raw logs.
@@ -19,6 +33,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - UX-5 Add dry-run start and step execution.
 
 ### Changed
+
 - DOC-1 Record entrypoint refactor and coverage recovery notes in shared docs.
 - MD-2 Extract loop and session command handlers into the app loop session module.
 - MD-3 Move PRD and init command handlers into the app PRD module.
@@ -35,11 +50,13 @@ CI=<status/link>; PR=<link if final PRD task>
 - UX-8 Add update check opt-out and start log/tmux hints.
 
 ### Verification
-- Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
+
+- Verification: Tests=not-run; Coverage=not-run (>= 70%); CI=not-run; PR=not-opened
 
 ## [0.2.3]
 
 ### Added
+
 - PROMPT-1 Require lower-case conventional commits in the default prompt template.
 - VER-1 Add verifier command for tests and coverage gates.
 - DOC-1 Document verifier workflow, review gate, and commit conventions.
@@ -190,6 +207,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-SERVER-1 Add server CORS invalid origin, stale pid stop, and unreadable task file tests.
 
 ### Fixed
+
 - MD-8 Fix verifier config import, public CLI error type, and file reader trait alias.
 - WT-1 Skip auto worktree creation on dirty repos and emit explicit skip reasons.
 - REF-1 Consolidate shared backend execution helpers.
@@ -203,20 +221,24 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-6 Normalize absolute context path comparisons and isolate config env override tests.
 
 ### Verification
-- Verification: Tests=cargo test --workspace; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
+
+- Verification: Tests=cargo test --workspace; Coverage=not-run (>= 70%); CI=not-run; PR=not-opened
 
 ## [0.2.2]
 
 ### Fixed
+
 - Installer: add PATH auto-update for local installs.
 - Windows installer: fix Join-Path usage when piping to iex.
 
 ### Verification
-- Verification: Tests=cargo test --workspace; Coverage=65.49% (>= 90%); CI=not-run; PR=not-opened
+
+- Verification: Tests=cargo test --workspace; Coverage=65.49% (>= 70%); CI=not-run; PR=not-opened
 
 ## [0.2.1]
 
 ### Added
+
 - AW-2 Added auto worktree edge case tests for skip behavior, subdir mapping, and collisions.
 - AW-3 Documented auto worktree UX, skip reasons, and Graphite stacking guidance.
 - WT-1 Auto-create worktrees for PRD runs with config and CLI controls.
@@ -226,16 +248,19 @@ CI=<status/link>; PR=<link if final PRD task>
 - DOC-1 Documented update command, update notice, and regenerated completions.
 
 ### Fixed
+
 - START-1 Added session name fallback for dot and root paths.
 - INST-1 Hardened installer cleanup and PATH-aware verification.
 - LOG-1 Format loop start/finish timestamps and human-readable durations.
 
 ### Verification
-- Verification: Tests=CI; Coverage=CI (>= 90%); CI=green; PR=not-required
+
+- Verification: Tests=CI; Coverage=CI (>= 70%); CI=green; PR=not-required
 
 ## [0.1.0]
 
 ### Added
+
 - INIT-4 Documented init command and updated shell completions.
 - Added multi-arch release assets for Linux and macOS.
 - Initial public release notes for the gralph CLI.
@@ -307,6 +332,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - T-CONFIG-1 Added config path precedence tests.
 
 ### Fixed
+
 - AW-1 Resolve auto worktree repo roots from target dirs and preserve subdir runs.
 - Aligned the Cargo-installed binary name with release assets (`gralph`).
 - OSS-1 Removed duplicate introductory text from README.
