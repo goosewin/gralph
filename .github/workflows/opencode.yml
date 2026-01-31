@@ -31,3 +31,5 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         with:
           model: opencode/gpt-5.2-codex
+          variant: high
+
