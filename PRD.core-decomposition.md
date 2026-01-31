@@ -107,7 +107,7 @@ The verifier pipeline must continue to run tests, parse coverage output, enforce
   * Tests cover open questions removal and stray unchecked cleanup in sanitized output.
   * Tests cover context bundle path handling for absolute and relative entries.
 - **Dependencies** None
-- [ ] PRD-1 Isolate PRD content sanitization and add parsing tests
+- [x] PRD-1 Isolate PRD content sanitization and add parsing tests
 ---
 
 ## Success Criteria

@@ -22,6 +22,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - LS-2 Isolate session lifecycle decisions and add transition tests.
 - VER-1 Extract verifier parsing helpers and add coverage parsing tests.
 - VER-2 Add review gate and check gate decision tests.
+- PRD-1 Split PRD sanitize/validate content handling and add sanitize tests.
 
 ### Verification
 - Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
