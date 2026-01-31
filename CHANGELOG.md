@@ -11,6 +11,9 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ## [Unreleased]
 
+### Added
+- UX-1 Add doctor command with local diagnostics checks.
+
 ### Changed
 - DOC-1 Record entrypoint refactor and coverage recovery notes in shared docs.
 - MD-2 Extract loop and session command handlers into the app loop session module.

@@ -47,12 +47,16 @@ SERVER OPTIONS:
   --token, -t           Authentication token (required for non-localhost)
   --open                Disable token requirement (use with caution)
 
+DOCTOR OPTIONS:
+  --dir                 Project directory to check (default: current)
+
 EXAMPLES:
   gralph start .
   gralph start ~/project --name myapp --max-iterations 50
   gralph status
   gralph logs myapp --follow
   gralph stop myapp
+  gralph doctor --dir .
   gralph prd create --dir . --output PRD.new.md --goal "Add a billing dashboard"
   gralph init --dir .
   gralph worktree create C-1
@@ -83,6 +87,8 @@ pub enum Command {
     Stop(StopArgs),
     #[command(about = "Show status of all loops")]
     Status,
+    #[command(about = "Run local diagnostics")]
+    Doctor(DoctorArgs),
     #[command(about = "View logs for a loop")]
     Logs(LogsArgs),
     #[command(about = "Resume crashed/stopped loops")]
@@ -181,6 +187,12 @@ pub struct LogsArgs {
     pub name: String,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Follow log output")]
     pub follow: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct DoctorArgs {
+    #[arg(long, help = "Project directory to check (default: current)")]
+    pub dir: Option<PathBuf>,
 }
 
 #[derive(Args, Debug)]
@@ -366,6 +378,28 @@ mod tests {
         match cli.command {
             Some(Command::Status) => {}
             other => panic!("Expected status command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_doctor_defaults() {
+        let cli = Cli::parse_from(["gralph", "doctor"]);
+        match cli.command {
+            Some(Command::Doctor(args)) => {
+                assert!(args.dir.is_none());
+            }
+            other => panic!("Expected doctor command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_doctor_dir() {
+        let cli = Cli::parse_from(["gralph", "doctor", "--dir", "."]);
+        match cli.command {
+            Some(Command::Doctor(args)) => {
+                assert_eq!(args.dir, Some(PathBuf::from(".")));
+            }
+            other => panic!("Expected doctor command, got: {other:?}"),
         }
     }
 

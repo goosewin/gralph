@@ -42,6 +42,7 @@ gralph verifier                   # Run verifier pipeline
 gralph init .                     # Scaffold shared context files
 gralph status                     # Check all running loops
 gralph logs myapp --follow        # Watch logs
+gralph doctor                     # Run local diagnostics
 gralph stop myapp                 # Stop a loop
 gralph resume                     # Resume after crash
 gralph update                     # Install latest release to ~/.local/bin
@@ -69,6 +70,19 @@ so the stack is attached to the correct checkout and branch.
 2. Finds unchecked tasks (`- [ ]` lines)
 3. Spawns AI to complete one task
 4. Repeats until all tasks done or max iterations hit
+
+## Doctor
+
+`gralph doctor` runs local checks for backend CLIs, gh install/auth, git clean
+state, config readability, and state store access. It prints per-check status,
+actionable hints, and exits non-zero when required items are missing.
+
+Common failure hints:
+- Missing backend CLI: install the CLI listed under Requirements or use `gralph backends`.
+- Missing gh or auth: install https://cli.github.com and run `gh auth login`.
+- Dirty git repo: `git status`, then commit or stash changes.
+- Config parse error: fix YAML in `~/.config/gralph/config.yaml` or project `.gralph.yaml`.
+- State store error: check `GRALPH_STATE_DIR` and permissions for `~/.config/gralph`.
 
 ## Verifier Pipeline
 

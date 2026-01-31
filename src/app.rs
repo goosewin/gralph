@@ -1,6 +1,7 @@
-use crate::backend::backend_from_name;
+use crate::backend::{backend_from_name, command_in_path};
 use crate::cli::{
-    self, Cli, Command, ConfigArgs, ConfigCommand, ServerArgs, VerifierArgs, ASCII_BANNER,
+    self, Cli, Command, ConfigArgs, ConfigCommand, DoctorArgs, ServerArgs, VerifierArgs,
+    ASCII_BANNER,
 };
 use crate::config::Config;
 use crate::core;
@@ -16,7 +17,7 @@ use std::fmt::Display;
 use std::fs;
 use std::io::{self, Read, Seek};
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
+use std::process::{Command as ProcCommand, ExitCode};
 
 mod loop_session;
 mod prd_init;
@@ -203,6 +204,7 @@ fn dispatch(command: Command, deps: &Deps) -> Result<(), CliError> {
         Command::RunLoop(args) => loop_session::cmd_run_loop(args, deps),
         Command::Stop(args) => loop_session::cmd_stop(args, deps),
         Command::Status => loop_session::cmd_status(deps),
+        Command::Doctor(args) => cmd_doctor(args, deps),
         Command::Logs(args) => loop_session::cmd_logs(args, deps),
         Command::Resume(args) => loop_session::cmd_resume(args, deps),
         Command::Init(args) => cmd_init(args),
@@ -331,6 +333,341 @@ fn cmd_backends() -> Result<(), CliError> {
         println!();
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DoctorStatus {
+    Ok,
+    Warn,
+    Fail,
+}
+
+impl DoctorStatus {
+    fn as_str(&self) -> &'static str {
+        match self {
+            DoctorStatus::Ok => "ok",
+            DoctorStatus::Warn => "warn",
+            DoctorStatus::Fail => "fail",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct DoctorCheck {
+    label: String,
+    status: DoctorStatus,
+    detail: String,
+    hint: Option<String>,
+}
+
+fn cmd_doctor(args: DoctorArgs, deps: &Deps) -> Result<(), CliError> {
+    let dir = args
+        .dir
+        .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    if !dir.is_dir() {
+        return Err(CliError::Message(format!(
+            "Directory does not exist: {}",
+            dir.display()
+        )));
+    }
+
+    println!("Doctor checks (dir: {})", dir.display());
+    let mut checks: Vec<DoctorCheck> = Vec::new();
+
+    let config = match Config::load(Some(&dir)) {
+        Ok(config) => {
+            checks.push(DoctorCheck {
+                label: "config".to_string(),
+                status: DoctorStatus::Ok,
+                detail: "readable".to_string(),
+                hint: None,
+            });
+            Some(config)
+        }
+        Err(err) => {
+            checks.push(DoctorCheck {
+                label: "config".to_string(),
+                status: DoctorStatus::Fail,
+                detail: err.to_string(),
+                hint: Some("Fix YAML syntax or check GRALPH_* config path overrides".to_string()),
+            });
+            None
+        }
+    };
+
+    let default_backend_raw = config
+        .as_ref()
+        .and_then(|config| config.get("defaults.backend"))
+        .unwrap_or_else(|| "claude".to_string());
+    let default_backend = default_backend_raw.trim().to_string();
+    let backend_choices = [
+        ("claude", "npm install -g @anthropic-ai/claude-code"),
+        ("opencode", "npm install -g opencode-ai"),
+        ("gemini", "npm install -g @google/gemini-cli"),
+        ("codex", "npm install -g @openai/codex"),
+    ];
+
+    let mut required_backend = None;
+    if default_backend.is_empty() {
+        checks.push(DoctorCheck {
+            label: "backend default".to_string(),
+            status: DoctorStatus::Fail,
+            detail: "defaults.backend is empty".to_string(),
+            hint: Some("Set defaults.backend to claude, opencode, gemini, or codex".to_string()),
+        });
+    } else if backend_choices
+        .iter()
+        .all(|(name, _)| *name != default_backend.as_str())
+    {
+        checks.push(DoctorCheck {
+            label: "backend default".to_string(),
+            status: DoctorStatus::Fail,
+            detail: format!("unknown backend '{}'", default_backend),
+            hint: Some("Set defaults.backend to claude, opencode, gemini, or codex".to_string()),
+        });
+    } else {
+        required_backend = Some(default_backend.clone());
+    }
+
+    for (name, install_hint) in backend_choices {
+        let backend = backend_from_name(name).map_err(CliError::Message)?;
+        let installed = backend.check_installed();
+        let is_default = required_backend
+            .as_deref()
+            .map(|value| value == name)
+            .unwrap_or(false);
+        let status = if installed {
+            DoctorStatus::Ok
+        } else if is_default {
+            DoctorStatus::Fail
+        } else {
+            DoctorStatus::Warn
+        };
+        let detail = match (installed, is_default) {
+            (true, true) => "installed (default backend)",
+            (true, false) => "installed",
+            (false, true) => "not installed (default backend)",
+            (false, false) => "not installed",
+        };
+        let hint = if installed {
+            None
+        } else {
+            Some(format!("Install {}: {}", name, install_hint))
+        };
+        checks.push(DoctorCheck {
+            label: format!("backend {}", name),
+            status,
+            detail: detail.to_string(),
+            hint,
+        });
+    }
+
+    let gh_installed = command_in_path("gh");
+    if gh_installed {
+        checks.push(DoctorCheck {
+            label: "gh".to_string(),
+            status: DoctorStatus::Ok,
+            detail: "installed".to_string(),
+            hint: None,
+        });
+    } else {
+        checks.push(DoctorCheck {
+            label: "gh".to_string(),
+            status: DoctorStatus::Fail,
+            detail: "not installed".to_string(),
+            hint: Some("Install GitHub CLI: https://cli.github.com".to_string()),
+        });
+    }
+
+    if gh_installed {
+        let output = ProcCommand::new("gh")
+            .args(["auth", "status", "-h", "github.com"])
+            .output();
+        match output {
+            Ok(output) if output.status.success() => {
+                checks.push(DoctorCheck {
+                    label: "gh auth".to_string(),
+                    status: DoctorStatus::Ok,
+                    detail: "authenticated".to_string(),
+                    hint: None,
+                });
+            }
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                let detail = if !stderr.is_empty() {
+                    stderr
+                } else if !stdout.is_empty() {
+                    stdout
+                } else {
+                    "not authenticated".to_string()
+                };
+                checks.push(DoctorCheck {
+                    label: "gh auth".to_string(),
+                    status: DoctorStatus::Fail,
+                    detail,
+                    hint: Some("Run: gh auth login".to_string()),
+                });
+            }
+            Err(err) => {
+                checks.push(DoctorCheck {
+                    label: "gh auth".to_string(),
+                    status: DoctorStatus::Fail,
+                    detail: format!("failed to run gh: {}", err),
+                    hint: Some("Run: gh auth login".to_string()),
+                });
+            }
+        }
+    } else {
+        checks.push(DoctorCheck {
+            label: "gh auth".to_string(),
+            status: DoctorStatus::Warn,
+            detail: "skipped (gh not installed)".to_string(),
+            hint: None,
+        });
+    }
+
+    match check_git_clean(&dir) {
+        Ok(check) => checks.push(check),
+        Err(err) => {
+            checks.push(DoctorCheck {
+                label: "git clean".to_string(),
+                status: DoctorStatus::Warn,
+                detail: err.to_string(),
+                hint: Some("Install git and run inside a git repo".to_string()),
+            });
+        }
+    }
+
+    let state_store = deps.state_store();
+    match state_store.init_state() {
+        Ok(()) => checks.push(DoctorCheck {
+            label: "state store".to_string(),
+            status: DoctorStatus::Ok,
+            detail: "accessible".to_string(),
+            hint: None,
+        }),
+        Err(err) => checks.push(DoctorCheck {
+            label: "state store".to_string(),
+            status: DoctorStatus::Fail,
+            detail: err.to_string(),
+            hint: Some("Check GRALPH_STATE_DIR or ~/.config/gralph permissions".to_string()),
+        }),
+    }
+
+    let mut failures = 0;
+    let mut warnings = 0;
+    for check in &checks {
+        match check.status {
+            DoctorStatus::Fail => failures += 1,
+            DoctorStatus::Warn => warnings += 1,
+            DoctorStatus::Ok => {}
+        }
+        println!(
+            "- {:<4} {}: {}",
+            check.status.as_str(),
+            check.label,
+            check.detail
+        );
+        if let Some(hint) = &check.hint {
+            println!("  hint: {}", hint);
+        }
+    }
+
+    let exit_code = if failures > 0 { 1 } else { 0 };
+    println!(
+        "Summary: checks={}, failures={}, warnings={}, exit={}",
+        checks.len(),
+        failures,
+        warnings,
+        exit_code
+    );
+
+    if failures > 0 {
+        Err(CliError::Message("doctor checks failed".to_string()))
+    } else {
+        Ok(())
+    }
+}
+
+fn check_git_clean(dir: &Path) -> Result<DoctorCheck, CliError> {
+    let output = ProcCommand::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(["rev-parse", "--show-toplevel"])
+        .output();
+    let output = match output {
+        Ok(output) => output,
+        Err(err) => {
+            return Ok(DoctorCheck {
+                label: "git clean".to_string(),
+                status: DoctorStatus::Warn,
+                detail: format!("git not available: {}", err),
+                hint: Some("Install git to enable repo checks".to_string()),
+            });
+        }
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let detail = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            "not a git repository".to_string()
+        };
+        return Ok(DoctorCheck {
+            label: "git clean".to_string(),
+            status: DoctorStatus::Warn,
+            detail,
+            hint: Some("Run inside a git repo to check cleanliness".to_string()),
+        });
+    }
+
+    let repo_root = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if repo_root.is_empty() {
+        return Ok(DoctorCheck {
+            label: "git clean".to_string(),
+            status: DoctorStatus::Warn,
+            detail: "unable to resolve repo root".to_string(),
+            hint: Some("Run inside a git repo to check cleanliness".to_string()),
+        });
+    }
+
+    let status_output = ProcCommand::new("git")
+        .arg("-C")
+        .arg(&repo_root)
+        .args(["status", "--porcelain"])
+        .output()
+        .map_err(CliError::Io)?;
+    if !status_output.status.success() {
+        return Ok(DoctorCheck {
+            label: "git clean".to_string(),
+            status: DoctorStatus::Warn,
+            detail: "unable to check git status".to_string(),
+            hint: Some("Run git status to inspect repo".to_string()),
+        });
+    }
+    if status_output.stdout.is_empty() {
+        Ok(DoctorCheck {
+            label: "git clean".to_string(),
+            status: DoctorStatus::Ok,
+            detail: "clean".to_string(),
+            hint: None,
+        })
+    } else {
+        let changes = String::from_utf8_lossy(&status_output.stdout)
+            .lines()
+            .count();
+        Ok(DoctorCheck {
+            label: "git clean".to_string(),
+            status: DoctorStatus::Warn,
+            detail: format!("dirty ({} changes)", changes),
+            hint: Some("Commit or stash changes for clean runs".to_string()),
+        })
+    }
 }
 
 fn cmd_config(args: ConfigArgs) -> Result<(), CliError> {
