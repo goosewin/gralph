@@ -16,6 +16,8 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Changed
 
+- TMUX-1 Remove --no-tmux flag from CLI and completions; document tmux as required.
+
 ### Fixed
 
 ### Verification

@@ -18,7 +18,6 @@ const ROOT_AFTER_HELP: &str = r#"START OPTIONS:
   --prompt-template   Path to custom prompt template file
   --webhook           Notification webhook URL
   --no-worktree       Disable automatic worktree creation
-  --no-tmux           Run in foreground (blocks; logs in .gralph/<session>.log)
   --strict-prd        Validate PRD before starting the loop
   --dry-run           Print the next task block and resolved prompt
 
@@ -163,12 +162,6 @@ pub struct StartArgs {
     pub webhook: Option<String>,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Disable automatic worktree creation")]
     pub no_worktree: bool,
-    #[arg(
-        long,
-        action = clap::ArgAction::SetTrue,
-        help = "Run in foreground (blocks; logs in .gralph/<session>.log)"
-    )]
-    pub no_tmux: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Validate PRD before starting the loop")]
     pub strict_prd: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Print the next task block and resolved prompt")]
@@ -559,7 +552,6 @@ mod tests {
                 assert!(args.prompt_template.is_none());
                 assert!(args.webhook.is_none());
                 assert!(!args.no_worktree);
-                assert!(!args.no_tmux);
                 assert!(!args.strict_prd);
                 assert!(!args.dry_run);
             }
@@ -592,7 +584,6 @@ mod tests {
             "--webhook",
             "https://example.com/hook",
             "--no-worktree",
-            "--no-tmux",
             "--strict-prd",
         ]);
         match cli.command {
@@ -608,7 +599,6 @@ mod tests {
                 assert_eq!(args.prompt_template, Some(PathBuf::from("prompt.txt")));
                 assert_eq!(args.webhook.as_deref(), Some("https://example.com/hook"));
                 assert!(args.no_worktree);
-                assert!(args.no_tmux);
                 assert!(args.strict_prd);
                 assert!(!args.dry_run);
             }

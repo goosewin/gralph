@@ -1062,7 +1062,7 @@ _gralph() {
             return 0
             ;;
         gralph__start)
-            opts="-n -f -b -m -h --name --max-iterations --task-file --completion-marker --backend --model --variant --prompt-template --webhook --no-worktree --no-tmux --strict-prd --dry-run --help <DIR>"
+            opts="-n -f -b -m -h --name --max-iterations --task-file --completion-marker --backend --model --variant --prompt-template --webhook --no-worktree --strict-prd --dry-run --help <DIR>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

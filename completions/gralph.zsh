@@ -44,7 +44,6 @@ _arguments "${_arguments_options[@]}" : \
 '--prompt-template=[Path to custom prompt template file]:PROMPT_TEMPLATE:_files' \
 '--webhook=[Notification webhook URL]:WEBHOOK:_default' \
 '--no-worktree[Disable automatic worktree creation]' \
-'--no-tmux[Run in foreground (blocks; logs in .gralph/<session>.log)]' \
 '--strict-prd[Validate PRD before starting the loop]' \
 '--dry-run[Print the next task block and resolved prompt]' \
 '-h[Print help]' \

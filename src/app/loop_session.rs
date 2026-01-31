@@ -28,16 +28,11 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
     if args.dry_run {
         return cmd_start_dry_run(args, deps);
     }
-    let no_tmux = args.no_tmux;
     let session_name = super::session_name(&args.name, &args.dir)?;
     let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
     let mut run_args = run_loop_args_from_start(args, session_name)?;
     deps.worktree()
         .maybe_create_auto_worktree(&mut run_args, &config)?;
-    if no_tmux {
-        return run_loop_with_state(run_args, deps);
-    }
-
     let child = spawn_run_loop(&run_args, deps.process())?;
 
     let store = deps.state_store();
@@ -92,7 +87,6 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
         run_args.name,
         log_file.display()
     );
-    println!("Run in foreground with --no-tmux to stream output.");
     Ok(())
 }
 

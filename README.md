@@ -30,7 +30,7 @@ irm https://raw.githubusercontent.com/goosewin/gralph/main/install.ps1 | iex
   - `opencode` - `npm install -g opencode-ai`
   - `gemini` - `npm install -g @google/gemini-cli`
   - `codex` - `npm install -g @openai/codex`
-- `tmux` for background sessions (optional with `--no-tmux`)
+- `tmux` for background sessions (required)
 
 ## Basic Commands
 
@@ -74,7 +74,7 @@ so the stack is attached to the correct checkout and branch.
 Session logs are written to `.gralph/<session>.log` under the project directory.
 Raw backend output is saved to `.gralph/<session>.raw.log` and can be viewed with
 `gralph logs <name> --raw`.
-When running in the background (no `--no-tmux`), follow logs with
+When running in the background (tmux required), follow logs with
 `gralph logs <name> --follow` or `tail -f .gralph/<session>.log`.
 
 ## Dry-run and Step
