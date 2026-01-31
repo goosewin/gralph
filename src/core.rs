@@ -768,7 +768,7 @@ fn log_message(log_file: Option<&Path>, message: &str) -> Result<(), CoreError> 
     Ok(())
 }
 
-fn raw_log_path(log_file: &Path) -> PathBuf {
+pub(crate) fn raw_log_path(log_file: &Path) -> PathBuf {
     let log_str = log_file.to_string_lossy();
     if log_str.ends_with(".log") {
         PathBuf::from(log_str.trim_end_matches(".log")).with_extension("raw.log")

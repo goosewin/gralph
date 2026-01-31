@@ -113,7 +113,7 @@ Each task block must contain exactly one unchecked task line.
   * `logs --raw` handles both present and missing files.
   * README documents raw log access and file location.
 - **Dependencies** None
-- [ ] UX-3 Expose raw log access and paths
+- [x] UX-3 Expose raw log access and paths
 ---
 
 ### Task UX-4

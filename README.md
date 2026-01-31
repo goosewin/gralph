@@ -42,6 +42,7 @@ gralph verifier                   # Run verifier pipeline
 gralph init .                     # Scaffold shared context files
 gralph status                     # Check all running loops
 gralph logs myapp --follow        # Watch logs
+gralph logs myapp --raw           # Show raw backend output
 gralph doctor                     # Run local diagnostics
 gralph cleanup                    # Mark stale sessions (state cleanup)
 gralph stop myapp                 # Stop a loop
@@ -64,6 +65,12 @@ in the target directory. Disable auto worktrees with `--no-worktree` or set
 
 When stacking with Graphite, run `gt` inside the worktree created for the task
 so the stack is attached to the correct checkout and branch.
+
+## Logs
+
+Session logs are written to `.gralph/<session>.log` under the project directory.
+Raw backend output is saved to `.gralph/<session>.raw.log` and can be viewed with
+`gralph logs <name> --raw`.
 
 ## How It Works
 

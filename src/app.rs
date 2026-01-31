@@ -1678,6 +1678,7 @@ mod tests {
         let args = cli::LogsArgs {
             name: "demo".to_string(),
             follow: false,
+            raw: false,
         };
         loop_session::cmd_logs(args, &Deps::real()).unwrap();
         clear_env_overrides();
@@ -1699,6 +1700,7 @@ mod tests {
         let args = cli::LogsArgs {
             name: "demo".to_string(),
             follow: false,
+            raw: false,
         };
         loop_session::cmd_logs(args, &Deps::real()).unwrap();
         clear_env_overrides();

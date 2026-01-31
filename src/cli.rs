@@ -194,6 +194,8 @@ pub struct LogsArgs {
     pub name: String,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Follow log output")]
     pub follow: bool,
+    #[arg(long, action = clap::ArgAction::SetTrue, help = "Show raw backend output")]
+    pub raw: bool,
 }
 
 #[derive(Args, Debug)]

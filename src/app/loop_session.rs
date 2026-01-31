@@ -51,6 +51,7 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
         .dir
         .join(".gralph")
         .join(format!("{}.log", run_args.name));
+    let raw_log_file = core::raw_log_path(&log_file);
 
     store
         .set_session(
@@ -67,6 +68,7 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
                 ("last_task_count", &remaining.to_string()),
                 ("completion_marker", &completion_marker),
                 ("log_file", &log_file.to_string_lossy()),
+                ("raw_log_file", &raw_log_file.to_string_lossy()),
                 ("backend", run_args.backend.as_deref().unwrap_or("claude")),
                 ("model", run_args.model.as_deref().unwrap_or("")),
                 ("variant", run_args.variant.as_deref().unwrap_or("")),
@@ -217,10 +219,15 @@ pub(super) fn cmd_logs(args: LogsArgs, deps: &Deps) -> Result<(), CliError> {
         .get_session(&args.name)
         .map_err(|err| CliError::Message(err.to_string()))?
         .ok_or_else(|| CliError::Message(format!("Session not found: {}", args.name)))?;
-    let log_file = resolve_log_file(&args.name, &session)?;
+    let log_file = if args.raw {
+        resolve_raw_log_file(&args.name, &session)?
+    } else {
+        resolve_log_file(&args.name, &session)?
+    };
     if !log_file.is_file() {
         return Err(CliError::Message(format!(
-            "Log file does not exist: {}",
+            "{} does not exist: {}",
+            if args.raw { "Raw log file" } else { "Log file" },
             log_file.display()
         )));
     }
@@ -496,6 +503,7 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
     let now = format_rfc3339(deps.clock());
     let remaining = core::count_remaining_tasks(&args.dir.join(&task_file));
     let log_file = args.dir.join(".gralph").join(format!("{}.log", args.name));
+    let raw_log_file = core::raw_log_path(&log_file);
 
     store
         .set_session(
@@ -512,6 +520,7 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
                 ("last_task_count", &remaining.to_string()),
                 ("completion_marker", &completion_marker),
                 ("log_file", &log_file.to_string_lossy()),
+                ("raw_log_file", &raw_log_file.to_string_lossy()),
                 ("backend", &backend_name),
                 ("model", model.as_deref().unwrap_or("")),
                 ("variant", args.variant.as_deref().unwrap_or("")),
@@ -748,6 +757,19 @@ pub(super) fn resolve_log_file(
     Ok(PathBuf::from(dir)
         .join(".gralph")
         .join(format!("{}.log", name)))
+}
+
+pub(super) fn resolve_raw_log_file(
+    name: &str,
+    session: &serde_json::Value,
+) -> Result<PathBuf, CliError> {
+    if let Some(path) = session.get("raw_log_file").and_then(|v| v.as_str()) {
+        if !path.trim().is_empty() {
+            return Ok(PathBuf::from(path));
+        }
+    }
+    let log_file = resolve_log_file(name, session)?;
+    Ok(core::raw_log_path(&log_file))
 }
 
 fn follow_log(path: &Path, fs: &dyn FileSystem, clock: &dyn core::Clock) -> Result<(), CliError> {

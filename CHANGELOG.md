@@ -14,6 +14,7 @@ CI=<status/link>; PR=<link if final PRD task>
 ### Added
 - UX-1 Add doctor command with local diagnostics checks.
 - UX-2 Add cleanup command for stale sessions.
+- UX-3 Record raw log paths and expose raw logs.
 
 ### Changed
 - DOC-1 Record entrypoint refactor and coverage recovery notes in shared docs.
