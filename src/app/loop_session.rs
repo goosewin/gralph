@@ -1194,14 +1194,51 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::process::{Child, Command};
 
-    fn env_guard() -> std::sync::MutexGuard<'static, ()> {
-        let guard = crate::test_support::env_lock();
-        clear_env_overrides();
-        guard
+    struct EnvGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        original_values: Vec<(String, Option<std::ffi::OsString>)>,
     }
 
-    fn clear_env_overrides() {
-        for key in [
+    impl EnvGuard {
+        fn new() -> Self {
+            let lock = crate::test_support::env_lock();
+            let keys = env_override_keys();
+            let mut original_values = Vec::with_capacity(keys.len());
+
+            for &key in keys {
+                original_values.push((key.to_string(), env::var_os(key)));
+                remove_env(key);
+            }
+
+            Self {
+                _lock: lock,
+                original_values,
+            }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (key, value) in &self.original_values {
+                if let Some(value) = value {
+                    unsafe {
+                        env::set_var(key, value);
+                    }
+                } else {
+                    unsafe {
+                        env::remove_var(key);
+                    }
+                }
+            }
+        }
+    }
+
+    fn env_guard() -> EnvGuard {
+        EnvGuard::new()
+    }
+
+    fn env_override_keys() -> &'static [&'static str] {
+        &[
             "GRALPH_DEFAULT_CONFIG",
             "GRALPH_GLOBAL_CONFIG",
             "GRALPH_CONFIG_DIR",
@@ -1216,9 +1253,7 @@ mod tests {
             "GRALPH_COMPLETION_MARKER",
             "GRALPH_BACKEND",
             "GRALPH_MODEL",
-        ] {
-            remove_env(key);
-        }
+        ]
     }
 
     fn set_env(key: &str, value: impl AsRef<std::ffi::OsStr>) {
