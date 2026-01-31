@@ -201,6 +201,7 @@ pub fn exit_code_for(result: Result<(), CliError>) -> ExitCode {
 fn dispatch(command: Command, deps: &Deps) -> Result<(), CliError> {
     match command {
         Command::Start(args) => loop_session::cmd_start(args, deps),
+        Command::Step(args) => loop_session::cmd_step(args, deps),
         Command::RunLoop(args) => loop_session::cmd_run_loop(args, deps),
         Command::Stop(args) => loop_session::cmd_stop(args, deps),
         Command::Status(args) => loop_session::cmd_status(args, deps),

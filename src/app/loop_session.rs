@@ -1,6 +1,8 @@
 use super::{CliError, Deps, FileSystem, ProcessRunner};
 use crate::backend::backend_from_name;
-use crate::cli::{CleanupArgs, LogsArgs, ResumeArgs, RunLoopArgs, StartArgs, StatusArgs, StopArgs};
+use crate::cli::{
+    CleanupArgs, LogsArgs, ResumeArgs, RunLoopArgs, StartArgs, StatusArgs, StepArgs, StopArgs,
+};
 use crate::config::Config;
 use crate::core::{self, LoopStatus};
 use crate::notify;
@@ -9,6 +11,7 @@ use crate::state::{CleanupMode, StateStore};
 use crate::update;
 use crate::verifier;
 use serde_json::{Map, Value};
+use std::fs;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcCommand, Stdio};
@@ -20,6 +23,9 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
             "Directory does not exist: {}",
             args.dir.display()
         )));
+    }
+    if args.dry_run {
+        return cmd_start_dry_run(args, deps);
     }
     let no_tmux = args.no_tmux;
     let session_name = super::session_name(&args.name, &args.dir)?;
@@ -80,6 +86,62 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
 
     println!("Gralph loop started in background (PID: {}).", child.id());
     Ok(())
+}
+
+fn cmd_start_dry_run(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
+    let session_name = super::session_name(&args.name, &args.dir)?;
+    let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
+    let run_args = run_loop_args_from_start(args, session_name)?;
+    let task_file = resolve_task_file(&run_args, &config);
+    let max_iterations = resolve_max_iterations(&run_args, &config);
+    let completion_marker = resolve_completion_marker(&run_args, &config);
+
+    if should_validate_prd(run_args.strict_prd) {
+        prd::prd_validate_file(&run_args.dir.join(&task_file), false, Some(&run_args.dir))
+            .map_err(|err| CliError::Message(err.to_string()))?;
+    }
+
+    let prompt_template = match &run_args.prompt_template {
+        Some(path) => Some(deps.fs().read_to_string(path).map_err(CliError::Io)?),
+        None => None,
+    };
+
+    let rendered = core::render_iteration_prompt(
+        &run_args.dir,
+        &task_file,
+        1,
+        max_iterations,
+        &completion_marker,
+        prompt_template.as_deref(),
+        Some(&config),
+    )
+    .map_err(|err| CliError::Message(err.to_string()))?;
+
+    println!("Next task block:");
+    if let Some(block) = rendered.task_block {
+        println!("{}", block);
+    } else {
+        println!("(none)");
+    }
+    println!();
+    println!("Resolved prompt:");
+    println!("{}", rendered.prompt);
+    Ok(())
+}
+
+pub(super) fn cmd_step(args: StepArgs, deps: &Deps) -> Result<(), CliError> {
+    if !args.dir.is_dir() {
+        return Err(CliError::Message(format!(
+            "Directory does not exist: {}",
+            args.dir.display()
+        )));
+    }
+    let session_name = super::session_name(&args.name, &args.dir)?;
+    let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
+    let mut run_args = run_loop_args_from_step(args, session_name)?;
+    deps.worktree()
+        .maybe_create_auto_worktree(&mut run_args, &config)?;
+    run_single_iteration(run_args, &config, deps)
 }
 
 pub(super) fn cmd_run_loop(mut args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
@@ -237,10 +299,12 @@ fn enrich_status_session(session: Value, process: &dyn ProcessRunner) -> Value {
     } else {
         prd::prd_next_task_id(&PathBuf::from(dir).join(task_file))
     };
-    let last_log = log_file.as_ref().and_then(|path| core::last_log_line(path));
+    let last_log = log_file
+        .as_ref()
+        .and_then(|path| core::last_log_line(path.as_path()));
     let last_error = log_file
         .as_ref()
-        .and_then(|path| core::last_error_line(path));
+        .and_then(|path| core::last_error_line(path.as_path()));
 
     map.insert(
         "current_remaining".to_string(),
@@ -302,7 +366,7 @@ fn resolve_status_raw_log_file(
             return Some(PathBuf::from(path));
         }
     }
-    log_file.map(core::raw_log_path)
+    log_file.map(|path| core::raw_log_path(path.as_path()))
 }
 
 fn print_status_verbose(sessions: &[Value]) {
@@ -772,6 +836,66 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
     Ok(())
 }
 
+fn run_single_iteration(args: RunLoopArgs, config: &Config, deps: &Deps) -> Result<(), CliError> {
+    let task_file = resolve_task_file(&args, config);
+    let max_iterations = resolve_max_iterations(&args, config);
+    let completion_marker = resolve_completion_marker(&args, config);
+    let backend_name = resolve_backend_name(&args, config);
+    let model = resolve_model(&args, config, &backend_name);
+
+    if should_validate_prd(args.strict_prd) {
+        prd::prd_validate_file(&args.dir.join(&task_file), false, Some(&args.dir))
+            .map_err(|err| CliError::Message(err.to_string()))?;
+    }
+
+    let prompt_template = match &args.prompt_template {
+        Some(path) => Some(deps.fs().read_to_string(path).map_err(CliError::Io)?),
+        None => None,
+    };
+
+    let backend = backend_from_name(&backend_name).map_err(CliError::Message)?;
+    if !backend.check_installed() {
+        return Err(CliError::Message(format!(
+            "Backend is not installed: {}",
+            backend_name
+        )));
+    }
+
+    let gralph_dir = args.dir.join(".gralph");
+    fs::create_dir_all(&gralph_dir).map_err(CliError::Io)?;
+    let log_file = gralph_dir.join(format!("{}.log", args.name));
+
+    let iteration_result = core::run_iteration(
+        &*backend,
+        &args.dir,
+        &task_file,
+        1,
+        max_iterations,
+        &completion_marker,
+        model.as_deref(),
+        args.variant.as_deref(),
+        Some(&log_file),
+        prompt_template.as_deref(),
+        Some(config),
+    )
+    .map_err(|err| CliError::Message(err.to_string()))?;
+
+    let remaining = core::count_remaining_tasks(&args.dir.join(&task_file));
+    println!("Step completed. Remaining tasks: {}", remaining);
+
+    let complete = core::check_completion(
+        &args.dir.join(&task_file),
+        &iteration_result.result,
+        &completion_marker,
+    )
+    .map_err(|err| CliError::Message(err.to_string()))?;
+    if complete {
+        println!("Completion promise detected.");
+    }
+
+    Ok(())
+}
+
 fn notify_if_configured(
     config: &Config,
     args: &RunLoopArgs,
@@ -837,6 +961,23 @@ fn run_loop_args_from_start(args: StartArgs, name: String) -> Result<RunLoopArgs
         variant: args.variant,
         prompt_template: args.prompt_template,
         webhook: args.webhook,
+        no_worktree: args.no_worktree,
+        strict_prd: args.strict_prd,
+    })
+}
+
+fn run_loop_args_from_step(args: StepArgs, name: String) -> Result<RunLoopArgs, CliError> {
+    Ok(RunLoopArgs {
+        dir: args.dir,
+        name,
+        max_iterations: args.max_iterations,
+        task_file: args.task_file,
+        completion_marker: args.completion_marker,
+        backend: args.backend,
+        model: args.model,
+        variant: args.variant,
+        prompt_template: args.prompt_template,
+        webhook: None,
         no_worktree: args.no_worktree,
         strict_prd: args.strict_prd,
     })

@@ -20,6 +20,19 @@ const ROOT_AFTER_HELP: &str = r#"START OPTIONS:
   --no-worktree       Disable automatic worktree creation
   --no-tmux           Run in foreground (blocks)
   --strict-prd        Validate PRD before starting the loop
+  --dry-run           Print the next task block and resolved prompt
+
+STEP OPTIONS:
+  --name, -n          Session name (default: directory name)
+  --max-iterations    Max iterations before giving up (default: 30)
+  --task-file, -f     Task file path (default: PRD.md)
+  --completion-marker Completion promise text (default: COMPLETE)
+  --backend, -b       AI backend (default: claude). See `gralph backends`
+  --model, -m         Model override (format depends on backend)
+  --variant           Model variant override (backend-specific)
+  --prompt-template   Path to custom prompt template file
+  --no-worktree       Disable automatic worktree creation
+  --strict-prd        Validate PRD before running the step
 
 PRD OPTIONS:
   --dir               Project directory (default: current)
@@ -57,6 +70,8 @@ CLEANUP OPTIONS:
 EXAMPLES:
   gralph start .
   gralph start ~/project --name myapp --max-iterations 50
+  gralph start . --dry-run
+  gralph step .
   gralph status
   gralph logs myapp --follow
   gralph stop myapp
@@ -88,6 +103,8 @@ pub struct Cli {
 pub enum Command {
     #[command(about = "Start a new gralph loop")]
     Start(StartArgs),
+    #[command(about = "Run exactly one iteration")]
+    Step(StepArgs),
     #[command(about = "Stop a running loop")]
     Stop(StopArgs),
     #[command(about = "Show status of all loops")]
@@ -149,6 +166,34 @@ pub struct StartArgs {
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Run in foreground (blocks)")]
     pub no_tmux: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Validate PRD before starting the loop")]
+    pub strict_prd: bool,
+    #[arg(long, action = clap::ArgAction::SetTrue, help = "Print the next task block and resolved prompt")]
+    pub dry_run: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct StepArgs {
+    #[arg(value_name = "DIR", help = "Project directory to run the step in")]
+    pub dir: PathBuf,
+    #[arg(short, long, help = "Session name (default: directory name)")]
+    pub name: Option<String>,
+    #[arg(long, help = "Max iterations before giving up (default: 30)")]
+    pub max_iterations: Option<u32>,
+    #[arg(short = 'f', long, help = "Task file path (default: PRD.md)")]
+    pub task_file: Option<String>,
+    #[arg(long, help = "Completion promise text (default: COMPLETE)")]
+    pub completion_marker: Option<String>,
+    #[arg(short = 'b', long, help = "AI backend (default: claude)")]
+    pub backend: Option<String>,
+    #[arg(short = 'm', long, help = "Model override (format depends on backend)")]
+    pub model: Option<String>,
+    #[arg(long, help = "Model variant override (backend-specific)")]
+    pub variant: Option<String>,
+    #[arg(long, help = "Path to custom prompt template file")]
+    pub prompt_template: Option<PathBuf>,
+    #[arg(long, action = clap::ArgAction::SetTrue, help = "Disable automatic worktree creation")]
+    pub no_worktree: bool,
+    #[arg(long, action = clap::ArgAction::SetTrue, help = "Validate PRD before running the step")]
     pub strict_prd: bool,
 }
 
@@ -512,6 +557,7 @@ mod tests {
                 assert!(!args.no_worktree);
                 assert!(!args.no_tmux);
                 assert!(!args.strict_prd);
+                assert!(!args.dry_run);
             }
             other => panic!("Expected start command, got: {other:?}"),
         }
@@ -560,8 +606,84 @@ mod tests {
                 assert!(args.no_worktree);
                 assert!(args.no_tmux);
                 assert!(args.strict_prd);
+                assert!(!args.dry_run);
             }
             other => panic!("Expected start command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_start_dry_run() {
+        let cli = Cli::parse_from(["gralph", "start", ".", "--dry-run"]);
+        match cli.command {
+            Some(Command::Start(args)) => {
+                assert!(args.dry_run);
+            }
+            other => panic!("Expected start command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_step_defaults() {
+        let cli = Cli::parse_from(["gralph", "step", "."]);
+        match cli.command {
+            Some(Command::Step(args)) => {
+                assert_eq!(args.dir, PathBuf::from("."));
+                assert!(args.name.is_none());
+                assert!(args.max_iterations.is_none());
+                assert!(args.task_file.is_none());
+                assert!(args.completion_marker.is_none());
+                assert!(args.backend.is_none());
+                assert!(args.model.is_none());
+                assert!(args.variant.is_none());
+                assert!(args.prompt_template.is_none());
+                assert!(!args.no_worktree);
+                assert!(!args.strict_prd);
+            }
+            other => panic!("Expected step command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_step_flags() {
+        let cli = Cli::parse_from([
+            "gralph",
+            "step",
+            ".",
+            "--name",
+            "myapp",
+            "--max-iterations",
+            "50",
+            "--task-file",
+            "PRD.md",
+            "--completion-marker",
+            "DONE",
+            "--backend",
+            "codex",
+            "--model",
+            "o3",
+            "--variant",
+            "mini",
+            "--prompt-template",
+            "prompt.txt",
+            "--no-worktree",
+            "--strict-prd",
+        ]);
+        match cli.command {
+            Some(Command::Step(args)) => {
+                assert_eq!(args.dir, PathBuf::from("."));
+                assert_eq!(args.name.as_deref(), Some("myapp"));
+                assert_eq!(args.max_iterations, Some(50));
+                assert_eq!(args.task_file.as_deref(), Some("PRD.md"));
+                assert_eq!(args.completion_marker.as_deref(), Some("DONE"));
+                assert_eq!(args.backend.as_deref(), Some("codex"));
+                assert_eq!(args.model.as_deref(), Some("o3"));
+                assert_eq!(args.variant.as_deref(), Some("mini"));
+                assert_eq!(args.prompt_template, Some(PathBuf::from("prompt.txt")));
+                assert!(args.no_worktree);
+                assert!(args.strict_prd);
+            }
+            other => panic!("Expected step command, got: {other:?}"),
         }
     }
 

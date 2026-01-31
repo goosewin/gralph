@@ -139,7 +139,7 @@ Each task block must contain exactly one unchecked task line.
   * Step uses the same prompt rendering and strict PRD behavior as the loop.
   * README documents dry-run and step usage.
 - **Dependencies** None
-- [ ] UX-5 Add dry-run start and step execution
+- [x] UX-5 Add dry-run start and step execution
 ---
 
 ### Task UX-6

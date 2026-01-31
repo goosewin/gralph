@@ -38,6 +38,8 @@ irm https://raw.githubusercontent.com/goosewin/gralph/main/install.ps1 | iex
 gralph start .                    # Start loop in current directory
 gralph start . --backend opencode # Use different backend
 gralph start . --no-worktree      # Skip auto worktree creation
+gralph start . --dry-run          # Print next task block and resolved prompt
+gralph step .                     # Run exactly one iteration
 gralph verifier                   # Run verifier pipeline
 gralph init .                     # Scaffold shared context files
 gralph status                     # Check all running loops
@@ -71,6 +73,14 @@ so the stack is attached to the correct checkout and branch.
 Session logs are written to `.gralph/<session>.log` under the project directory.
 Raw backend output is saved to `.gralph/<session>.raw.log` and can be viewed with
 `gralph logs <name> --raw`.
+
+## Dry-run and Step
+
+`gralph start --dry-run` prints the next task block and the resolved prompt template
+without running a backend or creating tmux sessions.
+
+`gralph step` runs exactly one iteration using the same prompt rendering and strict
+PRD validation behavior as the loop. It does not auto-run the verifier.
 
 ## How It Works
 

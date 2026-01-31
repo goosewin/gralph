@@ -4,6 +4,7 @@
 
 ```
 gralph start <dir>          Start a new loop
+gralph step <dir>           Run exactly one iteration
 gralph stop <name>          Stop a running loop
 gralph stop --all           Stop all loops
 gralph status               Show all loops
@@ -38,9 +39,19 @@ gralph start <directory> [options]
 | `--no-worktree` | | Disable automatic worktree creation | false |
 | `--no-tmux` | | Run in foreground | false |
 | `--strict-prd` | | Validate PRD first | false |
+| `--dry-run` | | Print next task block and resolved prompt | false |
 
 By default, `gralph start` creates a git worktree under `.worktrees/` for each PRD run
 when the directory is a git repo with at least one commit.
+
+## `gralph step`
+
+```bash
+gralph step <directory> [options]
+```
+
+Runs exactly one iteration using the same prompt rendering and strict PRD behavior as
+the loop, and does not auto-run the verifier.
 
 ## `gralph stop`
 

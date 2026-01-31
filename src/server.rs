@@ -397,7 +397,7 @@ fn resolve_raw_log_file_for_session(
             return Some(PathBuf::from(path));
         }
     }
-    log_file.map(raw_log_path)
+    log_file.map(|path| raw_log_path(path.as_path()))
 }
 
 fn stop_session(_name: &str, session: &Value) {
