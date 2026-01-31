@@ -1869,7 +1869,7 @@ mod tests {
 
         assert_eq!(args.dir, temp.path());
         assert!(!args.no_worktree);
-        assert!(!temp.path().join(".worktrees").exists());
+        assert!(!temp.path().join(".worktree").exists());
     }
 
     #[test]
@@ -1887,7 +1887,7 @@ mod tests {
 
         assert_eq!(args.dir, original);
         assert!(!args.no_worktree);
-        assert!(!temp.path().join(".worktrees").exists());
+        assert!(!temp.path().join(".worktree").exists());
     }
 
     #[test]
@@ -1901,7 +1901,7 @@ mod tests {
 
         worktree::maybe_create_auto_worktree(&mut args, &config).unwrap();
 
-        let worktrees_dir = temp.path().join(".worktrees");
+        let worktrees_dir = temp.path().join(".worktree");
         let mut entries: Vec<PathBuf> = fs::read_dir(&worktrees_dir)
             .unwrap()
             .filter_map(|entry| entry.ok().map(|entry| entry.path()))
@@ -1926,7 +1926,7 @@ mod tests {
 
         worktree::maybe_create_auto_worktree(&mut args, &config).unwrap();
 
-        let worktrees_dir = temp.path().join(".worktrees");
+        let worktrees_dir = temp.path().join(".worktree");
         let mut entries: Vec<PathBuf> = fs::read_dir(&worktrees_dir)
             .unwrap()
             .filter_map(|entry| entry.ok().map(|entry| entry.path()))
@@ -1947,7 +1947,7 @@ mod tests {
         commit_file(temp.path(), "README.md", "initial");
         let config = Config::load(Some(temp.path())).unwrap();
         let mut args = run_loop_args(temp.path().to_path_buf());
-        let worktrees_dir = temp.path().join(".worktrees");
+        let worktrees_dir = temp.path().join(".worktree");
         fs::create_dir_all(&worktrees_dir).unwrap();
 
         let timestamp = "20260126-120000";
@@ -1971,7 +1971,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");
-        let worktrees_dir = temp.path().join(".worktrees");
+        let worktrees_dir = temp.path().join(".worktree");
         fs::create_dir_all(&worktrees_dir).unwrap();
         git_status_ok(temp.path(), &["branch", "prd-collision"]);
         fs::create_dir_all(worktrees_dir.join("prd-collision-2")).unwrap();
@@ -1990,7 +1990,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");
-        let worktrees_dir = temp.path().join(".worktrees");
+        let worktrees_dir = temp.path().join(".worktree");
         fs::create_dir_all(&worktrees_dir).unwrap();
         git_status_ok(temp.path(), &["branch", "prd-collision"]);
 
@@ -2008,7 +2008,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");
-        let worktrees_dir = temp.path().join(".worktrees");
+        let worktrees_dir = temp.path().join(".worktree");
         fs::create_dir_all(&worktrees_dir).unwrap();
         fs::create_dir_all(worktrees_dir.join("prd-collision")).unwrap();
 
@@ -2026,7 +2026,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");
-        let worktrees_dir = temp.path().join(".worktrees");
+        let worktrees_dir = temp.path().join(".worktree");
         fs::create_dir_all(&worktrees_dir).unwrap();
 
         let branch = worktree::ensure_unique_worktree_branch(
@@ -2045,7 +2045,7 @@ mod tests {
         commit_file(temp.path(), "README.md", "initial");
         let branch = "task-C-1";
         git_status_ok(temp.path(), &["branch", branch]);
-        let worktree_path = temp.path().join(".worktrees").join(branch);
+        let worktree_path = temp.path().join(".worktree").join(branch);
 
         let err =
             worktree::create_worktree_at(temp.path().to_str().unwrap(), branch, &worktree_path)
@@ -2064,7 +2064,7 @@ mod tests {
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");
         let branch = "task-C-2";
-        let worktree_path = temp.path().join(".worktrees").join(branch);
+        let worktree_path = temp.path().join(".worktree").join(branch);
         fs::create_dir_all(&worktree_path).unwrap();
 
         let err =

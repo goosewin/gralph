@@ -3,8 +3,8 @@
 ## Worktree Protocol
 1) Read: ARCHITECTURE.md, PROCESS.md, DECISIONS.md, CHANGELOG.md, RISK_REGISTER.md.
 2) Create worktree: `.worktrees/task-<ID>` (new `task-<ID>` branch). `gralph start`
-   auto-creates a worktree per PRD run unless `--no-worktree` is set or
-   `defaults.auto_worktree` is false.
+   auto-creates a worktree under `.worktree/<unique-worktree>` per PRD run unless
+   `--no-worktree` is set or `defaults.auto_worktree` is false.
    - Auto worktree resolves the repo from the target run directory and preserves
      subdirectory paths inside the worktree.
    - Auto worktree skips when the target is not in a git repo, the repo has no

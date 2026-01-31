@@ -88,7 +88,7 @@ Start must either create and record a tmux session successfully or exit with a c
   * Start runs inside the worktree when auto worktree is enabled.
   * --no-worktree keeps the original working directory.
 - **Dependencies** TMUX-2
-- [ ] WT-1 Worktree run directory
+- [x] WT-1 Worktree run directory
 ---
 
 ## Success Criteria

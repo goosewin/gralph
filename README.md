@@ -57,7 +57,7 @@ On session start, gralph performs a best-effort update check and prints a notice
 if a newer release is available (it never blocks startup). Disable it with
 `defaults.check_updates: false` or `GRALPH_NO_UPDATE_CHECK=1`.
 
-By default, `gralph start` creates a git worktree under `.worktrees/` for each PRD run
+By default, `gralph start` creates a git worktree under `.worktree/<unique-worktree>` for each PRD run
 when the target directory is inside a git repo with at least one commit and the
 repo is clean. Subdirectory runs are preserved, so `gralph start path/to/subdir`
 continues the loop from the matching subdirectory inside the worktree.
