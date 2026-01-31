@@ -1330,6 +1330,8 @@ mod tests {
     use std::env;
     use std::fs;
     use std::io;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
     use std::process::{Child, Command};
 
@@ -1405,6 +1407,43 @@ mod tests {
         unsafe {
             env::remove_var(key);
         }
+    }
+
+    struct PathGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl PathGuard {
+        fn new(path: &Path) -> Self {
+            let lock = crate::test_support::env_lock();
+            let previous = env::var_os("PATH");
+            set_env("PATH", path);
+            Self {
+                _lock: lock,
+                previous,
+            }
+        }
+    }
+
+    impl Drop for PathGuard {
+        fn drop(&mut self) {
+            if let Some(value) = &self.previous {
+                set_env("PATH", value);
+            } else {
+                remove_env("PATH");
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    fn write_tmux_stub(dir: &Path, script: &str) -> PathBuf {
+        let path = dir.join("tmux");
+        fs::write(&path, script).unwrap();
+        let mut perms = fs::metadata(&path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).unwrap();
+        path
     }
 
     fn write_file(path: &Path, contents: &str) {
@@ -1609,6 +1648,60 @@ mod tests {
             resolve_model(&args, &config, "opencode").as_deref(),
             Some("opencode-default")
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_tmux_available_succeeds_with_stubbed_tmux() {
+        let temp = tempfile::tempdir().unwrap();
+        write_tmux_stub(temp.path(), "#!/bin/sh\nexit 0\n");
+        let _guard = PathGuard::new(temp.path());
+
+        assert!(ensure_tmux_available().is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_tmux_available_reports_non_zero_exit() {
+        let temp = tempfile::tempdir().unwrap();
+        write_tmux_stub(temp.path(), "#!/bin/sh\nexit 1\n");
+        let _guard = PathGuard::new(temp.path());
+
+        let err = ensure_tmux_available().unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "tmux is required; install tmux and try again"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_tmux_available_reports_missing_tmux() {
+        let temp = tempfile::tempdir().unwrap();
+        let _guard = PathGuard::new(temp.path());
+
+        let err = ensure_tmux_available().unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "tmux is required but was not found on PATH"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unique_tmux_session_name_appends_suffix_on_collision() {
+        let temp = tempfile::tempdir().unwrap();
+        let counter = temp.path().join("tmux-counter");
+        let script = format!(
+            "#!/bin/sh\ncounter=\"{}\"\nif [ -f \"$counter\" ]; then\n  exit 1\nfi\ntouch \"$counter\"\nexit 0\n",
+            counter.display()
+        );
+        write_tmux_stub(temp.path(), &script);
+        let _guard = PathGuard::new(temp.path());
+
+        let name = unique_tmux_session_name("session").unwrap();
+        assert!(name.starts_with("session-"));
+        assert!(name.ends_with("-2"));
     }
 
     #[test]
