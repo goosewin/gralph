@@ -1,4 +1,4 @@
-use super::{CliError, join_or_none, normalize_csv};
+use super::{join_or_none, normalize_csv, CliError};
 use crate::backend::backend_from_name;
 use crate::cli::{InitArgs, PrdArgs, PrdCheckArgs, PrdCommand, PrdCreateArgs};
 use crate::config::Config;

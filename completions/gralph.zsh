@@ -113,6 +113,13 @@ _arguments "${_arguments_options[@]}" : \
 ':name -- Session name:_default' \
 && ret=0
 ;;
+(attach)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+':name -- Session name:_default' \
+&& ret=0
+;;
 (resume)
 _arguments "${_arguments_options[@]}" : \
 '-h[Print help]' \
@@ -380,6 +387,7 @@ _arguments "${_arguments_options[@]}" : \
 (run-loop)
 _arguments "${_arguments_options[@]}" : \
 '--name=[Session name]:NAME:_default' \
+'--tmux-session=[]:TMUX_SESSION:_default' \
 '--max-iterations=[]:MAX_ITERATIONS:_default' \
 '--task-file=[]:TASK_FILE:_default' \
 '--completion-marker=[]:COMPLETION_MARKER:_default' \
@@ -432,6 +440,10 @@ _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
 (logs)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(attach)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -566,6 +578,7 @@ _gralph_commands() {
 'cleanup:Clean up stale sessions' \
 'doctor:Run local diagnostics' \
 'logs:View logs for a loop' \
+'attach:Attach to a loop tmux session' \
 'resume:Resume crashed/stopped loops' \
 'init:Initialize shared context files' \
 'prd:Generate or validate PRDs' \
@@ -580,6 +593,11 @@ _gralph_commands() {
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'gralph commands' commands "$@"
+}
+(( $+functions[_gralph__attach_commands] )) ||
+_gralph__attach_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph attach commands' commands "$@"
 }
 (( $+functions[_gralph__backends_commands] )) ||
 _gralph__backends_commands() {
@@ -661,6 +679,7 @@ _gralph__help_commands() {
 'cleanup:Clean up stale sessions' \
 'doctor:Run local diagnostics' \
 'logs:View logs for a loop' \
+'attach:Attach to a loop tmux session' \
 'resume:Resume crashed/stopped loops' \
 'init:Initialize shared context files' \
 'prd:Generate or validate PRDs' \
@@ -675,6 +694,11 @@ _gralph__help_commands() {
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'gralph help commands' commands "$@"
+}
+(( $+functions[_gralph__help__attach_commands] )) ||
+_gralph__help__attach_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph help attach commands' commands "$@"
 }
 (( $+functions[_gralph__help__backends_commands] )) ||
 _gralph__help__backends_commands() {

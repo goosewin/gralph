@@ -16,6 +16,9 @@ _gralph() {
             ",$1")
                 cmd="gralph"
                 ;;
+            gralph,attach)
+                cmd="gralph__attach"
+                ;;
             gralph,backends)
                 cmd="gralph__backends"
                 ;;
@@ -36,9 +39,6 @@ _gralph() {
                 ;;
             gralph,logs)
                 cmd="gralph__logs"
-                ;;
-            gralph,attach)
-                cmd="gralph__attach"
                 ;;
             gralph,prd)
                 cmd="gralph__prd"
@@ -100,6 +100,9 @@ _gralph() {
             gralph__config__help,set)
                 cmd="gralph__config__help__set"
                 ;;
+            gralph__help,attach)
+                cmd="gralph__help__attach"
+                ;;
             gralph__help,backends)
                 cmd="gralph__help__backends"
                 ;;
@@ -120,9 +123,6 @@ _gralph() {
                 ;;
             gralph__help,logs)
                 cmd="gralph__help__logs"
-                ;;
-            gralph__help,attach)
-                cmd="gralph__help__attach"
                 ;;
             gralph__help,prd)
                 cmd="gralph__help__prd"
@@ -226,6 +226,20 @@ _gralph() {
         gralph)
             opts="-h -V --help --version start step stop status cleanup doctor logs attach resume init prd worktree backends config verifier server version update run-loop help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__attach)
+            opts="-h --help <NAME>"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -423,6 +437,20 @@ _gralph() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        gralph__help__attach)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         gralph__help__backends)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
@@ -550,20 +578,6 @@ _gralph() {
             return 0
             ;;
         gralph__help__logs)
-            opts=""
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        gralph__help__attach)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -821,20 +835,6 @@ _gralph() {
             ;;
         gralph__logs)
             opts="-h --follow --raw --help <NAME>"
-            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
-                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-                return 0
-            fi
-            case "${prev}" in
-                *)
-                    COMPREPLY=()
-                    ;;
-            esac
-            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
-            return 0
-            ;;
-        gralph__attach)
-            opts="-h --help <NAME>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
