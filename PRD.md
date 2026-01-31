@@ -126,7 +126,7 @@ Each task block must contain exactly one unchecked task line.
   * Last error is derived from log entries such as "Error:" and "Iteration failed:" in `src/core.rs`.
   * Task ID uses existing PRD parsing logic in `src/prd.rs` or equivalent.
 - **Dependencies** UX-3
-- [ ] UX-4 Add status JSON and error context
+- [x] UX-4 Add status JSON and error context
 ---
 
 ### Task UX-5

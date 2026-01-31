@@ -91,7 +91,7 @@ pub enum Command {
     #[command(about = "Stop a running loop")]
     Stop(StopArgs),
     #[command(about = "Show status of all loops")]
-    Status,
+    Status(StatusArgs),
     #[command(about = "Clean up stale sessions")]
     Cleanup(CleanupArgs),
     #[command(about = "Run local diagnostics")]
@@ -186,6 +186,14 @@ pub struct StopArgs {
     pub name: Option<String>,
     #[arg(short, long, action = clap::ArgAction::SetTrue, help = "Stop all loops")]
     pub all: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct StatusArgs {
+    #[arg(long, action = clap::ArgAction::SetTrue, conflicts_with = "verbose", help = "Print JSON output")]
+    pub json: bool,
+    #[arg(long, action = clap::ArgAction::SetTrue, conflicts_with = "json", help = "Show log paths and last error line")]
+    pub verbose: bool,
 }
 
 #[derive(Args, Debug)]
@@ -393,7 +401,22 @@ mod tests {
     fn parse_status_command() {
         let cli = Cli::parse_from(["gralph", "status"]);
         match cli.command {
-            Some(Command::Status) => {}
+            Some(Command::Status(args)) => {
+                assert!(!args.json);
+                assert!(!args.verbose);
+            }
+            other => panic!("Expected status command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_status_json_flag() {
+        let cli = Cli::parse_from(["gralph", "status", "--json"]);
+        match cli.command {
+            Some(Command::Status(args)) => {
+                assert!(args.json);
+                assert!(!args.verbose);
+            }
             other => panic!("Expected status command, got: {other:?}"),
         }
     }

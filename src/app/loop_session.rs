@@ -1,6 +1,6 @@
 use super::{CliError, Deps, FileSystem, ProcessRunner};
 use crate::backend::backend_from_name;
-use crate::cli::{CleanupArgs, LogsArgs, ResumeArgs, RunLoopArgs, StartArgs, StopArgs};
+use crate::cli::{CleanupArgs, LogsArgs, ResumeArgs, RunLoopArgs, StartArgs, StatusArgs, StopArgs};
 use crate::config::Config;
 use crate::core::{self, LoopStatus};
 use crate::notify;
@@ -8,6 +8,7 @@ use crate::prd;
 use crate::state::{CleanupMode, StateStore};
 use crate::update;
 use crate::verifier;
+use serde_json::{Map, Value};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcCommand, Stdio};
@@ -120,7 +121,7 @@ pub(super) fn cmd_stop(args: StopArgs, deps: &Deps) -> Result<(), CliError> {
     Ok(())
 }
 
-pub(super) fn cmd_status(deps: &Deps) -> Result<(), CliError> {
+pub(super) fn cmd_status(args: StatusArgs, deps: &Deps) -> Result<(), CliError> {
     let store = deps.state_store();
     store
         .init_state()
@@ -131,21 +132,37 @@ pub(super) fn cmd_status(deps: &Deps) -> Result<(), CliError> {
         .list_sessions()
         .map_err(|err| CliError::Message(err.to_string()))?;
     if sessions.is_empty() {
-        println!("No sessions found.");
+        if args.json {
+            let output = serde_json::json!({"sessions": []});
+            let rendered =
+                serde_json::to_string(&output).map_err(|err| CliError::Message(err.to_string()))?;
+            println!("{}", rendered);
+        } else {
+            println!("No sessions found.");
+        }
+        return Ok(());
+    }
+
+    let enriched = sessions
+        .into_iter()
+        .map(|session| enrich_status_session(session, deps.process()))
+        .collect::<Vec<_>>();
+
+    if args.json {
+        let output = serde_json::json!({"sessions": enriched});
+        let rendered =
+            serde_json::to_string(&output).map_err(|err| CliError::Message(err.to_string()))?;
+        println!("{}", rendered);
         return Ok(());
     }
 
     let mut rows = Vec::new();
-    for session in sessions {
+    for session in &enriched {
         let name = session
             .get("name")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
         let dir = session.get("dir").and_then(|v| v.as_str()).unwrap_or("");
-        let task_file = session
-            .get("task_file")
-            .and_then(|v| v.as_str())
-            .unwrap_or("PRD.md");
         let iteration = session
             .get("iteration")
             .and_then(|v| v.as_u64())
@@ -158,14 +175,10 @@ pub(super) fn cmd_status(deps: &Deps) -> Result<(), CliError> {
             .get("status")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
-        let remaining = if dir.is_empty() {
-            session
-                .get("last_task_count")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(0)
-        } else {
-            core::count_remaining_tasks(&PathBuf::from(dir).join(task_file)) as u64
-        };
+        let remaining = session
+            .get("current_remaining")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
 
         rows.push(vec![
             name.to_string(),
@@ -177,7 +190,167 @@ pub(super) fn cmd_status(deps: &Deps) -> Result<(), CliError> {
     }
 
     print_table(&["NAME", "DIR", "ITERATION", "STATUS", "REMAINING"], &rows);
+    if args.verbose {
+        print_status_verbose(&enriched);
+    }
     Ok(())
+}
+
+fn enrich_status_session(session: Value, process: &dyn ProcessRunner) -> Value {
+    let mut map = match session.as_object() {
+        Some(map) => map.clone(),
+        None => Map::new(),
+    };
+    let name_raw = map.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let dir = map.get("dir").and_then(|v| v.as_str()).unwrap_or("");
+    let task_file = map
+        .get("task_file")
+        .and_then(|v| v.as_str())
+        .unwrap_or("PRD.md");
+    let mut status = map
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+    let pid = map.get("pid").and_then(|v| v.as_i64()).unwrap_or(0);
+    let mut is_alive = false;
+    if status == "running" && pid > 0 {
+        if process.is_alive(pid) {
+            is_alive = true;
+        } else {
+            status = "stale".to_string();
+        }
+    }
+
+    let remaining = if dir.is_empty() {
+        map.get("last_task_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as i64
+    } else {
+        core::count_remaining_tasks(&PathBuf::from(dir).join(task_file)) as i64
+    };
+
+    let log_file = resolve_status_log_file(&map, name_raw, dir);
+    let raw_log_file = resolve_status_raw_log_file(&map, log_file.as_ref());
+    let last_task_id = if dir.is_empty() {
+        None
+    } else {
+        prd::prd_next_task_id(&PathBuf::from(dir).join(task_file))
+    };
+    let last_log = log_file.as_ref().and_then(|path| core::last_log_line(path));
+    let last_error = log_file
+        .as_ref()
+        .and_then(|path| core::last_error_line(path));
+
+    map.insert(
+        "current_remaining".to_string(),
+        Value::Number(remaining.into()),
+    );
+    map.insert("is_alive".to_string(), Value::Bool(is_alive));
+    map.insert("status".to_string(), Value::String(status));
+    map.insert(
+        "log_file".to_string(),
+        log_file
+            .as_ref()
+            .map(|path| Value::String(path.to_string_lossy().to_string()))
+            .unwrap_or(Value::Null),
+    );
+    map.insert(
+        "raw_log_file".to_string(),
+        raw_log_file
+            .as_ref()
+            .map(|path| Value::String(path.to_string_lossy().to_string()))
+            .unwrap_or(Value::Null),
+    );
+    map.insert(
+        "last_task_id".to_string(),
+        last_task_id.map(Value::String).unwrap_or(Value::Null),
+    );
+    map.insert(
+        "last_log_line".to_string(),
+        last_log.map(Value::String).unwrap_or(Value::Null),
+    );
+    map.insert(
+        "last_error".to_string(),
+        last_error.map(Value::String).unwrap_or(Value::Null),
+    );
+    Value::Object(map)
+}
+
+fn resolve_status_log_file(map: &Map<String, Value>, name: &str, dir: &str) -> Option<PathBuf> {
+    if let Some(path) = map.get("log_file").and_then(|value| value.as_str()) {
+        if !path.trim().is_empty() {
+            return Some(PathBuf::from(path));
+        }
+    }
+    if dir.is_empty() || name.is_empty() {
+        return None;
+    }
+    Some(
+        PathBuf::from(dir)
+            .join(".gralph")
+            .join(format!("{}.log", name)),
+    )
+}
+
+fn resolve_status_raw_log_file(
+    map: &Map<String, Value>,
+    log_file: Option<&PathBuf>,
+) -> Option<PathBuf> {
+    if let Some(path) = map.get("raw_log_file").and_then(|value| value.as_str()) {
+        if !path.trim().is_empty() {
+            return Some(PathBuf::from(path));
+        }
+    }
+    log_file.map(core::raw_log_path)
+}
+
+fn print_status_verbose(sessions: &[Value]) {
+    for session in sessions {
+        let name = session
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let log_file = session
+            .get("log_file")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let raw_log_file = session
+            .get("raw_log_file")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let last_error = session
+            .get("last_error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        println!();
+        println!("{}:", name);
+        println!(
+            "  log_file: {}",
+            if log_file.is_empty() {
+                "none"
+            } else {
+                log_file
+            }
+        );
+        println!(
+            "  raw_log_file: {}",
+            if raw_log_file.is_empty() {
+                "none"
+            } else {
+                raw_log_file
+            }
+        );
+        println!(
+            "  last_error: {}",
+            if last_error.is_empty() {
+                "none"
+            } else {
+                last_error
+            }
+        );
+    }
 }
 
 pub(super) fn cmd_cleanup(args: CleanupArgs, deps: &Deps) -> Result<(), CliError> {
@@ -849,7 +1022,9 @@ mod tests {
     use super::*;
     use std::env;
     use std::fs;
+    use std::io;
     use std::path::{Path, PathBuf};
+    use std::process::{Child, Command};
 
     fn env_guard() -> std::sync::MutexGuard<'static, ()> {
         let guard = crate::test_support::env_lock();
@@ -931,6 +1106,32 @@ mod tests {
         }
     }
 
+    struct TestProcessRunner {
+        alive: bool,
+    }
+
+    impl ProcessRunner for TestProcessRunner {
+        fn current_exe(&self) -> io::Result<PathBuf> {
+            Ok(PathBuf::from("/bin/true"))
+        }
+
+        fn spawn(&self, _cmd: &mut Command) -> io::Result<Child> {
+            Err(io::Error::new(io::ErrorKind::Other, "not used"))
+        }
+
+        fn kill_tmux_session(&self, _session: &str) {}
+
+        fn kill_pid(&self, _pid: i64) {}
+
+        fn pid(&self) -> u32 {
+            0
+        }
+
+        fn is_alive(&self, _pid: i64) -> bool {
+            self.alive
+        }
+    }
+
     #[test]
     fn resolve_task_file_prefers_cli_config_then_default() {
         let _guard = env_guard();
@@ -945,6 +1146,49 @@ mod tests {
 
         let config = load_config("defaults:\n  backend: claude\n");
         assert_eq!(resolve_task_file(&args, &config), "PRD.md");
+    }
+
+    #[test]
+    fn enrich_status_session_includes_log_and_task_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        let log_path = temp.path().join(".gralph").join("alpha.log");
+        write_file(&log_path, "Ok\nIteration failed: bad\n");
+        let prd_path = temp.path().join("PRD.md");
+        write_file(
+            &prd_path,
+            "# PRD\n\n### Task UX-4\n- **ID** UX-4\n- [ ] Do\n",
+        );
+
+        let session = serde_json::json!({
+            "name": "alpha",
+            "status": "running",
+            "pid": 123,
+            "dir": temp.path().to_string_lossy(),
+            "task_file": "PRD.md",
+            "log_file": log_path.to_string_lossy(),
+        });
+        let enriched = enrich_status_session(session, &TestProcessRunner { alive: true });
+        let expected_raw = core::raw_log_path(&log_path).to_string_lossy().to_string();
+
+        assert_eq!(enriched["last_task_id"], "UX-4");
+        assert_eq!(enriched["last_error"], "Iteration failed: bad");
+        assert_eq!(enriched["last_log_line"], "Iteration failed: bad");
+        assert_eq!(
+            enriched["raw_log_file"].as_str(),
+            Some(expected_raw.as_str())
+        );
+    }
+
+    #[test]
+    fn print_status_verbose_handles_missing_values() {
+        let session = serde_json::json!({
+            "name": "alpha",
+            "log_file": Value::Null,
+            "raw_log_file": Value::Null,
+            "last_error": Value::Null,
+        });
+
+        print_status_verbose(&[session]);
     }
 
     #[test]

@@ -777,6 +777,35 @@ pub(crate) fn raw_log_path(log_file: &Path) -> PathBuf {
     }
 }
 
+pub fn last_log_line(log_file: &Path) -> Option<String> {
+    if log_file.as_os_str().is_empty() || !log_file.is_file() {
+        return None;
+    }
+    let contents = fs::read_to_string(log_file).ok()?;
+    let mut last = None;
+    for line in contents.lines() {
+        if !line.trim().is_empty() {
+            last = Some(line.to_string());
+        }
+    }
+    last
+}
+
+pub fn last_error_line(log_file: &Path) -> Option<String> {
+    if log_file.as_os_str().is_empty() || !log_file.is_file() {
+        return None;
+    }
+    let contents = fs::read_to_string(log_file).ok()?;
+    let mut last = None;
+    for line in contents.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("Error:") || trimmed.starts_with("Iteration failed:") {
+            last = Some(line.to_string());
+        }
+    }
+    last
+}
+
 fn copy_if_exists(from: &Path, to: &Path) -> Result<(), CoreError> {
     if !from.is_file() {
         return Ok(());
@@ -1574,6 +1603,30 @@ mod tests {
 
         let result = log_message(Some(&dir_path), "message");
         assert!(matches!(result, Err(CoreError::Io { .. })));
+    }
+
+    #[test]
+    fn last_log_line_returns_last_non_empty_line() {
+        let temp = tempfile::tempdir().unwrap();
+        let log_path = temp.path().join("session.log");
+        fs::write(&log_path, "first\n\nsecond\n").unwrap();
+
+        let last = last_log_line(&log_path);
+        assert_eq!(last.as_deref(), Some("second"));
+    }
+
+    #[test]
+    fn last_error_line_returns_last_matching_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let log_path = temp.path().join("session.log");
+        fs::write(
+            &log_path,
+            "Starting\nError: backend produced no output.\nIteration failed: bad output\n",
+        )
+        .unwrap();
+
+        let last = last_error_line(&log_path);
+        assert_eq!(last.as_deref(), Some("Iteration failed: bad output"));
     }
 
     #[test]
