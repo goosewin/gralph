@@ -15,6 +15,7 @@ mod verifier;
 pub mod app;
 pub use app::{exit_code_for, run, Deps};
 pub use entrypoint::cli_entrypoint;
+#[cfg(test)]
 pub(crate) use entrypoint::cli_entrypoint_from;
 
 #[cfg(test)]

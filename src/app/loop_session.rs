@@ -230,10 +230,8 @@ pub(super) fn cmd_resume(args: ResumeArgs, deps: &Deps) -> Result<(), CliError> 
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
         let pid = session.get("pid").and_then(|v| v.as_i64()).unwrap_or(0);
-        let should_resume = status == "stale"
-            || status == "stopped"
-            || status == "failed"
-            || (status == "running" && !deps.process().is_alive(pid));
+        let pid_alive = status == "running" && pid > 0 && deps.process().is_alive(pid);
+        let should_resume = should_resume_session(status, pid, pid_alive);
         if !should_resume {
             continue;
         }
@@ -324,38 +322,126 @@ fn format_rfc3339(clock: &dyn core::Clock) -> String {
     datetime.to_rfc3339()
 }
 
-fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
-    let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
-    maybe_check_for_update();
-    let task_file = args
-        .task_file
+fn resolve_task_file(args: &RunLoopArgs, config: &Config) -> String {
+    args.task_file
         .clone()
         .or_else(|| config.get("defaults.task_file"))
-        .unwrap_or_else(|| "PRD.md".to_string());
-    let max_iterations = args
-        .max_iterations
+        .unwrap_or_else(|| "PRD.md".to_string())
+}
+
+fn resolve_max_iterations(args: &RunLoopArgs, config: &Config) -> u32 {
+    args.max_iterations
         .or_else(|| {
             config
                 .get("defaults.max_iterations")
-                .and_then(|v| v.parse().ok())
+                .and_then(|value| value.parse().ok())
         })
-        .unwrap_or(30);
-    let completion_marker = args
-        .completion_marker
+        .unwrap_or(30)
+}
+
+fn resolve_completion_marker(args: &RunLoopArgs, config: &Config) -> String {
+    args.completion_marker
         .clone()
         .or_else(|| config.get("defaults.completion_marker"))
-        .unwrap_or_else(|| "COMPLETE".to_string());
-    let backend_name = args
-        .backend
+        .unwrap_or_else(|| "COMPLETE".to_string())
+}
+
+fn resolve_backend_name(args: &RunLoopArgs, config: &Config) -> String {
+    args.backend
         .clone()
         .or_else(|| config.get("defaults.backend"))
-        .unwrap_or_else(|| "claude".to_string());
+        .unwrap_or_else(|| "claude".to_string())
+}
+
+fn resolve_model(args: &RunLoopArgs, config: &Config, backend_name: &str) -> Option<String> {
     let mut model = args.model.clone().or_else(|| config.get("defaults.model"));
     if model.as_deref().unwrap_or("").is_empty() && backend_name == "opencode" {
         model = config.get("opencode.default_model");
     }
+    model
+}
 
-    if args.strict_prd {
+fn should_validate_prd(strict_prd: bool) -> bool {
+    strict_prd
+}
+
+fn should_resume_session(status: &str, pid: i64, pid_alive: bool) -> bool {
+    if matches!(status, "stale" | "stopped" | "failed") {
+        return true;
+    }
+    if status == "running" {
+        return pid <= 0 || !pid_alive;
+    }
+    false
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum OutcomeStatusPlan {
+    Final {
+        status: &'static str,
+    },
+    Verify {
+        initial_status: &'static str,
+        verifying_status: &'static str,
+        verified_status: &'static str,
+        verify_failed_status: &'static str,
+    },
+}
+
+impl OutcomeStatusPlan {
+    fn initial_status(&self) -> &'static str {
+        match self {
+            OutcomeStatusPlan::Final { status } => status,
+            OutcomeStatusPlan::Verify { initial_status, .. } => initial_status,
+        }
+    }
+}
+
+fn outcome_status_plan(status: LoopStatus, auto_run_verifier: bool) -> OutcomeStatusPlan {
+    if status == LoopStatus::Complete && auto_run_verifier {
+        OutcomeStatusPlan::Verify {
+            initial_status: status.as_str(),
+            verifying_status: "verifying",
+            verified_status: "verified",
+            verify_failed_status: "verify-failed",
+        }
+    } else {
+        OutcomeStatusPlan::Final {
+            status: status.as_str(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NotificationDecision {
+    Complete,
+    Failed { reason: &'static str },
+}
+
+fn notification_decision(
+    status: LoopStatus,
+    notify_on_complete: bool,
+) -> Option<NotificationDecision> {
+    match status {
+        LoopStatus::Complete => notify_on_complete.then_some(NotificationDecision::Complete),
+        LoopStatus::Failed => Some(NotificationDecision::Failed { reason: "error" }),
+        LoopStatus::MaxIterations => Some(NotificationDecision::Failed {
+            reason: "max_iterations",
+        }),
+        LoopStatus::Running => None,
+    }
+}
+
+fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
+    let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
+    maybe_check_for_update();
+    let task_file = resolve_task_file(&args, &config);
+    let max_iterations = resolve_max_iterations(&args, &config);
+    let completion_marker = resolve_completion_marker(&args, &config);
+    let backend_name = resolve_backend_name(&args, &config);
+    let model = resolve_model(&args, &config, &backend_name);
+
+    if should_validate_prd(args.strict_prd) {
         prd::prd_validate_file(&args.dir.join(&task_file), false, Some(&args.dir))
             .map_err(|err| CliError::Message(err.to_string()))?;
     }
@@ -433,31 +519,39 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
     )
     .map_err(|err| CliError::Message(err.to_string()))?;
 
+    let auto_run_verifier = verifier::resolve_verifier_auto_run(&config);
+    let status_plan = outcome_status_plan(outcome.status, auto_run_verifier);
     store
         .set_session(
             &args.name,
             &[
-                ("status", outcome.status.as_str()),
+                ("status", status_plan.initial_status()),
                 ("last_task_count", &outcome.remaining_tasks.to_string()),
             ],
         )
         .map_err(|err| CliError::Message(err.to_string()))?;
 
-    if outcome.status == LoopStatus::Complete && verifier::resolve_verifier_auto_run(&config) {
+    if let OutcomeStatusPlan::Verify {
+        verifying_status,
+        verified_status,
+        verify_failed_status,
+        ..
+    } = status_plan
+    {
         store
             .set_session(
                 &args.name,
-                &[("status", "verifying"), ("last_task_count", "0")],
+                &[("status", verifying_status), ("last_task_count", "0")],
             )
             .map_err(|err| CliError::Message(err.to_string()))?;
         if let Err(err) = verifier::run_verifier_pipeline(&args.dir, &config, None, None, None) {
-            let _ = store.set_session(&args.name, &[("status", "verify-failed")]);
+            let _ = store.set_session(&args.name, &[("status", verify_failed_status)]);
             return Err(err);
         }
         store
             .set_session(
                 &args.name,
-                &[("status", "verified"), ("last_task_count", "0")],
+                &[("status", verified_status), ("last_task_count", "0")],
             )
             .map_err(|err| CliError::Message(err.to_string()))?;
     }
@@ -481,35 +575,29 @@ fn notify_if_configured(
         return Ok(());
     };
 
-    match outcome.status {
-        LoopStatus::Complete => {
-            let on_complete = config
-                .get("notifications.on_complete")
-                .map(|v| v == "true")
-                .unwrap_or(true);
-            if on_complete {
-                notifier
-                    .notify_complete(
-                        &args.name,
-                        &webhook,
-                        Some(&args.dir.to_string_lossy()),
-                        Some(outcome.iterations),
-                        Some(outcome.duration_secs),
-                        None,
-                    )
-                    .map_err(|err| CliError::Message(err.to_string()))?;
-            }
+    let on_complete = config
+        .get("notifications.on_complete")
+        .map(|v| v == "true")
+        .unwrap_or(true);
+    match notification_decision(outcome.status, on_complete) {
+        Some(NotificationDecision::Complete) => {
+            notifier
+                .notify_complete(
+                    &args.name,
+                    &webhook,
+                    Some(&args.dir.to_string_lossy()),
+                    Some(outcome.iterations),
+                    Some(outcome.duration_secs),
+                    None,
+                )
+                .map_err(|err| CliError::Message(err.to_string()))?;
         }
-        LoopStatus::Failed | LoopStatus::MaxIterations => {
+        Some(NotificationDecision::Failed { reason }) => {
             notifier
                 .notify_failed(
                     &args.name,
                     &webhook,
-                    Some(match outcome.status {
-                        LoopStatus::Failed => "error",
-                        LoopStatus::MaxIterations => "max_iterations",
-                        _ => "error",
-                    }),
+                    Some(reason),
                     Some(&args.dir.to_string_lossy()),
                     Some(outcome.iterations),
                     Some(max_iterations),
@@ -519,7 +607,7 @@ fn notify_if_configured(
                 )
                 .map_err(|err| CliError::Message(err.to_string()))?;
         }
-        LoopStatus::Running => {}
+        None => {}
     }
 
     Ok(())
@@ -684,5 +772,297 @@ fn print_table(headers: &[&str], rows: &[Vec<String>]) {
             print!("{:width$}  ", col, width = widths[index]);
         }
         println!();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    struct EnvGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        original_values: Vec<(String, Option<std::ffi::OsString>)>,
+    }
+
+    impl EnvGuard {
+        fn new() -> Self {
+            let lock = crate::test_support::env_lock();
+            let keys = env_override_keys();
+            let mut original_values = Vec::with_capacity(keys.len());
+
+            for &key in keys {
+                original_values.push((key.to_string(), env::var_os(key)));
+                remove_env(key);
+            }
+
+            Self {
+                _lock: lock,
+                original_values,
+            }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (key, value) in &self.original_values {
+                if let Some(value) = value {
+                    unsafe {
+                        env::set_var(key, value);
+                    }
+                } else {
+                    unsafe {
+                        env::remove_var(key);
+                    }
+                }
+            }
+        }
+    }
+
+    fn env_guard() -> EnvGuard {
+        EnvGuard::new()
+    }
+
+    fn env_override_keys() -> &'static [&'static str] {
+        &[
+            "GRALPH_DEFAULT_CONFIG",
+            "GRALPH_GLOBAL_CONFIG",
+            "GRALPH_CONFIG_DIR",
+            "GRALPH_PROJECT_CONFIG_NAME",
+            "GRALPH_DEFAULTS_MAX_ITERATIONS",
+            "GRALPH_DEFAULTS_TASK_FILE",
+            "GRALPH_DEFAULTS_COMPLETION_MARKER",
+            "GRALPH_DEFAULTS_BACKEND",
+            "GRALPH_DEFAULTS_MODEL",
+            "GRALPH_MAX_ITERATIONS",
+            "GRALPH_TASK_FILE",
+            "GRALPH_COMPLETION_MARKER",
+            "GRALPH_BACKEND",
+            "GRALPH_MODEL",
+        ]
+    }
+
+    fn set_env(key: &str, value: impl AsRef<std::ffi::OsStr>) {
+        unsafe {
+            env::set_var(key, value);
+        }
+    }
+
+    fn remove_env(key: &str) {
+        unsafe {
+            env::remove_var(key);
+        }
+    }
+
+    fn write_file(path: &Path, contents: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(path, contents).unwrap();
+    }
+
+    fn load_config(contents: &str) -> Config {
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("default.yaml");
+        write_file(&config_path, contents);
+        let missing_global = temp.path().join("missing-global.yaml");
+
+        set_env("GRALPH_DEFAULT_CONFIG", &config_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &missing_global);
+
+        let config = Config::load(None).unwrap();
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+
+        config
+    }
+
+    fn base_args() -> RunLoopArgs {
+        RunLoopArgs {
+            dir: PathBuf::from("."),
+            name: "session".to_string(),
+            max_iterations: None,
+            task_file: None,
+            completion_marker: None,
+            backend: None,
+            model: None,
+            variant: None,
+            prompt_template: None,
+            webhook: None,
+            no_worktree: false,
+            strict_prd: false,
+        }
+    }
+
+    #[test]
+    fn resolve_task_file_prefers_cli_config_then_default() {
+        let _guard = env_guard();
+        let config = load_config("defaults:\n  task_file: Config.md\n");
+        let mut args = base_args();
+
+        args.task_file = Some("CLI.md".to_string());
+        assert_eq!(resolve_task_file(&args, &config), "CLI.md");
+
+        args.task_file = None;
+        assert_eq!(resolve_task_file(&args, &config), "Config.md");
+
+        let config = load_config("defaults:\n  backend: claude\n");
+        assert_eq!(resolve_task_file(&args, &config), "PRD.md");
+    }
+
+    #[test]
+    fn resolve_max_iterations_prefers_cli_config_then_default() {
+        let _guard = env_guard();
+        let config = load_config("defaults:\n  max_iterations: 12\n");
+        let mut args = base_args();
+
+        args.max_iterations = Some(55);
+        assert_eq!(resolve_max_iterations(&args, &config), 55);
+
+        args.max_iterations = None;
+        assert_eq!(resolve_max_iterations(&args, &config), 12);
+
+        let config = load_config("defaults:\n  max_iterations: nope\n");
+        assert_eq!(resolve_max_iterations(&args, &config), 30);
+    }
+
+    #[test]
+    fn resolve_completion_marker_prefers_cli_config_then_default() {
+        let _guard = env_guard();
+        let config = load_config("defaults:\n  completion_marker: DONE\n");
+        let mut args = base_args();
+
+        args.completion_marker = Some("FINISH".to_string());
+        assert_eq!(resolve_completion_marker(&args, &config), "FINISH");
+
+        args.completion_marker = None;
+        assert_eq!(resolve_completion_marker(&args, &config), "DONE");
+
+        let config = load_config("defaults:\n  backend: claude\n");
+        assert_eq!(resolve_completion_marker(&args, &config), "COMPLETE");
+    }
+
+    #[test]
+    fn resolve_backend_prefers_cli_config_then_default() {
+        let _guard = env_guard();
+        let config = load_config("defaults:\n  backend: gemini\n");
+        let mut args = base_args();
+
+        args.backend = Some("codex".to_string());
+        assert_eq!(resolve_backend_name(&args, &config), "codex");
+
+        args.backend = None;
+        assert_eq!(resolve_backend_name(&args, &config), "gemini");
+
+        let config = load_config("defaults:\n  task_file: PRD.md\n");
+        assert_eq!(resolve_backend_name(&args, &config), "claude");
+    }
+
+    #[test]
+    fn resolve_model_prefers_cli_or_config_and_opencode_default() {
+        let _guard = env_guard();
+        let config = load_config(
+            "defaults:\n  model: config-model\n  backend: opencode\nopencode:\n  default_model: opencode-default\n",
+        );
+        let mut args = base_args();
+
+        args.model = Some("cli-model".to_string());
+        assert_eq!(
+            resolve_model(&args, &config, "opencode").as_deref(),
+            Some("cli-model")
+        );
+
+        args.model = None;
+        assert_eq!(
+            resolve_model(&args, &config, "claude").as_deref(),
+            Some("config-model")
+        );
+
+        let config = load_config(
+            "defaults:\n  model: \"\"\n  backend: opencode\nopencode:\n  default_model: opencode-default\n",
+        );
+        assert_eq!(
+            resolve_model(&args, &config, "opencode").as_deref(),
+            Some("opencode-default")
+        );
+    }
+
+    #[test]
+    fn should_validate_prd_matches_flag() {
+        assert!(should_validate_prd(true));
+        assert!(!should_validate_prd(false));
+    }
+
+    #[test]
+    fn should_resume_session_handles_status_and_pid() {
+        for status in ["stale", "stopped", "failed"] {
+            assert!(should_resume_session(status, 123, true));
+            assert!(should_resume_session(status, 0, false));
+        }
+
+        assert!(should_resume_session("running", 0, false));
+        assert!(should_resume_session("running", 123, false));
+        assert!(!should_resume_session("running", 123, true));
+        assert!(!should_resume_session("complete", 123, false));
+        assert!(!should_resume_session("unknown", 0, false));
+    }
+
+    #[test]
+    fn outcome_status_plan_handles_complete_with_auto_run() {
+        let plan = outcome_status_plan(LoopStatus::Complete, true);
+        match plan {
+            OutcomeStatusPlan::Verify {
+                initial_status,
+                verifying_status,
+                verified_status,
+                verify_failed_status,
+            } => {
+                assert_eq!(initial_status, "complete");
+                assert_eq!(verifying_status, "verifying");
+                assert_eq!(verified_status, "verified");
+                assert_eq!(verify_failed_status, "verify-failed");
+            }
+            OutcomeStatusPlan::Final { .. } => panic!("expected verify plan"),
+        }
+    }
+
+    #[test]
+    fn outcome_status_plan_handles_failed_and_max_iterations() {
+        let plan = outcome_status_plan(LoopStatus::Failed, true);
+        assert_eq!(plan, OutcomeStatusPlan::Final { status: "failed" });
+
+        let plan = outcome_status_plan(LoopStatus::MaxIterations, true);
+        assert_eq!(
+            plan,
+            OutcomeStatusPlan::Final {
+                status: "max_iterations",
+            }
+        );
+
+        let plan = outcome_status_plan(LoopStatus::Complete, false);
+        assert_eq!(plan, OutcomeStatusPlan::Final { status: "complete" });
+    }
+
+    #[test]
+    fn notification_decision_maps_statuses() {
+        assert_eq!(
+            notification_decision(LoopStatus::Complete, true),
+            Some(NotificationDecision::Complete)
+        );
+        assert_eq!(notification_decision(LoopStatus::Complete, false), None);
+        assert_eq!(
+            notification_decision(LoopStatus::Failed, true),
+            Some(NotificationDecision::Failed { reason: "error" })
+        );
+        assert_eq!(
+            notification_decision(LoopStatus::MaxIterations, true),
+            Some(NotificationDecision::Failed {
+                reason: "max_iterations"
+            })
+        );
+        assert_eq!(notification_decision(LoopStatus::Running, true), None);
     }
 }

@@ -18,6 +18,11 @@ CI=<status/link>; PR=<link if final PRD task>
 - MD-4 Move worktree and git helpers into the app worktree module.
 - MD-7 Document the run entrypoint and command module layout.
 - MR-2 Document the lib entrypoint helper and main delegation flow.
+- LS-1 Extract loop setting helpers and add config precedence tests.
+- LS-2 Isolate session lifecycle decisions and add transition tests.
+- VER-1 Extract verifier parsing helpers and add coverage parsing tests.
+- VER-2 Add review gate and check gate decision tests.
+- PRD-1 Split PRD sanitize/validate content handling and add sanitize tests.
 
 ### Verification
 - Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
