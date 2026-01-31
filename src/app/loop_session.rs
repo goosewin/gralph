@@ -31,6 +31,9 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
     let session_name = super::session_name(&args.name, &args.dir)?;
     let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
     let mut run_args = run_loop_args_from_start(args, session_name)?;
+    ensure_tmux_available()?;
+    let tmux_session = unique_tmux_session_name(&run_args.name)?;
+    run_args.tmux_session = Some(tmux_session.clone());
     deps.worktree()
         .maybe_create_auto_worktree(&mut run_args, &config)?;
     let child = spawn_run_loop(&run_args, deps.process())?;
@@ -63,7 +66,7 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
                 ("dir", &run_args.dir.to_string_lossy()),
                 ("task_file", &task_file),
                 ("pid", &child.id().to_string()),
-                ("tmux_session", ""),
+                ("tmux_session", &tmux_session),
                 ("started_at", &now),
                 ("iteration", "1"),
                 ("max_iterations", &max_iterations.to_string()),
@@ -81,6 +84,7 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
         .map_err(|err| CliError::Message(err.to_string()))?;
 
     println!("Gralph loop started in background (PID: {}).", child.id());
+    println!("Tmux session: {}", tmux_session);
     println!("Logs: {}", log_file.display());
     println!(
         "Tail logs: gralph logs {} --follow (or tail -f {}).",
@@ -548,6 +552,7 @@ pub(super) fn cmd_resume(args: ResumeArgs, deps: &Deps) -> Result<(), CliError> 
         let run_args = RunLoopArgs {
             dir: PathBuf::from(dir),
             name: name.to_string(),
+            tmux_session: None,
             max_iterations,
             task_file,
             completion_marker,
@@ -758,6 +763,7 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
     store
         .init_state()
         .map_err(|err| CliError::Message(err.to_string()))?;
+    let tmux_session = resolve_tmux_session(&args);
     let now = format_rfc3339(deps.clock());
     let remaining = core::count_remaining_tasks(&args.dir.join(&task_file));
     let log_file = args.dir.join(".gralph").join(format!("{}.log", args.name));
@@ -770,7 +776,7 @@ fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
                 ("dir", &args.dir.to_string_lossy()),
                 ("task_file", &task_file),
                 ("pid", &deps.process().pid().to_string()),
-                ("tmux_session", ""),
+                ("tmux_session", &tmux_session),
                 ("started_at", &now),
                 ("iteration", "1"),
                 ("max_iterations", &max_iterations.to_string()),
@@ -970,10 +976,19 @@ fn notify_if_configured(
     Ok(())
 }
 
+fn resolve_tmux_session(args: &RunLoopArgs) -> String {
+    args.tmux_session
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .to_string()
+}
+
 fn run_loop_args_from_start(args: StartArgs, name: String) -> Result<RunLoopArgs, CliError> {
     Ok(RunLoopArgs {
         dir: args.dir,
         name,
+        tmux_session: None,
         max_iterations: args.max_iterations,
         task_file: args.task_file,
         completion_marker: args.completion_marker,
@@ -991,6 +1006,7 @@ fn run_loop_args_from_step(args: StepArgs, name: String) -> Result<RunLoopArgs, 
     Ok(RunLoopArgs {
         dir: args.dir,
         name,
+        tmux_session: None,
         max_iterations: args.max_iterations,
         task_file: args.task_file,
         completion_marker: args.completion_marker,
@@ -1004,17 +1020,74 @@ fn run_loop_args_from_step(args: StepArgs, name: String) -> Result<RunLoopArgs, 
     })
 }
 
-fn spawn_run_loop(
-    args: &RunLoopArgs,
-    process: &dyn ProcessRunner,
-) -> Result<std::process::Child, CliError> {
-    let exe = process.current_exe().map_err(CliError::Io)?;
-    let mut cmd = ProcCommand::new(exe);
+fn ensure_tmux_available() -> Result<(), CliError> {
+    let status = ProcCommand::new("tmux")
+        .arg("-V")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    match status {
+        Ok(status) if status.success() => Ok(()),
+        Ok(_) => Err(CliError::Message(
+            "tmux is required to start loops; install tmux and try again".to_string(),
+        )),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Err(CliError::Message(
+            "tmux is required to start loops but was not found on PATH".to_string(),
+        )),
+        Err(err) => Err(CliError::Message(format!(
+            "failed to check tmux availability: {}",
+            err
+        ))),
+    }
+}
+
+fn unique_tmux_session_name(base: &str) -> Result<String, CliError> {
+    let timestamp = super::worktree::worktree_timestamp_slug();
+    let mut candidate = if base.trim().is_empty() {
+        format!("gralph-{}", timestamp)
+    } else {
+        format!("{}-{}", base, timestamp)
+    };
+    let base_candidate = candidate.clone();
+    let mut suffix = 2;
+    while tmux_session_exists(&candidate)? {
+        candidate = format!("{}-{}", base_candidate, suffix);
+        suffix += 1;
+    }
+    Ok(candidate)
+}
+
+fn tmux_session_exists(name: &str) -> Result<bool, CliError> {
+    let status = ProcCommand::new("tmux")
+        .arg("has-session")
+        .arg("-t")
+        .arg(name)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    match status {
+        Ok(status) => Ok(status.success()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Err(CliError::Message(
+            "tmux is required to start loops but was not found on PATH".to_string(),
+        )),
+        Err(err) => Err(CliError::Message(format!(
+            "failed to check tmux session: {}",
+            err
+        ))),
+    }
+}
+
+fn append_run_loop_args(cmd: &mut ProcCommand, args: &RunLoopArgs) {
     cmd.arg("run-loop")
         .arg(args.dir.to_string_lossy().as_ref())
         .arg("--name")
         .arg(&args.name);
 
+    if let Some(tmux_session) = args.tmux_session.as_deref() {
+        if !tmux_session.trim().is_empty() {
+            cmd.arg("--tmux-session").arg(tmux_session);
+        }
+    }
     if let Some(max) = args.max_iterations {
         cmd.arg("--max-iterations").arg(max.to_string());
     }
@@ -1045,6 +1118,33 @@ fn spawn_run_loop(
     if args.strict_prd {
         cmd.arg("--strict-prd");
     }
+}
+
+fn spawn_run_loop(
+    args: &RunLoopArgs,
+    process: &dyn ProcessRunner,
+) -> Result<std::process::Child, CliError> {
+    let exe = process.current_exe().map_err(CliError::Io)?;
+    let mut cmd = if let Some(tmux_session) = args.tmux_session.as_deref() {
+        if tmux_session.trim().is_empty() {
+            let mut cmd = ProcCommand::new(exe);
+            append_run_loop_args(&mut cmd, args);
+            cmd
+        } else {
+            let mut cmd = ProcCommand::new("tmux");
+            cmd.arg("new-session")
+                .arg("-d")
+                .arg("-s")
+                .arg(tmux_session)
+                .arg(exe);
+            append_run_loop_args(&mut cmd, args);
+            cmd
+        }
+    } else {
+        let mut cmd = ProcCommand::new(exe);
+        append_run_loop_args(&mut cmd, args);
+        cmd
+    };
 
     cmd.stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -1290,6 +1390,7 @@ mod tests {
         RunLoopArgs {
             dir: PathBuf::from("."),
             name: "session".to_string(),
+            tmux_session: None,
             max_iterations: None,
             task_file: None,
             completion_marker: None,

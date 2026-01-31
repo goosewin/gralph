@@ -969,6 +969,7 @@ mod tests {
         RunLoopArgs {
             dir,
             name: "test-session".to_string(),
+            tmux_session: None,
             max_iterations: None,
             task_file: None,
             completion_marker: None,

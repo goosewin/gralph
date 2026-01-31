@@ -201,6 +201,8 @@ pub struct RunLoopArgs {
     #[arg(long, help = "Session name")]
     pub name: String,
     #[arg(long)]
+    pub tmux_session: Option<String>,
+    #[arg(long)]
     pub max_iterations: Option<u32>,
     #[arg(long)]
     pub task_file: Option<String>,

@@ -66,7 +66,7 @@ Start must either create and record a tmux session successfully or exit with a c
   * State entries include tmux_session for running loops.
   * Stop uses tmux_session to terminate the session when present.
 - **Dependencies** TMUX-1
-- [ ] TMUX-2 Require tmux session and state
+- [x] TMUX-2 Require tmux session and state
 ### Task TMUX-3
 
 - **ID** TMUX-3

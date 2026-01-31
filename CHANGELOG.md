@@ -17,6 +17,7 @@ CI=<status/link>; PR=<link if final PRD task>
 ### Changed
 
 - TMUX-1 Remove --no-tmux flag from CLI and completions; document tmux as required.
+- TMUX-2 Require tmux sessions for start and persist tmux session names in state.
 
 ### Fixed
 
