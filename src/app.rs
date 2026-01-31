@@ -966,6 +966,28 @@ mod tests {
         }
     }
 
+    struct PathGuard {
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl PathGuard {
+        fn new(path: impl AsRef<std::ffi::OsStr>) -> Self {
+            let previous = env::var_os("PATH");
+            set_env("PATH", path);
+            Self { previous }
+        }
+    }
+
+    impl Drop for PathGuard {
+        fn drop(&mut self) {
+            if let Some(value) = &self.previous {
+                set_env("PATH", value);
+            } else {
+                remove_env("PATH");
+            }
+        }
+    }
+
     fn run_loop_args(dir: PathBuf) -> RunLoopArgs {
         RunLoopArgs {
             dir,
@@ -1841,6 +1863,23 @@ mod tests {
         let config = Config::load(Some(temp.path())).unwrap();
 
         assert!(worktree::resolve_auto_worktree(&config, false));
+    }
+
+    #[test]
+    fn auto_worktree_skips_when_git_missing() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config = Config::load(Some(temp.path())).unwrap();
+        let mut args = run_loop_args(temp.path().to_path_buf());
+        let original = args.dir.clone();
+        let missing_git = tempfile::tempdir().unwrap();
+        let _path_guard = PathGuard::new(missing_git.path());
+
+        worktree::maybe_create_auto_worktree(&mut args, &config).unwrap();
+
+        assert_eq!(args.dir, original);
+        assert!(!args.no_worktree);
+        assert!(!temp.path().join(".worktree").exists());
     }
 
     #[test]

@@ -22,6 +22,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - TMUX-2 Require tmux sessions for start and persist tmux session names in state.
 - WT-1 Run auto worktree loops from `.worktree/<unique-worktree>`.
 - COV-70-1 Add tmux availability and session collision tests.
+- COV-70-3 Add auto worktree skip and path mapping tests.
 
 ### Fixed
 
