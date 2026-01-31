@@ -1514,6 +1514,72 @@ mod tests {
         }
     }
 
+    #[derive(Debug, Clone)]
+    struct CapturedCommand {
+        program: String,
+        args: Vec<String>,
+    }
+
+    struct CaptureProcessRunner {
+        exe: PathBuf,
+        captured: std::sync::Mutex<Vec<CapturedCommand>>,
+    }
+
+    impl CaptureProcessRunner {
+        fn new(exe: PathBuf) -> Self {
+            Self {
+                exe,
+                captured: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+
+        fn last(&self) -> CapturedCommand {
+            self.captured
+                .lock()
+                .unwrap()
+                .last()
+                .cloned()
+                .expect("expected captured command")
+        }
+    }
+
+    impl ProcessRunner for CaptureProcessRunner {
+        fn current_exe(&self) -> io::Result<PathBuf> {
+            Ok(self.exe.clone())
+        }
+
+        fn spawn(&self, cmd: &mut Command) -> io::Result<Child> {
+            let program = cmd.get_program().to_string_lossy().to_string();
+            let args = cmd
+                .get_args()
+                .map(|arg| arg.to_string_lossy().to_string())
+                .collect();
+            self.captured
+                .lock()
+                .unwrap()
+                .push(CapturedCommand { program, args });
+            Err(io::Error::new(io::ErrorKind::Other, "capture only"))
+        }
+
+        fn kill_tmux_session(&self, _session: &str) {}
+
+        fn kill_pid(&self, _pid: i64) {}
+
+        fn pid(&self) -> u32 {
+            0
+        }
+
+        fn is_alive(&self, _pid: i64) -> bool {
+            false
+        }
+    }
+
+    fn capture_run_loop_command(args: RunLoopArgs) -> CapturedCommand {
+        let runner = CaptureProcessRunner::new(PathBuf::from("gralph"));
+        let _ = spawn_run_loop(&args, &runner);
+        runner.last()
+    }
+
     #[test]
     fn resolve_task_file_prefers_cli_config_then_default() {
         let _guard = env_guard();
@@ -1702,6 +1768,52 @@ mod tests {
         let name = unique_tmux_session_name("session").unwrap();
         assert!(name.starts_with("session-"));
         assert!(name.ends_with("-2"));
+    }
+
+    #[test]
+    fn spawn_run_loop_uses_exe_without_tmux_session() {
+        let args = base_args();
+        let captured = capture_run_loop_command(args);
+
+        assert_eq!(captured.program, "gralph");
+        assert_eq!(captured.args, vec!["run-loop", ".", "--name", "session"]);
+        assert!(!captured.args.contains(&"--tmux-session".to_string()));
+    }
+
+    #[test]
+    fn spawn_run_loop_skips_tmux_arg_when_session_blank() {
+        let mut args = base_args();
+        args.tmux_session = Some("  ".to_string());
+        let captured = capture_run_loop_command(args);
+
+        assert_eq!(captured.program, "gralph");
+        assert_eq!(captured.args, vec!["run-loop", ".", "--name", "session"]);
+        assert!(!captured.args.contains(&"--tmux-session".to_string()));
+    }
+
+    #[test]
+    fn spawn_run_loop_uses_tmux_and_includes_tmux_session_arg() {
+        let mut args = base_args();
+        args.tmux_session = Some("tmux-1".to_string());
+        let captured = capture_run_loop_command(args);
+
+        assert_eq!(captured.program, "tmux");
+        assert_eq!(
+            captured.args,
+            vec![
+                "new-session",
+                "-d",
+                "-s",
+                "tmux-1",
+                "gralph",
+                "run-loop",
+                ".",
+                "--name",
+                "session",
+                "--tmux-session",
+                "tmux-1",
+            ]
+        );
     }
 
     #[test]

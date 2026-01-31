@@ -61,7 +61,7 @@ Add tests that exercise auto worktree skip reasons and path mapping behavior so 
   * Capture program and args via a ProcessRunner test double.
   * Verify `--tmux-session` is only added for non-empty values.
 - **Dependencies** None
-- [ ] COV-70-2 Test run-loop command assembly for tmux paths
+- [x] COV-70-2 Test run-loop command assembly for tmux paths
 ### Task COV-70-3
 
 - **ID** COV-70-3
