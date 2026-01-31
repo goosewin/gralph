@@ -389,10 +389,7 @@ fn resolve_raw_log_file_for_session(
     map: &Map<String, Value>,
     log_file: Option<&PathBuf>,
 ) -> Option<PathBuf> {
-    if let Some(path) = map
-        .get("raw_log_file")
-        .and_then(|value| value.as_str())
-    {
+    if let Some(path) = map.get("raw_log_file").and_then(|value| value.as_str()) {
         if !path.trim().is_empty() {
             return Some(PathBuf::from(path));
         }

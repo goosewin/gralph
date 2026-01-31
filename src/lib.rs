@@ -9,11 +9,11 @@ pub mod server;
 pub mod state;
 pub mod task;
 pub mod update;
-pub mod version;
 mod verifier;
+pub mod version;
 
 pub mod app;
-pub use app::{exit_code_for, run, Deps};
+pub use app::{Deps, exit_code_for, run};
 pub use entrypoint::cli_entrypoint;
 #[cfg(test)]
 pub(crate) use entrypoint::cli_entrypoint_from;
@@ -122,7 +122,10 @@ mod tests {
         let default_path = temp.path().join("default.yaml");
         write_file(&default_path, "defaults:\n  task_file: PRD.md\n");
         set_env("GRALPH_DEFAULT_CONFIG", &default_path);
-        set_env("GRALPH_GLOBAL_CONFIG", temp.path().join("missing-global.yaml"));
+        set_env(
+            "GRALPH_GLOBAL_CONFIG",
+            temp.path().join("missing-global.yaml"),
+        );
         set_env(
             "GRALPH_PROJECT_CONFIG_NAME",
             temp.path().join("missing-project.yaml"),
@@ -141,7 +144,10 @@ mod tests {
         let default_path = temp.path().join("default.yaml");
         write_file(&default_path, "defaults:\n  task_file: PRD.md\n");
         set_env("GRALPH_DEFAULT_CONFIG", &default_path);
-        set_env("GRALPH_GLOBAL_CONFIG", temp.path().join("missing-global.yaml"));
+        set_env(
+            "GRALPH_GLOBAL_CONFIG",
+            temp.path().join("missing-global.yaml"),
+        );
         set_env(
             "GRALPH_PROJECT_CONFIG_NAME",
             temp.path().join("missing-project.yaml"),
@@ -160,7 +166,10 @@ mod tests {
         let default_path = temp.path().join("default.yaml");
         write_file(&default_path, "defaults:\n  task_file: PRD.md\n");
         set_env("GRALPH_DEFAULT_CONFIG", &default_path);
-        set_env("GRALPH_GLOBAL_CONFIG", temp.path().join("missing-global.yaml"));
+        set_env(
+            "GRALPH_GLOBAL_CONFIG",
+            temp.path().join("missing-global.yaml"),
+        );
         set_env(
             "GRALPH_PROJECT_CONFIG_NAME",
             temp.path().join("missing-project.yaml"),
@@ -179,7 +188,10 @@ mod tests {
         let default_path = temp.path().join("default.yaml");
         write_file(&default_path, "defaults:\n  task_file: PRD.md\n");
         set_env("GRALPH_DEFAULT_CONFIG", &default_path);
-        set_env("GRALPH_GLOBAL_CONFIG", temp.path().join("missing-global.yaml"));
+        set_env(
+            "GRALPH_GLOBAL_CONFIG",
+            temp.path().join("missing-global.yaml"),
+        );
         set_env(
             "GRALPH_PROJECT_CONFIG_NAME",
             temp.path().join("missing-project.yaml"),
@@ -286,10 +298,7 @@ mod tests {
         let log_path = temp.path().join("missing.log");
         let log_string = log_path.to_string_lossy().to_string();
         store
-            .set_session(
-                "demo",
-                &[("dir", &dir_string), ("log_file", &log_string)],
-            )
+            .set_session("demo", &[("dir", &dir_string), ("log_file", &log_string)])
             .unwrap();
 
         let code = cli_entrypoint_from(["gralph", "logs", "demo"]);
