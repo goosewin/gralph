@@ -204,6 +204,7 @@ fn dispatch(command: Command, deps: &Deps) -> Result<(), CliError> {
         Command::RunLoop(args) => loop_session::cmd_run_loop(args, deps),
         Command::Stop(args) => loop_session::cmd_stop(args, deps),
         Command::Status => loop_session::cmd_status(deps),
+        Command::Cleanup(args) => loop_session::cmd_cleanup(args, deps),
         Command::Doctor(args) => cmd_doctor(args, deps),
         Command::Logs(args) => loop_session::cmd_logs(args, deps),
         Command::Resume(args) => loop_session::cmd_resume(args, deps),

@@ -1,6 +1,6 @@
 use super::{CliError, Deps, FileSystem, ProcessRunner};
 use crate::backend::backend_from_name;
-use crate::cli::{LogsArgs, ResumeArgs, RunLoopArgs, StartArgs, StopArgs};
+use crate::cli::{CleanupArgs, LogsArgs, ResumeArgs, RunLoopArgs, StartArgs, StopArgs};
 use crate::config::Config;
 use crate::core::{self, LoopStatus};
 use crate::notify;
@@ -175,6 +175,36 @@ pub(super) fn cmd_status(deps: &Deps) -> Result<(), CliError> {
     }
 
     print_table(&["NAME", "DIR", "ITERATION", "STATUS", "REMAINING"], &rows);
+    Ok(())
+}
+
+pub(super) fn cmd_cleanup(args: CleanupArgs, deps: &Deps) -> Result<(), CliError> {
+    let store = deps.state_store();
+    store
+        .init_state()
+        .map_err(|err| CliError::Message(err.to_string()))?;
+
+    if args.purge {
+        let purged = store
+            .purge_all()
+            .map_err(|err| CliError::Message(err.to_string()))?;
+        print_cleanup_result("Purged", "No sessions found.", &purged);
+        return Ok(());
+    }
+
+    let mode = if args.remove {
+        CleanupMode::Remove
+    } else {
+        CleanupMode::Mark
+    };
+    let cleaned = store
+        .cleanup_stale(mode)
+        .map_err(|err| CliError::Message(err.to_string()))?;
+    let action = match mode {
+        CleanupMode::Mark => "Marked",
+        CleanupMode::Remove => "Removed",
+    };
+    print_cleanup_result(action, "No stale sessions found.", &cleaned);
     Ok(())
 }
 
@@ -744,6 +774,23 @@ fn print_tail(path: &Path, lines: usize, fs: &dyn FileSystem) -> Result<(), CliE
         println!("{}", line);
     }
     Ok(())
+}
+
+fn print_cleanup_result(action: &str, empty_message: &str, sessions: &[String]) {
+    if sessions.is_empty() {
+        println!("{}", empty_message);
+        return;
+    }
+    if sessions.len() <= 10 {
+        println!(
+            "{} {} session(s): {}",
+            action,
+            sessions.len(),
+            sessions.join(", ")
+        );
+    } else {
+        println!("{} {} sessions.", action, sessions.len());
+    }
 }
 
 fn print_table(headers: &[&str], rows: &[Vec<String>]) {

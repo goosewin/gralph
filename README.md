@@ -43,6 +43,7 @@ gralph init .                     # Scaffold shared context files
 gralph status                     # Check all running loops
 gralph logs myapp --follow        # Watch logs
 gralph doctor                     # Run local diagnostics
+gralph cleanup                    # Mark stale sessions (state cleanup)
 gralph stop myapp                 # Stop a loop
 gralph resume                     # Resume after crash
 gralph update                     # Install latest release to ~/.local/bin
@@ -83,6 +84,13 @@ Common failure hints:
 - Dirty git repo: `git status`, then commit or stash changes.
 - Config parse error: fix YAML in `~/.config/gralph/config.yaml` or project `.gralph.yaml`.
 - State store error: check `GRALPH_STATE_DIR` and permissions for `~/.config/gralph`.
+
+## Cleanup
+
+`gralph cleanup` marks stale sessions by default (running sessions with dead PIDs)
+using the state store. Use `--remove` to delete only stale sessions from state.
+Use `--purge` to delete all sessions from state (explicit opt-in). Output lists
+affected sessions when available, otherwise it prints a count.
 
 ## Verifier Pipeline
 

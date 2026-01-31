@@ -50,6 +50,10 @@ SERVER OPTIONS:
 DOCTOR OPTIONS:
   --dir                 Project directory to check (default: current)
 
+CLEANUP OPTIONS:
+  --remove              Delete stale sessions from state
+  --purge               Delete all sessions from state (explicit opt-in)
+
 EXAMPLES:
   gralph start .
   gralph start ~/project --name myapp --max-iterations 50
@@ -57,6 +61,7 @@ EXAMPLES:
   gralph logs myapp --follow
   gralph stop myapp
   gralph doctor --dir .
+  gralph cleanup
   gralph prd create --dir . --output PRD.new.md --goal "Add a billing dashboard"
   gralph init --dir .
   gralph worktree create C-1
@@ -87,6 +92,8 @@ pub enum Command {
     Stop(StopArgs),
     #[command(about = "Show status of all loops")]
     Status,
+    #[command(about = "Clean up stale sessions")]
+    Cleanup(CleanupArgs),
     #[command(about = "Run local diagnostics")]
     Doctor(DoctorArgs),
     #[command(about = "View logs for a loop")]
@@ -193,6 +200,14 @@ pub struct LogsArgs {
 pub struct DoctorArgs {
     #[arg(long, help = "Project directory to check (default: current)")]
     pub dir: Option<PathBuf>,
+}
+
+#[derive(Args, Debug)]
+pub struct CleanupArgs {
+    #[arg(long, action = clap::ArgAction::SetTrue, conflicts_with = "purge", help = "Delete stale sessions")]
+    pub remove: bool,
+    #[arg(long, action = clap::ArgAction::SetTrue, conflicts_with = "remove", help = "Delete all sessions (explicit opt-in)")]
+    pub purge: bool,
 }
 
 #[derive(Args, Debug)]
@@ -390,6 +405,48 @@ mod tests {
             }
             other => panic!("Expected doctor command, got: {other:?}"),
         }
+    }
+
+    #[test]
+    fn parse_cleanup_defaults() {
+        let cli = Cli::parse_from(["gralph", "cleanup"]);
+        match cli.command {
+            Some(Command::Cleanup(args)) => {
+                assert!(!args.remove);
+                assert!(!args.purge);
+            }
+            other => panic!("Expected cleanup command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_cleanup_remove() {
+        let cli = Cli::parse_from(["gralph", "cleanup", "--remove"]);
+        match cli.command {
+            Some(Command::Cleanup(args)) => {
+                assert!(args.remove);
+                assert!(!args.purge);
+            }
+            other => panic!("Expected cleanup command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_cleanup_purge() {
+        let cli = Cli::parse_from(["gralph", "cleanup", "--purge"]);
+        match cli.command {
+            Some(Command::Cleanup(args)) => {
+                assert!(!args.remove);
+                assert!(args.purge);
+            }
+            other => panic!("Expected cleanup command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_cleanup_conflict() {
+        let err = Cli::try_parse_from(["gralph", "cleanup", "--remove", "--purge"]).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
     }
 
     #[test]

@@ -23,11 +23,16 @@
    - CI/CD preflight matches `.github/workflows/ci.yml`
    - Worktree is clean
 6) On loop completion, `gralph` runs `gralph verifier` automatically unless
-   `verifier.auto_run` is false. The verifier runs tests, coverage, and static
-   checks, creates a PR via `gh` (using the repo template), and waits for the
-   configured review gate (greptile by default) plus green checks.
+    `verifier.auto_run` is false. The verifier runs tests, coverage, and static
+    checks, creates a PR via `gh` (using the repo template), and waits for the
+    configured review gate (greptile by default) plus green checks.
    - If auto-run is disabled, run `gralph verifier` manually in the worktree.
 7) Verifier merges the PR via `gh` after the review gate passes.
+
+## Cleanup
+`gralph cleanup` marks stale sessions by default (running sessions with dead PIDs)
+using the state store. Use `--remove` to delete stale sessions from state. Use
+`--purge` to delete all sessions from state; it is explicit opt-in.
 
 ## Last PRD Todo Gate
 - Ensure you are on a new task branch/worktree; never finish the last PRD task

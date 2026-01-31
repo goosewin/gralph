@@ -100,7 +100,7 @@ Each task block must contain exactly one unchecked task line.
   * `--remove` deletes only stale sessions; `--purge` requires explicit opt-in.
   * README and PROCESS describe cleanup behavior.
 - **Dependencies** None
-- [ ] UX-2 Add cleanup command for stale sessions
+- [x] UX-2 Add cleanup command for stale sessions
 ---
 
 ### Task UX-3
