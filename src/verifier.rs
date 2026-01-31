@@ -27,7 +27,7 @@ const DEFAULT_REVIEW_MIN_RATING: f64 = 8.0;
 const DEFAULT_REVIEW_MAX_ISSUES: usize = 0;
 const DEFAULT_REVIEW_POLL_SECONDS: u64 = 20;
 const DEFAULT_REVIEW_TIMEOUT_SECONDS: u64 = 1800;
-const DEFAULT_REVIEW_REQUIRE_APPROVAL: bool = false;
+const DEFAULT_REVIEW_REQUIRE_APPROVAL: bool = true;
 const DEFAULT_REVIEW_REQUIRE_CHECKS: bool = true;
 const DEFAULT_REVIEW_MERGE_METHOD: &str = "merge";
 const DEFAULT_VERIFIER_AUTO_RUN: bool = true;
@@ -2035,7 +2035,7 @@ mod tests {
             max_issues: 0,
             poll_seconds: 20,
             timeout_seconds: 60,
-            require_approval: false,
+            require_approval: true,
             require_checks: true,
             merge_method: MergeMethod::Merge,
         }

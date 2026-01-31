@@ -165,7 +165,7 @@ Each task block must contain exactly one unchecked task line.
   * PROCESS and ARCHITECTURE reflect the new merge gate.
   * README documents how to enable auto-merge.
 - **Dependencies** None
-- [ ] UX-7 Enforce safe auto-merge defaults
+- [x] UX-7 Enforce safe auto-merge defaults
 ---
 
 ### Task UX-8

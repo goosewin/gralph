@@ -26,7 +26,10 @@
     `verifier.auto_run` is false. The verifier runs tests, coverage, and static
     checks, creates a PR via `gh` (using the repo template), and waits for the
     configured review gate (greptile by default) plus green checks.
-   - If auto-run is disabled, run `gralph verifier` manually in the worktree.
+    - By default the review gate requires explicit approval; set
+      `verifier.review.require_approval: false` to allow auto-merge without an
+      approval requirement.
+    - If auto-run is disabled, run `gralph verifier` manually in the worktree.
 7) Verifier merges the PR via `gh` after the review gate passes.
 
 ## Cleanup

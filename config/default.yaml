@@ -30,7 +30,7 @@ verifier:
     max_issues: 0
     poll_seconds: 20
     timeout_seconds: 1800
-    require_approval: false
+    require_approval: true
     require_checks: true
     merge_method: merge
 

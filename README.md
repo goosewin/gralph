@@ -116,6 +116,8 @@ waits for review criteria (greptile by default), and merges only when reviews an
 checks meet thresholds. When `verifier.auto_run` is true, it runs automatically
 after loop completion; otherwise run `gralph verifier` manually. Configure the
 review gate under `verifier.review.*` and ensure `gh auth login` is complete.
+Auto-merge requires explicit approval by default. To allow auto-merge without an
+approval requirement, set `verifier.review.require_approval: false` in config.
 Verifier defaults are stack-aware: Rust/Cargo keeps the default cargo commands and
 auto-run behavior, while non-Rust or unknown stacks default `verifier.auto_run`
 to false and require explicit `verifier.test_command` and

@@ -31,6 +31,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - VER-2 Add review gate and check gate decision tests.
 - PRD-1 Split PRD sanitize/validate content handling and add sanitize tests.
 - UX-6 Make verifier defaults stack-aware for non-Rust stacks.
+- UX-7 Require approval by default for verifier auto-merge and document opt-in.
 
 ### Verification
 - Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened
