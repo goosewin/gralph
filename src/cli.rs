@@ -18,7 +18,7 @@ const ROOT_AFTER_HELP: &str = r#"START OPTIONS:
   --prompt-template   Path to custom prompt template file
   --webhook           Notification webhook URL
   --no-worktree       Disable automatic worktree creation
-  --no-tmux           Run in foreground (blocks)
+  --no-tmux           Run in foreground (blocks; logs in .gralph/<session>.log)
   --strict-prd        Validate PRD before starting the loop
   --dry-run           Print the next task block and resolved prompt
 
@@ -163,7 +163,11 @@ pub struct StartArgs {
     pub webhook: Option<String>,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Disable automatic worktree creation")]
     pub no_worktree: bool,
-    #[arg(long, action = clap::ArgAction::SetTrue, help = "Run in foreground (blocks)")]
+    #[arg(
+        long,
+        action = clap::ArgAction::SetTrue,
+        help = "Run in foreground (blocks; logs in .gralph/<session>.log)"
+    )]
     pub no_tmux: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Validate PRD before starting the loop")]
     pub strict_prd: bool,

@@ -178,7 +178,7 @@ Each task block must contain exactly one unchecked task line.
   * Start output mentions log file path and how to tail logs in background runs.
   * README and PROCESS document new flags and hints.
 - **Dependencies** None
-- [ ] UX-8 Add update opt-out and clearer messaging
+- [x] UX-8 Add update opt-out and clearer messaging
 ---
 
 ## Success Criteria

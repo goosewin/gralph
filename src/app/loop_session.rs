@@ -11,6 +11,7 @@ use crate::state::{CleanupMode, StateStore};
 use crate::update;
 use crate::verifier;
 use serde_json::{Map, Value};
+use std::env;
 use std::fs;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -85,6 +86,13 @@ pub(super) fn cmd_start(args: StartArgs, deps: &Deps) -> Result<(), CliError> {
         .map_err(|err| CliError::Message(err.to_string()))?;
 
     println!("Gralph loop started in background (PID: {}).", child.id());
+    println!("Logs: {}", log_file.display());
+    println!(
+        "Tail logs: gralph logs {} --follow (or tail -f {}).",
+        run_args.name,
+        log_file.display()
+    );
+    println!("Run in foreground with --no-tmux to stream output.");
     Ok(())
 }
 
@@ -591,6 +599,23 @@ fn maybe_check_for_update() {
     }
 }
 
+fn should_check_for_update(config: &Config) -> bool {
+    if let Ok(value) = env::var("GRALPH_NO_UPDATE_CHECK") {
+        if value.trim().is_empty() {
+            return false;
+        }
+        if let Some(parsed) = super::parse_bool_value(&value) {
+            return !parsed;
+        }
+        return false;
+    }
+    config
+        .get("defaults.check_updates")
+        .as_deref()
+        .and_then(super::parse_bool_value)
+        .unwrap_or(true)
+}
+
 fn format_rfc3339(clock: &dyn core::Clock) -> String {
     let datetime: chrono::DateTime<chrono::Local> = clock.now().into();
     datetime.to_rfc3339()
@@ -708,7 +733,9 @@ fn notification_decision(
 
 fn run_loop_with_state(args: RunLoopArgs, deps: &Deps) -> Result<(), CliError> {
     let config = Config::load(Some(&args.dir)).map_err(|err| CliError::Message(err.to_string()))?;
-    maybe_check_for_update();
+    if should_check_for_update(&config) {
+        maybe_check_for_update();
+    }
     let task_file = resolve_task_file(&args, &config);
     let max_iterations = resolve_max_iterations(&args, &config);
     let completion_marker = resolve_completion_marker(&args, &config);

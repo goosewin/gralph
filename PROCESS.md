@@ -52,6 +52,8 @@ using the state store. Use `--remove` to delete stale sessions from state. Use
 - New risks must be added to RISK_REGISTER.md with mitigation.
 - Rust CLI is the source of truth; do not reintroduce shell scripts.
 - Test coverage must remain >= 90%.
+- Update checks are best-effort; disable with `defaults.check_updates: false` or `GRALPH_NO_UPDATE_CHECK=1`.
+- Background runs write logs to `.gralph/<session>.log`; tail with `gralph logs <name> --follow`.
 - The soft coverage target (`verifier.coverage_warn`) is a warning-only signal set to 80 percent; it does not block merges or change `verifier.coverage_min`.
 - It was raised after coverage stayed stable for at least two consecutive cycles.
 - Final PRD task requires a PR, review gate approval, and green CI before merge.

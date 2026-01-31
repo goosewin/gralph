@@ -32,6 +32,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - PRD-1 Split PRD sanitize/validate content handling and add sanitize tests.
 - UX-6 Make verifier defaults stack-aware for non-Rust stacks.
 - UX-7 Require approval by default for verifier auto-merge and document opt-in.
+- UX-8 Add update check opt-out and start log/tmux hints.
 
 ### Verification
 - Verification: Tests=not-run; Coverage=not-run (>= 90%); CI=not-run; PR=not-opened

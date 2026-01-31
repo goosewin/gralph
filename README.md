@@ -53,7 +53,8 @@ gralph update                     # Install latest release to ~/.local/bin
 ```
 
 On session start, gralph performs a best-effort update check and prints a notice
-if a newer release is available (it never blocks startup).
+if a newer release is available (it never blocks startup). Disable it with
+`defaults.check_updates: false` or `GRALPH_NO_UPDATE_CHECK=1`.
 
 By default, `gralph start` creates a git worktree under `.worktrees/` for each PRD run
 when the target directory is inside a git repo with at least one commit and the
@@ -73,6 +74,8 @@ so the stack is attached to the correct checkout and branch.
 Session logs are written to `.gralph/<session>.log` under the project directory.
 Raw backend output is saved to `.gralph/<session>.raw.log` and can be viewed with
 `gralph logs <name> --raw`.
+When running in the background (no `--no-tmux`), follow logs with
+`gralph logs <name> --follow` or `tail -f .gralph/<session>.log`.
 
 ## Dry-run and Step
 
