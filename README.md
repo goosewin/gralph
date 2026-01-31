@@ -45,6 +45,7 @@ gralph init .                     # Scaffold shared context files
 gralph status                     # Check all running loops
 gralph logs myapp --follow        # Watch logs
 gralph logs myapp --raw           # Show raw backend output
+gralph attach myapp               # Attach to the tmux session
 gralph doctor                     # Run local diagnostics
 gralph cleanup                    # Mark stale sessions (state cleanup)
 gralph stop myapp                 # Stop a loop
@@ -76,6 +77,7 @@ Raw backend output is saved to `.gralph/<session>.raw.log` and can be viewed wit
 `gralph logs <name> --raw`.
 When running in the background (tmux required), follow logs with
 `gralph logs <name> --follow` or `tail -f .gralph/<session>.log`.
+Attach to the tmux session with `gralph attach <name>`.
 
 ## Dry-run and Step
 

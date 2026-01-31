@@ -77,7 +77,7 @@ Start must either create and record a tmux session successfully or exit with a c
   * Errors are clear when no session or tmux_session is found.
   * README includes the attach command usage.
 - **Dependencies** TMUX-2
-- [ ] TMUX-3 Add attach command
+- [x] TMUX-3 Add attach command
 ### Task WT-1
 
 - **ID** WT-1

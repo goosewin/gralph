@@ -73,6 +73,7 @@ EXAMPLES:
   gralph step .
   gralph status
   gralph logs myapp --follow
+  gralph attach myapp
   gralph stop myapp
   gralph doctor --dir .
   gralph cleanup
@@ -114,6 +115,8 @@ pub enum Command {
     Doctor(DoctorArgs),
     #[command(about = "View logs for a loop")]
     Logs(LogsArgs),
+    #[command(about = "Attach to a loop tmux session")]
+    Attach(AttachArgs),
     #[command(about = "Resume crashed/stopped loops")]
     Resume(ResumeArgs),
     #[command(about = "Initialize shared context files")]
@@ -248,6 +251,12 @@ pub struct LogsArgs {
     pub follow: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Show raw backend output")]
     pub raw: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct AttachArgs {
+    #[arg(value_name = "NAME", help = "Session name")]
+    pub name: String,
 }
 
 #[derive(Args, Debug)]
@@ -473,6 +482,17 @@ mod tests {
                 assert!(args.dir.is_none());
             }
             other => panic!("Expected doctor command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_attach_command() {
+        let cli = Cli::parse_from(["gralph", "attach", "myapp"]);
+        match cli.command {
+            Some(Command::Attach(args)) => {
+                assert_eq!(args.name, "myapp");
+            }
+            other => panic!("Expected attach command, got: {other:?}"),
         }
     }
 

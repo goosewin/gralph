@@ -1,7 +1,8 @@
 use super::{CliError, Deps, FileSystem, ProcessRunner};
 use crate::backend::backend_from_name;
 use crate::cli::{
-    CleanupArgs, LogsArgs, ResumeArgs, RunLoopArgs, StartArgs, StatusArgs, StepArgs, StopArgs,
+    AttachArgs, CleanupArgs, LogsArgs, ResumeArgs, RunLoopArgs, StartArgs, StatusArgs, StepArgs,
+    StopArgs,
 };
 use crate::config::Config;
 use crate::core::{self, LoopStatus};
@@ -481,6 +482,50 @@ pub(super) fn cmd_logs(args: LogsArgs, deps: &Deps) -> Result<(), CliError> {
         print_tail(&log_file, 200, deps.fs())?;
     }
     Ok(())
+}
+
+pub(super) fn cmd_attach(args: AttachArgs, deps: &Deps) -> Result<(), CliError> {
+    ensure_tmux_available()?;
+    let store = deps.state_store();
+    store
+        .init_state()
+        .map_err(|err| CliError::Message(err.to_string()))?;
+    let session = store
+        .get_session(&args.name)
+        .map_err(|err| CliError::Message(err.to_string()))?
+        .ok_or_else(|| CliError::Message(format!("Session not found: {}", args.name)))?;
+    let tmux_session = session
+        .get("tmux_session")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .unwrap_or("");
+    if tmux_session.is_empty() {
+        return Err(CliError::Message(format!(
+            "No tmux session recorded for {}",
+            args.name
+        )));
+    }
+
+    let status = ProcCommand::new("tmux")
+        .arg("attach-session")
+        .arg("-t")
+        .arg(tmux_session)
+        .status();
+    match status {
+        Ok(status) if status.success() => Ok(()),
+        Ok(status) => Err(CliError::Message(format!(
+            "Failed to attach to tmux session {} (exit code {}).",
+            tmux_session,
+            status
+                .code()
+                .map(|code| code.to_string())
+                .unwrap_or_else(|| "unknown".to_string())
+        ))),
+        Err(err) => Err(CliError::Message(format!(
+            "Failed to attach to tmux session {}: {}",
+            tmux_session, err
+        ))),
+    }
 }
 
 pub(super) fn cmd_resume(args: ResumeArgs, deps: &Deps) -> Result<(), CliError> {
@@ -1029,10 +1074,10 @@ fn ensure_tmux_available() -> Result<(), CliError> {
     match status {
         Ok(status) if status.success() => Ok(()),
         Ok(_) => Err(CliError::Message(
-            "tmux is required to start loops; install tmux and try again".to_string(),
+            "tmux is required; install tmux and try again".to_string(),
         )),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Err(CliError::Message(
-            "tmux is required to start loops but was not found on PATH".to_string(),
+            "tmux is required but was not found on PATH".to_string(),
         )),
         Err(err) => Err(CliError::Message(format!(
             "failed to check tmux availability: {}",
@@ -1068,7 +1113,7 @@ fn tmux_session_exists(name: &str) -> Result<bool, CliError> {
     match status {
         Ok(status) => Ok(status.success()),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Err(CliError::Message(
-            "tmux is required to start loops but was not found on PATH".to_string(),
+            "tmux is required but was not found on PATH".to_string(),
         )),
         Err(err) => Err(CliError::Message(format!(
             "failed to check tmux session: {}",
