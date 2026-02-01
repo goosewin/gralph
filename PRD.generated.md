@@ -218,7 +218,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests verify package.json dependency parsing.
   * Tests cover Gemfile, mix.exs, and composer.json detection.
 - **Dependencies** COV80-PRD-1
-- [ ] COV80-PRD-3 Add PRD stack detection tests
+- [x] COV80-PRD-3 Add PRD stack detection tests
 ---
 
 ### Task COV80-STATE-1

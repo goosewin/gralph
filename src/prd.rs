@@ -3757,4 +3757,861 @@ mod tests {
         assert!(!is_heading("Not a heading"));
         assert!(!is_heading("")); // Empty line
     }
+
+    // COV80-PRD-3: Stack detection tests
+
+    #[test]
+    fn prd_detect_stack_returns_empty_for_nonexistent_dir() {
+        let detection = prd_detect_stack(Path::new("/nonexistent/path/xyz"));
+        assert!(detection.ids.is_empty());
+        assert!(detection.root.is_none());
+    }
+
+    #[test]
+    fn prd_detect_stack_returns_empty_for_empty_path() {
+        let detection = prd_detect_stack(Path::new(""));
+        assert!(detection.ids.is_empty());
+        assert!(detection.root.is_none());
+    }
+
+    #[test]
+    fn prd_detect_stack_returns_empty_for_file_path() {
+        let temp = tempdir().unwrap();
+        let file = temp.path().join("somefile.txt");
+        fs::write(&file, "content").unwrap();
+
+        let detection = prd_detect_stack(&file);
+        assert!(detection.ids.is_empty());
+        assert!(detection.root.is_none());
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_typescript_with_tsconfig() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("package.json"),
+            r#"{"name": "ts-app", "version": "1.0.0"}"#,
+        )
+        .unwrap();
+        fs::write(base.join("tsconfig.json"), r#"{"compilerOptions": {}}"#).unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.languages.contains(&"JavaScript".to_string()));
+        assert!(detection.languages.contains(&"TypeScript".to_string()));
+        assert!(detection.evidence.contains(&"tsconfig.json".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_pnpm_package_manager() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("package.json"), r#"{"name": "pnpm-app"}"#).unwrap();
+        fs::write(base.join("pnpm-lock.yaml"), "lockfileVersion: 6.0\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.package_managers.contains(&"pnpm".to_string()));
+        assert!(detection.evidence.contains(&"pnpm-lock.yaml".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_yarn_package_manager() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("package.json"), r#"{"name": "yarn-app"}"#).unwrap();
+        fs::write(base.join("yarn.lock"), "# yarn lockfile v1\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.package_managers.contains(&"yarn".to_string()));
+        assert!(detection.evidence.contains(&"yarn.lock".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_npm_package_manager() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("package.json"), r#"{"name": "npm-app"}"#).unwrap();
+        fs::write(base.join("package-lock.json"), r#"{"lockfileVersion": 2}"#).unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.package_managers.contains(&"npm".to_string()));
+        assert!(detection.evidence.contains(&"package-lock.json".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_bun_runtime_and_package_manager() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("package.json"), r#"{"name": "bun-app"}"#).unwrap();
+        fs::write(base.join("bun.lockb"), "binary content").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.runtimes.contains(&"Bun".to_string()));
+        assert!(detection.package_managers.contains(&"bun".to_string()));
+        assert!(detection.evidence.contains(&"bun.lockb".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_bun_via_bunfig() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("package.json"), r#"{"name": "bun-config-app"}"#).unwrap();
+        fs::write(base.join("bunfig.toml"), "[install]\nauto = true\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.runtimes.contains(&"Bun".to_string()));
+        assert!(detection.package_managers.contains(&"bun".to_string()));
+        assert!(detection.evidence.contains(&"bunfig.toml".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_nextjs_framework_via_config() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("package.json"), r#"{"name": "next-app"}"#).unwrap();
+        fs::write(base.join("next.config.js"), "module.exports = {};\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"Next.js".to_string()));
+        assert!(detection.evidence.contains(&"next.config.js".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_nextjs_framework_via_mjs_config() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("package.json"), r#"{"name": "next-esm-app"}"#).unwrap();
+        fs::write(base.join("next.config.mjs"), "export default {};\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"Next.js".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_nuxt_framework_via_config() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("package.json"), r#"{"name": "nuxt-app"}"#).unwrap();
+        fs::write(base.join("nuxt.config.ts"), "export default defineNuxtConfig({});\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"Nuxt".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_svelte_framework_via_config() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("package.json"), r#"{"name": "svelte-app"}"#).unwrap();
+        fs::write(base.join("svelte.config.js"), "export default {};\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"Svelte".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_vite_tool() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("package.json"), r#"{"name": "vite-app"}"#).unwrap();
+        fs::write(base.join("vite.config.ts"), "export default {};\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.tools.contains(&"Vite".to_string()));
+        assert!(detection.evidence.contains(&"vite.config.ts".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_angular_framework() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("package.json"), r#"{"name": "ng-app"}"#).unwrap();
+        fs::write(base.join("angular.json"), r#"{"version": 1}"#).unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"Angular".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_vue_framework_via_config() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("package.json"), r#"{"name": "vue-app"}"#).unwrap();
+        fs::write(base.join("vue.config.js"), "module.exports = {};\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"Vue".to_string()));
+    }
+
+    #[test]
+    fn json_has_dependency_finds_in_dependencies() {
+        let temp = tempdir().unwrap();
+        let pkg = temp.path().join("package.json");
+        fs::write(
+            &pkg,
+            r#"{"dependencies": {"react": "^18.0.0", "axios": "^1.0.0"}}"#,
+        )
+        .unwrap();
+
+        assert!(json_has_dependency(&pkg, "react"));
+        assert!(json_has_dependency(&pkg, "axios"));
+        assert!(!json_has_dependency(&pkg, "vue"));
+    }
+
+    #[test]
+    fn json_has_dependency_finds_in_dev_dependencies() {
+        let temp = tempdir().unwrap();
+        let pkg = temp.path().join("package.json");
+        fs::write(&pkg, r#"{"devDependencies": {"jest": "^29.0.0"}}"#).unwrap();
+
+        assert!(json_has_dependency(&pkg, "jest"));
+        assert!(!json_has_dependency(&pkg, "mocha"));
+    }
+
+    #[test]
+    fn json_has_dependency_finds_in_peer_dependencies() {
+        let temp = tempdir().unwrap();
+        let pkg = temp.path().join("package.json");
+        fs::write(&pkg, r#"{"peerDependencies": {"react": ">=17.0.0"}}"#).unwrap();
+
+        assert!(json_has_dependency(&pkg, "react"));
+    }
+
+    #[test]
+    fn json_has_dependency_returns_false_for_empty_dep() {
+        let temp = tempdir().unwrap();
+        let pkg = temp.path().join("package.json");
+        fs::write(&pkg, r#"{"dependencies": {"react": "^18.0.0"}}"#).unwrap();
+
+        assert!(!json_has_dependency(&pkg, ""));
+    }
+
+    #[test]
+    fn json_has_dependency_returns_false_for_nonexistent_file() {
+        let nonexistent = Path::new("/nonexistent/package.json");
+        assert!(!json_has_dependency(nonexistent, "react"));
+    }
+
+    #[test]
+    fn json_has_dependency_falls_back_to_string_match_for_invalid_json() {
+        let temp = tempdir().unwrap();
+        let pkg = temp.path().join("package.json");
+        fs::write(&pkg, r#"not valid json but has "react" somewhere"#).unwrap();
+
+        assert!(json_has_dependency(&pkg, "react"));
+        assert!(!json_has_dependency(&pkg, "vue"));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_react_from_package_json() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("package.json"),
+            r#"{"name": "react-app", "dependencies": {"react": "^18.0.0"}}"#,
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"React".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_express_from_package_json() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("package.json"),
+            r#"{"dependencies": {"express": "^4.18.0"}}"#,
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"Express".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_fastify_from_package_json() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("package.json"),
+            r#"{"dependencies": {"fastify": "^4.0.0"}}"#,
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"Fastify".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_nestjs_from_package_json() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("package.json"),
+            r#"{"dependencies": {"@nestjs/core": "^10.0.0"}}"#,
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"NestJS".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_go_stack() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("go.mod"), "module example.com/app\n\ngo 1.21\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"Go".to_string()));
+        assert!(detection.languages.contains(&"Go".to_string()));
+        assert!(detection.tools.contains(&"Go modules".to_string()));
+        assert!(detection.evidence.contains(&"go.mod".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_python_pyproject() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("pyproject.toml"),
+            "[project]\nname = \"myapp\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"Python".to_string()));
+        assert!(detection.languages.contains(&"Python".to_string()));
+        assert!(detection.evidence.contains(&"pyproject.toml".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_poetry_tool_in_pyproject() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("pyproject.toml"),
+            "[tool.poetry]\nname = \"myapp\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"Python".to_string()));
+        assert!(detection.tools.contains(&"Poetry".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_python_requirements_txt() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("requirements.txt"), "requests==2.28.0\nflask>=2.0.0\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"Python".to_string()));
+        assert!(detection.languages.contains(&"Python".to_string()));
+        assert!(detection.evidence.contains(&"requirements.txt".to_string()));
+    }
+
+    #[test]
+    fn requirements_contains_detects_django() {
+        let temp = tempdir().unwrap();
+        let req = temp.path().join("requirements.txt");
+        fs::write(&req, "requests==2.28.0\nDjango>=4.0\nflask\n").unwrap();
+
+        assert!(requirements_contains(&req, "django"));
+        assert!(requirements_contains(&req, "flask"));
+        assert!(!requirements_contains(&req, "fastapi"));
+    }
+
+    #[test]
+    fn requirements_contains_handles_version_specifiers() {
+        let temp = tempdir().unwrap();
+        let req = temp.path().join("requirements.txt");
+        fs::write(&req, "django>=4.0,<5.0\nflask==2.3.0\nfastapi<0.100\n").unwrap();
+
+        assert!(requirements_contains(&req, "django"));
+        assert!(requirements_contains(&req, "flask"));
+        assert!(requirements_contains(&req, "fastapi"));
+    }
+
+    #[test]
+    fn requirements_contains_does_not_match_partial_names() {
+        let temp = tempdir().unwrap();
+        let req = temp.path().join("requirements.txt");
+        fs::write(&req, "djangorestframework>=3.14.0\nflask-cors>=3.0.0\n").unwrap();
+
+        // "django" alone should not match "djangorestframework"
+        assert!(!requirements_contains(&req, "django"));
+        // "flask" alone should not match "flask-cors"
+        assert!(!requirements_contains(&req, "flask"));
+    }
+
+    #[test]
+    fn requirements_contains_returns_false_for_nonexistent_file() {
+        let nonexistent = Path::new("/nonexistent/requirements.txt");
+        assert!(!requirements_contains(nonexistent, "django"));
+    }
+
+    #[test]
+    fn requirements_contains_handles_empty_lines() {
+        let temp = tempdir().unwrap();
+        let req = temp.path().join("requirements.txt");
+        fs::write(&req, "\n\n  \ndjango>=4.0\n\n").unwrap();
+
+        assert!(requirements_contains(&req, "django"));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_django_in_requirements() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("requirements.txt"), "django>=4.0\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"Django".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_flask_in_requirements() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("requirements.txt"), "flask>=2.0\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"Flask".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_fastapi_in_requirements() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("requirements.txt"), "fastapi>=0.100.0\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"FastAPI".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_django_in_pyproject() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("pyproject.toml"),
+            "[project]\nname = \"myapp\"\ndependencies = [\"django>=4.0\"]\n",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"Django".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_python_pipfile() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("Pipfile"), "[packages]\nrequests = \"*\"\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"Python".to_string()));
+        assert!(detection.evidence.contains(&"Pipfile".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_python_poetry_lock() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("poetry.lock"), "[[package]]\nname = \"requests\"\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"Python".to_string()));
+        assert!(detection.evidence.contains(&"poetry.lock".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_ruby_gemfile() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("Gemfile"),
+            "source 'https://rubygems.org'\ngem 'sinatra'\n",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"Ruby".to_string()));
+        assert!(detection.languages.contains(&"Ruby".to_string()));
+        assert!(detection.evidence.contains(&"Gemfile".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_rails_in_gemfile() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("Gemfile"),
+            "source 'https://rubygems.org'\ngem 'rails', '~> 7.0'\n",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"Ruby".to_string()));
+        assert!(detection.frameworks.contains(&"Rails".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_sinatra_in_gemfile() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("Gemfile"),
+            "source 'https://rubygems.org'\ngem 'sinatra'\n",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"Sinatra".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_elixir_mix() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("mix.exs"),
+            "defmodule MyApp.MixProject do\n  use Mix.Project\nend\n",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"Elixir".to_string()));
+        assert!(detection.languages.contains(&"Elixir".to_string()));
+        assert!(detection.evidence.contains(&"mix.exs".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_phoenix_in_mix() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("mix.exs"),
+            "defmodule MyApp.MixProject do\n  {:phoenix, \"~> 1.7\"}\nend\n",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"Elixir".to_string()));
+        assert!(detection.frameworks.contains(&"Phoenix".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_php_composer() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("composer.json"),
+            r#"{"name": "vendor/app", "require": {"php": ">=8.0"}}"#,
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"PHP".to_string()));
+        assert!(detection.languages.contains(&"PHP".to_string()));
+        assert!(detection.evidence.contains(&"composer.json".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_laravel_in_composer() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("composer.json"),
+            r#"{"require": {"laravel/framework": "^10.0"}}"#,
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"PHP".to_string()));
+        assert!(detection.frameworks.contains(&"Laravel".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_java_maven() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("pom.xml"),
+            "<project><modelVersion>4.0.0</modelVersion></project>",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"Java".to_string()));
+        assert!(detection.languages.contains(&"Java".to_string()));
+        assert!(detection.tools.contains(&"Maven".to_string()));
+        assert!(detection.evidence.contains(&"pom.xml".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_spring_boot_in_pom() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("pom.xml"),
+            "<project><parent><artifactId>spring-boot-starter-parent</artifactId></parent></project>",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"Java".to_string()));
+        assert!(detection.frameworks.contains(&"Spring Boot".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_java_gradle() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("build.gradle"),
+            "plugins { id 'java' }\n",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"Java".to_string()));
+        assert!(detection.tools.contains(&"Gradle".to_string()));
+        assert!(detection.evidence.contains(&"build.gradle".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_spring_boot_in_gradle() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("build.gradle"),
+            "plugins {\n  id 'org.springframework.boot' version '3.0.0'\n}\nid 'spring-boot'\n",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.frameworks.contains(&"Spring Boot".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_gradle_kts() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("build.gradle.kts"),
+            "plugins { kotlin(\"jvm\") }\n",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&"Java".to_string()));
+        assert!(detection.tools.contains(&"Gradle".to_string()));
+        assert!(detection.evidence.contains(&"build.gradle.kts".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_dotnet_csproj() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("MyApp.csproj"),
+            "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&".NET".to_string()));
+        assert!(detection.languages.contains(&"C#".to_string()));
+        assert!(detection.evidence.iter().any(|e| e.ends_with(".csproj")));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_dotnet_sln() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("MyApp.sln"),
+            "Microsoft Visual Studio Solution File\n",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.ids.contains(&".NET".to_string()));
+        assert!(detection.languages.contains(&"C#".to_string()));
+        assert!(detection.evidence.iter().any(|e| e.ends_with(".sln")));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_docker() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("Dockerfile"), "FROM node:18\nWORKDIR /app\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.tools.contains(&"Docker".to_string()));
+        assert!(detection.evidence.contains(&"Dockerfile".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_docker_compose_yml() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("docker-compose.yml"),
+            "version: '3'\nservices:\n  web:\n",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.tools.contains(&"Docker Compose".to_string()));
+        assert!(detection.evidence.contains(&"docker-compose.yml".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_docker_compose_yaml() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("docker-compose.yaml"),
+            "version: '3'\nservices:\n  db:\n",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.tools.contains(&"Docker Compose".to_string()));
+        assert!(detection.evidence.contains(&"docker-compose.yaml".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_makefile() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("Makefile"), "build:\n\tgo build\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.tools.contains(&"Make".to_string()));
+        assert!(detection.evidence.contains(&"Makefile".to_string()));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_terraform() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(
+            base.join("main.tf"),
+            "resource \"aws_instance\" \"example\" {}\n",
+        )
+        .unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.tools.contains(&"Terraform".to_string()));
+        assert!(detection.evidence.iter().any(|e| e.ends_with(".tf")));
+    }
+
+    #[test]
+    fn prd_detect_stack_detects_multiple_terraform_files() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("main.tf"), "resource {}\n").unwrap();
+        fs::write(base.join("variables.tf"), "variable {}\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert!(detection.tools.contains(&"Terraform".to_string()));
+        // Should have both files in evidence
+        assert!(detection.evidence.iter().filter(|e| e.ends_with(".tf")).count() >= 1);
+    }
+
+    #[test]
+    fn prd_detect_stack_sets_selected_ids_from_ids() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("Cargo.toml"), "[package]\nname = \"app\"\n").unwrap();
+        fs::write(base.join("go.mod"), "module app\n").unwrap();
+
+        let detection = prd_detect_stack(base);
+        assert_eq!(detection.ids, detection.selected_ids);
+        assert!(detection.selected_ids.contains(&"Rust".to_string()));
+        assert!(detection.selected_ids.contains(&"Go".to_string()));
+    }
+
+    #[test]
+    fn contains_case_insensitive_returns_false_for_empty_needle() {
+        let temp = tempdir().unwrap();
+        let file = temp.path().join("test.txt");
+        fs::write(&file, "some content").unwrap();
+
+        assert!(!contains_case_insensitive(&file, ""));
+    }
+
+    #[test]
+    fn contains_case_insensitive_returns_false_for_nonexistent_file() {
+        let nonexistent = Path::new("/nonexistent/file.txt");
+        assert!(!contains_case_insensitive(nonexistent, "anything"));
+    }
+
+    #[test]
+    fn contains_case_insensitive_matches_regardless_of_case() {
+        let temp = tempdir().unwrap();
+        let file = temp.path().join("test.txt");
+        fs::write(&file, "This has DJANGO and Flask content").unwrap();
+
+        assert!(contains_case_insensitive(&file, "django"));
+        assert!(contains_case_insensitive(&file, "DJANGO"));
+        assert!(contains_case_insensitive(&file, "Django"));
+        assert!(contains_case_insensitive(&file, "flask"));
+        assert!(contains_case_insensitive(&file, "FLASK"));
+        assert!(!contains_case_insensitive(&file, "fastapi"));
+    }
+
+    #[test]
+    fn add_unique_skips_empty_values() {
+        let mut values = vec!["existing".to_string()];
+        add_unique(&mut values, "");
+        assert_eq!(values.len(), 1);
+    }
+
+    #[test]
+    fn add_unique_skips_duplicates() {
+        let mut values = vec!["first".to_string()];
+        add_unique(&mut values, "first");
+        assert_eq!(values.len(), 1);
+        add_unique(&mut values, "second");
+        assert_eq!(values.len(), 2);
+    }
+
+    #[test]
+    fn record_stack_file_uses_relative_paths_when_possible() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let subdir = base.join("src");
+        fs::create_dir_all(&subdir).unwrap();
+        let file = subdir.join("main.rs");
+        fs::write(&file, "fn main() {}").unwrap();
+
+        let mut detection = StackDetection::default();
+        detection.root = Some(base.to_path_buf());
+        record_stack_file(&mut detection, &file);
+
+        assert!(detection.evidence.contains(&"src/main.rs".to_string()));
+    }
+
+    #[test]
+    fn record_stack_file_uses_absolute_path_without_root() {
+        let temp = tempdir().unwrap();
+        let file = temp.path().join("test.txt");
+        fs::write(&file, "content").unwrap();
+
+        let mut detection = StackDetection::default();
+        // No root set
+        record_stack_file(&mut detection, &file);
+
+        // Should contain the full path since no root is set
+        assert!(!detection.evidence.is_empty());
+        assert!(detection.evidence[0].contains("test.txt"));
+    }
 }

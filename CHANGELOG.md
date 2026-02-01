@@ -31,6 +31,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV80-APP-1 Add app CLI dispatch tests for error formatting and subcommand routing.
 - COV80-APP-3 Add app doctor and init tests for config errors, backend checks, and scaffolding paths.
 - COV80-PRD-2 Add PRD sanitize tests for context filtering and Open Questions removal.
+- COV80-PRD-3 Add PRD stack detection tests for framework and tool detection.
 
 ### Fixed
 
