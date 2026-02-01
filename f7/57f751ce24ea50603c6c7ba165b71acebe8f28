@@ -1,0 +1,27 @@
+src/prd.rs
+  cc37f59adf2ff643 3511-3759
+CHANGELOG.md
+  cc37f59adf2ff643 33
+PRD.generated.md
+  cc37f59adf2ff643 208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "f757f751ce24ea50603c6c7ba165b71acebe8f28",
+  "prompts": {
+    "cc37f59adf2ff643": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b04feae5-7b73-4f3b-8f6d-fe04d60cbfc1",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 255,
+      "total_deletions": 5,
+      "accepted_lines": 251,
+      "overriden_lines": 0
+    }
+  }
+}
