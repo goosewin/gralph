@@ -192,7 +192,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests cover lines 89-127 prd_validate_file entry.
   * Tests verify error message formatting.
 - **Dependencies** None
-- [ ] COV80-PRD-1 Add PRD error and validation tests
+- [x] COV80-PRD-1 Add PRD error and validation tests
 ---
 
 ### Task COV80-PRD-2

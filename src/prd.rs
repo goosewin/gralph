@@ -3270,4 +3270,242 @@ mod tests {
 
         assert!(summary.contains("- Stack focus: Rust"));
     }
+
+    // COV80-PRD-1: Tests for PrdError Display and source (lines 44-62)
+
+    #[test]
+    fn prd_error_io_display_includes_path_and_source() {
+        let io_err = io::Error::new(io::ErrorKind::NotFound, "file not found");
+        let path = PathBuf::from("/tmp/missing.md");
+        let err = PrdError::Io {
+            path: path.clone(),
+            source: io_err,
+        };
+
+        let display = format!("{}", err);
+        assert!(display.contains("prd io error at"));
+        assert!(display.contains("/tmp/missing.md"));
+        assert!(display.contains("file not found"));
+    }
+
+    #[test]
+    fn prd_error_validation_display_shows_messages() {
+        let validation_err = PrdValidationError {
+            messages: vec![
+                "Error: first issue".to_string(),
+                "Error: second issue".to_string(),
+            ],
+        };
+        let err = PrdError::Validation(validation_err);
+
+        let display = format!("{}", err);
+        assert!(display.contains("Error: first issue"));
+        assert!(display.contains("Error: second issue"));
+        assert!(display.contains('\n'));
+    }
+
+    #[test]
+    fn prd_error_io_source_returns_io_error() {
+        use std::error::Error;
+
+        let io_err = io::Error::new(io::ErrorKind::PermissionDenied, "access denied");
+        let path = PathBuf::from("/restricted/file.md");
+        let err = PrdError::Io {
+            path,
+            source: io_err,
+        };
+
+        let source = err.source();
+        assert!(source.is_some());
+        let source_display = format!("{}", source.unwrap());
+        assert!(source_display.contains("access denied"));
+    }
+
+    #[test]
+    fn prd_error_validation_source_returns_validation_error() {
+        use std::error::Error;
+
+        let validation_err = PrdValidationError {
+            messages: vec!["Missing required field: ID".to_string()],
+        };
+        let err = PrdError::Validation(validation_err);
+
+        let source = err.source();
+        assert!(source.is_some());
+        let source_display = format!("{}", source.unwrap());
+        assert!(source_display.contains("Missing required field: ID"));
+    }
+
+    #[test]
+    fn prd_validation_error_display_joins_messages() {
+        let err = PrdValidationError {
+            messages: vec![
+                "Line 1: error".to_string(),
+                "Line 2: warning".to_string(),
+                "Line 3: info".to_string(),
+            ],
+        };
+
+        let display = format!("{}", err);
+        assert_eq!(display, "Line 1: error\nLine 2: warning\nLine 3: info");
+    }
+
+    #[test]
+    fn prd_validation_error_is_std_error() {
+        use std::error::Error;
+
+        let err = PrdValidationError {
+            messages: vec!["test error".to_string()],
+        };
+
+        // Verify it implements std::error::Error
+        let _: &dyn Error = &err;
+    }
+
+    // COV80-PRD-1: Tests for prd_validate_file entry (lines 89-127)
+
+    #[test]
+    fn prd_validate_file_rejects_empty_path() {
+        let empty_path = Path::new("");
+        let result = prd_validate_file(empty_path, false, None);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.messages.iter().any(|m| m.contains("task_file is required")));
+    }
+
+    #[test]
+    fn prd_validate_file_rejects_nonexistent_file() {
+        let temp = tempdir().unwrap();
+        let nonexistent = temp.path().join("does_not_exist.md");
+
+        let result = prd_validate_file(&nonexistent, false, None);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.messages.iter().any(|m| m.contains("Task file does not exist")));
+    }
+
+    #[test]
+    fn prd_validate_file_rejects_directory_path() {
+        let temp = tempdir().unwrap();
+        let dir = temp.path().join("subdir");
+        fs::create_dir_all(&dir).unwrap();
+
+        let result = prd_validate_file(&dir, false, None);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.messages.iter().any(|m| m.contains("Task file does not exist")));
+    }
+
+    #[test]
+    fn prd_validate_file_rejects_whitespace_only_content() {
+        let temp = tempdir().unwrap();
+        let prd = temp.path().join("whitespace.md");
+        fs::write(&prd, "   \n\t\n  ").unwrap();
+
+        let result = prd_validate_file(&prd, false, None);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.messages.iter().any(|m| m.contains("Task file is empty")));
+    }
+
+    #[test]
+    fn prd_validate_file_error_message_includes_file_path() {
+        let temp = tempdir().unwrap();
+        let prd = temp.path().join("test_prd.md");
+        fs::write(&prd, "").unwrap();
+
+        let result = prd_validate_file(&prd, false, None);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let display = format!("{}", err);
+        assert!(display.contains("test_prd.md"));
+    }
+
+    #[test]
+    fn prd_validate_contents_empty_content_error_includes_path() {
+        let task_file = Path::new("my_prd.md");
+        let result = prd_validate_contents("", task_file, false, None);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.messages.iter().any(|m| {
+            m.contains("my_prd.md") && m.contains("Task file is empty")
+        }));
+    }
+
+    #[test]
+    fn prd_validate_contents_open_questions_error_includes_path() {
+        let task_file = Path::new("special.md");
+        let contents = "# PRD\n\n## Open Questions\n- Question?\n";
+
+        let result = prd_validate_contents(contents, task_file, false, None);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.messages.iter().any(|m| {
+            m.contains("special.md") && m.contains("Open Questions section is not allowed")
+        }));
+    }
+
+    // COV80-PRD-1: Error message formatting verification
+
+    #[test]
+    fn prd_error_io_formatting_is_readable() {
+        let io_err = io::Error::new(io::ErrorKind::NotFound, "no such file");
+        let err = PrdError::Io {
+            path: PathBuf::from("docs/context.md"),
+            source: io_err,
+        };
+
+        let msg = format!("{}", err);
+        // Should have format: "prd io error at <path>: <source>"
+        assert!(msg.starts_with("prd io error at docs/context.md:"));
+    }
+
+    #[test]
+    fn prd_validation_error_empty_messages_displays_empty() {
+        let err = PrdValidationError { messages: vec![] };
+        let display = format!("{}", err);
+        assert!(display.is_empty());
+    }
+
+    #[test]
+    fn prd_validation_error_single_message_no_newline() {
+        let err = PrdValidationError {
+            messages: vec!["Single error".to_string()],
+        };
+        let display = format!("{}", err);
+        assert_eq!(display, "Single error");
+        assert!(!display.contains('\n'));
+    }
+
+    #[test]
+    fn prd_validate_file_reports_multiple_errors_in_order() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+
+        let prd = base.join("prd.md");
+        // PRD with open questions and missing fields - should report multiple errors
+        fs::write(
+            &prd,
+            "# PRD\n\n## Open Questions\n- Question\n\n### Task ERR-1\n- **ID** ERR-1\n- [ ] ERR-1 Task\n",
+        )
+        .unwrap();
+
+        let result = prd_validate_file(&prd, false, None);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        // Should have multiple error messages
+        assert!(err.messages.len() > 1);
+        // Open questions error should be present
+        assert!(err.messages.iter().any(|m| m.contains("Open Questions")));
+        // Missing field errors should be present
+        assert!(err.messages.iter().any(|m| m.contains("Missing required field")));
+    }
 }
