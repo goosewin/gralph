@@ -1,0 +1,27 @@
+PRD.coverage-90.md
+  5744f8cb2970b545 61
+CHANGELOG.md
+  5744f8cb2970b545 22
+src/app/loop_session.rs
+  5744f8cb2970b545 3611-4220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "986545b1b9457bdebde8d5eaad2e9ec3a6e92d15",
+  "prompts": {
+    "5744f8cb2970b545": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "561559ab-f6c1-4864-bf35-ac4d67d435ef",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 612,
+      "total_deletions": 1,
+      "accepted_lines": 612,
+      "overriden_lines": 0
+    }
+  }
+}
