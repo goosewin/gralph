@@ -1,0 +1,27 @@
+PDF.increase-coverage.invalid.md
+  ccdd239087a1b718 90
+src/verifier.rs
+  ccdd239087a1b718 4842-5168
+CHANGELOG.md
+  ccdd239087a1b718 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "2444405f13afe9d5d6bb2c0137bf1a79a3f37094",
+  "prompts": {
+    "ccdd239087a1b718": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fbcb0a27-b823-495b-a7cf-514410e23e5b",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 337,
+      "total_deletions": 9,
+      "accepted_lines": 329,
+      "overriden_lines": 0
+    }
+  }
+}
