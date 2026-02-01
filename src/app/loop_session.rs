@@ -1453,6 +1453,14 @@ mod tests {
         fs::write(path, contents).unwrap();
     }
 
+    fn set_state_env(root: &Path) -> PathBuf {
+        let state_dir = root.join("state");
+        set_env("GRALPH_STATE_DIR", &state_dir);
+        set_env("GRALPH_STATE_FILE", state_dir.join("state.json"));
+        set_env("GRALPH_LOCK_FILE", state_dir.join("state.lock"));
+        state_dir
+    }
+
     fn load_config(contents: &str) -> Config {
         let temp = tempfile::tempdir().unwrap();
         let config_path = temp.path().join("default.yaml");
@@ -1759,7 +1767,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let counter = temp.path().join("tmux-counter");
         let script = format!(
-            "#!/bin/sh\ncounter=\"{}\"\nif [ -f \"$counter\" ]; then\n  exit 1\nfi\ntouch \"$counter\"\nexit 0\n",
+            "#!/bin/sh\ncounter=\"{}\"\nif [ -f \"$counter\" ]; then\n  exit 1\nfi\n: > \"$counter\"\nexit 0\n",
             counter.display()
         );
         write_tmux_stub(temp.path(), &script);
@@ -1890,5 +1898,215 @@ mod tests {
             })
         );
         assert_eq!(notification_decision(LoopStatus::Running, true), None);
+    }
+
+    #[test]
+    fn cmd_cleanup_marks_stale_sessions() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = set_state_env(temp.path());
+        let deps = Deps::real();
+        let store = deps.state_store();
+        store.init_state().unwrap();
+
+        let state = serde_json::json!({
+            "sessions": {
+                "demo": {
+                    "status": "running",
+                    "pid": 999999
+                }
+            }
+        });
+        fs::write(
+            state_dir.join("state.json"),
+            serde_json::to_string(&state).unwrap(),
+        )
+        .unwrap();
+
+        cmd_cleanup(
+            CleanupArgs {
+                remove: false,
+                purge: false,
+            },
+            &deps,
+        )
+        .unwrap();
+
+        let updated = fs::read_to_string(state_dir.join("state.json")).unwrap();
+        let updated: Value = serde_json::from_str(&updated).unwrap();
+        assert_eq!(updated["sessions"]["demo"]["status"], "stale");
+    }
+
+    #[test]
+    fn cmd_cleanup_removes_stale_sessions() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = set_state_env(temp.path());
+        let deps = Deps::real();
+        let store = deps.state_store();
+        store.init_state().unwrap();
+
+        let state = serde_json::json!({
+            "sessions": {
+                "demo": {
+                    "status": "running",
+                    "pid": 999999
+                }
+            }
+        });
+        fs::write(
+            state_dir.join("state.json"),
+            serde_json::to_string(&state).unwrap(),
+        )
+        .unwrap();
+
+        cmd_cleanup(
+            CleanupArgs {
+                remove: true,
+                purge: false,
+            },
+            &deps,
+        )
+        .unwrap();
+
+        let updated = fs::read_to_string(state_dir.join("state.json")).unwrap();
+        let updated: Value = serde_json::from_str(&updated).unwrap();
+        assert!(updated["sessions"].get("demo").is_none());
+    }
+
+    #[test]
+    fn cmd_logs_reports_missing_session() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        set_state_env(temp.path());
+        let deps = Deps::real();
+        deps.state_store().init_state().unwrap();
+
+        let err = cmd_logs(
+            LogsArgs {
+                name: "missing".to_string(),
+                follow: false,
+                raw: false,
+            },
+            &deps,
+        )
+        .unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Session not found"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_logs_reports_missing_log_file() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = set_state_env(temp.path());
+        let deps = Deps::real();
+        deps.state_store().init_state().unwrap();
+
+        let missing_log = temp.path().join("missing.log");
+        let state = serde_json::json!({
+            "sessions": {
+                "demo": {
+                    "log_file": missing_log.to_string_lossy(),
+                    "dir": temp.path().to_string_lossy()
+                }
+            }
+        });
+        fs::write(
+            state_dir.join("state.json"),
+            serde_json::to_string(&state).unwrap(),
+        )
+        .unwrap();
+
+        let err = cmd_logs(
+            LogsArgs {
+                name: "demo".to_string(),
+                follow: false,
+                raw: false,
+            },
+            &deps,
+        )
+        .unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Log file"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_logs_prints_tail_for_existing_log() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = set_state_env(temp.path());
+        let deps = Deps::real();
+        deps.state_store().init_state().unwrap();
+
+        let log_dir = temp.path().join(".gralph");
+        fs::create_dir_all(&log_dir).unwrap();
+        let log_file = log_dir.join("demo.log");
+        fs::write(&log_file, "line one\nline two\n").unwrap();
+        let state = serde_json::json!({
+            "sessions": {
+                "demo": {
+                    "log_file": log_file.to_string_lossy(),
+                    "dir": temp.path().to_string_lossy()
+                }
+            }
+        });
+        fs::write(
+            state_dir.join("state.json"),
+            serde_json::to_string(&state).unwrap(),
+        )
+        .unwrap();
+
+        cmd_logs(
+            LogsArgs {
+                name: "demo".to_string(),
+                follow: false,
+                raw: false,
+            },
+            &deps,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn cmd_start_dry_run_renders_prompt() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(&temp.path().join("README.md"), "context\n");
+        write_file(
+            &temp.path().join(".gralph.yaml"),
+            "defaults:\n  context_files: README.md\n",
+        );
+        write_file(
+            &temp.path().join("PRD.md"),
+            "# PRD\n\n## Implementation Tasks\n\n### Task T-1\n\n- **ID** T-1\n- **Context Bundle** `README.md`\n- **DoD** ok\n- **Checklist**\n  * check\n- **Dependencies** None\n- [ ] T-1 test\n",
+        );
+
+        let args = StartArgs {
+            dir: temp.path().to_path_buf(),
+            name: None,
+            max_iterations: None,
+            task_file: None,
+            completion_marker: None,
+            backend: None,
+            model: None,
+            variant: None,
+            prompt_template: None,
+            webhook: None,
+            no_worktree: false,
+            strict_prd: true,
+            dry_run: true,
+        };
+        let deps = Deps::real();
+
+        cmd_start_dry_run(args, &deps).unwrap();
     }
 }

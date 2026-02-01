@@ -908,12 +908,8 @@ mod tests {
     use std::collections::BTreeMap;
     use std::fs;
     use std::process::Command as ProcCommand;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
     fn env_guard() -> std::sync::MutexGuard<'static, ()> {
-        let guard = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
+        let guard = crate::test_support::env_lock();
         clear_env_overrides();
         guard
     }
@@ -945,6 +941,24 @@ mod tests {
         let err = CliError::Message("nope".to_string());
         let code = exit_code_for(Err(err));
         assert_eq!(code, ExitCode::FAILURE);
+    }
+
+    #[test]
+    fn cmd_intro_runs() {
+        let _guard = env_guard();
+        assert!(cmd_intro().is_ok());
+    }
+
+    #[test]
+    fn cmd_version_runs() {
+        let _guard = env_guard();
+        assert!(cmd_version().is_ok());
+    }
+
+    #[test]
+    fn cmd_backends_runs() {
+        let _guard = env_guard();
+        assert!(cmd_backends().is_ok());
     }
 
     fn write_file(path: &Path, contents: &str) {
@@ -986,6 +1000,36 @@ mod tests {
                 remove_env("PATH");
             }
         }
+    }
+
+    struct CurrentDirGuard {
+        previous: PathBuf,
+    }
+
+    impl CurrentDirGuard {
+        fn set(path: &Path) -> Self {
+            let previous = env::current_dir().unwrap();
+            env::set_current_dir(path).unwrap();
+            Self { previous }
+        }
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            env::set_current_dir(&self.previous).unwrap();
+        }
+    }
+
+    #[cfg(unix)]
+    fn write_mock_git(dir: &Path, script: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = dir.join("git");
+        fs::write(&path, script).unwrap();
+        let mut perms = fs::metadata(&path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&path, perms).unwrap();
+        path
     }
 
     fn run_loop_args(dir: PathBuf) -> RunLoopArgs {
@@ -1534,6 +1578,122 @@ mod tests {
     }
 
     #[test]
+    fn cmd_config_get_reads_existing_key() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join(".gralph.yaml"),
+            "defaults:\n  backend: opencode\n",
+        );
+        let _cwd_guard = CurrentDirGuard::set(temp.path());
+
+        let args = cli::ConfigGetArgs {
+            key: "defaults.backend".to_string(),
+        };
+        cmd_config_get(args).unwrap();
+    }
+
+    #[test]
+    fn cmd_config_get_reports_missing_key() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(&temp.path().join(".gralph.yaml"), "defaults: {}\n");
+        let _cwd_guard = CurrentDirGuard::set(temp.path());
+
+        let args = cli::ConfigGetArgs {
+            key: "defaults.missing".to_string(),
+        };
+        let err = cmd_config_get(args).unwrap_err();
+        match err {
+            CliError::Message(message) => assert!(message.contains("Config key not found")),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_config_list_reads_project_config() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join(".gralph.yaml"),
+            "defaults:\n  backend: claude\nlogging:\n  level: info\n",
+        );
+        let _cwd_guard = CurrentDirGuard::set(temp.path());
+
+        cmd_config_list().unwrap();
+    }
+
+    #[test]
+    fn check_git_clean_warns_when_git_missing() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let _path_guard = PathGuard::new(temp.path());
+
+        let check = check_git_clean(temp.path()).unwrap();
+
+        assert_eq!(check.status, DoctorStatus::Warn);
+        assert!(check.detail.contains("git not available"));
+    }
+
+    #[test]
+    fn check_git_clean_warns_when_not_git_repo() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+
+        let check = check_git_clean(temp.path()).unwrap();
+
+        assert_eq!(check.status, DoctorStatus::Warn);
+        assert!(!check.detail.is_empty());
+    }
+
+    #[test]
+    fn check_git_clean_reports_clean_and_dirty_repo() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "clean");
+
+        let clean_check = check_git_clean(temp.path()).unwrap();
+        assert_eq!(clean_check.status, DoctorStatus::Ok);
+
+        fs::write(temp.path().join("README.md"), "dirty").unwrap();
+        let dirty_check = check_git_clean(temp.path()).unwrap();
+        assert_eq!(dirty_check.status, DoctorStatus::Warn);
+        assert!(dirty_check.detail.contains("dirty"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn check_git_clean_warns_when_repo_root_empty() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_mock_git(temp.path(), "#!/bin/sh\nexit 0\n");
+        let _path_guard = PathGuard::new(temp.path());
+
+        let check = check_git_clean(temp.path()).unwrap();
+
+        assert_eq!(check.status, DoctorStatus::Warn);
+        assert_eq!(check.detail, "unable to resolve repo root");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn check_git_clean_warns_when_git_status_fails() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let script = format!(
+            "#!/bin/sh\nrepo=\"\"\nprev=\"\"\nfor arg in \"$@\"; do\n  if [ \"$prev\" = \"-C\" ]; then\n    repo=\"$arg\"\n    prev=\"\"\n    continue\n  fi\n  if [ \"$arg\" = \"-C\" ]; then\n    prev=\"-C\"\n    continue\n  fi\n  if [ \"$arg\" = \"rev-parse\" ]; then\n    if [ -n \"$repo\" ]; then\n      printf '%s\\n' \"$repo\"\n    fi\n    exit 0\n  fi\n  if [ \"$arg\" = \"status\" ]; then\n    exit 1\n  fi\ndone\nexit 0\n"
+        );
+        write_mock_git(temp.path(), &script);
+        let _path_guard = PathGuard::new(temp.path());
+
+        let check = check_git_clean(temp.path()).unwrap();
+
+        assert_eq!(check.status, DoctorStatus::Warn);
+        assert_eq!(check.detail, "unable to check git status");
+    }
+
+    #[test]
     fn set_yaml_value_sets_nested_keys_and_overwrites_non_mapping() {
         let mut root = serde_yaml::Value::String("oops".to_string());
 
@@ -2007,6 +2167,7 @@ mod tests {
 
     #[test]
     fn ensure_unique_worktree_branch_handles_collisions() {
+        let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");
@@ -2026,6 +2187,7 @@ mod tests {
 
     #[test]
     fn ensure_unique_worktree_branch_handles_branch_only_collision() {
+        let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");
@@ -2044,6 +2206,7 @@ mod tests {
 
     #[test]
     fn ensure_unique_worktree_branch_handles_path_only_collision() {
+        let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");
@@ -2062,6 +2225,7 @@ mod tests {
 
     #[test]
     fn ensure_unique_worktree_branch_returns_base_when_available() {
+        let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");
@@ -2079,6 +2243,7 @@ mod tests {
 
     #[test]
     fn create_worktree_at_rejects_existing_branch() {
+        let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");
@@ -2099,6 +2264,7 @@ mod tests {
 
     #[test]
     fn create_worktree_at_rejects_existing_path() {
+        let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");

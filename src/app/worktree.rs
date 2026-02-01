@@ -419,3 +419,155 @@ fn print_auto_worktree_hint() {
         "Hint: use --no-worktree or set defaults.auto_worktree: false to disable auto worktrees."
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    struct CurrentDirGuard {
+        original: PathBuf,
+    }
+
+    impl CurrentDirGuard {
+        fn set(path: &Path) -> Self {
+            let original = env::current_dir().unwrap();
+            env::set_current_dir(path).unwrap();
+            Self { original }
+        }
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            let _ = env::set_current_dir(&self.original);
+        }
+    }
+
+    fn run_git(dir: &Path, args: &[&str]) {
+        let output = ProcCommand::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}{}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn init_repo(dir: &Path) {
+        run_git(dir, &["init"]);
+        run_git(dir, &["config", "user.email", "test@example.com"]);
+        run_git(dir, &["config", "user.name", "Test User"]);
+        fs::write(dir.join("README.md"), "init\n").unwrap();
+        run_git(dir, &["add", "."]);
+        run_git(dir, &["commit", "-m", "init"]);
+    }
+
+    #[test]
+    fn cmd_worktree_create_creates_branch_and_path() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_repo(temp.path());
+        let _dir_guard = CurrentDirGuard::set(temp.path());
+
+        cmd_worktree_create(WorktreeCreateArgs {
+            id: "C-1".to_string(),
+        })
+        .unwrap();
+
+        let worktree_path = temp.path().join(".worktrees").join("task-C-1");
+        assert!(worktree_path.is_dir());
+        run_git(
+            temp.path(),
+            &["show-ref", "--verify", "--quiet", "refs/heads/task-C-1"],
+        );
+    }
+
+    #[test]
+    fn cmd_worktree_create_rejects_dirty_repo() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_repo(temp.path());
+        fs::write(temp.path().join("README.md"), "dirty\n").unwrap();
+        let _dir_guard = CurrentDirGuard::set(temp.path());
+
+        let err = cmd_worktree_create(WorktreeCreateArgs {
+            id: "C-2".to_string(),
+        })
+        .unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Git working tree is dirty"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_worktree_finish_reports_missing_branch() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_repo(temp.path());
+        let _dir_guard = CurrentDirGuard::set(temp.path());
+
+        let err = cmd_worktree_finish(WorktreeFinishArgs {
+            id: "C-3".to_string(),
+        })
+        .unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Branch does not exist"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_worktree_finish_reports_missing_path() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_repo(temp.path());
+        run_git(temp.path(), &["branch", "task-C-4"]);
+        let _dir_guard = CurrentDirGuard::set(temp.path());
+
+        let err = cmd_worktree_finish(WorktreeFinishArgs {
+            id: "C-4".to_string(),
+        })
+        .unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Worktree path is missing"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_worktree_finish_rejects_current_branch() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_repo(temp.path());
+        run_git(temp.path(), &["checkout", "-b", "task-C-5"]);
+        let worktree_path = temp.path().join(".worktrees").join("task-C-5");
+        fs::create_dir_all(&worktree_path).unwrap();
+        let _dir_guard = CurrentDirGuard::set(temp.path());
+
+        let err = cmd_worktree_finish(WorktreeFinishArgs {
+            id: "C-5".to_string(),
+        })
+        .unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Cannot finish while on branch"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+}

@@ -5,6 +5,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+mod support;
+use support::FakeCli;
+
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
 const ENV_KEYS: [&str; 8] = [
@@ -145,4 +148,39 @@ fn cli_prd_check_reports_missing_file() {
     cmd.assert()
         .failure()
         .stderr(predicate::str::contains("Task file does not exist"));
+}
+
+#[test]
+fn cli_prd_create_writes_generated_file() {
+    let temp = tempfile::tempdir().unwrap();
+    let _guard = prepare_env(temp.path());
+    let project = temp_path(temp.path(), "project");
+    fs::create_dir_all(&project).unwrap();
+    fs::write(project.join("ARCHITECTURE.md"), "arch\n").unwrap();
+    fs::write(project.join("PROCESS.md"), "process\n").unwrap();
+
+    let prd_output = project.join("PRD.generated.md");
+    let prd_contents = "# Project Requirements Document\n\n## Overview\n\nTest.\n\n## Implementation Tasks\n\n### Task TST-1\n\n- **ID** TST-1\n- **Context Bundle** `ARCHITECTURE.md`\n- **DoD** Example.\n- **Checklist**\n  * Example\n- **Dependencies** None\n- [ ] TST-1 Example task\n";
+    let fake = FakeCli::new("codex", prd_contents, "", 0).unwrap();
+    let _path_guard = fake.prepend_to_path().unwrap();
+
+    let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("gralph");
+    cmd.current_dir(&project);
+    cmd.args([
+        "prd",
+        "create",
+        "--goal",
+        "Test PRD",
+        "--backend",
+        "codex",
+        "--output",
+    ])
+    .arg(&prd_output);
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("PRD created:"));
+
+    let generated = fs::read_to_string(&prd_output).unwrap();
+    assert!(generated.contains("### Task TST-1"));
 }
