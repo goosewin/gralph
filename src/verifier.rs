@@ -4285,4 +4285,558 @@ Coverage Results: 75.00%
         let result = ensure_gh_authenticated(temp.path());
         assert!(result.is_ok());
     }
+
+    // COV80-VER-3: Review gate polling tests
+
+    #[test]
+    fn merge_method_as_flag_returns_correct_flags() {
+        assert_eq!(MergeMethod::Merge.as_flag(), "--merge");
+        assert_eq!(MergeMethod::Squash.as_flag(), "--squash");
+        assert_eq!(MergeMethod::Rebase.as_flag(), "--rebase");
+    }
+
+    #[test]
+    fn gate_decision_is_passed_returns_true_for_passed() {
+        let decision = GateDecision::Passed("ok".to_string());
+        assert!(decision.is_passed());
+        assert!(!decision.is_failed());
+    }
+
+    #[test]
+    fn gate_decision_is_failed_returns_true_for_failed() {
+        let decision = GateDecision::Failed("error".to_string());
+        assert!(decision.is_failed());
+        assert!(!decision.is_passed());
+    }
+
+    #[test]
+    fn gate_decision_pending_returns_false_for_both_checks() {
+        let decision = GateDecision::Pending("waiting".to_string());
+        assert!(!decision.is_passed());
+        assert!(!decision.is_failed());
+    }
+
+    #[test]
+    fn gate_decision_summary_returns_message() {
+        assert_eq!(
+            GateDecision::Passed("all good".to_string()).summary(),
+            "all good"
+        );
+        assert_eq!(
+            GateDecision::Failed("failed check".to_string()).summary(),
+            "failed check"
+        );
+        assert_eq!(
+            GateDecision::Pending("waiting for CI".to_string()).summary(),
+            "waiting for CI"
+        );
+    }
+
+    #[test]
+    fn evaluate_review_gate_skips_approval_when_not_required() {
+        let mut settings = base_review_settings();
+        settings.require_approval = false;
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "COMMENTED",
+                    "body": "Rating: 9/10",
+                    "submittedAt": "2024-01-02T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(_)));
+    }
+
+    #[test]
+    fn evaluate_review_gate_uses_latest_review_by_timestamp() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "APPROVED",
+                    "body": "Rating: 9/10",
+                    "submittedAt": "2024-01-01T00:00:00Z"
+                },
+                {
+                    "author": { "login": "greptile" },
+                    "state": "CHANGES_REQUESTED",
+                    "body": "Rating: 9/10",
+                    "submittedAt": "2024-01-02T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Failed(message) if message.contains("requested")));
+    }
+
+    #[test]
+    fn evaluate_review_gate_allows_issue_budget_when_configured() {
+        let mut settings = base_review_settings();
+        settings.max_issues = 3;
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "APPROVED",
+                    "body": "Rating: 9/10\nIssues: 2",
+                    "submittedAt": "2024-01-02T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(_)));
+    }
+
+    #[test]
+    fn evaluate_check_gate_reports_failed_on_timed_out() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "COMPLETED",
+                    "conclusion": "TIMED_OUT"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Failed(message) if message.contains("ci")));
+    }
+
+    #[test]
+    fn evaluate_check_gate_reports_failed_on_stale() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "COMPLETED",
+                    "conclusion": "STALE"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Failed(message) if message.contains("ci")));
+    }
+
+    #[test]
+    fn evaluate_check_gate_passes_with_neutral_conclusion() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "COMPLETED",
+                    "conclusion": "NEUTRAL"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(_)));
+    }
+
+    #[test]
+    fn evaluate_check_gate_passes_with_skipped_conclusion() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "COMPLETED",
+                    "conclusion": "SKIPPED"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(_)));
+    }
+
+    #[test]
+    fn evaluate_check_gate_reports_multiple_failed_checks() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "build",
+                    "status": "COMPLETED",
+                    "conclusion": "FAILURE"
+                },
+                {
+                    "name": "lint",
+                    "status": "COMPLETED",
+                    "conclusion": "FAILURE"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        match decision {
+            GateDecision::Failed(message) => {
+                assert!(message.contains("build"));
+                assert!(message.contains("lint"));
+            }
+            _ => panic!("expected Failed decision"),
+        }
+    }
+
+    #[test]
+    fn evaluate_check_gate_reports_multiple_pending_checks() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "build",
+                    "status": "IN_PROGRESS",
+                    "conclusion": ""
+                },
+                {
+                    "name": "lint",
+                    "status": "QUEUED",
+                    "conclusion": ""
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        match decision {
+            GateDecision::Pending(message) => {
+                assert!(message.contains("build"));
+                assert!(message.contains("lint"));
+            }
+            _ => panic!("expected Pending decision"),
+        }
+    }
+
+    #[test]
+    fn resolve_review_gate_settings_defaults_poll_seconds() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  review:\n    poll_seconds: \"\"\n");
+        let settings = resolve_review_gate_settings(&config).unwrap();
+        assert_eq!(settings.poll_seconds, DEFAULT_REVIEW_POLL_SECONDS);
+    }
+
+    #[test]
+    fn resolve_review_gate_settings_rejects_short_poll_seconds() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  review:\n    poll_seconds: 2\n");
+        let err = resolve_review_gate_settings(&config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("poll_seconds"));
+                assert!(message.contains("minimum"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_review_gate_settings_accepts_edge_poll_seconds() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  review:\n    poll_seconds: 5\n");
+        let settings = resolve_review_gate_settings(&config).unwrap();
+        assert_eq!(settings.poll_seconds, 5);
+    }
+
+    #[test]
+    fn resolve_review_gate_settings_accepts_edge_timeout_seconds() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  review:\n    timeout_seconds: 30\n");
+        let settings = resolve_review_gate_settings(&config).unwrap();
+        assert_eq!(settings.timeout_seconds, 30);
+    }
+
+    #[test]
+    fn resolve_review_gate_merge_method_defaults_to_merge() {
+        let method = resolve_review_gate_merge_method(None).unwrap();
+        assert!(matches!(method, MergeMethod::Merge));
+    }
+
+    #[test]
+    fn resolve_review_gate_merge_method_handles_empty_string() {
+        let method = resolve_review_gate_merge_method(Some("".to_string())).unwrap();
+        assert!(matches!(method, MergeMethod::Merge));
+    }
+
+    #[test]
+    fn resolve_review_gate_merge_method_accepts_squash() {
+        let method = resolve_review_gate_merge_method(Some("squash".to_string())).unwrap();
+        assert!(matches!(method, MergeMethod::Squash));
+    }
+
+    #[test]
+    fn resolve_review_gate_merge_method_accepts_rebase() {
+        let method = resolve_review_gate_merge_method(Some("rebase".to_string())).unwrap();
+        assert!(matches!(method, MergeMethod::Rebase));
+    }
+
+    #[test]
+    fn resolve_review_gate_merge_method_is_case_insensitive() {
+        let method = resolve_review_gate_merge_method(Some("SQUASH".to_string())).unwrap();
+        assert!(matches!(method, MergeMethod::Squash));
+        let method = resolve_review_gate_merge_method(Some("REBASE".to_string())).unwrap();
+        assert!(matches!(method, MergeMethod::Rebase));
+        let method = resolve_review_gate_merge_method(Some("MERGE".to_string())).unwrap();
+        assert!(matches!(method, MergeMethod::Merge));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_gh_pr_merge_uses_merge_flag() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\nif echo \"$@\" | grep -q -- '--merge'; then echo merged; exit 0; fi; exit 1\n",
+        );
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let result = run_gh_pr_merge(temp.path(), MergeMethod::Merge);
+        assert!(result.is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_gh_pr_merge_uses_squash_flag() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\nif echo \"$@\" | grep -q -- '--squash'; then echo squashed; exit 0; fi; exit 1\n",
+        );
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let result = run_gh_pr_merge(temp.path(), MergeMethod::Squash);
+        assert!(result.is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_gh_pr_merge_uses_rebase_flag() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\nif echo \"$@\" | grep -q -- '--rebase'; then echo rebased; exit 0; fi; exit 1\n",
+        );
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let result = run_gh_pr_merge(temp.path(), MergeMethod::Rebase);
+        assert!(result.is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_gh_pr_merge_reports_failure_with_message() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\necho 'merge conflict' >&2\nexit 1\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let err = run_gh_pr_merge(temp.path(), MergeMethod::Merge).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("gh pr merge failed"));
+                assert!(message.contains("merge conflict"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_gh_pr_merge_reports_empty_failure() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\nexit 1\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let err = run_gh_pr_merge(temp.path(), MergeMethod::Merge).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert_eq!(message, "gh pr merge failed.");
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gh_pr_view_json_parses_valid_output() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\necho '{\"url\":\"https://github.com/test/pr/1\",\"number\":1}'\nexit 0\n",
+        );
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let result = gh_pr_view_json(temp.path()).unwrap();
+        assert_eq!(result.get("number").and_then(|v| v.as_i64()), Some(1));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gh_pr_view_json_reports_empty_failure() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\nexit 1\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let err = gh_pr_view_json(temp.path()).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert_eq!(message, "gh pr view failed.");
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gh_pr_view_json_reports_parse_error_for_invalid_json() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\necho 'not valid json'\nexit 0\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let err = gh_pr_view_json(temp.path()).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Unable to parse gh pr view output"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn find_reviewer_review_returns_none_for_empty_reviews() {
+        let reviews: Vec<serde_json::Value> = vec![];
+        let result = find_reviewer_review(&reviews, "greptile");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn find_reviewer_review_matches_case_insensitive() {
+        let reviews = vec![json!({
+            "author": { "login": "GREPTILE" },
+            "state": "APPROVED",
+            "body": "Rating: 9/10",
+            "submittedAt": "2024-01-02T00:00:00Z"
+        })];
+        let result = find_reviewer_review(&reviews, "greptile");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().state, "APPROVED");
+    }
+
+    #[test]
+    fn find_reviewer_review_uses_created_at_fallback() {
+        let reviews = vec![json!({
+            "author": { "login": "greptile" },
+            "state": "APPROVED",
+            "body": "Rating: 9/10",
+            "createdAt": "2024-01-02T00:00:00Z"
+        })];
+        let result = find_reviewer_review(&reviews, "greptile");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().submitted_at, "2024-01-02T00:00:00Z");
+    }
+
+    #[test]
+    fn find_reviewer_review_defaults_state_to_commented() {
+        let reviews = vec![json!({
+            "author": { "login": "greptile" },
+            "body": "Rating: 9/10",
+            "submittedAt": "2024-01-02T00:00:00Z"
+        })];
+        let result = find_reviewer_review(&reviews, "greptile");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().state, "COMMENTED");
+    }
+
+    #[test]
+    fn extract_check_rollup_returns_empty_for_missing_field() {
+        let pr_view = json!({});
+        let checks = extract_check_rollup(&pr_view);
+        assert!(checks.is_empty());
+    }
+
+    #[test]
+    fn extract_check_rollup_uses_context_fallback_for_name() {
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "context": "ci-check",
+                    "status": "COMPLETED",
+                    "conclusion": "SUCCESS"
+                }
+            ]
+        });
+        let checks = extract_check_rollup(&pr_view);
+        assert_eq!(checks.len(), 1);
+        assert_eq!(checks[0].name, "ci-check");
+    }
+
+    #[test]
+    fn extract_check_rollup_defaults_name_to_unknown() {
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "status": "COMPLETED",
+                    "conclusion": "SUCCESS"
+                }
+            ]
+        });
+        let checks = extract_check_rollup(&pr_view);
+        assert_eq!(checks.len(), 1);
+        assert_eq!(checks[0].name, "unknown");
+    }
+
+    #[test]
+    fn run_verifier_review_gate_skips_when_disabled() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  review:\n    enabled: false\n");
+        let temp = tempfile::tempdir().unwrap();
+
+        // Should succeed immediately without checking git or gh
+        let result = run_verifier_review_gate(temp.path(), &config, None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_verifier_review_gate_fails_without_git_repo() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  review:\n    enabled: true\n");
+        let temp = tempfile::tempdir().unwrap();
+
+        let err = run_verifier_review_gate(temp.path(), &config, None).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                // Should fail on git rev-parse or indicate not in a repo
+                assert!(
+                    message.contains("git")
+                        || message.contains("repository")
+                        || message.contains("fatal")
+                );
+            }
+            _ => {}
+        }
+    }
 }

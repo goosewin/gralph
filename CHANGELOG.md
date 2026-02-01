@@ -27,6 +27,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV80-LS-3 Add loop_session failure path tests for notification flows and callbacks.
 - COV80-LS-4 Add loop_session dry-run and step execution tests.
 - COV80-VER-2 Add verifier static check pipeline and PR creation flow tests.
+- COV80-VER-3 Add verifier review gate polling tests for timeout, approval, and merge method.
 
 ### Fixed
 

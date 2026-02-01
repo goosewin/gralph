@@ -140,7 +140,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests verify timeout and retry behavior.
   * Tests cover merge method selection.
 - **Dependencies** COV80-VER-2
-- [ ] COV80-VER-3 Add verifier review gate tests
+- [x] COV80-VER-3 Add verifier review gate tests
 ---
 
 ### Task COV80-APP-1
