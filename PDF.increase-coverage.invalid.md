@@ -59,7 +59,7 @@ Each task block must contain exactly one unchecked task line.
   * Cover count_remaining_tasks with header and non-header formats.
   * Cover check_completion with success and failure cases.
 - **Dependencies** None
-- [ ] COV90-CORE-1 Add core loop validation tests
+- [x] COV90-CORE-1 Add core loop validation tests
 
 ---
 
