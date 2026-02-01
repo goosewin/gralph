@@ -283,7 +283,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests cover lines 173-225 archive extraction.
   * Tests verify permission error handling.
 - **Dependencies** None
-- [ ] COV80-UPDATE-1 Add update version and extract tests
+- [x] COV80-UPDATE-1 Add update version and extract tests
 ---
 
 ### Task COV80-FINAL-1

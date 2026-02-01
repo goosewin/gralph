@@ -1288,4 +1288,305 @@ mod tests {
             other => panic!("expected permission denied, got {other:?}"),
         }
     }
+
+    // --- COV80-UPDATE-1: UpdateError Display and source coverage ---
+
+    #[test]
+    fn update_error_display_http_formats_inner_error() {
+        // Create an HTTP error by making a request to an invalid URL
+        let err = reqwest::blocking::get("http://[::1]:0/invalid")
+            .expect_err("expected error");
+        let update_err = UpdateError::Http(err);
+        let display = update_err.to_string();
+        // The display should contain error information (varies by platform)
+        assert!(!display.is_empty());
+    }
+
+    #[test]
+    fn update_error_display_json_formats_inner_error() {
+        let json_err = serde_json::from_str::<Value>("not-json").expect_err("expected error");
+        let update_err = UpdateError::Json(json_err);
+        let display = update_err.to_string();
+        assert!(!display.is_empty());
+    }
+
+    #[test]
+    fn update_error_display_io_formats_inner_error() {
+        let io_err = io::Error::new(io::ErrorKind::NotFound, "file not found");
+        let update_err = UpdateError::Io(io_err);
+        let display = update_err.to_string();
+        assert!(display.contains("file not found"));
+    }
+
+    #[test]
+    fn update_error_display_missing_tag() {
+        let update_err = UpdateError::MissingTag;
+        let display = update_err.to_string();
+        assert!(display.contains("tag"));
+    }
+
+    #[test]
+    fn update_error_display_missing_binary_includes_path() {
+        let update_err = UpdateError::MissingBinary("/path/to/binary".to_string());
+        let display = update_err.to_string();
+        assert!(display.contains("/path/to/binary"));
+    }
+
+    #[test]
+    fn update_error_display_invalid_version_includes_value() {
+        let update_err = UpdateError::InvalidVersion("bad-version".to_string());
+        let display = update_err.to_string();
+        assert!(display.contains("bad-version"));
+    }
+
+    #[test]
+    fn update_error_display_unsupported_platform_includes_value() {
+        let update_err = UpdateError::UnsupportedPlatform("windows-arm".to_string());
+        let display = update_err.to_string();
+        assert!(display.contains("windows-arm"));
+    }
+
+    #[test]
+    fn update_error_display_command_failed_includes_message() {
+        let update_err = UpdateError::CommandFailed("tar failed".to_string());
+        let display = update_err.to_string();
+        assert!(display.contains("tar failed"));
+    }
+
+    #[test]
+    fn update_error_from_reqwest_error() {
+        let err = reqwest::blocking::get("http://[::1]:0/invalid")
+            .expect_err("expected error");
+        let update_err: UpdateError = err.into();
+        assert!(matches!(update_err, UpdateError::Http(_)));
+    }
+
+    #[test]
+    fn update_error_from_json_error() {
+        let json_err = serde_json::from_str::<Value>("not-json").expect_err("expected error");
+        let update_err: UpdateError = json_err.into();
+        assert!(matches!(update_err, UpdateError::Json(_)));
+    }
+
+    #[test]
+    fn update_error_from_io_error() {
+        let io_err = io::Error::new(io::ErrorKind::PermissionDenied, "denied");
+        let update_err: UpdateError = io_err.into();
+        assert!(matches!(update_err, UpdateError::Io(_)));
+    }
+
+    // --- COV80-UPDATE-1: Version parsing edge cases ---
+
+    #[test]
+    fn version_ordering_major_takes_precedence() {
+        let v1 = Version::parse("2.0.0").expect("parse");
+        let v2 = Version::parse("1.9.9").expect("parse");
+        assert!(v1 > v2);
+    }
+
+    #[test]
+    fn version_ordering_minor_takes_precedence_over_patch() {
+        let v1 = Version::parse("1.2.0").expect("parse");
+        let v2 = Version::parse("1.1.9").expect("parse");
+        assert!(v1 > v2);
+    }
+
+    #[test]
+    fn version_ordering_equal_versions() {
+        let v1 = Version::parse("1.2.3").expect("parse");
+        let v2 = Version::parse("1.2.3").expect("parse");
+        assert_eq!(v1, v2);
+        assert!(v1 <= v2);
+        assert!(v1 >= v2);
+    }
+
+    #[test]
+    fn version_display_formats_without_v_prefix() {
+        let v = Version::parse("v1.2.3").expect("parse");
+        assert_eq!(v.to_string(), "1.2.3");
+    }
+
+    #[test]
+    fn check_for_update_returns_info_when_newer_available() {
+        let _lock = crate::test_support::env_lock();
+        let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "v99.0.0");
+        let result = check_for_update("1.0.0").expect("check");
+        assert!(result.is_some());
+        let info = result.unwrap();
+        assert_eq!(info.current, "1.0.0");
+        assert_eq!(info.latest, "99.0.0");
+    }
+
+    #[test]
+    fn check_for_update_returns_none_when_current_is_newer() {
+        let _lock = crate::test_support::env_lock();
+        let _guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "v1.0.0");
+        let result = check_for_update("99.0.0").expect("check");
+        assert!(result.is_none());
+    }
+
+    // --- COV80-UPDATE-1: install_release success path ---
+
+    #[cfg(unix)]
+    #[test]
+    fn install_release_succeeds_with_valid_archive() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempdir().expect("tempdir");
+        let install_dir = temp.path().join("install");
+        let install_dir_value = install_dir.to_string_lossy().to_string();
+        let _install_guard = EnvGuard::set("GRALPH_INSTALL_DIR", &install_dir_value);
+        let _version_guard = EnvGuard::set("GRALPH_VERSION", "1.2.3");
+
+        let archive_body = build_release_archive("1.2.3");
+        let (url, handle) = start_bytes_server("200 OK", archive_body);
+        let _download_guard = EnvGuard::set("GRALPH_TEST_RELEASE_DOWNLOAD_URL", &url);
+
+        let result = install_release();
+        handle.join().expect("server thread");
+
+        let outcome = result.expect("install should succeed");
+        assert_eq!(outcome.version, "1.2.3");
+        assert_eq!(outcome.install_dir, install_dir);
+        assert_eq!(outcome.install_path, install_dir.join("gralph"));
+        assert!(outcome.install_path.is_file());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_release_reports_missing_binary_in_archive() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempdir().expect("tempdir");
+        let install_dir = temp.path().join("install");
+        let install_dir_value = install_dir.to_string_lossy().to_string();
+        let _install_guard = EnvGuard::set("GRALPH_INSTALL_DIR", &install_dir_value);
+        let _version_guard = EnvGuard::set("GRALPH_VERSION", "1.2.3");
+
+        // Build archive without binary
+        let archive_temp = tempdir().expect("tempdir");
+        let release_dir = archive_temp.path().join("gralph-1.2.3");
+        fs::create_dir_all(&release_dir).expect("create release dir");
+        // Create an empty file that is not 'gralph'
+        fs::write(release_dir.join("README"), "readme").expect("write readme");
+        let archive_path = archive_temp.path().join("gralph.tar.gz");
+        let status = Command::new("tar")
+            .arg("-czf")
+            .arg(&archive_path)
+            .arg("-C")
+            .arg(archive_temp.path())
+            .arg(release_dir.file_name().expect("release dir name"))
+            .status()
+            .expect("run tar");
+        assert!(status.success());
+        let archive_body = fs::read(&archive_path).expect("read archive");
+
+        let (url, handle) = start_bytes_server("200 OK", archive_body);
+        let _download_guard = EnvGuard::set("GRALPH_TEST_RELEASE_DOWNLOAD_URL", &url);
+
+        let result = install_release();
+        handle.join().expect("server thread");
+
+        assert!(matches!(result, Err(UpdateError::MissingBinary(_))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_release_resolves_binary_in_path() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempdir().expect("tempdir");
+        let install_dir = temp.path().join("install");
+        let install_dir_value = install_dir.to_string_lossy().to_string();
+        let _install_guard = EnvGuard::set("GRALPH_INSTALL_DIR", &install_dir_value);
+        let _version_guard = EnvGuard::set("GRALPH_VERSION", "1.2.3");
+
+        let archive_body = build_release_archive("1.2.3");
+        let (url, handle) = start_bytes_server("200 OK", archive_body);
+        let _download_guard = EnvGuard::set("GRALPH_TEST_RELEASE_DOWNLOAD_URL", &url);
+
+        let result = install_release();
+        handle.join().expect("server thread");
+
+        let _outcome = result.expect("install should succeed");
+
+        // After install, set PATH to include install_dir and verify resolve_in_path works
+        let _path_guard = PathGuard::set(Some(install_dir.as_os_str()));
+        let resolved = resolve_in_path("gralph");
+        assert_eq!(resolved, Some(install_dir.join("gralph")));
+        // The outcome.resolved_path was computed before we set PATH, so it may be None
+        // This test verifies that resolve_in_path correctly finds the binary when PATH includes it
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn install_release_uses_latest_when_version_not_set() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempdir().expect("tempdir");
+        let install_dir = temp.path().join("install");
+        let install_dir_value = install_dir.to_string_lossy().to_string();
+        let _install_guard = EnvGuard::set("GRALPH_INSTALL_DIR", &install_dir_value);
+        // Unset GRALPH_VERSION to use default "latest"
+        unsafe { env::remove_var("GRALPH_VERSION") };
+        let _tag_guard = EnvGuard::set("GRALPH_TEST_LATEST_TAG", "v2.0.0");
+
+        let archive_body = build_release_archive("2.0.0");
+        let (url, handle) = start_bytes_server("200 OK", archive_body);
+        let _download_guard = EnvGuard::set("GRALPH_TEST_RELEASE_DOWNLOAD_URL", &url);
+
+        let result = install_release();
+        handle.join().expect("server thread");
+
+        let outcome = result.expect("install should succeed");
+        assert_eq!(outcome.version, "2.0.0");
+    }
+
+    // --- COV80-UPDATE-1: Platform detection edge cases ---
+
+    #[test]
+    fn detect_platform_for_linux_x86_64() {
+        let result = detect_platform_for("linux", "x86_64").expect("platform");
+        assert_eq!(result, "linux-x86_64");
+    }
+
+    #[test]
+    fn detect_platform_for_linux_aarch64() {
+        let result = detect_platform_for("linux", "aarch64").expect("platform");
+        assert_eq!(result, "linux-aarch64");
+    }
+
+    #[test]
+    fn detect_platform_for_linux_arm64_alias() {
+        let result = detect_platform_for("linux", "arm64").expect("platform");
+        assert_eq!(result, "linux-aarch64");
+    }
+
+    #[test]
+    fn detect_platform_for_macos_x86_64() {
+        let result = detect_platform_for("macos", "x86_64").expect("platform");
+        assert_eq!(result, "macos-x86_64");
+    }
+
+    #[test]
+    fn detect_platform_for_macos_aarch64() {
+        let result = detect_platform_for("macos", "aarch64").expect("platform");
+        assert_eq!(result, "macos-arm64");
+    }
+
+    #[test]
+    fn detect_platform_for_macos_arm64_alias() {
+        let result = detect_platform_for("macos", "arm64").expect("platform");
+        assert_eq!(result, "macos-arm64");
+    }
+
+    // --- COV80-UPDATE-1: TempDir cleanup ---
+
+    #[test]
+    fn temp_dir_cleans_up_on_drop() {
+        let path = {
+            let temp = TempDir::new("test-cleanup").expect("tempdir");
+            let path = temp.path.clone();
+            assert!(path.is_dir());
+            path
+        };
+        // After drop, directory should be cleaned up
+        assert!(!path.exists());
+    }
 }

@@ -35,6 +35,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV80-PRD-3 Add PRD stack detection tests for framework and tool detection.
 - COV80-STATE-1 Add state store edge case tests for StateError Display/source and parse_value edge cases.
 - COV80-CONFIG-1 Add config loader edge case tests for ConfigError Display/source, get_user merge precedence, and env override handling.
+- COV80-UPDATE-1 Add update module tests for UpdateError Display variants, version parsing, install_release success path, and archive extraction errors.
 
 ### Fixed
 
