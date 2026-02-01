@@ -3591,4 +3591,231 @@ mod tests {
             .collect();
         assert_eq!(rel, vec!["notes.txt", "src/main.rs"]);
     }
+
+    // COV80-VER-1: Pipeline entry and stack detection tests
+
+    #[test]
+    fn verifier_stack_defaults_detects_rust_with_cargo_toml() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(
+            temp.path().join("Cargo.toml"),
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        let defaults = VerifierStackDefaults::from_dir(temp.path());
+        assert!(defaults.uses_rust_defaults());
+        assert!(!defaults.requires_explicit_commands());
+    }
+
+    #[test]
+    fn verifier_stack_defaults_detects_non_rust_without_cargo() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("package.json"), "{}\n").unwrap();
+        let defaults = VerifierStackDefaults::from_dir(temp.path());
+        assert!(!defaults.uses_rust_defaults());
+        assert!(defaults.requires_explicit_commands());
+    }
+
+    #[test]
+    fn verifier_stack_defaults_detects_non_rust_empty_dir() {
+        let temp = tempfile::tempdir().unwrap();
+        let defaults = VerifierStackDefaults::from_dir(temp.path());
+        assert!(!defaults.uses_rust_defaults());
+        assert!(defaults.requires_explicit_commands());
+    }
+
+    #[test]
+    fn stack_root_for_detection_uses_git_root_when_present() {
+        let repo = init_git_repo("main");
+        let subdir = repo.path().join("nested");
+        fs::create_dir_all(&subdir).unwrap();
+        let root = stack_root_for_detection(&subdir);
+        // Canonicalize both paths to handle macOS /private/var vs /var symlinks
+        let expected = repo.path().canonicalize().unwrap();
+        let actual = root.canonicalize().unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn stack_root_for_detection_falls_back_to_dir_without_git() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = stack_root_for_detection(temp.path());
+        assert_eq!(root, temp.path());
+    }
+
+    #[test]
+    fn is_rust_stack_true_for_rust_id() {
+        let detection = prd::StackDetection {
+            root: None,
+            ids: vec!["Rust".to_string()],
+            languages: vec![],
+            frameworks: vec![],
+            tools: vec![],
+            runtimes: vec![],
+            package_managers: vec![],
+            evidence: vec![],
+            selected_ids: vec![],
+        };
+        assert!(is_rust_stack(&detection));
+    }
+
+    #[test]
+    fn is_rust_stack_true_for_cargo_tool() {
+        let detection = prd::StackDetection {
+            root: None,
+            ids: vec![],
+            languages: vec![],
+            frameworks: vec![],
+            tools: vec!["Cargo".to_string()],
+            runtimes: vec![],
+            package_managers: vec![],
+            evidence: vec![],
+            selected_ids: vec![],
+        };
+        assert!(is_rust_stack(&detection));
+    }
+
+    #[test]
+    fn is_rust_stack_false_for_non_rust() {
+        let detection = prd::StackDetection {
+            root: None,
+            ids: vec!["JavaScript".to_string()],
+            languages: vec![],
+            frameworks: vec![],
+            tools: vec!["npm".to_string()],
+            runtimes: vec![],
+            package_managers: vec![],
+            evidence: vec![],
+            selected_ids: vec![],
+        };
+        assert!(!is_rust_stack(&detection));
+    }
+
+    #[test]
+    fn is_rust_stack_false_for_empty_detection() {
+        let detection = prd::StackDetection {
+            root: None,
+            ids: vec![],
+            languages: vec![],
+            frameworks: vec![],
+            tools: vec![],
+            runtimes: vec![],
+            package_managers: vec![],
+            evidence: vec![],
+            selected_ids: vec![],
+        };
+        assert!(!is_rust_stack(&detection));
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_tarpaulin_full_output() {
+        let output = r#"
+Jun 15 10:23:45.123 INFO cargo_tarpaulin::statemachine: running test
+test tests::sample_test ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+Jun 15 10:23:46.456 INFO cargo_tarpaulin::report: Coverage Results: 73.42%
+"#;
+        assert_eq!(extract_coverage_percent(output), Some(73.42));
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_tarpaulin_workspace_output() {
+        let output = r#"
+Running tests
+test src/config.rs::tests::test_config_load ... ok
+test src/state.rs::tests::test_state ... ok
+
+|| Tested/Total Lines:
+|| src/config.rs: 45/50
+|| src/state.rs: 80/100
+||
+75.00% coverage, 125/150 lines covered
+Coverage Results: 75.00%
+"#;
+        assert_eq!(extract_coverage_percent(output), Some(75.0));
+    }
+
+    #[test]
+    fn extract_coverage_percent_prefers_results_over_coverage_line() {
+        let output = "Total coverage: 65.00%\nCoverage Results: 70.50%";
+        assert_eq!(extract_coverage_percent(output), Some(70.50));
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_decimal_precision() {
+        let output = "Coverage Results: 81.234567%";
+        let result = extract_coverage_percent(output).unwrap();
+        assert!((result - 81.234567).abs() < 1e-6);
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_integer_percent() {
+        let output = "Coverage Results: 90%";
+        assert_eq!(extract_coverage_percent(output), Some(90.0));
+    }
+
+    #[test]
+    fn resolve_verifier_command_uses_user_config_when_require_explicit() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(
+            temp.path().join(".gralph.yaml"),
+            "verifier:\n  test_command: \"npm test\"\n",
+        )
+        .unwrap();
+        let config = Config::load(Some(temp.path())).unwrap();
+        let command = resolve_verifier_command(
+            None,
+            &config,
+            "verifier.test_command",
+            "",
+            true,
+        )
+        .unwrap();
+        assert_eq!(command, "npm test");
+    }
+
+    #[test]
+    fn resolve_verifier_command_arg_overrides_config_for_non_rust() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(
+            temp.path().join(".gralph.yaml"),
+            "verifier:\n  test_command: \"npm test\"\n",
+        )
+        .unwrap();
+        let config = Config::load(Some(temp.path())).unwrap();
+        let command = resolve_verifier_command(
+            Some("yarn test".to_string()),
+            &config,
+            "verifier.test_command",
+            "",
+            true,
+        )
+        .unwrap();
+        assert_eq!(command, "yarn test");
+    }
+
+    #[test]
+    fn resolve_verifier_command_trims_whitespace() {
+        let config = Config::load(None).unwrap();
+        let command = resolve_verifier_command(
+            Some("  cargo test  ".to_string()),
+            &config,
+            "verifier.test_command",
+            DEFAULT_TEST_COMMAND,
+            false,
+        )
+        .unwrap();
+        assert_eq!(command, "cargo test");
+    }
+
+    #[test]
+    fn verifier_stack_defaults_equality() {
+        assert_eq!(VerifierStackDefaults::Rust, VerifierStackDefaults::Rust);
+        assert_eq!(VerifierStackDefaults::NonRust, VerifierStackDefaults::NonRust);
+        assert_ne!(VerifierStackDefaults::Rust, VerifierStackDefaults::NonRust);
+    }
 }

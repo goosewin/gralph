@@ -114,7 +114,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests verify Rust vs non-Rust stack command selection.
   * Tests cover coverage extraction from tarpaulin output.
 - **Dependencies** None
-- [ ] COV80-VER-1 Add verifier pipeline entry tests
+- [x] COV80-VER-1 Add verifier pipeline entry tests
 ---
 
 ### Task COV80-VER-2
