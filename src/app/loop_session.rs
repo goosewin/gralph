@@ -3417,4 +3417,195 @@ exit 0
             }
         }
     }
+
+    #[test]
+    fn cmd_start_dry_run_prints_none_when_no_task_block() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join("PRD.md"),
+            "# PRD\n\n## Implementation Tasks\n\n### Task T-1\n\n- **ID** T-1\n- **Context Bundle** `README.md`\n- **DoD** ok\n- **Checklist**\n  * check\n- **Dependencies** None\n- [x] T-1 completed\n",
+        );
+
+        let args = StartArgs {
+            dir: temp.path().to_path_buf(),
+            name: None,
+            max_iterations: None,
+            task_file: None,
+            completion_marker: None,
+            backend: None,
+            model: None,
+            variant: None,
+            prompt_template: None,
+            webhook: None,
+            no_worktree: false,
+            strict_prd: false,
+            dry_run: true,
+        };
+        let deps = Deps::real();
+
+        // Should succeed and print "(none)" for task block
+        cmd_start_dry_run(args, &deps).unwrap();
+    }
+
+    #[test]
+    fn cmd_start_dry_run_uses_custom_prompt_template() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join("PRD.md"),
+            "# PRD\n\n## Implementation Tasks\n\n### Task T-1\n\n- **ID** T-1\n- **Context Bundle** `README.md`\n- **DoD** ok\n- **Checklist**\n  * check\n- **Dependencies** None\n- [ ] T-1 do\n",
+        );
+        let template_path = temp.path().join("custom-template.txt");
+        write_file(
+            &template_path,
+            "Custom template: {task_file} iteration {iteration}/{max_iterations}\nTask: {task_block}\n",
+        );
+
+        let args = StartArgs {
+            dir: temp.path().to_path_buf(),
+            name: None,
+            max_iterations: Some(10),
+            task_file: None,
+            completion_marker: None,
+            backend: None,
+            model: None,
+            variant: None,
+            prompt_template: Some(template_path),
+            webhook: None,
+            no_worktree: false,
+            strict_prd: false,
+            dry_run: true,
+        };
+        let deps = Deps::real();
+
+        cmd_start_dry_run(args, &deps).unwrap();
+    }
+
+    #[test]
+    fn cmd_start_dry_run_fails_on_invalid_prd_with_strict() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join("PRD.md"),
+            "# PRD\n\n- [ ] Task without proper structure\n",
+        );
+
+        let args = StartArgs {
+            dir: temp.path().to_path_buf(),
+            name: None,
+            max_iterations: None,
+            task_file: None,
+            completion_marker: None,
+            backend: None,
+            model: None,
+            variant: None,
+            prompt_template: None,
+            webhook: None,
+            no_worktree: false,
+            strict_prd: true,
+            dry_run: true,
+        };
+        let deps = Deps::real();
+
+        let err = cmd_start_dry_run(args, &deps).unwrap_err();
+        match err {
+            CliError::Message(msg) => {
+                assert!(msg.contains("task") || msg.contains("Task"));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_start_dry_run_fails_on_missing_template() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(&temp.path().join("PRD.md"), "# PRD\n- [ ] Task\n");
+
+        let args = StartArgs {
+            dir: temp.path().to_path_buf(),
+            name: None,
+            max_iterations: None,
+            task_file: None,
+            completion_marker: None,
+            backend: None,
+            model: None,
+            variant: None,
+            prompt_template: Some(temp.path().join("missing-template.txt")),
+            webhook: None,
+            no_worktree: false,
+            strict_prd: false,
+            dry_run: true,
+        };
+        let deps = Deps::real();
+
+        let err = cmd_start_dry_run(args, &deps).unwrap_err();
+        match err {
+            CliError::Io(_) => {}
+            other => panic!("expected IO error, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn run_loop_args_from_start_preserves_none_values() {
+        let temp = tempfile::tempdir().unwrap();
+        let args = StartArgs {
+            dir: temp.path().to_path_buf(),
+            name: None,
+            max_iterations: None,
+            task_file: None,
+            completion_marker: None,
+            backend: None,
+            model: None,
+            variant: None,
+            prompt_template: None,
+            webhook: None,
+            no_worktree: false,
+            strict_prd: false,
+            dry_run: false,
+        };
+
+        let run_args = run_loop_args_from_start(args, "session".to_string()).unwrap();
+
+        assert!(run_args.max_iterations.is_none());
+        assert!(run_args.task_file.is_none());
+        assert!(run_args.completion_marker.is_none());
+        assert!(run_args.backend.is_none());
+        assert!(run_args.model.is_none());
+        assert!(run_args.variant.is_none());
+        assert!(run_args.prompt_template.is_none());
+        assert!(run_args.webhook.is_none());
+        assert!(run_args.tmux_session.is_none());
+    }
+
+    #[test]
+    fn run_loop_args_from_step_preserves_none_values() {
+        let temp = tempfile::tempdir().unwrap();
+        let args = StepArgs {
+            dir: temp.path().to_path_buf(),
+            name: None,
+            max_iterations: None,
+            task_file: None,
+            completion_marker: None,
+            backend: None,
+            model: None,
+            variant: None,
+            prompt_template: None,
+            no_worktree: false,
+            strict_prd: false,
+        };
+
+        let run_args = run_loop_args_from_step(args, "step".to_string()).unwrap();
+
+        assert!(run_args.max_iterations.is_none());
+        assert!(run_args.task_file.is_none());
+        assert!(run_args.completion_marker.is_none());
+        assert!(run_args.backend.is_none());
+        assert!(run_args.model.is_none());
+        assert!(run_args.variant.is_none());
+        assert!(run_args.prompt_template.is_none());
+        assert!(run_args.webhook.is_none());
+        assert!(run_args.tmux_session.is_none());
+    }
 }

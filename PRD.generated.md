@@ -101,7 +101,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests cover lines 1001-1064 step iteration flow.
   * Tests verify prompt template injection.
 - **Dependencies** COV80-LS-2
-- [ ] COV80-LS-4 Add loop_session dry-run and step tests
+- [x] COV80-LS-4 Add loop_session dry-run and step tests
 ---
 
 ### Task COV80-VER-1

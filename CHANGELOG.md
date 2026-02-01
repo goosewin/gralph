@@ -25,6 +25,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV-70-1 Add tmux availability and session collision tests.
 - COV-70-3 Add auto worktree skip and path mapping tests.
 - COV80-LS-3 Add loop_session failure path tests for notification flows and callbacks.
+- COV80-LS-4 Add loop_session dry-run and step execution tests.
 
 ### Fixed
 
