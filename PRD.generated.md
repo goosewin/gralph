@@ -75,7 +75,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests cover lines 570-599 session name collision handling.
   * Tests verify tmux unavailable error paths.
 - **Dependencies** COV80-LS-1
-- [ ] COV80-LS-2 Add loop_session tmux command and collision tests
+- [x] COV80-LS-2 Add loop_session tmux command and collision tests
 ---
 
 ### Task COV80-LS-3

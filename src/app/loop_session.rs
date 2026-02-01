@@ -2812,4 +2812,255 @@ mod tests {
         let updated: Value = serde_json::from_str(&updated).unwrap();
         assert!(updated["sessions"].as_object().unwrap().is_empty());
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn unique_tmux_session_name_uses_gralph_prefix_for_empty_base() {
+        let temp = tempfile::tempdir().unwrap();
+        write_tmux_stub(temp.path(), "#!/bin/sh\nexit 1\n");
+        let _guard = PathGuard::new(temp.path());
+
+        let name = unique_tmux_session_name("").unwrap();
+        assert!(name.starts_with("gralph-"));
+
+        let name_whitespace = unique_tmux_session_name("   ").unwrap();
+        assert!(name_whitespace.starts_with("gralph-"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unique_tmux_session_name_increments_suffix_on_multiple_collisions() {
+        // Use temp directory for counter files to track call count
+        let temp = tempfile::tempdir().unwrap();
+        let c1 = temp.path().join("c1");
+        let c2 = temp.path().join("c2");
+
+        // Script simulates: session exists for first 2 checks, then doesn't exist
+        // Uses file existence as counter (no external commands needed)
+        // Call sequence:
+        //   1st: c1 missing -> create c1 -> exit 0 (exists) -> suffix becomes -2
+        //   2nd: c1 exists, c2 missing -> create c2 -> exit 0 (exists) -> suffix becomes -3
+        //   3rd: c1 and c2 both exist -> exit 1 (not found) -> return with -3
+        let script = format!(
+            "#!/bin/sh\n\
+             if [ ! -f \"{}\" ]; then : > \"{}\"; exit 0; fi\n\
+             if [ ! -f \"{}\" ]; then : > \"{}\"; exit 0; fi\n\
+             exit 1\n",
+            c1.display(),
+            c1.display(),
+            c2.display(),
+            c2.display()
+        );
+        write_tmux_stub(temp.path(), &script);
+        let _guard = PathGuard::new(temp.path());
+
+        let name = unique_tmux_session_name("test").unwrap();
+        assert!(
+            name.starts_with("test-"),
+            "expected test- prefix, got: {}",
+            name
+        );
+        // After 2 collisions the suffix should be -3
+        assert!(name.ends_with("-3"), "expected -3 suffix, got: {}", name);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tmux_session_exists_returns_true_when_session_found() {
+        let temp = tempfile::tempdir().unwrap();
+        write_tmux_stub(temp.path(), "#!/bin/sh\nexit 0\n");
+        let _guard = PathGuard::new(temp.path());
+
+        assert!(tmux_session_exists("any-session").unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tmux_session_exists_returns_false_when_session_not_found() {
+        let temp = tempfile::tempdir().unwrap();
+        write_tmux_stub(temp.path(), "#!/bin/sh\nexit 1\n");
+        let _guard = PathGuard::new(temp.path());
+
+        assert!(!tmux_session_exists("missing-session").unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tmux_session_exists_errors_when_tmux_missing() {
+        let temp = tempfile::tempdir().unwrap();
+        let _guard = PathGuard::new(temp.path());
+
+        let err = tmux_session_exists("session").unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "tmux is required but was not found on PATH"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cmd_attach_errors_when_session_not_found() {
+        let temp = tempfile::tempdir().unwrap();
+        write_tmux_stub(temp.path(), "#!/bin/sh\nexit 0\n");
+        let _path_guard = PathGuard::new(temp.path());
+        let _state_dir = set_state_env(temp.path());
+
+        let deps = Deps::real();
+        deps.state_store().init_state().unwrap();
+
+        let err = cmd_attach(
+            AttachArgs {
+                name: "nonexistent".to_string(),
+            },
+            &deps,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("Session not found"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cmd_attach_errors_when_no_tmux_session_recorded() {
+        let temp = tempfile::tempdir().unwrap();
+        write_tmux_stub(temp.path(), "#!/bin/sh\nexit 0\n");
+        let _path_guard = PathGuard::new(temp.path());
+        let state_dir = set_state_env(temp.path());
+
+        let deps = Deps::real();
+        deps.state_store().init_state().unwrap();
+
+        let state = serde_json::json!({
+            "sessions": {
+                "mysession": { "status": "running", "tmux_session": "" }
+            }
+        });
+        fs::write(
+            state_dir.join("state.json"),
+            serde_json::to_string(&state).unwrap(),
+        )
+        .unwrap();
+
+        let err = cmd_attach(
+            AttachArgs {
+                name: "mysession".to_string(),
+            },
+            &deps,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("No tmux session recorded"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cmd_attach_errors_when_tmux_session_whitespace_only() {
+        let temp = tempfile::tempdir().unwrap();
+        write_tmux_stub(temp.path(), "#!/bin/sh\nexit 0\n");
+        let _path_guard = PathGuard::new(temp.path());
+        let state_dir = set_state_env(temp.path());
+
+        let deps = Deps::real();
+        deps.state_store().init_state().unwrap();
+
+        let state = serde_json::json!({
+            "sessions": {
+                "mysession": { "status": "running", "tmux_session": "   " }
+            }
+        });
+        fs::write(
+            state_dir.join("state.json"),
+            serde_json::to_string(&state).unwrap(),
+        )
+        .unwrap();
+
+        let err = cmd_attach(
+            AttachArgs {
+                name: "mysession".to_string(),
+            },
+            &deps,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("No tmux session recorded"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cmd_attach_errors_when_tmux_unavailable() {
+        let temp = tempfile::tempdir().unwrap();
+        let _path_guard = PathGuard::new(temp.path());
+        let _state_dir = set_state_env(temp.path());
+
+        let deps = Deps::real();
+
+        let err = cmd_attach(
+            AttachArgs {
+                name: "session".to_string(),
+            },
+            &deps,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("tmux is required"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cmd_attach_reports_failed_attach_with_exit_code() {
+        let temp = tempfile::tempdir().unwrap();
+        let script = r#"#!/bin/sh
+if [ "$1" = "-V" ]; then exit 0; fi
+if [ "$1" = "attach-session" ]; then exit 42; fi
+exit 0
+"#;
+        write_tmux_stub(temp.path(), script);
+        let _path_guard = PathGuard::new(temp.path());
+        let state_dir = set_state_env(temp.path());
+
+        let deps = Deps::real();
+        deps.state_store().init_state().unwrap();
+
+        let state = serde_json::json!({
+            "sessions": {
+                "mysession": { "status": "running", "tmux_session": "tmux-123" }
+            }
+        });
+        fs::write(
+            state_dir.join("state.json"),
+            serde_json::to_string(&state).unwrap(),
+        )
+        .unwrap();
+
+        let err = cmd_attach(
+            AttachArgs {
+                name: "mysession".to_string(),
+            },
+            &deps,
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("Failed to attach"));
+        assert!(err.to_string().contains("42"));
+    }
+
+    #[test]
+    fn spawn_run_loop_propagates_current_exe_error() {
+        struct FailExeRunner;
+        impl ProcessRunner for FailExeRunner {
+            fn current_exe(&self) -> io::Result<PathBuf> {
+                Err(io::Error::new(io::ErrorKind::NotFound, "exe not found"))
+            }
+            fn spawn(&self, _cmd: &mut Command) -> io::Result<Child> {
+                unreachable!()
+            }
+            fn kill_tmux_session(&self, _session: &str) {}
+            fn kill_pid(&self, _pid: i64) {}
+            fn pid(&self) -> u32 {
+                0
+            }
+            fn is_alive(&self, _pid: i64) -> bool {
+                false
+            }
+        }
+
+        let args = base_args();
+        let err = spawn_run_loop(&args, &FailExeRunner).unwrap_err();
+        assert!(matches!(err, CliError::Io(_)));
+    }
 }
