@@ -1,202 +1,236 @@
-# Project Requirements Document (Template)
+# PRD: Increase Test Coverage to 90%
 
-## Overview
+## Objective
 
-Gralph is a CLI loop runner for PRD-driven AI work. This PRD focuses on reducing UX friction and making defaults safer while preserving the power-user workflow (stateless iterations, context files, auto worktrees, verifier pipeline, status server, and notifications). Intended users are current power users plus newcomers who need clearer run modes, better observability, and safer verification defaults.
+Increase gralph test coverage from 85.59% to 90% by adding targeted unit tests
+for modules with the lowest coverage percentages.
 
-## Problem Statement
+## Background
 
-- The CLI is power-user first; defaults and docs imply stability while behaviors are more implicit and advanced.
-- "tmux optional" messaging is unclear; background runs hide stdout and stderr, and log locations are not surfaced up front.
-- Verifier defaults in `config/default.yaml` are Rust-specific and `verifier.auto_run` defaults to true, which is surprising in non-Rust repos.
-- Auto-merge can proceed without explicit approvals (`verifier.review.require_approval: false`), which feels risky by default.
-- Status output and the status server do not surface last error, last task ID, or the latest log line, making background runs opaque.
-- Resume and reruns can drift when prompt template or backend overrides are not captured in session state.
-- Update checks run on every loop start with no opt-out for offline or locked-down environments.
-- Strict PRD validation is easy to trip without tools like dry-run or single-step execution.
+Current coverage stands at 85.59% (4953/5787 lines covered). The target is 90%,
+requiring approximately 255 additional lines of coverage. Analysis identifies
+these modules as having the largest coverage gaps:
 
-## Solution
+- src/app/loop_session.rs: 64% covered (526/822 lines) - highest priority
+- src/app.rs: 74% covered (378/508 lines)
+- src/verifier.rs: 86% covered (944/1097 lines)
+- src/server.rs: 86% covered (224/260 lines)
+- src/backend/claude.rs: 88% covered (81/92 lines)
 
-Provide safe defaults and clearer observability without removing power-user workflows. Add diagnostic and maintenance commands, expose raw backend output, add dry-run and single-step flows, make verifier defaults stack-aware with safe auto-merge gating, and introduce an update check opt-out plus clearer tmux and worktree messaging.
+## Warnings
 
----
+- No external sources were provided; all tasks are derived from repository files
+- Coverage percentages based on cargo tarpaulin output at time of analysis
+- Some functions may require mocking external dependencies (tmux, backend CLIs)
 
-## Functional Requirements
+## Success Criteria
 
-### FR-1: Safer Verifier Defaults and Auto-Merge Gating
-
-- Use stack detection in `src/prd.rs` to decide default verifier behavior.
-- For Rust/Cargo projects, keep existing default commands from `config/default.yaml`.
-- For non-Rust or unknown stacks, default `verifier.auto_run` to false and require explicit test and coverage commands to enable verifier.
-- Auto-merge is opt-in: require approvals by default or introduce `verifier.auto_merge: false` and gate merge on explicit opt-in.
-
-### FR-2: Observability and Raw Output Access
-
-- Add `gralph logs <name> --raw` to display `.gralph/<session>.raw.log` when present.
-- Add `gralph status --json` with machine-readable session data including `current_remaining`, `last_task_id`, `last_log_line`, `last_error`, `log_file`, `raw_log_file`, `is_alive`, and `status`.
-- Add `gralph status --verbose` to surface log paths and last error line.
-- `/status` and `/status/:name` in `src/server.rs` include the same fields.
-
-### FR-3: Dry-Run and Single-Step Execution
-
-- `gralph start --dry-run` prints the next unchecked task block and the resolved prompt template without running a backend or creating tmux sessions.
-- `gralph step` runs exactly one iteration using the same config and prompt rendering as the loop and does not auto-run the verifier.
-
-### FR-4: Doctor and Cleanup Utilities
-
-- `gralph doctor` checks backend CLIs, `gh` installation and auth, git clean state for the target directory, config readability, and state store access; it outputs actionable remediation with a non-zero exit on failure.
-- `gralph cleanup` marks stale sessions by default and supports `--remove` and `--purge` for destructive cleanup, with a clear summary of affected sessions.
-
-### FR-5: Update Check Controls and Clear Run Messaging
-
-- Add `defaults.check_updates` and `GRALPH_NO_UPDATE_CHECK=1` to skip update checks on loop start.
-- When auto-worktree is skipped, print a hint for `--no-worktree` and any configured worktree mode option.
-- Update `--no-tmux` help and start output to clearly state where logs are written and how to tail them.
-
----
-
-## Non-Functional Requirements
-
-### NFR-1: Performance
-
-- `gralph doctor`, `gralph status`, and `gralph cleanup` should complete quickly on local checks and avoid long network waits.
-
-### NFR-2: Reliability and Safety
-
-- No destructive cleanup happens by default; state file deletion requires an explicit flag.
-- Raw logs remain preserved and discoverable when backends emit structured output.
-
-### NFR-3: Compatibility
-
-- Existing CLI flags and defaults remain valid for Rust projects; new behaviors are opt-in or stack-aware.
+- Test coverage reaches 90% or higher as measured by cargo tarpaulin
+- All existing tests continue to pass
+- New tests follow existing test patterns and conventions in the codebase
 
 ---
 
 ## Implementation Tasks
 
-Each task must use a `### Task <ID>` block header and include the required fields.
-Each task block must contain exactly one unchecked task line.
+### Task COV-001
 
-### Task UX-1
-
-- **ID** UX-1
-- **Context Bundle** `src/cli.rs`, `src/backend/mod.rs`, `src/config.rs`, `src/state.rs`, `README.md`
-- **DoD** `gralph doctor` runs local checks for backend CLIs, `gh` install and auth, git clean state, config readability, and state store access, prints actionable output, and exits non-zero on required failures.
+- **ID** COV-001
+- **Context Bundle** src/app/loop_session.rs:22-137, src/app.rs:133-181, src/cli.rs
+- **DoD** Tests cover cmd_start error paths (non-existent directory), cmd_start_dry_run prompt rendering, and session state initialization.
 - **Checklist**
-  * CLI help lists `doctor` and its options.
-  * Output includes per-check status and a summary exit code.
-  * README documents doctor usage and common failure hints.
+  * Test cmd_start returns error when directory does not exist
+  * Test cmd_start_dry_run renders prompt and task block correctly
+  * Test cmd_start_dry_run with strict_prd validation
+  * Test cmd_start_dry_run with custom prompt_template
+  * Test run_loop_args_from_start conversion
 - **Dependencies** None
-- [x] UX-1 Add doctor command and checks
+- [ ] COV-001 Add tests for loop_session cmd_start and cmd_start_dry_run
+
 ---
 
-### Task UX-2
+### Task COV-002
 
-- **ID** UX-2
-- **Context Bundle** `src/cli.rs`, `src/state.rs`, `PROCESS.md`, `README.md`
-- **DoD** `gralph cleanup` marks stale sessions by default using `StateStore::cleanup_stale`, supports `--remove` and `--purge`, and reports the list or count of affected sessions.
+- **ID** COV-002
+- **Context Bundle** src/app/loop_session.rs:161-191, src/app/loop_session.rs:427-455, src/state.rs
+- **DoD** Tests cover stop_session logic, stop --all behavior, cleanup with purge flag, and cleanup with remove flag.
 - **Checklist**
-  * Default mode marks stale sessions without deleting state.
-  * `--remove` deletes only stale sessions; `--purge` requires explicit opt-in.
-  * README and PROCESS describe cleanup behavior.
+  * Test cmd_stop with specific session name
+  * Test cmd_stop with --all flag stops multiple sessions
+  * Test cmd_stop returns error when session not found
+  * Test cmd_cleanup with purge flag
+  * Test cmd_cleanup with remove flag marks/removes stale sessions
 - **Dependencies** None
-- [x] UX-2 Add cleanup command for stale sessions
+- [ ] COV-002 Add tests for loop_session cmd_stop and cmd_cleanup
+
 ---
 
-### Task UX-3
+### Task COV-003
 
-- **ID** UX-3
-- **Context Bundle** `src/core.rs`, `src/cli.rs`, `src/state.rs`, `README.md`
-- **DoD** Session state records the `.raw.log` path derived from `.gralph/<session>.log`, and `gralph logs --raw` prints that file or a clear error when missing.
+- **ID** COV-003
+- **Context Bundle** src/app/loop_session.rs:193-266, src/app/loop_session.rs:268-349, src/app/loop_session.rs:351-425
+- **DoD** Tests cover JSON output format, verbose output, session enrichment with remaining task counts, and log file resolution.
 - **Checklist**
-  * Raw log path uses the same suffix logic as `raw_log_path` in `src/core.rs`.
-  * `logs --raw` handles both present and missing files.
-  * README documents raw log access and file location.
+  * Test cmd_status with empty sessions returns appropriate message
+  * Test cmd_status with --json flag returns valid JSON
+  * Test cmd_status with --verbose flag includes extended info
+  * Test enrich_status_session adds current_remaining count
+  * Test enrich_status_session marks stale sessions correctly
+  * Test resolve_status_log_file with empty and non-empty paths
 - **Dependencies** None
-- [x] UX-3 Expose raw log access and paths
+- [ ] COV-003 Add tests for loop_session cmd_status and enrich_status_session
+
 ---
 
-### Task UX-4
+### Task COV-004
 
-- **ID** UX-4
-- **Context Bundle** `src/server.rs`, `src/state.rs`, `src/core.rs`, `src/prd.rs`, `src/cli.rs`
-- **DoD** `gralph status --json` and server `/status` include `last_task_id`, `last_log_line`, `last_error`, and `raw_log_file`, and `gralph status --verbose` surfaces log paths and the last error line.
+- **ID** COV-004
+- **Context Bundle** src/app/loop_session.rs:457-485, src/app/loop_session.rs:487-529, src/app/loop_session.rs:531-628
+- **DoD** Tests cover log file resolution, follow mode behavior, attach error handling, and resume session state transitions.
 - **Checklist**
-  * JSON output uses stable keys and includes required fields when available.
-  * Last error is derived from log entries such as "Error:" and "Iteration failed:" in `src/core.rs`.
-  * Task ID uses existing PRD parsing logic in `src/prd.rs` or equivalent.
-- **Dependencies** UX-3
-- [x] UX-4 Add status JSON and error context
----
-
-### Task UX-5
-
-- **ID** UX-5
-- **Context Bundle** `src/cli.rs`, `src/core.rs`, `src/prd.rs`, `README.md`
-- **DoD** `gralph start --dry-run` prints the next task block and resolved prompt template without running a backend, and `gralph step` runs exactly one iteration without auto-running the verifier.
-- **Checklist**
-  * Dry-run respects prompt template resolution order in `src/core.rs`.
-  * Step uses the same prompt rendering and strict PRD behavior as the loop.
-  * README documents dry-run and step usage.
+  * Test cmd_logs returns error when session not found
+  * Test cmd_logs returns error when log file does not exist
+  * Test cmd_logs with --raw flag uses raw_log_file
+  * Test cmd_attach returns error when no tmux session recorded
+  * Test cmd_resume identifies sessions needing resume
+  * Test should_resume_session helper function
 - **Dependencies** None
-- [x] UX-5 Add dry-run start and step execution
+- [ ] COV-004 Add tests for loop_session cmd_logs, cmd_attach, cmd_resume
+
 ---
 
-### Task UX-6
+### Task COV-005
 
-- **ID** UX-6
-- **Context Bundle** `config/default.yaml`, `src/config.rs`, `src/prd.rs`, `ARCHITECTURE.md`, `README.md`
-- **DoD** Verifier defaults are stack-aware: Rust/Cargo retains current defaults, while non-Rust or unknown stacks default `verifier.auto_run` to false and require explicit commands.
+- **ID** COV-005
+- **Context Bundle** src/app/loop_session.rs:663-776, src/app/loop_session.rs:778-end
+- **DoD** Tests cover configuration resolution, outcome status planning with verifier, and notification decision logic.
 - **Checklist**
-  * Stack detection drives verifier defaults.
-  * Rust defaults remain unchanged from `config/default.yaml`.
-  * README and ARCHITECTURE describe stack-aware behavior.
-- **Dependencies** None
-- [x] UX-6 Make verifier defaults stack-aware
+  * Test resolve_task_file with args, config, and defaults
+  * Test resolve_max_iterations with args, config, and defaults
+  * Test resolve_completion_marker with args, config, and defaults
+  * Test resolve_backend_name with args, config, and defaults
+  * Test resolve_model with opencode special case
+  * Test outcome_status_plan returns Verify when auto_run_verifier is true
+  * Test notification_decision for Complete, Failed, MaxIterations statuses
+  * Test should_check_for_update with env var and config
+- **Dependencies** COV-001
+- [ ] COV-005 Add tests for loop_session run_loop_with_state and iteration logic
+
 ---
 
-### Task UX-7
+### Task COV-006
 
-- **ID** UX-7
-- **Context Bundle** `config/default.yaml`, `PROCESS.md`, `ARCHITECTURE.md`, `README.md`
-- **DoD** Auto-merge is opt-in by default via `verifier.review.require_approval: true` or a new `verifier.auto_merge: false`, with documentation aligned to the new safe default.
+- **ID** COV-006
+- **Context Bundle** src/app.rs:201-223, src/app.rs:302-338, src/app.rs:340-398
+- **DoD** Tests cover command dispatch routing, doctor check execution with various config states, and backends listing.
 - **Checklist**
-  * Default config prevents merge without explicit approval or opt-in.
-  * PROCESS and ARCHITECTURE reflect the new merge gate.
-  * README documents how to enable auto-merge.
+  * Test dispatch routes commands to correct handlers
+  * Test cmd_doctor with valid config
+  * Test cmd_doctor with invalid config shows failure
+  * Test cmd_doctor with missing directory returns error
+  * Test cmd_backends lists installed and not-installed backends
+  * Test DoctorStatus as_str conversion
 - **Dependencies** None
-- [x] UX-7 Enforce safe auto-merge defaults
+- [ ] COV-006 Add tests for app.rs command dispatch and doctor checks
+
 ---
 
-### Task UX-8
+### Task COV-007
 
-- **ID** UX-8
-- **Context Bundle** `config/default.yaml`, `src/config.rs`, `src/cli.rs`, `README.md`, `PROCESS.md`
-- **DoD** Update checks can be disabled via `defaults.check_updates` or `GRALPH_NO_UPDATE_CHECK`, and start output includes clear tmux and worktree skip hints with log locations.
+- **ID** COV-007
+- **Context Bundle** src/verifier.rs:246-298, src/verifier.rs:307-359, src/verifier.rs:361-400
+- **DoD** Tests cover static check configuration parsing, command parsing with shell words, and coverage percentage extraction from various output formats.
 - **Checklist**
-  * Update check is bypassed when config or env disables it.
-  * Start output mentions log file path and how to tail logs in background runs.
-  * README and PROCESS document new flags and hints.
+  * Test parse_verifier_command with simple and complex commands
+  * Test parse_verifier_command_tokens with quoted arguments
+  * Test extract_coverage_percent with tarpaulin output
+  * Test extract_coverage_percent with line coverage format
+  * Test coverage_percent_from_line with various formats
+  * Test parse_percent_from_line edge cases
 - **Dependencies** None
-- [x] UX-8 Add update opt-out and clearer messaging
----
-
-## Success Criteria
-
-- Non-Rust repos do not auto-run the verifier unless explicitly configured.
-- `gralph status --json` includes `last_task_id`, `last_log_line`, `last_error`, and raw log paths for active sessions.
-- `gralph logs --raw` provides access to raw backend output when available.
-- `gralph doctor` exits non-zero when required tools or auth are missing and provides actionable hints.
-- Update checks can be disabled via config or env and are skipped when disabled.
+- [ ] COV-007 Add tests for verifier static checks
 
 ---
 
-## Sources
+### Task COV-008
 
-- None
+- **ID** COV-008
+- **Context Bundle** src/verifier.rs:160-244, src/verifier.rs:79-158
+- **DoD** Tests cover PR creation logic, review gate polling, and configuration resolution from args and config.
+- **Checklist**
+  * Test resolve_verifier_command with explicit and default values
+  * Test resolve_verifier_command requires explicit for non-Rust stacks
+  * Test resolve_verifier_coverage_min validation
+  * Test resolve_verifier_coverage_warn validation
+  * Test coverage_warn_message with values above and below threshold
+  * Test validate_coverage_min boundary conditions
+- **Dependencies** COV-007
+- [ ] COV-008 Add tests for verifier PR and review gate functions
 
 ---
 
-## Warnings
+### Task COV-009
 
-- No reliable external sources were provided. Verify requirements and stack assumptions before implementation.
+- **ID** COV-009
+- **Context Bundle** src/server.rs:54-74, src/server.rs:258-282, src/server.rs:125-143
+- **DoD** Tests cover bearer token authentication, CORS header handling, and server configuration validation.
+- **Checklist**
+  * Test check_auth returns None when no token configured
+  * Test check_auth returns unauthorized when token missing
+  * Test check_auth returns unauthorized when token invalid
+  * Test check_auth returns None when token matches
+  * Test ServerConfig validate requires token for non-localhost
+  * Test ServerConfig addr parsing with valid and invalid addresses
+- **Dependencies** None
+- [ ] COV-009 Add tests for server authentication and CORS
+
+---
+
+### Task COV-010
+
+- **ID** COV-010
+- **Context Bundle** src/server.rs:145-256, src/server.rs:284-end
+- **DoD** Tests cover HTTP handler responses, session enrichment with task counts, and error response formatting.
+- **Checklist**
+  * Test root_handler returns ok status
+  * Test status_handler returns sessions list
+  * Test status_name_handler returns 404 for missing session
+  * Test stop_handler updates session status
+  * Test fallback_handler returns 404 for unknown endpoints
+  * Test enrich_session adds remaining task count
+  * Test json_response and error_response formatting
+- **Dependencies** COV-009
+- [ ] COV-010 Add tests for server handlers and session enrichment
+
+---
+
+### Task COV-011
+
+- **ID** COV-011
+- **Context Bundle** src/backend/claude.rs:49-119, src/backend/claude.rs:121-178
+- **DoD** Tests cover run_iteration error handling, parse_text with malformed JSON, and text extraction from various response structures.
+- **Checklist**
+  * Test run_iteration returns error for empty prompt
+  * Test parse_text with empty file
+  * Test parse_text with non-JSON content
+  * Test extract_assistant_texts with non-assistant messages
+  * Test extract_assistant_texts with missing content array
+  * Test extract_result_text with non-result messages
+- **Dependencies** None
+- [ ] COV-011 Add tests for backend claude.rs edge cases
+
+---
+
+### Task COV-012
+
+- **ID** COV-012
+- **Context Bundle** Cargo.toml, src/lib.rs
+- **DoD** Run cargo tarpaulin to verify 90% coverage. Identify any remaining gaps and add targeted tests to close them.
+- **Checklist**
+  * Run cargo tarpaulin --workspace and verify 90% threshold
+  * Identify any remaining uncovered lines in priority modules
+  * Add tests for remaining gaps if coverage below 90%
+  * Ensure all tests pass with cargo test --workspace
+  * Document any intentionally uncovered code paths
+- **Dependencies** COV-001, COV-002, COV-003, COV-004, COV-005, COV-006, COV-007, COV-008, COV-009, COV-010, COV-011
+- [ ] COV-012 Final coverage verification and gap closure
