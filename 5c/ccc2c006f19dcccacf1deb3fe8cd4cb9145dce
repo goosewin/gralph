@@ -1,0 +1,27 @@
+src/server.rs
+  44296f2c2dfe89da 2326-2898
+PRD.coverage-90.md
+  44296f2c2dfe89da 89
+CHANGELOG.md
+  44296f2c2dfe89da 23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "5cccc2c006f19dcccacf1deb3fe8cd4cb9145dce",
+  "prompts": {
+    "44296f2c2dfe89da": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d5ddf1b4-92bb-430c-a12a-744a56dfd1a1",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 576,
+      "total_deletions": 2,
+      "accepted_lines": 575,
+      "overriden_lines": 0
+    }
+  }
+}
