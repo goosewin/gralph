@@ -127,7 +127,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests cover lines 467-510 PR creation flow.
   * Tests verify violation sorting and formatting.
 - **Dependencies** COV80-VER-1
-- [ ] COV80-VER-2 Add verifier static check tests
+- [x] COV80-VER-2 Add verifier static check tests
 ---
 
 ### Task COV80-VER-3

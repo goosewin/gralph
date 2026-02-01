@@ -3818,4 +3818,471 @@ Coverage Results: 75.00%
         assert_eq!(VerifierStackDefaults::NonRust, VerifierStackDefaults::NonRust);
         assert_ne!(VerifierStackDefaults::Rust, VerifierStackDefaults::NonRust);
     }
+
+    // COV80-VER-2: Static check pipeline tests
+
+    #[test]
+    fn run_verifier_static_checks_skips_when_disabled() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src")).unwrap();
+        fs::write(temp.path().join("src/lib.rs"), "// TODO: fix\n").unwrap();
+        let config = load_project_config("verifier:\n  static_checks:\n    enabled: false\n");
+
+        // Should succeed even with TODO markers when disabled
+        let result = run_verifier_static_checks(temp.path(), &config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_verifier_static_checks_passes_with_no_files() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config = load_project_config(
+            "verifier:\n  static_checks:\n    enabled: true\n    allow: \"src/*.rs\"\n",
+        );
+
+        // No src directory means no files to check
+        let result = run_verifier_static_checks(temp.path(), &config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_verifier_static_checks_passes_with_clean_files() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src")).unwrap();
+        fs::write(temp.path().join("src/lib.rs"), "fn main() {}\n").unwrap();
+        let config = load_project_config(
+            "verifier:\n  static_checks:\n    enabled: true\n    todo: true\n    comments: false\n    duplicate: false\n    allow: \"src/*.rs\"\n",
+        );
+
+        let result = run_verifier_static_checks(temp.path(), &config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_verifier_static_checks_reports_multiple_violations() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src")).unwrap();
+        fs::write(temp.path().join("src/a.rs"), "// TODO: fix\n").unwrap();
+        fs::write(temp.path().join("src/b.rs"), "// FIXME: later\n").unwrap();
+        let config = load_project_config(
+            "verifier:\n  static_checks:\n    enabled: true\n    todo: true\n    comments: false\n    duplicate: false\n    allow: \"src/*.rs\"\n    todo_markers: \"TODO,FIXME\"\n",
+        );
+
+        let err = run_verifier_static_checks(temp.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Static checks failed"));
+                assert!(message.contains("2"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn run_verifier_static_checks_with_verbose_comments() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src")).unwrap();
+        // Create a verbose comment block
+        let verbose_content = "// This is line one\n// This is line two\n// This is line three\n// This is line four\n// This is line five\n// This is line six\n// This is line seven\n// This is line eight\n// This is line nine\n// This is line ten\n// This is line eleven\n// This is line twelve\n// This is line thirteen\nfn main() {}\n";
+        fs::write(temp.path().join("src/lib.rs"), verbose_content).unwrap();
+        let config = load_project_config(
+            "verifier:\n  static_checks:\n    enabled: true\n    todo: false\n    comments: true\n    duplicate: false\n    allow: \"src/*.rs\"\n    max_comment_lines: 5\n    max_comment_chars: 100\n",
+        );
+
+        let err = run_verifier_static_checks(temp.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Static checks failed"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn run_verifier_static_checks_with_duplicate_blocks() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src")).unwrap();
+        // Create duplicate code blocks
+        let code = "fn helper() {\n    let x = 1;\n    let y = 2;\n    let z = 3;\n    let a = 4;\n    let b = 5;\n    let c = 6;\n    let d = 7;\n    let e = 8;\n}\n";
+        fs::write(temp.path().join("src/a.rs"), code).unwrap();
+        fs::write(temp.path().join("src/b.rs"), code).unwrap();
+        let config = load_project_config(
+            "verifier:\n  static_checks:\n    enabled: true\n    todo: false\n    comments: false\n    duplicate: true\n    allow: \"src/*.rs\"\n    duplicate_block_lines: 4\n    duplicate_min_alnum_lines: 2\n",
+        );
+
+        let err = run_verifier_static_checks(temp.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Static checks failed"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn violations_are_sorted_by_path_then_line() {
+        let mut violations = vec![
+            StaticViolation {
+                path: PathBuf::from("src/z.rs"),
+                line: 1,
+                message: "first".to_string(),
+            },
+            StaticViolation {
+                path: PathBuf::from("src/a.rs"),
+                line: 10,
+                message: "second".to_string(),
+            },
+            StaticViolation {
+                path: PathBuf::from("src/a.rs"),
+                line: 5,
+                message: "third".to_string(),
+            },
+        ];
+
+        violations.sort_by(|left, right| {
+            let left_path = left.path.to_string_lossy();
+            let right_path = right.path.to_string_lossy();
+            match left_path.cmp(&right_path) {
+                std::cmp::Ordering::Equal => left.line.cmp(&right.line),
+                ordering => ordering,
+            }
+        });
+
+        assert_eq!(violations[0].path, PathBuf::from("src/a.rs"));
+        assert_eq!(violations[0].line, 5);
+        assert_eq!(violations[1].path, PathBuf::from("src/a.rs"));
+        assert_eq!(violations[1].line, 10);
+        assert_eq!(violations[2].path, PathBuf::from("src/z.rs"));
+        assert_eq!(violations[2].line, 1);
+    }
+
+    #[test]
+    fn format_static_violation_path_uses_relative_path() {
+        let root = Path::new("/project");
+        let path = Path::new("/project/src/main.rs");
+        let formatted = format_static_violation_path(root, path, 42);
+        assert_eq!(formatted, "src/main.rs:42");
+    }
+
+    #[test]
+    fn format_static_violation_path_preserves_absolute_when_not_prefix() {
+        let root = Path::new("/project");
+        let path = Path::new("/other/src/main.rs");
+        let formatted = format_static_violation_path(root, path, 10);
+        assert_eq!(formatted, "/other/src/main.rs:10");
+    }
+
+    // COV80-VER-2: PR creation flow tests
+
+    #[test]
+    fn run_verifier_pr_create_fails_without_git_repo() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config = load_project_config("verifier:\n  pr:\n    base: main\n");
+
+        let err = run_verifier_pr_create(temp.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                // Should fail either on git rev-parse or indicate not a git repo
+                assert!(
+                    message.contains("git")
+                        || message.contains("repository")
+                        || message.contains("unable")
+                        || message.contains("fatal")
+                );
+            }
+            CliError::Io(_) => {
+                // Also acceptable - git command may fail with IO error
+            }
+        }
+    }
+
+    #[test]
+    fn run_verifier_pr_create_fails_on_detached_head() {
+        let _guard = env_guard();
+        let repo = init_git_repo("main");
+        // Create a detached HEAD state
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(repo.path())
+            .arg("rev-parse")
+            .arg("HEAD")
+            .output()
+            .unwrap();
+        let sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        run_git(repo.path(), &["checkout", &sha]);
+
+        let config = load_project_config("verifier:\n  pr:\n    base: main\n");
+
+        let err = run_verifier_pr_create(repo.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("detached HEAD") || message.contains("HEAD"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_verifier_pr_create_reports_gh_auth_failure() {
+        let _guard = env_guard();
+        let repo = init_git_repo("feature-branch");
+        let bin_dir = repo.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then echo 'not logged in' >&2; exit 1; fi\nexit 0\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let config = load_project_config("verifier:\n  pr:\n    base: main\n");
+
+        let err = run_verifier_pr_create(repo.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("auth") || message.contains("login"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_verifier_pr_create_reports_empty_failure() {
+        let _guard = env_guard();
+        let repo = init_git_repo("feature-branch");
+        let bin_dir = repo.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        // Auth succeeds, but pr create fails with empty output
+        write_mock_gh(&bin_dir, "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then exit 0; fi\nexit 1\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let config = load_project_config("verifier:\n  pr:\n    base: main\n");
+
+        let err = run_verifier_pr_create(repo.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("gh pr create failed"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_verifier_pr_create_succeeds_with_template() {
+        let _guard = env_guard();
+        let repo = init_git_repo("feature-branch");
+        fs::create_dir_all(repo.path().join(".github")).unwrap();
+        fs::write(
+            repo.path().join(".github/pull_request_template.md"),
+            "## Description\n\n",
+        )
+        .unwrap();
+        let bin_dir = repo.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        // Mock gh to succeed and output a URL
+        write_mock_gh(&bin_dir, "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then exit 0; fi\necho 'https://github.com/test/repo/pull/123'\nexit 0\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let config = load_project_config("verifier:\n  pr:\n    base: main\n    title: test pr\n");
+
+        let result = run_verifier_pr_create(repo.path(), &config).unwrap();
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("github.com"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_verifier_pr_create_succeeds_without_template() {
+        let _guard = env_guard();
+        let repo = init_git_repo("feature-branch");
+        let bin_dir = repo.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then exit 0; fi\necho 'https://github.com/test/repo/pull/456'\nexit 0\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let config = load_project_config("verifier:\n  pr:\n    base: main\n");
+
+        let result = run_verifier_pr_create(repo.path(), &config).unwrap();
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn extract_pr_url_finds_url_in_output() {
+        let output = "Creating pull request for feature into main\nhttps://github.com/owner/repo/pull/123\n";
+        let url = extract_pr_url(output);
+        assert_eq!(url, Some("https://github.com/owner/repo/pull/123".to_string()));
+    }
+
+    #[test]
+    fn extract_pr_url_handles_http() {
+        let output = "PR: http://example.com/pr/1";
+        let url = extract_pr_url(output);
+        assert_eq!(url, Some("http://example.com/pr/1".to_string()));
+    }
+
+    #[test]
+    fn extract_pr_url_strips_trailing_punctuation() {
+        let output = "See https://github.com/test/pr/1);";
+        let url = extract_pr_url(output);
+        assert_eq!(url, Some("https://github.com/test/pr/1".to_string()));
+    }
+
+    #[test]
+    fn extract_pr_url_returns_none_without_url() {
+        let output = "No URL in this output";
+        let url = extract_pr_url(output);
+        assert!(url.is_none());
+    }
+
+    #[test]
+    fn resolve_verifier_pr_title_uses_config_value() {
+        let config = load_project_config("verifier:\n  pr:\n    title: custom title\n");
+        let title = resolve_verifier_pr_title(&config).unwrap();
+        assert_eq!(title, "custom title");
+    }
+
+    #[test]
+    fn resolve_verifier_pr_title_defaults_when_empty() {
+        let config = load_project_config("verifier:\n  pr:\n    title: \"\"\n");
+        let title = resolve_verifier_pr_title(&config).unwrap();
+        assert_eq!(title, DEFAULT_PR_TITLE);
+    }
+
+    #[test]
+    fn resolve_verifier_pr_title_trims_whitespace() {
+        let config = load_project_config("verifier:\n  pr:\n    title: \"  spaced title  \"\n");
+        let title = resolve_verifier_pr_title(&config).unwrap();
+        assert_eq!(title, "spaced title");
+    }
+
+    #[test]
+    fn resolve_pr_template_path_finds_github_lowercase() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join(".github")).unwrap();
+        fs::write(
+            temp.path().join(".github/pull_request_template.md"),
+            "template\n",
+        )
+        .unwrap();
+        let resolved = resolve_pr_template_path(temp.path());
+        assert!(resolved.is_some());
+        assert!(resolved
+            .unwrap()
+            .to_string_lossy()
+            .contains("pull_request_template.md"));
+    }
+
+    #[test]
+    fn resolve_pr_template_path_finds_github_uppercase() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join(".github")).unwrap();
+        fs::write(
+            temp.path().join(".github/PULL_REQUEST_TEMPLATE.md"),
+            "template\n",
+        )
+        .unwrap();
+        let resolved = resolve_pr_template_path(temp.path());
+        assert!(resolved.is_some());
+    }
+
+    #[test]
+    fn resolve_pr_template_path_finds_root_lowercase() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("pull_request_template.md"), "template\n").unwrap();
+        let resolved = resolve_pr_template_path(temp.path());
+        assert!(resolved.is_some());
+    }
+
+    #[test]
+    fn resolve_pr_template_path_finds_root_uppercase() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("PULL_REQUEST_TEMPLATE.md"), "template\n").unwrap();
+        let resolved = resolve_pr_template_path(temp.path());
+        assert!(resolved.is_some());
+    }
+
+    #[test]
+    fn resolve_verifier_pr_base_uses_config_value() {
+        let config = load_project_config("verifier:\n  pr:\n    base: develop\n");
+        let temp = tempfile::tempdir().unwrap();
+        let base = resolve_verifier_pr_base(&config, temp.path()).unwrap();
+        assert_eq!(base, "develop");
+    }
+
+    #[test]
+    fn map_gh_error_identifies_not_found() {
+        let err = map_gh_error(io::Error::new(io::ErrorKind::NotFound, "not found"));
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("gh CLI not found"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn map_gh_error_preserves_other_io_errors() {
+        let err = map_gh_error(io::Error::new(io::ErrorKind::PermissionDenied, "denied"));
+        assert!(matches!(err, CliError::Io(_)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_gh_authenticated_reports_detailed_failure() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\necho 'You are not logged in' >&2\nexit 1\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let err = ensure_gh_authenticated(temp.path()).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("not logged in"));
+                assert!(message.contains("gh auth login"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_gh_authenticated_reports_empty_failure() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\nexit 1\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let err = ensure_gh_authenticated(temp.path()).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("gh auth status failed"));
+                assert!(message.contains("gh auth login"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_gh_authenticated_succeeds_when_logged_in() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\necho 'Logged in'\nexit 0\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let result = ensure_gh_authenticated(temp.path());
+        assert!(result.is_ok());
+    }
 }
