@@ -1,0 +1,21 @@
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "921ea0adb6d3a746ee44bd7a85d053ce4cf7bb24",
+  "prompts": {
+    "6cb1909ba8f8cc42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "75d678cf-d674-46ed-a788-a01eb293c246",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 171,
+      "total_deletions": 198,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    }
+  }
+}
