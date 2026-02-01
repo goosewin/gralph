@@ -179,7 +179,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests cover lines 574-621 init scaffolding.
   * Tests verify error path formatting.
 - **Dependencies** COV80-APP-1
-- [ ] COV80-APP-3 Add app doctor and init tests
+- [x] COV80-APP-3 Add app doctor and init tests
 ---
 
 ### Task COV80-PRD-1

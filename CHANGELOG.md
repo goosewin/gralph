@@ -29,6 +29,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - COV80-VER-2 Add verifier static check pipeline and PR creation flow tests.
 - COV80-VER-3 Add verifier review gate polling tests for timeout, approval, and merge method.
 - COV80-APP-1 Add app CLI dispatch tests for error formatting and subcommand routing.
+- COV80-APP-3 Add app doctor and init tests for config errors, backend checks, and scaffolding paths.
 
 ### Fixed
 
