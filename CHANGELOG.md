@@ -21,8 +21,10 @@ CI=<status/link>; PR=<link if final PRD task>
 - TMUX-1 Remove --no-tmux flag from CLI and completions; document tmux as required.
 - TMUX-2 Require tmux sessions for start and persist tmux session names in state.
 - WT-1 Run auto worktree loops from `.worktrees/<unique-worktree>`.
+- WT-2 Auto-commit dirty repos before auto worktree creation.
 - COV-70-1 Add tmux availability and session collision tests.
 - COV-70-3 Add auto worktree skip and path mapping tests.
+- COV80-LS-3 Add loop_session failure path tests for notification flows and callbacks.
 
 ### Fixed
 

@@ -3063,4 +3063,358 @@ exit 0
         let err = spawn_run_loop(&args, &FailExeRunner).unwrap_err();
         assert!(matches!(err, CliError::Io(_)));
     }
+
+    // COV80-LS-3: failure path tests for notification flows, max iteration exits, and callbacks
+
+    struct FailingNotifier {
+        error_message: String,
+    }
+
+    impl FailingNotifier {
+        fn new(message: &str) -> Self {
+            Self {
+                error_message: message.to_string(),
+            }
+        }
+    }
+
+    impl notify::Notifier for FailingNotifier {
+        fn notify_complete(
+            &self,
+            _session: &str,
+            _webhook: &str,
+            _dir: Option<&str>,
+            _iterations: Option<u32>,
+            _duration_secs: Option<u64>,
+            _timeout_secs: Option<u64>,
+        ) -> Result<(), notify::NotifyError> {
+            Err(notify::NotifyError::InvalidInput(self.error_message.clone()))
+        }
+
+        fn notify_failed(
+            &self,
+            _session: &str,
+            _webhook: &str,
+            _reason: Option<&str>,
+            _dir: Option<&str>,
+            _iterations: Option<u32>,
+            _max_iterations: Option<u32>,
+            _remaining: Option<u32>,
+            _duration_secs: Option<u64>,
+            _timeout_secs: Option<u64>,
+        ) -> Result<(), notify::NotifyError> {
+            Err(notify::NotifyError::InvalidInput(self.error_message.clone()))
+        }
+    }
+
+    #[test]
+    fn notify_if_configured_propagates_complete_notification_error() {
+        let _guard = env_guard();
+        let config = load_config("notifications:\n  webhook: https://hook.test\n  on_complete: true\n");
+        let args = base_args();
+        let outcome = core::LoopOutcome {
+            status: LoopStatus::Complete,
+            iterations: 5,
+            remaining_tasks: 0,
+            duration_secs: 300,
+        };
+        let notifier = FailingNotifier::new("complete notification failed");
+
+        let err = notify_if_configured(&config, &args, &outcome, 30, &notifier).unwrap_err();
+        match err {
+            CliError::Message(msg) => {
+                assert!(msg.contains("complete notification failed"));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn notify_if_configured_propagates_failed_notification_error() {
+        let _guard = env_guard();
+        let config = load_config("notifications:\n  webhook: https://hook.test\n");
+        let args = base_args();
+        let outcome = core::LoopOutcome {
+            status: LoopStatus::Failed,
+            iterations: 2,
+            remaining_tasks: 5,
+            duration_secs: 60,
+        };
+        let notifier = FailingNotifier::new("failed notification error");
+
+        let err = notify_if_configured(&config, &args, &outcome, 30, &notifier).unwrap_err();
+        match err {
+            CliError::Message(msg) => {
+                assert!(msg.contains("failed notification error"));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn notify_if_configured_propagates_max_iterations_notification_error() {
+        let _guard = env_guard();
+        let config = load_config("notifications:\n  webhook: https://hook.test\n");
+        let args = base_args();
+        let outcome = core::LoopOutcome {
+            status: LoopStatus::MaxIterations,
+            iterations: 30,
+            remaining_tasks: 3,
+            duration_secs: 1800,
+        };
+        let notifier = FailingNotifier::new("max iterations notification error");
+
+        let err = notify_if_configured(&config, &args, &outcome, 30, &notifier).unwrap_err();
+        match err {
+            CliError::Message(msg) => {
+                assert!(msg.contains("max iterations notification error"));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn notification_decision_running_returns_none() {
+        // Running status should never trigger a notification
+        assert!(notification_decision(LoopStatus::Running, true).is_none());
+        assert!(notification_decision(LoopStatus::Running, false).is_none());
+    }
+
+    #[test]
+    fn notification_decision_failed_ignores_on_complete_flag() {
+        // Failed notifications should always be sent regardless of on_complete setting
+        assert_eq!(
+            notification_decision(LoopStatus::Failed, true),
+            Some(NotificationDecision::Failed { reason: "error" })
+        );
+        assert_eq!(
+            notification_decision(LoopStatus::Failed, false),
+            Some(NotificationDecision::Failed { reason: "error" })
+        );
+    }
+
+    #[test]
+    fn notification_decision_max_iterations_ignores_on_complete_flag() {
+        // MaxIterations notifications should always be sent regardless of on_complete setting
+        assert_eq!(
+            notification_decision(LoopStatus::MaxIterations, true),
+            Some(NotificationDecision::Failed {
+                reason: "max_iterations"
+            })
+        );
+        assert_eq!(
+            notification_decision(LoopStatus::MaxIterations, false),
+            Some(NotificationDecision::Failed {
+                reason: "max_iterations"
+            })
+        );
+    }
+
+    #[test]
+    fn outcome_status_plan_complete_without_auto_run_is_final() {
+        let plan = outcome_status_plan(LoopStatus::Complete, false);
+        assert_eq!(plan, OutcomeStatusPlan::Final { status: "complete" });
+    }
+
+    #[test]
+    fn outcome_status_plan_failed_with_auto_run_is_still_final() {
+        // Failed status should be final even if auto_run is enabled
+        let plan = outcome_status_plan(LoopStatus::Failed, true);
+        assert_eq!(plan, OutcomeStatusPlan::Final { status: "failed" });
+    }
+
+    #[test]
+    fn outcome_status_plan_max_iterations_with_auto_run_is_final() {
+        // MaxIterations status should be final even if auto_run is enabled
+        let plan = outcome_status_plan(LoopStatus::MaxIterations, true);
+        assert_eq!(
+            plan,
+            OutcomeStatusPlan::Final {
+                status: "max_iterations"
+            }
+        );
+    }
+
+    struct CallTrackingNotifier {
+        complete_count: std::sync::atomic::AtomicUsize,
+        failed_count: std::sync::atomic::AtomicUsize,
+        last_reason: std::sync::Mutex<Option<String>>,
+    }
+
+    impl CallTrackingNotifier {
+        fn new() -> Self {
+            Self {
+                complete_count: std::sync::atomic::AtomicUsize::new(0),
+                failed_count: std::sync::atomic::AtomicUsize::new(0),
+                last_reason: std::sync::Mutex::new(None),
+            }
+        }
+
+        fn complete_count(&self) -> usize {
+            self.complete_count
+                .load(std::sync::atomic::Ordering::SeqCst)
+        }
+
+        fn failed_count(&self) -> usize {
+            self.failed_count.load(std::sync::atomic::Ordering::SeqCst)
+        }
+
+        fn last_reason(&self) -> Option<String> {
+            self.last_reason.lock().unwrap().clone()
+        }
+    }
+
+    impl notify::Notifier for CallTrackingNotifier {
+        fn notify_complete(
+            &self,
+            _session: &str,
+            _webhook: &str,
+            _dir: Option<&str>,
+            _iterations: Option<u32>,
+            _duration_secs: Option<u64>,
+            _timeout_secs: Option<u64>,
+        ) -> Result<(), notify::NotifyError> {
+            self.complete_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn notify_failed(
+            &self,
+            _session: &str,
+            _webhook: &str,
+            reason: Option<&str>,
+            _dir: Option<&str>,
+            _iterations: Option<u32>,
+            _max_iterations: Option<u32>,
+            _remaining: Option<u32>,
+            _duration_secs: Option<u64>,
+            _timeout_secs: Option<u64>,
+        ) -> Result<(), notify::NotifyError> {
+            self.failed_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            *self.last_reason.lock().unwrap() = reason.map(|s| s.to_string());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn notify_if_configured_calls_complete_callback_once() {
+        let _guard = env_guard();
+        let config = load_config("notifications:\n  webhook: https://hook.test\n  on_complete: true\n");
+        let args = base_args();
+        let outcome = core::LoopOutcome {
+            status: LoopStatus::Complete,
+            iterations: 5,
+            remaining_tasks: 0,
+            duration_secs: 300,
+        };
+        let notifier = CallTrackingNotifier::new();
+
+        notify_if_configured(&config, &args, &outcome, 30, &notifier).unwrap();
+
+        assert_eq!(notifier.complete_count(), 1);
+        assert_eq!(notifier.failed_count(), 0);
+    }
+
+    #[test]
+    fn notify_if_configured_calls_failed_callback_for_error() {
+        let _guard = env_guard();
+        let config = load_config("notifications:\n  webhook: https://hook.test\n");
+        let args = base_args();
+        let outcome = core::LoopOutcome {
+            status: LoopStatus::Failed,
+            iterations: 2,
+            remaining_tasks: 5,
+            duration_secs: 60,
+        };
+        let notifier = CallTrackingNotifier::new();
+
+        notify_if_configured(&config, &args, &outcome, 30, &notifier).unwrap();
+
+        assert_eq!(notifier.complete_count(), 0);
+        assert_eq!(notifier.failed_count(), 1);
+        assert_eq!(notifier.last_reason(), Some("error".to_string()));
+    }
+
+    #[test]
+    fn notify_if_configured_calls_failed_callback_for_max_iterations() {
+        let _guard = env_guard();
+        let config = load_config("notifications:\n  webhook: https://hook.test\n");
+        let args = base_args();
+        let outcome = core::LoopOutcome {
+            status: LoopStatus::MaxIterations,
+            iterations: 30,
+            remaining_tasks: 3,
+            duration_secs: 1800,
+        };
+        let notifier = CallTrackingNotifier::new();
+
+        notify_if_configured(&config, &args, &outcome, 30, &notifier).unwrap();
+
+        assert_eq!(notifier.complete_count(), 0);
+        assert_eq!(notifier.failed_count(), 1);
+        assert_eq!(notifier.last_reason(), Some("max_iterations".to_string()));
+    }
+
+    #[test]
+    fn notify_if_configured_skips_callback_for_running_status() {
+        let _guard = env_guard();
+        let config = load_config("notifications:\n  webhook: https://hook.test\n  on_complete: true\n");
+        let args = base_args();
+        let outcome = core::LoopOutcome {
+            status: LoopStatus::Running,
+            iterations: 1,
+            remaining_tasks: 10,
+            duration_secs: 30,
+        };
+        let notifier = CallTrackingNotifier::new();
+
+        notify_if_configured(&config, &args, &outcome, 30, &notifier).unwrap();
+
+        assert_eq!(notifier.complete_count(), 0);
+        assert_eq!(notifier.failed_count(), 0);
+    }
+
+    #[test]
+    fn outcome_status_plan_verify_plan_all_fields_accessible() {
+        let plan = outcome_status_plan(LoopStatus::Complete, true);
+        match plan {
+            OutcomeStatusPlan::Verify {
+                initial_status,
+                verifying_status,
+                verified_status,
+                verify_failed_status,
+            } => {
+                // Verify all status values are distinct and meaningful
+                assert_eq!(initial_status, "complete");
+                assert_eq!(verifying_status, "verifying");
+                assert_eq!(verified_status, "verified");
+                assert_eq!(verify_failed_status, "verify-failed");
+                // Verify initial_status() accessor works
+                assert_eq!(plan.initial_status(), "complete");
+            }
+            OutcomeStatusPlan::Final { .. } => panic!("expected verify plan"),
+        }
+    }
+
+    #[test]
+    fn outcome_status_plan_final_initial_status_matches() {
+        for (status, expected) in [
+            (LoopStatus::Failed, "failed"),
+            (LoopStatus::MaxIterations, "max_iterations"),
+            (LoopStatus::Running, "running"),
+        ] {
+            let plan = outcome_status_plan(status, true);
+            match plan {
+                OutcomeStatusPlan::Final { status: s } => {
+                    assert_eq!(s, expected);
+                    assert_eq!(plan.initial_status(), expected);
+                }
+                OutcomeStatusPlan::Verify { .. } => {
+                    panic!("expected final plan for status {:?}", status)
+                }
+            }
+        }
+    }
 }

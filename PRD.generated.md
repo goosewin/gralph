@@ -88,7 +88,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests cover lines 778-892 max iteration and error exits.
   * Tests verify completion callback invocations.
 - **Dependencies** COV80-LS-1
-- [ ] COV80-LS-3 Add loop_session failure path tests
+- [x] COV80-LS-3 Add loop_session failure path tests
 ---
 
 ### Task COV80-LS-4
