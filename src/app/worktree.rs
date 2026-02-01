@@ -626,8 +626,7 @@ mod tests {
         match result.unwrap_err() {
             CliError::Message(msg) => {
                 assert!(
-                    msg.to_lowercase().contains("not a git repository")
-                        || msg.contains("fatal"),
+                    msg.to_lowercase().contains("not a git repository") || msg.contains("fatal"),
                     "Expected git error message, got: {}",
                     msg
                 );

@@ -3088,7 +3088,9 @@ exit 0
             _duration_secs: Option<u64>,
             _timeout_secs: Option<u64>,
         ) -> Result<(), notify::NotifyError> {
-            Err(notify::NotifyError::InvalidInput(self.error_message.clone()))
+            Err(notify::NotifyError::InvalidInput(
+                self.error_message.clone(),
+            ))
         }
 
         fn notify_failed(
@@ -3103,14 +3105,17 @@ exit 0
             _duration_secs: Option<u64>,
             _timeout_secs: Option<u64>,
         ) -> Result<(), notify::NotifyError> {
-            Err(notify::NotifyError::InvalidInput(self.error_message.clone()))
+            Err(notify::NotifyError::InvalidInput(
+                self.error_message.clone(),
+            ))
         }
     }
 
     #[test]
     fn notify_if_configured_propagates_complete_notification_error() {
         let _guard = env_guard();
-        let config = load_config("notifications:\n  webhook: https://hook.test\n  on_complete: true\n");
+        let config =
+            load_config("notifications:\n  webhook: https://hook.test\n  on_complete: true\n");
         let args = base_args();
         let outcome = core::LoopOutcome {
             status: LoopStatus::Complete,
@@ -3301,7 +3306,8 @@ exit 0
     #[test]
     fn notify_if_configured_calls_complete_callback_once() {
         let _guard = env_guard();
-        let config = load_config("notifications:\n  webhook: https://hook.test\n  on_complete: true\n");
+        let config =
+            load_config("notifications:\n  webhook: https://hook.test\n  on_complete: true\n");
         let args = base_args();
         let outcome = core::LoopOutcome {
             status: LoopStatus::Complete,
@@ -3360,7 +3366,8 @@ exit 0
     #[test]
     fn notify_if_configured_skips_callback_for_running_status() {
         let _guard = env_guard();
-        let config = load_config("notifications:\n  webhook: https://hook.test\n  on_complete: true\n");
+        let config =
+            load_config("notifications:\n  webhook: https://hook.test\n  on_complete: true\n");
         let args = base_args();
         let outcome = core::LoopOutcome {
             status: LoopStatus::Running,

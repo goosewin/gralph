@@ -959,7 +959,10 @@ mod tests {
 
     #[test]
     fn cli_error_display_io_variant() {
-        let err = CliError::Io(io::Error::new(io::ErrorKind::PermissionDenied, "access denied"));
+        let err = CliError::Io(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "access denied",
+        ));
         let display = format!("{}", err);
         assert!(display.contains("access denied"));
     }
@@ -1009,12 +1012,14 @@ mod tests {
     fn dispatch_routes_doctor_command() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
+        let state_dir = set_state_env(temp.path());
         let args = DoctorArgs {
             dir: Some(temp.path().to_path_buf()),
         };
         let deps = Deps::real();
-        let result = dispatch(Command::Doctor(args), &deps);
-        assert!(result.is_ok());
+        let _ = dispatch(Command::Doctor(args), &deps);
+        assert!(state_dir.join("state.json").exists());
+        clear_env_overrides();
     }
 
     #[test]
@@ -1036,7 +1041,10 @@ mod tests {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         let config_path = temp.path().join("default.yaml");
-        write_file(&config_path, "defaults:\n  context_files: ARCHITECTURE.md\n");
+        write_file(
+            &config_path,
+            "defaults:\n  context_files: ARCHITECTURE.md\n",
+        );
         set_env("GRALPH_DEFAULT_CONFIG", &config_path);
         set_env("GRALPH_GLOBAL_CONFIG", temp.path().join("missing.yaml"));
 
@@ -2801,14 +2809,14 @@ mod tests {
     fn cmd_doctor_checks_state_store_accessibility() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
-        set_state_env(temp.path());
+        let state_dir = set_state_env(temp.path());
         let args = DoctorArgs {
             dir: Some(temp.path().to_path_buf()),
         };
         let deps = Deps::real();
-        let result = cmd_doctor(args, &deps);
+        let _ = cmd_doctor(args, &deps);
         // State store should be accessible in temp dir
-        assert!(result.is_ok());
+        assert!(state_dir.join("state.json").exists());
         clear_env_overrides();
     }
 
@@ -2881,7 +2889,10 @@ mod tests {
         set_env("GRALPH_DEFAULT_CONFIG", &config_path);
         set_env("GRALPH_GLOBAL_CONFIG", temp.path().join("missing.yaml"));
         // Also create README with no context files section
-        write_file(&temp.path().join("README.md"), "# Test\n\nNo context section.\n");
+        write_file(
+            &temp.path().join("README.md"),
+            "# Test\n\nNo context section.\n",
+        );
 
         let args = InitArgs {
             dir: Some(temp.path().to_path_buf()),
@@ -2891,7 +2902,11 @@ mod tests {
 
         // Should fall back to defaults
         for file in default_context_files() {
-            assert!(temp.path().join(file).exists(), "expected {} to exist", file);
+            assert!(
+                temp.path().join(file).exists(),
+                "expected {} to exist",
+                file
+            );
         }
         clear_env_overrides();
     }
@@ -2926,10 +2941,7 @@ mod tests {
         let config_path = temp.path().join("default.yaml");
         write_file(
             &config_path,
-            &format!(
-                "defaults:\n  context_files: {}\n",
-                absolute_path.display()
-            ),
+            &format!("defaults:\n  context_files: {}\n", absolute_path.display()),
         );
         set_env("GRALPH_DEFAULT_CONFIG", &config_path);
         set_env("GRALPH_GLOBAL_CONFIG", temp.path().join("missing.yaml"));
@@ -3029,26 +3041,11 @@ mod tests {
 
     #[test]
     fn normalize_csv_handles_various_inputs() {
-        assert_eq!(
-            normalize_csv("a, b, c"),
-            vec!["a", "b", "c"]
-        );
-        assert_eq!(
-            normalize_csv("  a  ,  b  ,  c  "),
-            vec!["a", "b", "c"]
-        );
-        assert_eq!(
-            normalize_csv("a,,b,,c"),
-            vec!["a", "b", "c"]
-        );
-        assert_eq!(
-            normalize_csv(",,,"),
-            Vec::<String>::new()
-        );
-        assert_eq!(
-            normalize_csv("single"),
-            vec!["single"]
-        );
+        assert_eq!(normalize_csv("a, b, c"), vec!["a", "b", "c"]);
+        assert_eq!(normalize_csv("  a  ,  b  ,  c  "), vec!["a", "b", "c"]);
+        assert_eq!(normalize_csv("a,,b,,c"), vec!["a", "b", "c"]);
+        assert_eq!(normalize_csv(",,,"), Vec::<String>::new());
+        assert_eq!(normalize_csv("single"), vec!["single"]);
     }
 
     #[test]
@@ -3485,11 +3482,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         write_file(&temp.path().join("exists.md"), "content");
 
-        let entries = build_context_file_list(
-            temp.path(),
-            Some("exists.md,missing.md"),
-            None,
-        );
+        let entries = build_context_file_list(temp.path(), Some("exists.md,missing.md"), None);
 
         // Should only include the existing file
         assert!(entries.iter().any(|e| e.contains("exists.md")));
@@ -3502,11 +3495,7 @@ mod tests {
         write_file(&temp.path().join("config.md"), "config");
         write_file(&temp.path().join("user.md"), "user");
 
-        let entries = build_context_file_list(
-            temp.path(),
-            Some("user.md"),
-            Some("config.md"),
-        );
+        let entries = build_context_file_list(temp.path(), Some("user.md"), Some("config.md"));
 
         // Config should be processed first, appearing before user
         let config_pos = entries.iter().position(|e| e.contains("config.md"));
