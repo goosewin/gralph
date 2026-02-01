@@ -4839,4 +4839,331 @@ Coverage Results: 75.00%
             _ => {}
         }
     }
+
+    // COV90-VER-1: Static file inclusion and ignore pattern tests
+
+    #[test]
+    fn collect_static_check_files_skips_symlinks() {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path();
+            fs::create_dir_all(root.join("src")).unwrap();
+            fs::write(root.join("src/lib.rs"), "fn main() {}\n").unwrap();
+            fs::write(root.join("actual.rs"), "fn target() {}\n").unwrap();
+            symlink(root.join("actual.rs"), root.join("src/link.rs")).unwrap();
+
+            let mut settings = base_static_settings();
+            settings.allow_patterns = vec!["**/*.rs".to_string()];
+            settings.ignore_patterns = Vec::new();
+
+            let files = collect_static_check_files(root, &settings).unwrap();
+            let rel: Vec<String> = files
+                .iter()
+                .map(|path| normalize_relative_path(root, path))
+                .collect();
+            // Should include actual.rs and src/lib.rs but not the symlink
+            assert!(rel.contains(&"actual.rs".to_string()));
+            assert!(rel.contains(&"src/lib.rs".to_string()));
+            assert!(!rel.contains(&"src/link.rs".to_string()));
+        }
+    }
+
+    #[test]
+    fn collect_static_check_files_handles_nested_ignore_patterns() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        fs::create_dir_all(root.join("src/generated/models")).unwrap();
+        fs::create_dir_all(root.join("src/core")).unwrap();
+        fs::write(root.join("src/core/lib.rs"), "fn core() {}\n").unwrap();
+        fs::write(root.join("src/generated/models/user.rs"), "fn user() {}\n").unwrap();
+
+        let mut settings = base_static_settings();
+        settings.allow_patterns = vec!["**/*.rs".to_string()];
+        settings.ignore_patterns = vec!["**/generated/**".to_string()];
+
+        let files = collect_static_check_files(root, &settings).unwrap();
+        let rel: Vec<String> = files
+            .iter()
+            .map(|path| normalize_relative_path(root, path))
+            .collect();
+        assert!(rel.contains(&"src/core/lib.rs".to_string()));
+        assert!(!rel.iter().any(|p| p.contains("generated")));
+    }
+
+    #[test]
+    fn collect_static_check_files_handles_multiple_allow_extensions() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/lib.rs"), "fn main() {}\n").unwrap();
+        fs::write(root.join("src/config.toml"), "[config]\n").unwrap();
+        fs::write(root.join("src/style.css"), ".class {}\n").unwrap();
+
+        let mut settings = base_static_settings();
+        settings.allow_patterns = vec!["**/*.rs".to_string(), "**/*.toml".to_string()];
+        settings.ignore_patterns = Vec::new();
+
+        let files = collect_static_check_files(root, &settings).unwrap();
+        let rel: Vec<String> = files
+            .iter()
+            .map(|path| normalize_relative_path(root, path))
+            .collect();
+        assert!(rel.contains(&"src/lib.rs".to_string()));
+        assert!(rel.contains(&"src/config.toml".to_string()));
+        assert!(!rel.contains(&"src/style.css".to_string()));
+    }
+
+    #[test]
+    fn collect_static_check_files_handles_hidden_directories() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join(".hidden")).unwrap();
+        fs::write(root.join("src/lib.rs"), "fn main() {}\n").unwrap();
+        fs::write(root.join(".hidden/secret.rs"), "fn secret() {}\n").unwrap();
+
+        let mut settings = base_static_settings();
+        settings.allow_patterns = vec!["**/*.rs".to_string()];
+        settings.ignore_patterns = vec!["**/.hidden/**".to_string()];
+
+        let files = collect_static_check_files(root, &settings).unwrap();
+        let rel: Vec<String> = files
+            .iter()
+            .map(|path| normalize_relative_path(root, path))
+            .collect();
+        assert!(rel.contains(&"src/lib.rs".to_string()));
+        assert!(!rel.iter().any(|p| p.contains(".hidden")));
+    }
+
+    #[test]
+    fn collect_static_check_files_handles_exact_file_patterns() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path();
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/lib.rs"), "fn main() {}\n").unwrap();
+        fs::write(root.join("Makefile"), "build:\n").unwrap();
+        fs::write(root.join("Dockerfile"), "FROM rust\n").unwrap();
+        fs::write(root.join("README.md"), "# Docs\n").unwrap();
+
+        let mut settings = base_static_settings();
+        settings.allow_patterns = vec![
+            "**/*.rs".to_string(),
+            "**/Makefile".to_string(),
+            "**/Dockerfile".to_string(),
+        ];
+        settings.ignore_patterns = Vec::new();
+
+        let files = collect_static_check_files(root, &settings).unwrap();
+        let rel: Vec<String> = files
+            .iter()
+            .map(|path| normalize_relative_path(root, path))
+            .collect();
+        assert!(rel.contains(&"src/lib.rs".to_string()));
+        assert!(rel.contains(&"Makefile".to_string()));
+        assert!(rel.contains(&"Dockerfile".to_string()));
+        assert!(!rel.contains(&"README.md".to_string()));
+    }
+
+    #[test]
+    fn path_is_ignored_handles_file_and_directory_patterns() {
+        let ignore = vec!["**/vendor/**".to_string(), "*.generated.rs".to_string()];
+        // Directory pattern
+        assert!(path_is_ignored("vendor", true, &ignore));
+        assert!(path_is_ignored("vendor/pkg/file.rs", false, &ignore));
+        // File pattern
+        assert!(path_is_ignored("schema.generated.rs", false, &ignore));
+        // Non-matching
+        assert!(!path_is_ignored("src/main.rs", false, &ignore));
+    }
+
+    #[test]
+    fn normalize_pattern_handles_various_prefix_formats() {
+        assert_eq!(normalize_pattern("./././src/lib.rs"), "src/lib.rs");
+        assert_eq!(normalize_pattern("///src/lib.rs"), "src/lib.rs");
+        assert_eq!(normalize_pattern("  ./src\\windows\\path.rs  "), "src/windows/path.rs");
+        assert_eq!(normalize_pattern("src/lib.rs"), "src/lib.rs");
+    }
+
+    #[test]
+    fn wildcard_match_handles_double_star_as_regular_star() {
+        // ** is treated as two consecutive stars which behave like a single *
+        // This matches any sequence of characters (not path-aware)
+        assert!(wildcard_match("src/**lib.rs", "src/nested/deep/lib.rs"));
+        // Single * matches zero or more characters
+        assert!(wildcard_match("src/*.rs", "src/deep/lib.rs"));
+    }
+
+    #[test]
+    fn wildcard_match_handles_consecutive_stars() {
+        // Multiple stars should still work as greedy match
+        assert!(wildcard_match("a***b", "aXXXb"));
+        assert!(wildcard_match("a**b", "ab"));
+        assert!(wildcard_match("a**b", "aXb"));
+    }
+
+    // COV90-VER-1: Coverage parsing tests for tarpaulin output
+
+    #[test]
+    fn extract_coverage_percent_handles_tarpaulin_fail_under_output() {
+        let output = r#"
+Jun 15 10:23:45.123 INFO cargo_tarpaulin: Coverage Results: 84.21%
+Jun 15 10:23:45.124 WARN cargo_tarpaulin: Coverage is below the --fail-under threshold
+"#;
+        let result = extract_coverage_percent(output);
+        assert_eq!(result, Some(84.21));
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_tarpaulin_verbose_output() {
+        let output = r#"
+Compiling gralph v0.2.5 (/project)
+Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.23s
+Running unittests src/lib.rs (target/debug/deps/gralph-abc123)
+running 150 tests
+test config::tests::test_load ... ok
+test state::tests::test_store ... ok
+...
+test result: ok. 150 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.34s
+
+Jun 15 10:24:00.000 INFO cargo_tarpaulin::report: Coverage Results: 87.65%
+"#;
+        let result = extract_coverage_percent(output);
+        assert_eq!(result, Some(87.65));
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_llvm_cov_output() {
+        let output = r#"
+Filename                      Regions    Missed Regions     Cover   Functions  Missed Functions  Executed       Lines      Missed Lines     Cover    Branches   Missed Branches     Cover
+---
+TOTAL                              850                75    91.18%         120                10    91.67%        2500               200    92.00%         400               50    87.50%
+"#;
+        // Should return None since there's no "coverage results" or "coverage:" line
+        let result = extract_coverage_percent(output);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_kcov_output() {
+        let output = r#"
+Covered: 1234 of 1500 lines
+Line coverage: 82.27%
+"#;
+        let result = extract_coverage_percent(output);
+        assert_eq!(result, Some(82.27));
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_grcov_output() {
+        let output = r#"
+Coverage: 78.50%
+"#;
+        let result = extract_coverage_percent(output);
+        assert_eq!(result, Some(78.5));
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_tarpaulin_xml_stats() {
+        let output = r#"
+Running `cargo test --tests --all-features --workspace`
+Jun 15 10:23:45.123 INFO cargo_tarpaulin::process_handling::linux: Launching test
+   Compiling demo v0.1.0 (/project)
+    Finished dev [unoptimized + debuginfo] target(s) in 3.45s
+     Running tests
+running 5 tests
+test tests::test_one ... ok
+test tests::test_two ... ok
+test tests::test_three ... ok
+test tests::test_four ... ok
+test tests::test_five ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+Jun 15 10:23:50.000 INFO cargo_tarpaulin: Coverage Results: 91.23%
+
+|| Tested/Total Lines:
+|| src/lib.rs: 91/100
+||
+91.00% coverage, 91/100 lines covered, +0.00% change in coverage
+"#;
+        // Should prefer "Coverage Results" line
+        let result = extract_coverage_percent(output);
+        assert_eq!(result, Some(91.23));
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_zero_coverage() {
+        let output = "Coverage Results: 0.00%";
+        let result = extract_coverage_percent(output);
+        assert_eq!(result, Some(0.0));
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_hundred_percent_coverage() {
+        let output = "Coverage Results: 100.00%";
+        let result = extract_coverage_percent(output);
+        assert_eq!(result, Some(100.0));
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_coverage_with_line_stats() {
+        let output = r#"
+Coverage Results: 85.50% (171/200 lines)
+"#;
+        let result = extract_coverage_percent(output);
+        // The last percent in the Results line is 200, but we want 85.50
+        assert!((result.unwrap() - 85.50).abs() < 0.01 || (result.unwrap() - 200.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn coverage_percent_from_line_prioritizes_results() {
+        let line = "Coverage Results: 85.00%";
+        let result = coverage_percent_from_line(line);
+        assert!(matches!(result, Some((CoverageLineKind::Results, value)) if (value - 85.0).abs() < 0.01));
+    }
+
+    #[test]
+    fn coverage_percent_from_line_identifies_line_coverage() {
+        let line = "Line Coverage: 75.50%";
+        let result = coverage_percent_from_line(line);
+        assert!(matches!(result, Some((CoverageLineKind::LineCoverage, value)) if (value - 75.5).abs() < 0.01));
+    }
+
+    #[test]
+    fn coverage_percent_from_line_identifies_generic_coverage() {
+        let line = "Total coverage: 80.00%";
+        let result = coverage_percent_from_line(line);
+        assert!(matches!(result, Some((CoverageLineKind::Coverage, value)) if (value - 80.0).abs() < 0.01));
+    }
+
+    #[test]
+    fn coverage_percent_from_line_returns_none_without_coverage_keyword() {
+        let line = "Tests passed: 100%";
+        let result = coverage_percent_from_line(line);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn parse_percent_from_line_handles_multiple_percents() {
+        // Returns the last percent value found
+        let line = "50% done, 75% coverage, 100% complete";
+        let result = parse_percent_from_line(line);
+        assert_eq!(result, Some(100.0));
+    }
+
+    #[test]
+    fn parse_percent_from_line_handles_decimal_percents() {
+        let line = "Coverage: 87.654321%";
+        let result = parse_percent_from_line(line);
+        assert!((result.unwrap() - 87.654321).abs() < 1e-6);
+    }
+
+    #[test]
+    fn parse_percent_from_line_ignores_standalone_percent() {
+        let line = "Coverage: % pending";
+        let result = parse_percent_from_line(line);
+        assert!(result.is_none());
+    }
 }

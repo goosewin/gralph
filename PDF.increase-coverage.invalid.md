@@ -87,7 +87,7 @@ Each task block must contain exactly one unchecked task line.
   * Cover coverage parsing for tarpaulin output.
   * Record verification results in CHANGELOG.md.
 - **Dependencies** COV90-PRD-1
-- [ ] COV90-VER-1 Add verifier static check and coverage tests
+- [x] COV90-VER-1 Add verifier static check and coverage tests
 
 ---
 
