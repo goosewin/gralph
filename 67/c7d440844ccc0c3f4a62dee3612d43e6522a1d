@@ -1,0 +1,25 @@
+CHANGELOG.md
+  7d430d303c70dfea 39
+PRD.generated.md
+  7d430d303c70dfea 299
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "67c7d440844ccc0c3f4a62dee3612d43e6522a1d",
+  "prompts": {
+    "7d430d303c70dfea": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5a48dccb-d56c-473d-9099-2a37c0d9b514",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 1,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    }
+  }
+}
