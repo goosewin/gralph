@@ -1,0 +1,27 @@
+CHANGELOG.md
+  eb98ffe025446ffa 18
+PRD.generated.md
+  eb98ffe025446ffa 260
+src/app/worktree.rs
+  eb98ffe025446ffa 595-905
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "3eff3ba24f7918dab46a219b5d79ecddef5cfb7c",
+  "prompts": {
+    "eb98ffe025446ffa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5e025173-d9a1-4678-b7e8-d714adb857c9",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 320,
+      "total_deletions": 8,
+      "accepted_lines": 313,
+      "overriden_lines": 0
+    }
+  }
+}
