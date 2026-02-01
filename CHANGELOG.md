@@ -16,6 +16,7 @@ CI=<status/link>; PR=<link if final PRD task>
 
 - TMUX-3 Add attach command for tmux sessions.
 - COV80-WT-1 Add worktree git helper tests for git_output_in_dir, create_worktree_at, cmd_worktree_finish, and validate_task_id.
+- COV90-PRD-1 Add PRD validation and sanitize tests covering missing required fields, Open Questions removal, stray checkbox handling, and validation after sanitize with allowed context.
 
 ### Changed
 

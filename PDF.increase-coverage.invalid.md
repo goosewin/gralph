@@ -73,7 +73,7 @@ Each task block must contain exactly one unchecked task line.
   * Cover sanitize removal of Open Questions and stray checkboxes.
   * Verify validation passes after sanitize with allowed context.
 - **Dependencies** COV90-CORE-1
-- [ ] COV90-PRD-1 Add PRD validation and sanitize tests
+- [x] COV90-PRD-1 Add PRD validation and sanitize tests
 
 ---
 
