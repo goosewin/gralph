@@ -1,5 +1,5 @@
 use crate::app::worktree::git_output_in_dir;
-use crate::app::{join_or_none, normalize_csv, parse_bool_value, CliError};
+use crate::app::{CliError, join_or_none, normalize_csv, parse_bool_value};
 use crate::config::Config;
 use crate::prd;
 use std::collections::{BTreeMap, HashMap};
