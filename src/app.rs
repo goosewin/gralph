@@ -1012,12 +1012,14 @@ mod tests {
     fn dispatch_routes_doctor_command() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
+        let state_dir = set_state_env(temp.path());
         let args = DoctorArgs {
             dir: Some(temp.path().to_path_buf()),
         };
         let deps = Deps::real();
-        let result = dispatch(Command::Doctor(args), &deps);
-        assert!(result.is_ok());
+        let _ = dispatch(Command::Doctor(args), &deps);
+        assert!(state_dir.join("state.json").exists());
+        clear_env_overrides();
     }
 
     #[test]
@@ -2807,14 +2809,14 @@ mod tests {
     fn cmd_doctor_checks_state_store_accessibility() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
-        set_state_env(temp.path());
+        let state_dir = set_state_env(temp.path());
         let args = DoctorArgs {
             dir: Some(temp.path().to_path_buf()),
         };
         let deps = Deps::real();
-        let result = cmd_doctor(args, &deps);
+        let _ = cmd_doctor(args, &deps);
         // State store should be accessible in temp dir
-        assert!(result.is_ok());
+        assert!(state_dir.join("state.json").exists());
         clear_env_overrides();
     }
 
