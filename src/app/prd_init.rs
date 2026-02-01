@@ -1,4 +1,4 @@
-use super::{CliError, join_or_none, normalize_csv};
+use super::{join_or_none, normalize_csv, CliError};
 use crate::backend::backend_from_name;
 use crate::cli::{InitArgs, PrdArgs, PrdCheckArgs, PrdCommand, PrdCreateArgs};
 use crate::config::Config;
@@ -8,6 +8,9 @@ use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static CONTEXT_TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 pub(super) fn cmd_prd(args: PrdArgs) -> Result<(), CliError> {
     match args.command {
@@ -515,7 +518,12 @@ pub(super) fn write_allowed_context(entries: &[String]) -> Result<Option<PathBuf
     if entries.is_empty() {
         return Ok(None);
     }
-    let path = env::temp_dir().join(format!("gralph-context-{}.txt", std::process::id()));
+    let counter = CONTEXT_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let path = env::temp_dir().join(format!(
+        "gralph-context-{}-{}.txt",
+        std::process::id(),
+        counter
+    ));
     let mut file = fs::File::create(&path).map_err(CliError::Io)?;
     for entry in entries {
         writeln!(file, "{}", entry).map_err(CliError::Io)?;
