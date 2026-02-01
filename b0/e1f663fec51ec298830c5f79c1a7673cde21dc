@@ -1,0 +1,25 @@
+src/verifier.rs
+  59a4458d8e67d08e 3594-3820
+PRD.generated.md
+  59a4458d8e67d08e 117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "b0e1f663fec51ec298830c5f79c1a7673cde21dc",
+  "prompts": {
+    "59a4458d8e67d08e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e31db23c-741a-484d-8eab-332cad836e57",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 233,
+      "total_deletions": 6,
+      "accepted_lines": 228,
+      "overriden_lines": 0
+    }
+  }
+}
