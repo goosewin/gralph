@@ -3371,7 +3371,11 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.messages.iter().any(|m| m.contains("task_file is required")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|m| m.contains("task_file is required"))
+        );
     }
 
     #[test]
@@ -3383,7 +3387,11 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.messages.iter().any(|m| m.contains("Task file does not exist")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|m| m.contains("Task file does not exist"))
+        );
     }
 
     #[test]
@@ -3396,7 +3404,11 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.messages.iter().any(|m| m.contains("Task file does not exist")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|m| m.contains("Task file does not exist"))
+        );
     }
 
     #[test]
@@ -3409,7 +3421,11 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.messages.iter().any(|m| m.contains("Task file is empty")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|m| m.contains("Task file is empty"))
+        );
     }
 
     #[test]
@@ -3433,9 +3449,11 @@ mod tests {
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.messages.iter().any(|m| {
-            m.contains("my_prd.md") && m.contains("Task file is empty")
-        }));
+        assert!(
+            err.messages
+                .iter()
+                .any(|m| { m.contains("my_prd.md") && m.contains("Task file is empty") })
+        );
     }
 
     #[test]
@@ -3506,7 +3524,11 @@ mod tests {
         // Open questions error should be present
         assert!(err.messages.iter().any(|m| m.contains("Open Questions")));
         // Missing field errors should be present
-        assert!(err.messages.iter().any(|m| m.contains("Missing required field")));
+        assert!(
+            err.messages
+                .iter()
+                .any(|m| m.contains("Missing required field"))
+        );
     }
 
     // COV80-PRD-2: Tests for prd_sanitize_generated_file and prd_sanitize_contents (lines 172-279)
@@ -3724,7 +3746,11 @@ mod tests {
         let temp = tempdir().unwrap();
         let base = temp.path();
         let allowed_path = base.join("allowed.txt");
-        fs::write(&allowed_path, "docs/one.md\n\ndocs/two.md\n  \ndocs/three.md\n").unwrap();
+        fs::write(
+            &allowed_path,
+            "docs/one.md\n\ndocs/two.md\n  \ndocs/three.md\n",
+        )
+        .unwrap();
 
         let allowed = load_allowed_context(Some(&allowed_path));
         assert!(!allowed.is_empty());
@@ -3835,7 +3861,11 @@ mod tests {
 
         let detection = prd_detect_stack(base);
         assert!(detection.package_managers.contains(&"npm".to_string()));
-        assert!(detection.evidence.contains(&"package-lock.json".to_string()));
+        assert!(
+            detection
+                .evidence
+                .contains(&"package-lock.json".to_string())
+        );
     }
 
     #[test]
@@ -3892,7 +3922,11 @@ mod tests {
         let temp = tempdir().unwrap();
         let base = temp.path();
         fs::write(base.join("package.json"), r#"{"name": "nuxt-app"}"#).unwrap();
-        fs::write(base.join("nuxt.config.ts"), "export default defineNuxtConfig({});\n").unwrap();
+        fs::write(
+            base.join("nuxt.config.ts"),
+            "export default defineNuxtConfig({});\n",
+        )
+        .unwrap();
 
         let detection = prd_detect_stack(base);
         assert!(detection.frameworks.contains(&"Nuxt".to_string()));
@@ -4106,7 +4140,11 @@ mod tests {
     fn prd_detect_stack_detects_python_requirements_txt() {
         let temp = tempdir().unwrap();
         let base = temp.path();
-        fs::write(base.join("requirements.txt"), "requests==2.28.0\nflask>=2.0.0\n").unwrap();
+        fs::write(
+            base.join("requirements.txt"),
+            "requests==2.28.0\nflask>=2.0.0\n",
+        )
+        .unwrap();
 
         let detection = prd_detect_stack(base);
         assert!(detection.ids.contains(&"Python".to_string()));
@@ -4222,7 +4260,11 @@ mod tests {
     fn prd_detect_stack_detects_python_poetry_lock() {
         let temp = tempdir().unwrap();
         let base = temp.path();
-        fs::write(base.join("poetry.lock"), "[[package]]\nname = \"requests\"\n").unwrap();
+        fs::write(
+            base.join("poetry.lock"),
+            "[[package]]\nname = \"requests\"\n",
+        )
+        .unwrap();
 
         let detection = prd_detect_stack(base);
         assert!(detection.ids.contains(&"Python".to_string()));
@@ -4372,11 +4414,7 @@ mod tests {
     fn prd_detect_stack_detects_java_gradle() {
         let temp = tempdir().unwrap();
         let base = temp.path();
-        fs::write(
-            base.join("build.gradle"),
-            "plugins { id 'java' }\n",
-        )
-        .unwrap();
+        fs::write(base.join("build.gradle"), "plugins { id 'java' }\n").unwrap();
 
         let detection = prd_detect_stack(base);
         assert!(detection.ids.contains(&"Java".to_string()));
@@ -4469,7 +4507,11 @@ mod tests {
 
         let detection = prd_detect_stack(base);
         assert!(detection.tools.contains(&"Docker Compose".to_string()));
-        assert!(detection.evidence.contains(&"docker-compose.yml".to_string()));
+        assert!(
+            detection
+                .evidence
+                .contains(&"docker-compose.yml".to_string())
+        );
     }
 
     #[test]
@@ -4484,7 +4526,11 @@ mod tests {
 
         let detection = prd_detect_stack(base);
         assert!(detection.tools.contains(&"Docker Compose".to_string()));
-        assert!(detection.evidence.contains(&"docker-compose.yaml".to_string()));
+        assert!(
+            detection
+                .evidence
+                .contains(&"docker-compose.yaml".to_string())
+        );
     }
 
     #[test]
@@ -4523,7 +4569,14 @@ mod tests {
         let detection = prd_detect_stack(base);
         assert!(detection.tools.contains(&"Terraform".to_string()));
         // Should have both files in evidence
-        assert!(detection.evidence.iter().filter(|e| e.ends_with(".tf")).count() >= 1);
+        assert!(
+            detection
+                .evidence
+                .iter()
+                .filter(|e| e.ends_with(".tf"))
+                .count()
+                >= 1
+        );
     }
 
     #[test]

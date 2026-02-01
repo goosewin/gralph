@@ -1751,7 +1751,10 @@ mod tests {
             config.get_or("custom_key.nonexistent", "fallback"),
             "fallback"
         );
-        assert_eq!(config.get_or("completely.missing.key", "default"), "default");
+        assert_eq!(
+            config.get_or("completely.missing.key", "default"),
+            "default"
+        );
 
         remove_env("GRALPH_GLOBAL_CONFIG");
         remove_env("GRALPH_DEFAULT_CONFIG");

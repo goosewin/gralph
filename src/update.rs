@@ -1294,8 +1294,7 @@ mod tests {
     #[test]
     fn update_error_display_http_formats_inner_error() {
         // Create an HTTP error by making a request to an invalid URL
-        let err = reqwest::blocking::get("http://[::1]:0/invalid")
-            .expect_err("expected error");
+        let err = reqwest::blocking::get("http://[::1]:0/invalid").expect_err("expected error");
         let update_err = UpdateError::Http(err);
         let display = update_err.to_string();
         // The display should contain error information (varies by platform)
@@ -1355,8 +1354,7 @@ mod tests {
 
     #[test]
     fn update_error_from_reqwest_error() {
-        let err = reqwest::blocking::get("http://[::1]:0/invalid")
-            .expect_err("expected error");
+        let err = reqwest::blocking::get("http://[::1]:0/invalid").expect_err("expected error");
         let update_err: UpdateError = err.into();
         assert!(matches!(update_err, UpdateError::Http(_)));
     }

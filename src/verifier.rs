@@ -1,5 +1,5 @@
 use crate::app::worktree::git_output_in_dir;
-use crate::app::{join_or_none, normalize_csv, parse_bool_value, CliError};
+use crate::app::{CliError, join_or_none, normalize_csv, parse_bool_value};
 use crate::config::Config;
 use crate::prd;
 use std::collections::{BTreeMap, HashMap};
@@ -3766,14 +3766,8 @@ Coverage Results: 75.00%
         )
         .unwrap();
         let config = Config::load(Some(temp.path())).unwrap();
-        let command = resolve_verifier_command(
-            None,
-            &config,
-            "verifier.test_command",
-            "",
-            true,
-        )
-        .unwrap();
+        let command =
+            resolve_verifier_command(None, &config, "verifier.test_command", "", true).unwrap();
         assert_eq!(command, "npm test");
     }
 
@@ -3815,7 +3809,10 @@ Coverage Results: 75.00%
     #[test]
     fn verifier_stack_defaults_equality() {
         assert_eq!(VerifierStackDefaults::Rust, VerifierStackDefaults::Rust);
-        assert_eq!(VerifierStackDefaults::NonRust, VerifierStackDefaults::NonRust);
+        assert_eq!(
+            VerifierStackDefaults::NonRust,
+            VerifierStackDefaults::NonRust
+        );
         assert_ne!(VerifierStackDefaults::Rust, VerifierStackDefaults::NonRust);
     }
 
@@ -4036,7 +4033,10 @@ Coverage Results: 75.00%
         let repo = init_git_repo("feature-branch");
         let bin_dir = repo.path().join("bin");
         fs::create_dir(&bin_dir).unwrap();
-        write_mock_gh(&bin_dir, "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then echo 'not logged in' >&2; exit 1; fi\nexit 0\n");
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then echo 'not logged in' >&2; exit 1; fi\nexit 0\n",
+        );
         let _path_guard = PathGuard::set(&bin_dir);
 
         let config = load_project_config("verifier:\n  pr:\n    base: main\n");
@@ -4058,7 +4058,10 @@ Coverage Results: 75.00%
         let bin_dir = repo.path().join("bin");
         fs::create_dir(&bin_dir).unwrap();
         // Auth succeeds, but pr create fails with empty output
-        write_mock_gh(&bin_dir, "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then exit 0; fi\nexit 1\n");
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then exit 0; fi\nexit 1\n",
+        );
         let _path_guard = PathGuard::set(&bin_dir);
 
         let config = load_project_config("verifier:\n  pr:\n    base: main\n");
@@ -4086,7 +4089,10 @@ Coverage Results: 75.00%
         let bin_dir = repo.path().join("bin");
         fs::create_dir(&bin_dir).unwrap();
         // Mock gh to succeed and output a URL
-        write_mock_gh(&bin_dir, "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then exit 0; fi\necho 'https://github.com/test/repo/pull/123'\nexit 0\n");
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then exit 0; fi\necho 'https://github.com/test/repo/pull/123'\nexit 0\n",
+        );
         let _path_guard = PathGuard::set(&bin_dir);
 
         let config = load_project_config("verifier:\n  pr:\n    base: main\n    title: test pr\n");
@@ -4103,7 +4109,10 @@ Coverage Results: 75.00%
         let repo = init_git_repo("feature-branch");
         let bin_dir = repo.path().join("bin");
         fs::create_dir(&bin_dir).unwrap();
-        write_mock_gh(&bin_dir, "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then exit 0; fi\necho 'https://github.com/test/repo/pull/456'\nexit 0\n");
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then exit 0; fi\necho 'https://github.com/test/repo/pull/456'\nexit 0\n",
+        );
         let _path_guard = PathGuard::set(&bin_dir);
 
         let config = load_project_config("verifier:\n  pr:\n    base: main\n");
@@ -4114,9 +4123,13 @@ Coverage Results: 75.00%
 
     #[test]
     fn extract_pr_url_finds_url_in_output() {
-        let output = "Creating pull request for feature into main\nhttps://github.com/owner/repo/pull/123\n";
+        let output =
+            "Creating pull request for feature into main\nhttps://github.com/owner/repo/pull/123\n";
         let url = extract_pr_url(output);
-        assert_eq!(url, Some("https://github.com/owner/repo/pull/123".to_string()));
+        assert_eq!(
+            url,
+            Some("https://github.com/owner/repo/pull/123".to_string())
+        );
     }
 
     #[test]
@@ -4172,10 +4185,12 @@ Coverage Results: 75.00%
         .unwrap();
         let resolved = resolve_pr_template_path(temp.path());
         assert!(resolved.is_some());
-        assert!(resolved
-            .unwrap()
-            .to_string_lossy()
-            .contains("pull_request_template.md"));
+        assert!(
+            resolved
+                .unwrap()
+                .to_string_lossy()
+                .contains("pull_request_template.md")
+        );
     }
 
     #[test]
@@ -4239,7 +4254,10 @@ Coverage Results: 75.00%
         let temp = tempfile::tempdir().unwrap();
         let bin_dir = temp.path().join("bin");
         fs::create_dir(&bin_dir).unwrap();
-        write_mock_gh(&bin_dir, "#!/bin/sh\necho 'You are not logged in' >&2\nexit 1\n");
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\necho 'You are not logged in' >&2\nexit 1\n",
+        );
         let _path_guard = PathGuard::set(&bin_dir);
 
         let err = ensure_gh_authenticated(temp.path()).unwrap_err();
