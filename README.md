@@ -63,8 +63,8 @@ repo is clean. Subdirectory runs are preserved, so `gralph start path/to/subdir`
 continues the loop from the matching subdirectory inside the worktree.
 
 Auto worktree creation is skipped when the target directory is not inside a git
-repo, the repo has no commits, or the repo is dirty. In those cases the loop runs
-in the target directory. Disable auto worktrees with `--no-worktree` or set
+repo or the repo has no commits. If the repo is dirty, gralph commits all changes
+before creating the worktree. Disable auto worktrees with `--no-worktree` or set
 `defaults.auto_worktree: false`.
 
 When stacking with Graphite, run `gt` inside the worktree created for the task

@@ -42,7 +42,8 @@ gralph start <directory> [options]
 | `--dry-run` | | Print next task block and resolved prompt | false |
 
 By default, `gralph start` creates a git worktree under `.worktrees/<unique-worktree>` for each PRD run
-when the directory is a git repo with at least one commit.
+when the directory is a git repo with at least one commit. If the repo is dirty,
+gralph commits all changes before creating the worktree.
 
 ## `gralph step`
 
