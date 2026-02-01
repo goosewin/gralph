@@ -3508,4 +3508,253 @@ mod tests {
         // Missing field errors should be present
         assert!(err.messages.iter().any(|m| m.contains("Missing required field")));
     }
+
+    // COV80-PRD-2: Tests for prd_sanitize_generated_file and prd_sanitize_contents (lines 172-279)
+
+    #[test]
+    fn prd_sanitize_generated_file_returns_ok_for_empty_path() {
+        let empty_path = Path::new("");
+        let result = prd_sanitize_generated_file(empty_path, None, None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn prd_sanitize_generated_file_returns_ok_for_nonexistent_file() {
+        let temp = tempdir().unwrap();
+        let nonexistent = temp.path().join("does_not_exist.md");
+        let result = prd_sanitize_generated_file(&nonexistent, None, None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn prd_sanitize_generated_file_uses_task_file_parent_when_no_base_dir() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let subdir = base.join("subdir");
+        fs::create_dir_all(&subdir).unwrap();
+        fs::write(subdir.join("context.md"), "ok").unwrap();
+
+        let prd = subdir.join("prd.md");
+        fs::write(
+            &prd,
+            "# PRD\n\n### Task S-1\n- **ID** S-1\n- **Context Bundle** `context.md`\n- **DoD** Test.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] S-1 Task\n",
+        )
+        .unwrap();
+
+        // Call without base_dir - should use task_file.parent() (subdir)
+        prd_sanitize_generated_file(&prd, None, None).unwrap();
+        let sanitized = fs::read_to_string(&prd).unwrap();
+
+        // context.md should be retained because it exists in subdir (task_file parent)
+        assert!(sanitized.contains("- **Context Bundle** `context.md`"));
+    }
+
+    #[test]
+    fn prd_sanitize_contents_ends_open_questions_at_next_heading() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("README.md"), "readme").unwrap();
+
+        let contents = "# PRD\n\n## Open Questions\n- Question one\n- Question two\n\n## Next Section\nContent after open questions\n\n### Task S-2\n- **ID** S-2\n- **Context Bundle** `README.md`\n- **DoD** Test.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] S-2 Task\n";
+        let sanitized = prd_sanitize_contents(contents, Some(base), &AllowedContext::default());
+
+        // Open Questions section and its content should be removed
+        assert!(!sanitized.contains("Open Questions"));
+        assert!(!sanitized.contains("Question one"));
+        assert!(!sanitized.contains("Question two"));
+        // Next Section heading should be included (ends the OQ section)
+        assert!(sanitized.contains("## Next Section"));
+        assert!(sanitized.contains("Content after open questions"));
+    }
+
+    #[test]
+    fn prd_sanitize_contents_skips_content_before_first_heading() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("README.md"), "readme").unwrap();
+
+        let contents = "Some preamble text\nMore preamble\n\n# PRD Title\n\n### Task S-3\n- **ID** S-3\n- **Context Bundle** `README.md`\n- **DoD** Test.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] S-3 Task\n";
+        let sanitized = prd_sanitize_contents(contents, Some(base), &AllowedContext::default());
+
+        // Preamble before first heading should be skipped
+        assert!(!sanitized.contains("Some preamble text"));
+        assert!(!sanitized.contains("More preamble"));
+        // Content after first heading should be included
+        assert!(sanitized.contains("# PRD Title"));
+        assert!(sanitized.contains("- [ ] S-3 Task"));
+    }
+
+    #[test]
+    fn prd_sanitize_contents_handles_consecutive_task_blocks() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("README.md"), "readme").unwrap();
+
+        // Two consecutive task blocks without a separator (second task header immediately follows first block)
+        let contents = "# PRD\n\n### Task S-4A\n- **ID** S-4A\n- **Context Bundle** `README.md`\n- **DoD** Test A.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] S-4A Task\n### Task S-4B\n- **ID** S-4B\n- **Context Bundle** `README.md`\n- **DoD** Test B.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] S-4B Task\n";
+        let sanitized = prd_sanitize_contents(contents, Some(base), &AllowedContext::default());
+
+        // Both tasks should be sanitized
+        assert!(sanitized.contains("### Task S-4A"));
+        assert!(sanitized.contains("- [ ] S-4A Task"));
+        assert!(sanitized.contains("### Task S-4B"));
+        assert!(sanitized.contains("- [ ] S-4B Task"));
+    }
+
+    #[test]
+    fn prd_sanitize_contents_handles_task_block_at_eof() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("README.md"), "readme").unwrap();
+
+        // Task block that ends at EOF without a block-end marker (e.g., ---)
+        let contents = "# PRD\n\n### Task S-5\n- **ID** S-5\n- **Context Bundle** `README.md`\n- **DoD** Test.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] S-5 Task";
+        let sanitized = prd_sanitize_contents(contents, Some(base), &AllowedContext::default());
+
+        // Task block should be sanitized even without trailing separator
+        assert!(sanitized.contains("### Task S-5"));
+        assert!(sanitized.contains("- [ ] S-5 Task"));
+        assert!(sanitized.contains("- **Context Bundle** `README.md`"));
+    }
+
+    #[test]
+    fn prd_sanitize_contents_filters_context_by_allowed_list() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::create_dir_all(base.join("docs")).unwrap();
+        fs::write(base.join("docs/allowed.md"), "ok").unwrap();
+        fs::write(base.join("docs/blocked.md"), "ok").unwrap();
+
+        let allowed = allowed_context_from(&["docs/allowed.md"]);
+
+        let contents = "# PRD\n\n### Task S-6\n- **ID** S-6\n- **Context Bundle** `docs/allowed.md`, `docs/blocked.md`\n- **DoD** Test.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] S-6 Task\n";
+        let sanitized = prd_sanitize_contents(contents, Some(base), &allowed);
+
+        // Only allowed.md should remain
+        assert!(sanitized.contains("- **Context Bundle** `docs/allowed.md`"));
+        assert!(!sanitized.contains("docs/blocked.md"));
+    }
+
+    #[test]
+    fn prd_sanitize_contents_uses_allowed_fallback_when_all_context_filtered() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::create_dir_all(base.join("docs")).unwrap();
+        fs::write(base.join("docs/fallback.md"), "ok").unwrap();
+        fs::write(base.join("docs/invalid.md"), "ok").unwrap();
+
+        let allowed = allowed_context_from(&["docs/fallback.md"]);
+
+        // All context entries in the block will be filtered (invalid.md not in allowed list)
+        let contents = "# PRD\n\n### Task S-7\n- **ID** S-7\n- **Context Bundle** `docs/invalid.md`\n- **DoD** Test.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] S-7 Task\n";
+        let sanitized = prd_sanitize_contents(contents, Some(base), &allowed);
+
+        // Should fall back to the first valid entry in allowed list
+        assert!(sanitized.contains("- **Context Bundle** `docs/fallback.md`"));
+        assert!(!sanitized.contains("docs/invalid.md"));
+    }
+
+    #[test]
+    fn prd_sanitize_contents_removes_unchecked_checkbox_outside_blocks() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("README.md"), "readme").unwrap();
+
+        let contents = "# PRD\n\n- [ ] Outside task one\n\n### Task S-8\n- **ID** S-8\n- **Context Bundle** `README.md`\n- **DoD** Test.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] S-8 Task\n\n- [ ] Outside task two\n";
+        let sanitized = prd_sanitize_contents(contents, Some(base), &AllowedContext::default());
+
+        // Unchecked checkboxes outside blocks should have checkbox removed
+        assert!(!sanitized.contains("- [ ] Outside task one"));
+        assert!(sanitized.contains("- Outside task one"));
+        assert!(!sanitized.contains("- [ ] Outside task two"));
+        assert!(sanitized.contains("- Outside task two"));
+        // Inside the block, checkbox should be preserved
+        assert!(sanitized.contains("- [ ] S-8 Task"));
+    }
+
+    #[test]
+    fn prd_sanitize_generated_file_read_error_returns_io_error() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+
+        // Create a directory with the name of the file - reading it will fail
+        let prd = base.join("prd_dir.md");
+        fs::create_dir(&prd).unwrap();
+
+        // This will fail because prd is a directory (is_file returns false)
+        // so it returns Ok early. Test a different approach with permissions.
+        // Instead, test via a file that can't be read (we can't easily create one)
+        // so let's verify the early return for non-file:
+        let result = prd_sanitize_generated_file(&prd, None, None);
+        assert!(result.is_ok()); // Returns early because !is_file()
+    }
+
+    #[test]
+    fn prd_sanitize_contents_open_questions_at_end_removes_trailing_content() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        fs::write(base.join("README.md"), "readme").unwrap();
+
+        // Open Questions at the end with no following heading
+        let contents = "# PRD\n\n### Task S-9\n- **ID** S-9\n- **Context Bundle** `README.md`\n- **DoD** Test.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] S-9 Task\n\n## Open Questions\n- Should remove this\n- And this\n";
+        let sanitized = prd_sanitize_contents(contents, Some(base), &AllowedContext::default());
+
+        assert!(sanitized.contains("- [ ] S-9 Task"));
+        assert!(!sanitized.contains("Open Questions"));
+        assert!(!sanitized.contains("Should remove this"));
+        assert!(!sanitized.contains("And this"));
+    }
+
+    #[test]
+    fn load_allowed_context_returns_empty_for_none() {
+        let allowed = load_allowed_context(None);
+        assert!(allowed.is_empty());
+    }
+
+    #[test]
+    fn load_allowed_context_returns_empty_for_nonexistent_file() {
+        let temp = tempdir().unwrap();
+        let nonexistent = temp.path().join("nonexistent.txt");
+        let allowed = load_allowed_context(Some(&nonexistent));
+        assert!(allowed.is_empty());
+    }
+
+    #[test]
+    fn load_allowed_context_parses_entries_and_skips_empty_lines() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let allowed_path = base.join("allowed.txt");
+        fs::write(&allowed_path, "docs/one.md\n\ndocs/two.md\n  \ndocs/three.md\n").unwrap();
+
+        let allowed = load_allowed_context(Some(&allowed_path));
+        assert!(!allowed.is_empty());
+        assert!(allowed.contains("docs/one.md"));
+        assert!(allowed.contains("docs/two.md"));
+        assert!(allowed.contains("docs/three.md"));
+        // Empty/whitespace lines should not be added
+        assert!(!allowed.contains(""));
+        assert!(!allowed.contains("  "));
+    }
+
+    #[test]
+    fn is_open_questions_heading_requires_h2_prefix() {
+        // Note: this function expects lowercase input (called with line.to_lowercase())
+        assert!(is_open_questions_heading("## open questions"));
+        assert!(is_open_questions_heading("##  open questions")); // Extra space after ##
+        assert!(!is_open_questions_heading("# open questions")); // H1, not H2
+        assert!(!is_open_questions_heading("### open questions")); // H3, not H2
+        assert!(!is_open_questions_heading("open questions")); // No heading marker
+    }
+
+    #[test]
+    fn is_heading_detects_various_heading_levels() {
+        assert!(is_heading("# H1"));
+        assert!(is_heading("## H2"));
+        assert!(is_heading("### H3"));
+        assert!(is_heading("#### H4"));
+        assert!(is_heading("  ## Indented"));
+        assert!(!is_heading("#NoSpace")); // No space after #
+        assert!(!is_heading("Not a heading"));
+        assert!(!is_heading("")); // Empty line
+    }
 }

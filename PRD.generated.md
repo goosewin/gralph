@@ -205,7 +205,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests verify allowed context filtering.
   * Tests cover Open Questions section removal.
 - **Dependencies** COV80-PRD-1
-- [ ] COV80-PRD-2 Add PRD sanitize tests
+- [x] COV80-PRD-2 Add PRD sanitize tests
 ---
 
 ### Task COV80-PRD-3
