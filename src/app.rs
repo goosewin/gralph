@@ -2210,7 +2210,14 @@ mod tests {
             .output()
             .unwrap();
         assert!(status.status.success());
-        assert!(status.stdout.is_empty());
+        // After auto-commit, only the .worktrees/ dir should be untracked
+        let output = String::from_utf8_lossy(&status.stdout);
+        let lines: Vec<&str> = output.lines().filter(|line| !line.is_empty()).collect();
+        assert!(
+            lines.is_empty() || lines.iter().all(|line| line.contains(".worktrees/")),
+            "expected empty or only .worktrees/ untracked, got: {:?}",
+            lines
+        );
     }
 
     #[test]
@@ -2503,5 +2510,216 @@ mod tests {
         assert!(contents.contains("src/main.rs"));
 
         let _ = fs::remove_file(&path);
+    }
+
+    // COV80-APP-2: worktree path resolution tests
+    #[test]
+    fn git_output_in_dir_returns_error_for_non_git_dir() {
+        let temp = tempfile::tempdir().unwrap();
+        let err =
+            worktree::git_output_in_dir(temp.path(), ["rev-parse", "--show-toplevel"]).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(
+                    message.to_lowercase().contains("not a git repository")
+                        || message.to_lowercase().contains("fatal")
+                );
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn git_output_in_dir_returns_output_for_git_repo() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+
+        let output =
+            worktree::git_output_in_dir(temp.path(), ["rev-parse", "--show-toplevel"]).unwrap();
+        let resolved = output.trim();
+        let expected = temp.path().canonicalize().unwrap();
+        assert_eq!(PathBuf::from(resolved), expected);
+    }
+
+    #[test]
+    fn validate_task_id_accepts_multichar_prefix_and_number() {
+        worktree::validate_task_id("COV-80").unwrap();
+        worktree::validate_task_id("TEST-999").unwrap();
+        worktree::validate_task_id("X-0").unwrap();
+    }
+
+    #[test]
+    fn validate_task_id_rejects_empty_number_segment() {
+        let err = worktree::validate_task_id("A-").unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Invalid task ID format"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_task_id_rejects_empty_prefix_segment() {
+        let err = worktree::validate_task_id("-1").unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Invalid task ID format"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_task_id_rejects_too_many_segments() {
+        let err = worktree::validate_task_id("A-1-B").unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Invalid task ID format"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_task_id_rejects_digits_in_prefix() {
+        let err = worktree::validate_task_id("1-1").unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Invalid task ID format"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    // COV80-APP-2: session name fallback tests
+    #[test]
+    fn session_name_sanitizes_special_chars_in_override() {
+        let temp = tempfile::tempdir().unwrap();
+        let resolved = session_name(&Some("test/session:name".to_string()), temp.path()).unwrap();
+        assert_eq!(resolved, "test-session-name");
+    }
+
+    #[test]
+    fn session_name_falls_back_for_all_invalid_chars_override() {
+        let temp = tempfile::tempdir().unwrap();
+        let resolved = session_name(&Some("@#$%".to_string()), temp.path()).unwrap();
+        assert_eq!(resolved, "----");
+    }
+
+    #[test]
+    fn session_name_derives_from_nested_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let nested = temp.path().join("parent").join("child-project");
+        fs::create_dir_all(&nested).unwrap();
+        let resolved = session_name(&None, &nested).unwrap();
+        assert_eq!(resolved, "child-project");
+    }
+
+    #[test]
+    fn session_name_sanitizes_directory_with_spaces() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path().join("my project");
+        fs::create_dir_all(&dir).unwrap();
+        let resolved = session_name(&None, &dir).unwrap();
+        assert_eq!(resolved, "my-project");
+    }
+
+    #[test]
+    fn session_name_handles_hidden_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path().join(".hidden-project");
+        fs::create_dir_all(&dir).unwrap();
+        let resolved = session_name(&None, &dir).unwrap();
+        assert_eq!(resolved, "-hidden-project");
+    }
+
+    // COV80-APP-2: branch uniqueness checks
+    #[test]
+    fn ensure_unique_worktree_branch_increments_suffix_sequentially() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+
+        git_status_ok(temp.path(), &["branch", "prd-seq"]);
+        git_status_ok(temp.path(), &["branch", "prd-seq-2"]);
+        git_status_ok(temp.path(), &["branch", "prd-seq-3"]);
+        git_status_ok(temp.path(), &["branch", "prd-seq-4"]);
+
+        let branch = worktree::ensure_unique_worktree_branch(
+            temp.path().to_str().unwrap(),
+            &worktrees_dir,
+            "prd-seq",
+        );
+
+        assert_eq!(branch, "prd-seq-5");
+    }
+
+    #[test]
+    fn ensure_unique_worktree_branch_handles_mixed_branch_and_dir_collisions() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+
+        git_status_ok(temp.path(), &["branch", "prd-mixed"]);
+        fs::create_dir_all(worktrees_dir.join("prd-mixed-2")).unwrap();
+        git_status_ok(temp.path(), &["branch", "prd-mixed-3"]);
+        fs::create_dir_all(worktrees_dir.join("prd-mixed-4")).unwrap();
+
+        let branch = worktree::ensure_unique_worktree_branch(
+            temp.path().to_str().unwrap(),
+            &worktrees_dir,
+            "prd-mixed",
+        );
+
+        assert_eq!(branch, "prd-mixed-5");
+    }
+
+    #[test]
+    fn auto_worktree_branch_name_handles_whitespace_only_session() {
+        let name = worktree::auto_worktree_branch_name("   ", "20260126-120000");
+        // 3 spaces become 3 dashes, result is "prd-" + "---" + "-" + timestamp
+        assert_eq!(name, "prd-----20260126-120000");
+    }
+
+    #[test]
+    fn auto_worktree_branch_name_handles_special_chars_only_session() {
+        let name = worktree::auto_worktree_branch_name("@#$", "20260126-120000");
+        // 3 special chars become 3 dashes, result is "prd-" + "---" + "-" + timestamp
+        assert_eq!(name, "prd-----20260126-120000");
+    }
+
+    #[test]
+    fn create_worktree_at_creates_new_branch_and_path() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        init_git_repo(temp.path());
+        commit_file(temp.path(), "README.md", "initial");
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+        let branch = "task-NEW-1";
+        let worktree_path = worktrees_dir.join(branch);
+
+        worktree::create_worktree_at(temp.path().to_str().unwrap(), branch, &worktree_path)
+            .unwrap();
+
+        assert!(worktree_path.is_dir());
+        git_status_ok(
+            temp.path(),
+            &[
+                "show-ref",
+                "--verify",
+                "--quiet",
+                &format!("refs/heads/{}", branch),
+            ],
+        );
     }
 }

@@ -166,7 +166,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests cover lines 348-463 session name fallbacks.
   * Tests verify branch uniqueness checks.
 - **Dependencies** COV80-APP-1
-- [ ] COV80-APP-2 Add app worktree and naming tests
+- [x] COV80-APP-2 Add app worktree and naming tests
 ---
 
 ### Task COV80-APP-3
