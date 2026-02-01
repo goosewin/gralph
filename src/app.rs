@@ -27,12 +27,12 @@ use prd_init::{cmd_init, cmd_prd};
 
 #[cfg(test)]
 use prd_init::{
-    add_context_entry, build_context_file_list, default_context_files, format_display_path,
-    generic_markdown_template, init_template_for_path, invalid_prd_path, is_markdown_path,
-    read_prd_template_with_manifest, read_readme_context_files, resolve_init_context_files,
-    resolve_prd_output, write_allowed_context, write_atomic, ARCHITECTURE_TEMPLATE,
-    CHANGELOG_TEMPLATE, DECISIONS_TEMPLATE, DEFAULT_PRD_TEMPLATE, PROCESS_TEMPLATE,
-    RISK_REGISTER_TEMPLATE,
+    add_context_entry, build_context_file_list, cmd_prd_check, cmd_prd_create,
+    default_context_files, format_display_path, generic_markdown_template, init_template_for_path,
+    invalid_prd_path, is_markdown_path, read_prd_template_with_manifest, read_readme_context_files,
+    resolve_init_context_files, resolve_prd_output, write_allowed_context, write_atomic,
+    ARCHITECTURE_TEMPLATE, CHANGELOG_TEMPLATE, DECISIONS_TEMPLATE, DEFAULT_PRD_TEMPLATE,
+    PROCESS_TEMPLATE, RISK_REGISTER_TEMPLATE,
 };
 
 pub(crate) trait FileSystem: Send + Sync {
@@ -3144,5 +3144,442 @@ mod tests {
         let base = temp.path();
         let display = format_display_path(base, base);
         assert_eq!(display, "");
+    }
+
+    // COV80-PI-1: prd_init template and error tests
+
+    #[test]
+    fn cmd_prd_dispatches_check_command() {
+        let temp = tempfile::tempdir().unwrap();
+        let prd_path = temp.path().join("PRD.md");
+        write_file(
+            &prd_path,
+            "## Overview\n\nTest PRD.\n\n## Implementation Tasks\n\n### Task T-1\n\n- **ID** T-1\n- **Context Bundle** `README.md`\n- **DoD** Test task.\n- **Checklist**\n  * Item one.\n- **Dependencies** None\n- [ ] T-1 Test task summary\n",
+        );
+        write_file(&temp.path().join("README.md"), "readme");
+
+        let args = cli::PrdArgs {
+            command: cli::PrdCommand::Check(cli::PrdCheckArgs {
+                file: prd_path,
+                allow_missing_context: false,
+            }),
+        };
+        let result = prd_init::cmd_prd(args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn cmd_prd_check_reports_invalid_prd() {
+        let temp = tempfile::tempdir().unwrap();
+        let prd_path = temp.path().join("PRD.md");
+        // Task block missing required DoD field
+        write_file(
+            &prd_path,
+            "## Overview\n\n### Task T-1\n\n- **ID** T-1\n- **Context Bundle** `README.md`\n- **Checklist**\n  * Item one.\n- **Dependencies** None\n- [ ] T-1 Missing DoD field\n",
+        );
+        write_file(&temp.path().join("README.md"), "readme");
+
+        let args = cli::PrdCheckArgs {
+            file: prd_path,
+            allow_missing_context: false,
+        };
+        let err = prd_init::cmd_prd_check(args).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Missing required field: DoD"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_prd_check_respects_allow_missing_context() {
+        let temp = tempfile::tempdir().unwrap();
+        let prd_path = temp.path().join("PRD.md");
+        write_file(
+            &prd_path,
+            "## Overview\n\nTest PRD.\n\n## Implementation Tasks\n\n### Task T-1\n\n- **ID** T-1\n- **Context Bundle** `missing.md`\n- **DoD** Test task.\n- **Checklist**\n  * Item one.\n- **Dependencies** None\n- [ ] T-1 Test task summary\n",
+        );
+
+        let args = cli::PrdCheckArgs {
+            file: prd_path.clone(),
+            allow_missing_context: false,
+        };
+        let err = prd_init::cmd_prd_check(args).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("missing"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+
+        let args_allow = cli::PrdCheckArgs {
+            file: prd_path,
+            allow_missing_context: true,
+        };
+        let result = prd_init::cmd_prd_check(args_allow);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn cmd_prd_create_reports_missing_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let missing = temp.path().join("missing");
+
+        let args = cli::PrdCreateArgs {
+            dir: Some(missing.clone()),
+            output: None,
+            goal: Some("Test goal".to_string()),
+            constraints: None,
+            context: None,
+            sources: None,
+            backend: None,
+            model: None,
+            variant: None,
+            allow_missing_context: false,
+            multiline: false,
+            no_interactive: false,
+            interactive: false,
+            force: false,
+        };
+        let err = prd_init::cmd_prd_create(args).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Directory does not exist"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_prd_create_reports_missing_goal() {
+        let temp = tempfile::tempdir().unwrap();
+
+        let args = cli::PrdCreateArgs {
+            dir: Some(temp.path().to_path_buf()),
+            output: None,
+            goal: None,
+            constraints: None,
+            context: None,
+            sources: None,
+            backend: None,
+            model: None,
+            variant: None,
+            allow_missing_context: false,
+            multiline: false,
+            no_interactive: false,
+            interactive: false,
+            force: false,
+        };
+        let err = prd_init::cmd_prd_create(args).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Goal is required"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_prd_create_reports_backend_not_installed() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let missing_bin = tempfile::tempdir().unwrap();
+        let _path_guard = PathGuard::new(missing_bin.path());
+
+        let args = cli::PrdCreateArgs {
+            dir: Some(temp.path().to_path_buf()),
+            output: None,
+            goal: Some("Test goal".to_string()),
+            constraints: None,
+            context: None,
+            sources: None,
+            backend: Some("claude".to_string()),
+            model: None,
+            variant: None,
+            allow_missing_context: false,
+            multiline: false,
+            no_interactive: false,
+            interactive: false,
+            force: false,
+        };
+        let err = prd_init::cmd_prd_create(args).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Backend is not installed"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_prd_create_reports_unknown_backend() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+
+        let args = cli::PrdCreateArgs {
+            dir: Some(temp.path().to_path_buf()),
+            output: None,
+            goal: Some("Test goal".to_string()),
+            constraints: None,
+            context: None,
+            sources: None,
+            backend: Some("nonexistent-backend".to_string()),
+            model: None,
+            variant: None,
+            allow_missing_context: false,
+            multiline: false,
+            no_interactive: false,
+            interactive: false,
+            force: false,
+        };
+        let err = prd_init::cmd_prd_create(args).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Unknown backend"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_prd_template_uses_manifest_fallback() {
+        let project = tempfile::tempdir().unwrap();
+        let manifest = tempfile::tempdir().unwrap();
+        fs::write(manifest.path().join("PRD.template.md"), "manifest fallback").unwrap();
+
+        let template = read_prd_template_with_manifest(project.path(), manifest.path()).unwrap();
+
+        assert_eq!(template, "manifest fallback");
+    }
+
+    #[test]
+    fn default_prd_template_contains_required_sections() {
+        assert!(DEFAULT_PRD_TEMPLATE.contains("## Overview"));
+        assert!(DEFAULT_PRD_TEMPLATE.contains("## Problem Statement"));
+        assert!(DEFAULT_PRD_TEMPLATE.contains("## Solution"));
+        assert!(DEFAULT_PRD_TEMPLATE.contains("## Functional Requirements"));
+        assert!(DEFAULT_PRD_TEMPLATE.contains("## Non-Functional Requirements"));
+        assert!(DEFAULT_PRD_TEMPLATE.contains("## Implementation Tasks"));
+        assert!(DEFAULT_PRD_TEMPLATE.contains("## Success Criteria"));
+        assert!(DEFAULT_PRD_TEMPLATE.contains("### Task EX-1"));
+        assert!(DEFAULT_PRD_TEMPLATE.contains("- [ ] EX-1"));
+    }
+
+    #[test]
+    fn known_templates_have_expected_content() {
+        assert!(ARCHITECTURE_TEMPLATE.contains("# Architecture"));
+        assert!(ARCHITECTURE_TEMPLATE.contains("## Modules"));
+        assert!(PROCESS_TEMPLATE.contains("# Process"));
+        assert!(PROCESS_TEMPLATE.contains("## Worktree Protocol"));
+        assert!(DECISIONS_TEMPLATE.contains("# Decisions"));
+        assert!(DECISIONS_TEMPLATE.contains("## D-001"));
+        assert!(RISK_REGISTER_TEMPLATE.contains("# Risk Register"));
+        assert!(RISK_REGISTER_TEMPLATE.contains("## R-001"));
+        assert!(CHANGELOG_TEMPLATE.contains("# Changelog"));
+        assert!(CHANGELOG_TEMPLATE.contains("## [Unreleased]"));
+    }
+
+    #[test]
+    fn write_atomic_creates_new_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("new_file.md");
+
+        write_atomic(&path, "new content", false).unwrap();
+
+        let contents = fs::read_to_string(&path).unwrap();
+        assert_eq!(contents, "new content");
+    }
+
+    #[test]
+    fn write_atomic_leaves_no_temp_files_on_success() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("target.md");
+
+        write_atomic(&path, "content", false).unwrap();
+
+        let entries: Vec<_> = fs::read_dir(temp.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .collect();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].file_name().to_str().unwrap(), "target.md");
+    }
+
+    #[test]
+    fn init_template_for_path_case_insensitive_match() {
+        // All these should match ARCHITECTURE_TEMPLATE due to eq_ignore_ascii_case
+        assert_eq!(
+            init_template_for_path(Path::new("architecture.md")),
+            ARCHITECTURE_TEMPLATE
+        );
+        assert_eq!(
+            init_template_for_path(Path::new("ARCHITECTURE.MD")),
+            ARCHITECTURE_TEMPLATE
+        );
+        assert_eq!(
+            init_template_for_path(Path::new("Architecture.md")),
+            ARCHITECTURE_TEMPLATE
+        );
+        // Different filename falls back to generic
+        assert_eq!(
+            init_template_for_path(Path::new("ARCH.md")),
+            generic_markdown_template(Path::new("ARCH.md"))
+        );
+    }
+
+    #[test]
+    fn init_template_for_path_handles_nested_paths() {
+        let template = init_template_for_path(Path::new("docs/nested/ARCHITECTURE.md"));
+        assert_eq!(template, ARCHITECTURE_TEMPLATE);
+
+        let generic = init_template_for_path(Path::new("docs/nested/CUSTOM.md"));
+        assert!(generic.contains("# CUSTOM"));
+    }
+
+    #[test]
+    fn generic_markdown_template_handles_empty_stem() {
+        let template = generic_markdown_template(Path::new(""));
+        assert!(template.contains("# Context"));
+    }
+
+    #[test]
+    fn cmd_init_uses_current_dir_fallback() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let _cwd_guard = CurrentDirGuard::set(temp.path());
+        let config_path = temp.path().join("default.yaml");
+        write_file(
+            &config_path,
+            "defaults:\n  context_files: ARCHITECTURE.md\n",
+        );
+        set_env("GRALPH_DEFAULT_CONFIG", &config_path);
+        set_env("GRALPH_GLOBAL_CONFIG", temp.path().join("missing.yaml"));
+
+        let args = InitArgs {
+            dir: None,
+            force: false,
+        };
+        cmd_init(args).unwrap();
+
+        assert!(temp.path().join("ARCHITECTURE.md").exists());
+        clear_env_overrides();
+    }
+
+    #[test]
+    fn resolve_prd_output_uses_default_filename() {
+        let temp = tempfile::tempdir().unwrap();
+        let resolved = resolve_prd_output(temp.path(), None, false).unwrap();
+        assert_eq!(resolved, temp.path().join("PRD.generated.md"));
+    }
+
+    #[test]
+    fn invalid_prd_path_handles_no_extension() {
+        let output = PathBuf::from("PRD");
+        let invalid = invalid_prd_path(&output, false);
+        assert_eq!(invalid, PathBuf::from("PRD.invalid"));
+    }
+
+    #[test]
+    fn build_context_file_list_skips_missing_files() {
+        let temp = tempfile::tempdir().unwrap();
+        write_file(&temp.path().join("exists.md"), "content");
+
+        let entries = build_context_file_list(
+            temp.path(),
+            Some("exists.md,missing.md"),
+            None,
+        );
+
+        // Should only include the existing file
+        assert!(entries.iter().any(|e| e.contains("exists.md")));
+        assert!(!entries.iter().any(|e| e.contains("missing.md")));
+    }
+
+    #[test]
+    fn build_context_file_list_processes_config_before_user() {
+        let temp = tempfile::tempdir().unwrap();
+        write_file(&temp.path().join("config.md"), "config");
+        write_file(&temp.path().join("user.md"), "user");
+
+        let entries = build_context_file_list(
+            temp.path(),
+            Some("user.md"),
+            Some("config.md"),
+        );
+
+        // Config should be processed first, appearing before user
+        let config_pos = entries.iter().position(|e| e.contains("config.md"));
+        let user_pos = entries.iter().position(|e| e.contains("user.md"));
+        assert!(config_pos.is_some());
+        assert!(user_pos.is_some());
+        assert!(config_pos.unwrap() < user_pos.unwrap());
+    }
+
+    #[test]
+    fn write_allowed_context_writes_one_entry_per_line() {
+        let entries = vec![
+            "README.md".to_string(),
+            "ARCHITECTURE.md".to_string(),
+            "src/main.rs".to_string(),
+        ];
+        let path = write_allowed_context(&entries).unwrap().unwrap();
+
+        let contents = fs::read_to_string(&path).unwrap();
+        let lines: Vec<&str> = contents.lines().collect();
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[0], "README.md");
+        assert_eq!(lines[1], "ARCHITECTURE.md");
+        assert_eq!(lines[2], "src/main.rs");
+
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn resolve_init_context_files_uses_readme_when_config_empty() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join("README.md"),
+            "## Context Files\n\n- `NOTES.md`\n- `GUIDE.md`\n",
+        );
+
+        let entries = resolve_init_context_files(temp.path(), Some(""));
+
+        assert_eq!(entries, vec!["NOTES.md", "GUIDE.md"]);
+    }
+
+    #[test]
+    fn add_context_entry_resolves_relative_to_target_dir() {
+        let temp = tempfile::tempdir().unwrap();
+        let subdir = temp.path().join("docs");
+        fs::create_dir_all(&subdir).unwrap();
+        write_file(&subdir.join("guide.md"), "guide");
+        let mut entries: Vec<String> = Vec::new();
+        let mut seen: BTreeMap<String, bool> = BTreeMap::new();
+
+        add_context_entry(temp.path(), "docs/guide.md", &mut entries, &mut seen);
+
+        assert_eq!(entries, vec!["docs/guide.md".to_string()]);
+    }
+
+    #[test]
+    fn add_context_entry_formats_absolute_path_outside_target() {
+        let temp = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        let external = other.path().join("external.md");
+        write_file(&external, "external");
+        let mut entries: Vec<String> = Vec::new();
+        let mut seen: BTreeMap<String, bool> = BTreeMap::new();
+
+        add_context_entry(
+            temp.path(),
+            external.to_str().unwrap(),
+            &mut entries,
+            &mut seen,
+        );
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0], external.to_string_lossy().to_string());
     }
 }

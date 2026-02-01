@@ -1,4 +1,4 @@
-use super::{CliError, join_or_none, normalize_csv};
+use super::{join_or_none, normalize_csv, CliError};
 use crate::backend::backend_from_name;
 use crate::cli::{InitArgs, PrdArgs, PrdCheckArgs, PrdCommand, PrdCreateArgs};
 use crate::config::Config;
@@ -90,14 +90,14 @@ pub(super) fn cmd_init(args: InitArgs) -> Result<(), CliError> {
     Ok(())
 }
 
-fn cmd_prd_check(args: PrdCheckArgs) -> Result<(), CliError> {
+pub(super) fn cmd_prd_check(args: PrdCheckArgs) -> Result<(), CliError> {
     prd::prd_validate_file(&args.file, args.allow_missing_context, None)
         .map_err(|err| CliError::Message(err.to_string()))?;
     println!("PRD validation passed: {}", args.file.display());
     Ok(())
 }
 
-fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
+pub(super) fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
     let target_dir = args
         .dir
         .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));

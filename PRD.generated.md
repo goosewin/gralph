@@ -270,7 +270,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests cover lines 84-139 template rendering.
   * Tests cover lines 152-221 file write flows.
 - **Dependencies** None
-- [ ] COV80-PI-1 Add prd_init template and error tests
+- [x] COV80-PI-1 Add prd_init template and error tests
 ---
 
 ### Task COV80-UPDATE-1
