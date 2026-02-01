@@ -944,6 +944,113 @@ mod tests {
     }
 
     #[test]
+    fn exit_code_for_io_error_maps_failure() {
+        let err = CliError::Io(io::Error::new(io::ErrorKind::NotFound, "file not found"));
+        let code = exit_code_for(Err(err));
+        assert_eq!(code, ExitCode::FAILURE);
+    }
+
+    #[test]
+    fn cli_error_display_message_variant() {
+        let err = CliError::Message("custom error message".to_string());
+        let display = format!("{}", err);
+        assert_eq!(display, "custom error message");
+    }
+
+    #[test]
+    fn cli_error_display_io_variant() {
+        let err = CliError::Io(io::Error::new(io::ErrorKind::PermissionDenied, "access denied"));
+        let display = format!("{}", err);
+        assert!(display.contains("access denied"));
+    }
+
+    #[test]
+    fn cli_error_from_io_error() {
+        let io_err = io::Error::new(io::ErrorKind::NotFound, "missing file");
+        let cli_err: CliError = io_err.into();
+        match cli_err {
+            CliError::Io(err) => assert_eq!(err.kind(), io::ErrorKind::NotFound),
+            other => panic!("expected Io variant, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn run_with_no_command_calls_intro() {
+        let _guard = env_guard();
+        let cli = Cli { command: None };
+        let deps = Deps::real();
+        let result = run(cli, &deps);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_dispatches_version_command() {
+        let _guard = env_guard();
+        let cli = Cli {
+            command: Some(Command::Version),
+        };
+        let deps = Deps::real();
+        let result = run(cli, &deps);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_dispatches_backends_command() {
+        let _guard = env_guard();
+        let cli = Cli {
+            command: Some(Command::Backends),
+        };
+        let deps = Deps::real();
+        let result = run(cli, &deps);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn dispatch_routes_doctor_command() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let args = DoctorArgs {
+            dir: Some(temp.path().to_path_buf()),
+        };
+        let deps = Deps::real();
+        let result = dispatch(Command::Doctor(args), &deps);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn dispatch_routes_config_list_command() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        write_file(&temp.path().join(".gralph.yaml"), "defaults: {}\n");
+        let _cwd_guard = CurrentDirGuard::set(temp.path());
+        let args = ConfigArgs {
+            command: Some(ConfigCommand::List),
+        };
+        let deps = Deps::real();
+        let result = dispatch(Command::Config(args), &deps);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn dispatch_routes_init_command() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config_path = temp.path().join("default.yaml");
+        write_file(&config_path, "defaults:\n  context_files: ARCHITECTURE.md\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &config_path);
+        set_env("GRALPH_GLOBAL_CONFIG", temp.path().join("missing.yaml"));
+
+        let args = cli::InitArgs {
+            dir: Some(temp.path().to_path_buf()),
+            force: false,
+        };
+        let deps = Deps::real();
+        let result = dispatch(Command::Init(args), &deps);
+        assert!(result.is_ok());
+        clear_env_overrides();
+    }
+
+    #[test]
     fn cmd_intro_runs() {
         let _guard = env_guard();
         assert!(cmd_intro().is_ok());
@@ -2072,7 +2179,7 @@ mod tests {
     }
 
     #[test]
-    fn auto_worktree_skips_dirty_repo() {
+    fn auto_worktree_commits_dirty_repo() {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
@@ -2080,13 +2187,30 @@ mod tests {
         write_file(&temp.path().join("README.md"), "dirty");
         let config = Config::load(Some(temp.path())).unwrap();
         let mut args = run_loop_args(temp.path().to_path_buf());
-        let original = args.dir.clone();
 
         worktree::maybe_create_auto_worktree(&mut args, &config).unwrap();
 
-        assert_eq!(args.dir, original);
-        assert!(!args.no_worktree);
-        assert!(!temp.path().join(".worktrees").exists());
+        let worktrees_dir = temp.path().join(".worktrees");
+        let mut entries: Vec<PathBuf> = fs::read_dir(&worktrees_dir)
+            .unwrap()
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .collect();
+        assert_eq!(entries.len(), 1);
+        let worktree_path = entries.remove(0);
+        let expected = fs::canonicalize(&worktree_path).unwrap();
+        let actual = fs::canonicalize(&args.dir).unwrap();
+        assert_eq!(actual, expected);
+        assert!(args.no_worktree);
+
+        let status = ProcCommand::new("git")
+            .arg("-C")
+            .arg(temp.path())
+            .arg("status")
+            .arg("--porcelain")
+            .output()
+            .unwrap();
+        assert!(status.status.success());
+        assert!(status.stdout.is_empty());
     }
 
     #[test]

@@ -153,7 +153,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests cover lines 142-221 subcommand dispatch.
   * Tests verify error message formatting.
 - **Dependencies** None
-- [ ] COV80-APP-1 Add app CLI dispatch tests
+- [x] COV80-APP-1 Add app CLI dispatch tests
 ---
 
 ### Task COV80-APP-2
