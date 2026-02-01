@@ -1,0 +1,27 @@
+src/app/loop_session.rs
+  16c961204634a0bd 3066-3419
+PRD.generated.md
+  16c961204634a0bd 91
+CHANGELOG.md
+  16c961204634a0bd 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "878c367f364d0ffb34aa88ccdac3df5e3b241d48",
+  "prompts": {
+    "16c961204634a0bd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "af240304-c054-4f50-8c40-f3f1c242c436",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 356,
+      "total_deletions": 1,
+      "accepted_lines": 356,
+      "overriden_lines": 0
+    }
+  }
+}
