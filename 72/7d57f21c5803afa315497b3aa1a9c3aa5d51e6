@@ -1,0 +1,27 @@
+PRD.generated.md
+  c79decff244ce392 104
+src/app/loop_session.rs
+  c79decff244ce392 3420-3610
+CHANGELOG.md
+  c79decff244ce392 28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "727d57f21c5803afa315497b3aa1a9c3aa5d51e6",
+  "prompts": {
+    "c79decff244ce392": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "574a74a1-d625-41f4-bc4a-b711f7699e84",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 206,
+      "total_deletions": 14,
+      "accepted_lines": 193,
+      "overriden_lines": 0
+    }
+  }
+}
