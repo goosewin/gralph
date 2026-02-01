@@ -2109,4 +2109,707 @@ mod tests {
 
         cmd_start_dry_run(args, &deps).unwrap();
     }
+
+    #[test]
+    fn cmd_start_rejects_nonexistent_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let missing = temp.path().join("missing");
+        let args = StartArgs {
+            dir: missing.clone(),
+            name: None,
+            max_iterations: None,
+            task_file: None,
+            completion_marker: None,
+            backend: None,
+            model: None,
+            variant: None,
+            prompt_template: None,
+            webhook: None,
+            no_worktree: false,
+            strict_prd: false,
+            dry_run: false,
+        };
+        let deps = Deps::real();
+
+        let err = cmd_start(args, &deps).unwrap_err();
+        match err {
+            CliError::Message(msg) => {
+                assert!(msg.contains("Directory does not exist"));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn run_loop_args_from_start_maps_all_fields() {
+        let temp = tempfile::tempdir().unwrap();
+        let args = StartArgs {
+            dir: temp.path().to_path_buf(),
+            name: Some("custom".to_string()),
+            max_iterations: Some(15),
+            task_file: Some("TASKS.md".to_string()),
+            completion_marker: Some("DONE".to_string()),
+            backend: Some("gemini".to_string()),
+            model: Some("gemini-pro".to_string()),
+            variant: Some("fast".to_string()),
+            prompt_template: Some(PathBuf::from("template.txt")),
+            webhook: Some("https://hook.example".to_string()),
+            no_worktree: true,
+            strict_prd: true,
+            dry_run: false,
+        };
+
+        let run_args = run_loop_args_from_start(args, "session-name".to_string()).unwrap();
+
+        assert_eq!(run_args.dir, temp.path());
+        assert_eq!(run_args.name, "session-name");
+        assert_eq!(run_args.max_iterations, Some(15));
+        assert_eq!(run_args.task_file, Some("TASKS.md".to_string()));
+        assert_eq!(run_args.completion_marker, Some("DONE".to_string()));
+        assert_eq!(run_args.backend, Some("gemini".to_string()));
+        assert_eq!(run_args.model, Some("gemini-pro".to_string()));
+        assert_eq!(run_args.variant, Some("fast".to_string()));
+        assert_eq!(
+            run_args.prompt_template,
+            Some(PathBuf::from("template.txt"))
+        );
+        assert_eq!(run_args.webhook, Some("https://hook.example".to_string()));
+        assert!(run_args.no_worktree);
+        assert!(run_args.strict_prd);
+    }
+
+    #[test]
+    fn run_loop_args_from_step_maps_fields_without_webhook() {
+        let temp = tempfile::tempdir().unwrap();
+        let args = StepArgs {
+            dir: temp.path().to_path_buf(),
+            name: Some("step-session".to_string()),
+            max_iterations: Some(5),
+            task_file: Some("STEP.md".to_string()),
+            completion_marker: Some("FINISHED".to_string()),
+            backend: Some("claude".to_string()),
+            model: Some("opus".to_string()),
+            variant: Some("slow".to_string()),
+            prompt_template: Some(PathBuf::from("step-template.txt")),
+            no_worktree: true,
+            strict_prd: true,
+        };
+
+        let run_args = run_loop_args_from_step(args, "step-name".to_string()).unwrap();
+
+        assert_eq!(run_args.dir, temp.path());
+        assert_eq!(run_args.name, "step-name");
+        assert_eq!(run_args.max_iterations, Some(5));
+        assert_eq!(run_args.task_file, Some("STEP.md".to_string()));
+        assert_eq!(run_args.completion_marker, Some("FINISHED".to_string()));
+        assert_eq!(run_args.backend, Some("claude".to_string()));
+        assert_eq!(run_args.model, Some("opus".to_string()));
+        assert_eq!(run_args.variant, Some("slow".to_string()));
+        assert_eq!(
+            run_args.prompt_template,
+            Some(PathBuf::from("step-template.txt"))
+        );
+        assert!(run_args.webhook.is_none());
+        assert!(run_args.no_worktree);
+        assert!(run_args.strict_prd);
+    }
+
+    #[test]
+    fn cmd_step_rejects_nonexistent_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let missing = temp.path().join("no-such-dir");
+        let args = StepArgs {
+            dir: missing.clone(),
+            name: None,
+            max_iterations: None,
+            task_file: None,
+            completion_marker: None,
+            backend: None,
+            model: None,
+            variant: None,
+            prompt_template: None,
+            no_worktree: false,
+            strict_prd: false,
+        };
+        let deps = Deps::real();
+
+        let err = cmd_step(args, &deps).unwrap_err();
+        match err {
+            CliError::Message(msg) => {
+                assert!(msg.contains("Directory does not exist"));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn enrich_status_session_marks_stale_when_pid_dead() {
+        let session = serde_json::json!({
+            "name": "test",
+            "status": "running",
+            "pid": 999999,
+            "dir": "",
+            "last_task_count": 5,
+        });
+        let enriched = enrich_status_session(session, &TestProcessRunner { alive: false });
+
+        assert_eq!(enriched["status"], "stale");
+        assert_eq!(enriched["is_alive"], false);
+    }
+
+    #[test]
+    fn enrich_status_session_keeps_running_when_pid_alive() {
+        let temp = tempfile::tempdir().unwrap();
+        write_file(
+            &temp.path().join("PRD.md"),
+            "# Tasks\n- [ ] One\n- [ ] Two\n",
+        );
+        let session = serde_json::json!({
+            "name": "test",
+            "status": "running",
+            "pid": 123,
+            "dir": temp.path().to_string_lossy(),
+            "task_file": "PRD.md",
+        });
+        let enriched = enrich_status_session(session, &TestProcessRunner { alive: true });
+
+        assert_eq!(enriched["status"], "running");
+        assert_eq!(enriched["is_alive"], true);
+        assert_eq!(enriched["current_remaining"], 2);
+    }
+
+    #[test]
+    fn enrich_status_session_uses_last_task_count_for_empty_dir() {
+        let session = serde_json::json!({
+            "name": "test",
+            "status": "complete",
+            "pid": 0,
+            "dir": "",
+            "last_task_count": 7,
+        });
+        let enriched = enrich_status_session(session, &TestProcessRunner { alive: false });
+
+        assert_eq!(enriched["current_remaining"], 7);
+        assert_eq!(enriched["last_task_id"], Value::Null);
+    }
+
+    #[test]
+    fn resolve_status_log_file_uses_stored_path_when_present() {
+        let mut map = Map::new();
+        map.insert(
+            "log_file".to_string(),
+            Value::String("/var/log/test.log".to_string()),
+        );
+        let result = resolve_status_log_file(&map, "session", "/project");
+
+        assert_eq!(result, Some(PathBuf::from("/var/log/test.log")));
+    }
+
+    #[test]
+    fn resolve_status_log_file_constructs_path_when_missing() {
+        let map = Map::new();
+        let result = resolve_status_log_file(&map, "session", "/project");
+
+        assert_eq!(result, Some(PathBuf::from("/project/.gralph/session.log")));
+    }
+
+    #[test]
+    fn resolve_status_log_file_returns_none_for_empty_inputs() {
+        let map = Map::new();
+
+        assert!(resolve_status_log_file(&map, "", "/project").is_none());
+        assert!(resolve_status_log_file(&map, "session", "").is_none());
+    }
+
+    #[test]
+    fn resolve_status_raw_log_file_uses_stored_path_when_present() {
+        let mut map = Map::new();
+        map.insert(
+            "raw_log_file".to_string(),
+            Value::String("/var/log/raw.log".to_string()),
+        );
+        let result = resolve_status_raw_log_file(&map, None);
+
+        assert_eq!(result, Some(PathBuf::from("/var/log/raw.log")));
+    }
+
+    #[test]
+    fn resolve_status_raw_log_file_derives_from_log_file() {
+        let map = Map::new();
+        let log_file = PathBuf::from("/project/.gralph/session.log");
+        let result = resolve_status_raw_log_file(&map, Some(&log_file));
+
+        assert_eq!(result, Some(core::raw_log_path(&log_file)));
+    }
+
+    #[test]
+    fn outcome_status_plan_initial_status_returns_correct_value() {
+        let final_plan = OutcomeStatusPlan::Final { status: "failed" };
+        assert_eq!(final_plan.initial_status(), "failed");
+
+        let verify_plan = OutcomeStatusPlan::Verify {
+            initial_status: "complete",
+            verifying_status: "verifying",
+            verified_status: "verified",
+            verify_failed_status: "verify-failed",
+        };
+        assert_eq!(verify_plan.initial_status(), "complete");
+    }
+
+    #[test]
+    fn outcome_status_plan_running_status_is_final() {
+        let plan = outcome_status_plan(LoopStatus::Running, true);
+        assert_eq!(plan, OutcomeStatusPlan::Final { status: "running" });
+    }
+
+    struct TestNotifier {
+        complete_calls: std::sync::Mutex<Vec<(String, String)>>,
+        failed_calls: std::sync::Mutex<Vec<(String, String, Option<String>)>>,
+    }
+
+    impl TestNotifier {
+        fn new() -> Self {
+            Self {
+                complete_calls: std::sync::Mutex::new(Vec::new()),
+                failed_calls: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+    }
+
+    impl notify::Notifier for TestNotifier {
+        fn notify_complete(
+            &self,
+            session: &str,
+            webhook: &str,
+            _dir: Option<&str>,
+            _iterations: Option<u32>,
+            _duration_secs: Option<u64>,
+            _timeout_secs: Option<u64>,
+        ) -> Result<(), notify::NotifyError> {
+            self.complete_calls
+                .lock()
+                .unwrap()
+                .push((session.to_string(), webhook.to_string()));
+            Ok(())
+        }
+
+        fn notify_failed(
+            &self,
+            session: &str,
+            webhook: &str,
+            reason: Option<&str>,
+            _dir: Option<&str>,
+            _iterations: Option<u32>,
+            _max_iterations: Option<u32>,
+            _remaining: Option<u32>,
+            _duration_secs: Option<u64>,
+            _timeout_secs: Option<u64>,
+        ) -> Result<(), notify::NotifyError> {
+            self.failed_calls.lock().unwrap().push((
+                session.to_string(),
+                webhook.to_string(),
+                reason.map(|s| s.to_string()),
+            ));
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn notify_if_configured_skips_without_webhook() {
+        let _guard = env_guard();
+        let config = load_config("defaults:\n  backend: claude\n");
+        let args = base_args();
+        let outcome = core::LoopOutcome {
+            status: LoopStatus::Complete,
+            iterations: 3,
+            remaining_tasks: 0,
+            duration_secs: 120,
+        };
+        let notifier = TestNotifier::new();
+
+        let result = notify_if_configured(&config, &args, &outcome, 30, &notifier);
+
+        assert!(result.is_ok());
+        assert!(notifier.complete_calls.lock().unwrap().is_empty());
+        assert!(notifier.failed_calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn notify_if_configured_sends_complete_notification() {
+        let _guard = env_guard();
+        let config =
+            load_config("notifications:\n  webhook: https://hook.test\n  on_complete: true\n");
+        let args = base_args();
+        let outcome = core::LoopOutcome {
+            status: LoopStatus::Complete,
+            iterations: 5,
+            remaining_tasks: 0,
+            duration_secs: 300,
+        };
+        let notifier = TestNotifier::new();
+
+        let result = notify_if_configured(&config, &args, &outcome, 30, &notifier);
+
+        assert!(result.is_ok());
+        let calls = notifier.complete_calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "session");
+        assert_eq!(calls[0].1, "https://hook.test");
+    }
+
+    #[test]
+    fn notify_if_configured_skips_complete_when_disabled() {
+        let _guard = env_guard();
+        let config =
+            load_config("notifications:\n  webhook: https://hook.test\n  on_complete: false\n");
+        let args = base_args();
+        let outcome = core::LoopOutcome {
+            status: LoopStatus::Complete,
+            iterations: 5,
+            remaining_tasks: 0,
+            duration_secs: 300,
+        };
+        let notifier = TestNotifier::new();
+
+        let result = notify_if_configured(&config, &args, &outcome, 30, &notifier);
+
+        assert!(result.is_ok());
+        assert!(notifier.complete_calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn notify_if_configured_sends_failed_notification() {
+        let _guard = env_guard();
+        let config = load_config("notifications:\n  webhook: https://hook.test\n");
+        let args = base_args();
+        let outcome = core::LoopOutcome {
+            status: LoopStatus::Failed,
+            iterations: 2,
+            remaining_tasks: 5,
+            duration_secs: 60,
+        };
+        let notifier = TestNotifier::new();
+
+        let result = notify_if_configured(&config, &args, &outcome, 30, &notifier);
+
+        assert!(result.is_ok());
+        let calls = notifier.failed_calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "session");
+        assert_eq!(calls[0].1, "https://hook.test");
+        assert_eq!(calls[0].2, Some("error".to_string()));
+    }
+
+    #[test]
+    fn notify_if_configured_sends_max_iterations_notification() {
+        let _guard = env_guard();
+        let config = load_config("notifications:\n  webhook: https://hook.test\n");
+        let args = base_args();
+        let outcome = core::LoopOutcome {
+            status: LoopStatus::MaxIterations,
+            iterations: 30,
+            remaining_tasks: 3,
+            duration_secs: 1800,
+        };
+        let notifier = TestNotifier::new();
+
+        let result = notify_if_configured(&config, &args, &outcome, 30, &notifier);
+
+        assert!(result.is_ok());
+        let calls = notifier.failed_calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].2, Some("max_iterations".to_string()));
+    }
+
+    #[test]
+    fn notify_if_configured_uses_args_webhook_over_config() {
+        let _guard = env_guard();
+        let config = load_config("notifications:\n  webhook: https://config.hook\n");
+        let mut args = base_args();
+        args.webhook = Some("https://args.hook".to_string());
+        let outcome = core::LoopOutcome {
+            status: LoopStatus::Complete,
+            iterations: 1,
+            remaining_tasks: 0,
+            duration_secs: 10,
+        };
+        let notifier = TestNotifier::new();
+
+        let result = notify_if_configured(&config, &args, &outcome, 30, &notifier);
+
+        assert!(result.is_ok());
+        let calls = notifier.complete_calls.lock().unwrap();
+        assert_eq!(calls[0].1, "https://args.hook");
+    }
+
+    #[test]
+    fn stop_session_updates_state_and_kills_processes() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let _state_dir = set_state_env(temp.path());
+        let store = StateStore::new_from_env();
+        store.init_state().unwrap();
+
+        store
+            .set_session(
+                "demo",
+                &[
+                    ("status", "running"),
+                    ("pid", "12345"),
+                    ("tmux_session", "demo-tmux"),
+                ],
+            )
+            .unwrap();
+
+        let session = serde_json::json!({
+            "pid": 12345,
+            "tmux_session": "demo-tmux",
+        });
+
+        let result = stop_session(&store, "demo", &session, &TestProcessRunner { alive: true });
+        assert!(result.is_ok());
+
+        let updated = store.get_session("demo").unwrap().unwrap();
+        assert_eq!(updated["status"], "stopped");
+        assert_eq!(updated["pid"].as_str().unwrap_or("0"), "0");
+        assert_eq!(updated["tmux_session"], "");
+    }
+
+    #[test]
+    fn stop_session_handles_empty_tmux_session() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        set_state_env(temp.path());
+        let store = StateStore::new_from_env();
+        store.init_state().unwrap();
+
+        store
+            .set_session("demo", &[("status", "running"), ("pid", "12345")])
+            .unwrap();
+
+        let session = serde_json::json!({
+            "pid": 12345,
+            "tmux_session": "   ",
+        });
+
+        let result = stop_session(&store, "demo", &session, &TestProcessRunner { alive: true });
+        assert!(result.is_ok());
+
+        let updated = store.get_session("demo").unwrap().unwrap();
+        assert_eq!(updated["status"], "stopped");
+    }
+
+    #[test]
+    fn cmd_stop_handles_missing_session_name() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        set_state_env(temp.path());
+        let deps = Deps::real();
+        deps.state_store().init_state().unwrap();
+
+        let args = StopArgs {
+            name: None,
+            all: false,
+        };
+
+        let err = cmd_stop(args, &deps).unwrap_err();
+        match err {
+            CliError::Message(msg) => {
+                assert!(msg.contains("Session name is required"));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_stop_handles_nonexistent_session() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        set_state_env(temp.path());
+        let deps = Deps::real();
+        deps.state_store().init_state().unwrap();
+
+        let args = StopArgs {
+            name: Some("missing".to_string()),
+            all: false,
+        };
+
+        let err = cmd_stop(args, &deps).unwrap_err();
+        match err {
+            CliError::Message(msg) => {
+                assert!(msg.contains("Session not found"));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_tmux_session_trims_whitespace() {
+        let mut args = base_args();
+        args.tmux_session = Some("  session-name  ".to_string());
+        assert_eq!(resolve_tmux_session(&args), "session-name");
+
+        args.tmux_session = None;
+        assert_eq!(resolve_tmux_session(&args), "");
+
+        args.tmux_session = Some("".to_string());
+        assert_eq!(resolve_tmux_session(&args), "");
+    }
+
+    #[test]
+    fn format_rfc3339_produces_valid_timestamp() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        struct FixedClock(SystemTime);
+        impl core::Clock for FixedClock {
+            fn now(&self) -> SystemTime {
+                self.0
+            }
+            fn sleep(&self, _: Duration) {}
+        }
+
+        let fixed_time = UNIX_EPOCH + Duration::from_secs(1700000000);
+        let clock = FixedClock(fixed_time);
+        let result = format_rfc3339(&clock);
+
+        assert!(result.contains("2023"));
+        assert!(result.contains("T"));
+    }
+
+    #[test]
+    fn should_check_for_update_respects_env_var() {
+        let _guard = env_guard();
+        let config = load_config("defaults:\n  check_updates: true\n");
+
+        set_env("GRALPH_NO_UPDATE_CHECK", "1");
+        assert!(!should_check_for_update(&config));
+
+        set_env("GRALPH_NO_UPDATE_CHECK", "true");
+        assert!(!should_check_for_update(&config));
+
+        set_env("GRALPH_NO_UPDATE_CHECK", "false");
+        assert!(should_check_for_update(&config));
+
+        set_env("GRALPH_NO_UPDATE_CHECK", "");
+        assert!(!should_check_for_update(&config));
+
+        remove_env("GRALPH_NO_UPDATE_CHECK");
+        assert!(should_check_for_update(&config));
+    }
+
+    #[test]
+    fn should_check_for_update_respects_config() {
+        let _guard = env_guard();
+
+        let config = load_config("defaults:\n  check_updates: false\n");
+        assert!(!should_check_for_update(&config));
+
+        let config = load_config("defaults:\n  check_updates: true\n");
+        assert!(should_check_for_update(&config));
+
+        let config = load_config("defaults:\n  backend: claude\n");
+        assert!(should_check_for_update(&config));
+    }
+
+    #[test]
+    fn append_run_loop_args_includes_all_optional_flags() {
+        let mut args = base_args();
+        args.max_iterations = Some(20);
+        args.task_file = Some("TASKS.md".to_string());
+        args.completion_marker = Some("DONE".to_string());
+        args.backend = Some("gemini".to_string());
+        args.model = Some("gemini-pro".to_string());
+        args.variant = Some("fast".to_string());
+        args.prompt_template = Some(PathBuf::from("template.txt"));
+        args.webhook = Some("https://hook.test".to_string());
+        args.no_worktree = true;
+        args.strict_prd = true;
+
+        let mut cmd = ProcCommand::new("gralph");
+        append_run_loop_args(&mut cmd, &args);
+
+        let cmd_args: Vec<String> = cmd
+            .get_args()
+            .map(|s| s.to_string_lossy().to_string())
+            .collect();
+
+        assert!(cmd_args.contains(&"--max-iterations".to_string()));
+        assert!(cmd_args.contains(&"20".to_string()));
+        assert!(cmd_args.contains(&"--task-file".to_string()));
+        assert!(cmd_args.contains(&"TASKS.md".to_string()));
+        assert!(cmd_args.contains(&"--completion-marker".to_string()));
+        assert!(cmd_args.contains(&"DONE".to_string()));
+        assert!(cmd_args.contains(&"--backend".to_string()));
+        assert!(cmd_args.contains(&"gemini".to_string()));
+        assert!(cmd_args.contains(&"--model".to_string()));
+        assert!(cmd_args.contains(&"gemini-pro".to_string()));
+        assert!(cmd_args.contains(&"--variant".to_string()));
+        assert!(cmd_args.contains(&"fast".to_string()));
+        assert!(cmd_args.contains(&"--prompt-template".to_string()));
+        assert!(cmd_args.contains(&"template.txt".to_string()));
+        assert!(cmd_args.contains(&"--webhook".to_string()));
+        assert!(cmd_args.contains(&"https://hook.test".to_string()));
+        assert!(cmd_args.contains(&"--no-worktree".to_string()));
+        assert!(cmd_args.contains(&"--strict-prd".to_string()));
+    }
+
+    #[test]
+    fn print_cleanup_result_handles_various_counts() {
+        print_cleanup_result("Marked", "No stale sessions.", &[]);
+
+        print_cleanup_result(
+            "Removed",
+            "No stale sessions.",
+            &["a".to_string(), "b".to_string()],
+        );
+
+        let many: Vec<String> = (0..15).map(|i| format!("session-{}", i)).collect();
+        print_cleanup_result("Purged", "No sessions.", &many);
+    }
+
+    #[test]
+    fn print_table_formats_columns_correctly() {
+        let headers = &["NAME", "STATUS"];
+        let rows = vec![
+            vec!["alpha".to_string(), "running".to_string()],
+            vec!["beta-longer-name".to_string(), "ok".to_string()],
+        ];
+
+        print_table(headers, &rows);
+    }
+
+    #[test]
+    fn cmd_cleanup_purges_all_sessions() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let state_dir = set_state_env(temp.path());
+        let deps = Deps::real();
+        let store = deps.state_store();
+        store.init_state().unwrap();
+
+        let state = serde_json::json!({
+            "sessions": {
+                "a": { "status": "complete" },
+                "b": { "status": "stopped" }
+            }
+        });
+        fs::write(
+            state_dir.join("state.json"),
+            serde_json::to_string(&state).unwrap(),
+        )
+        .unwrap();
+
+        cmd_cleanup(
+            CleanupArgs {
+                remove: false,
+                purge: true,
+            },
+            &deps,
+        )
+        .unwrap();
+
+        let updated = fs::read_to_string(state_dir.join("state.json")).unwrap();
+        let updated: Value = serde_json::from_str(&updated).unwrap();
+        assert!(updated["sessions"].as_object().unwrap().is_empty());
+    }
 }
