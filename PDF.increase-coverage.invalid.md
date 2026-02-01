@@ -101,7 +101,7 @@ Each task block must contain exactly one unchecked task line.
   * Run the configured tarpaulin command and confirm >= 90%.
   * Add verification line to CHANGELOG.md.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-VER-1
-- [ ] COV90-FINAL-1 Verify coverage target
+- [x] COV90-FINAL-1 Verify coverage target
 
 ---
 
