@@ -1,0 +1,27 @@
+src/app.rs
+  fde7dc194332bdf4 2725-3147
+PRD.generated.md
+  fde7dc194332bdf4 182
+CHANGELOG.md
+  fde7dc194332bdf4 32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "25d1cdc8f445102db9d5a8dd0b24894fd9bdd383",
+  "prompts": {
+    "fde7dc194332bdf4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a2d5f064-284f-4d44-811d-3bfd113f5c23",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 425,
+      "total_deletions": 1,
+      "accepted_lines": 425,
+      "overriden_lines": 0
+    }
+  }
+}
