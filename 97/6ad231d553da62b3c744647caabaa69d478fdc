@@ -1,0 +1,27 @@
+src/verifier.rs
+  682c4e0ea8d11b69 5169-5933
+CHANGELOG.md
+  682c4e0ea8d11b69 20
+PRD.coverage-90.md
+  682c4e0ea8d11b69 75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "976ad231d553da62b3c744647caabaa69d478fdc",
+  "prompts": {
+    "682c4e0ea8d11b69": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "312c42e4-1d34-42e0-818a-886667404435",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 770,
+      "total_deletions": 5,
+      "accepted_lines": 767,
+      "overriden_lines": 0
+    }
+  }
+}
