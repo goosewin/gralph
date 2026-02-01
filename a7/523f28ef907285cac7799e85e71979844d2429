@@ -1,0 +1,27 @@
+CHANGELOG.md
+  2b82bac2fa389ed9 19
+PDF.increase-coverage.invalid.md
+  2b82bac2fa389ed9 76
+src/prd.rs
+  2b82bac2fa389ed9 4617-4942
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "a7523f28ef907285cac7799e85e71979844d2429",
+  "prompts": {
+    "2b82bac2fa389ed9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "93b0fca7-4f85-4164-a560-430f7a8a9963",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 330,
+      "total_deletions": 3,
+      "accepted_lines": 328,
+      "overriden_lines": 0
+    }
+  }
+}
