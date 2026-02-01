@@ -244,7 +244,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests cover lines 84-90 merge precedence.
   * Tests cover lines 157-230 env override handling.
 - **Dependencies** None
-- [ ] COV80-CONFIG-1 Add config loader edge case tests
+- [x] COV80-CONFIG-1 Add config loader edge case tests
 ---
 
 ### Task COV80-WT-1

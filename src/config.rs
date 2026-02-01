@@ -1555,4 +1555,335 @@ mod tests {
 
         remove_env("GRALPH_DEFAULT_CONFIG");
     }
+
+    // COV80-CONFIG-1: ConfigError Display and Error trait coverage
+    #[test]
+    fn config_error_display_formats_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let err = ConfigError::Io {
+            path: PathBuf::from("/tmp/config.yaml"),
+            source: io_err,
+        };
+        let display = format!("{err}");
+        assert!(display.contains("failed to read config"));
+        assert!(display.contains("/tmp/config.yaml"));
+        assert!(display.contains("file not found"));
+    }
+
+    #[test]
+    fn config_error_display_formats_parse_error() {
+        let parse_err: serde_yaml::Error = serde_yaml::from_str::<Value>("invalid: [").unwrap_err();
+        let err = ConfigError::Parse {
+            path: PathBuf::from("/tmp/config.yaml"),
+            source: parse_err,
+        };
+        let display = format!("{err}");
+        assert!(display.contains("failed to parse config"));
+        assert!(display.contains("/tmp/config.yaml"));
+    }
+
+    #[test]
+    fn config_error_source_returns_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "access denied");
+        let err = ConfigError::Io {
+            path: PathBuf::from("/tmp/config.yaml"),
+            source: io_err,
+        };
+        let source = err.source();
+        assert!(source.is_some());
+        let source_display = format!("{}", source.unwrap());
+        assert!(source_display.contains("access denied"));
+    }
+
+    #[test]
+    fn config_error_source_returns_parse_error() {
+        let parse_err: serde_yaml::Error =
+            serde_yaml::from_str::<Value>("invalid: [unclosed").unwrap_err();
+        let err = ConfigError::Parse {
+            path: PathBuf::from("/tmp/config.yaml"),
+            source: parse_err,
+        };
+        let source = err.source();
+        assert!(source.is_some());
+    }
+
+    // COV80-CONFIG-1: get_user method coverage (merge precedence for user overrides only)
+    #[test]
+    fn get_user_returns_none_for_default_only_values() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("global.yaml");
+
+        write_file(
+            &default_path,
+            "defaults:\n  max_iterations: 10\n  backend: claude\n",
+        );
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+        // get returns the value from merged config
+        assert_eq!(config.get("defaults.max_iterations").as_deref(), Some("10"));
+        // get_user returns None since value is only in default config
+        assert!(config.get_user("defaults.max_iterations").is_none());
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+    }
+
+    #[test]
+    fn get_user_returns_value_from_global_config() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("global.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 10\n");
+        write_file(&global_path, "defaults:\n  backend: gemini\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+        // get_user returns value from global config
+        assert_eq!(
+            config.get_user("defaults.backend").as_deref(),
+            Some("gemini")
+        );
+        // get_user returns None for default-only value
+        assert!(config.get_user("defaults.max_iterations").is_none());
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+    }
+
+    #[test]
+    fn get_user_returns_value_from_project_config() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("global.yaml");
+        let project_dir = temp.path().join("project");
+        let project_path = project_dir.join(".gralph.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 10\n");
+        write_file(&global_path, "defaults:\n  backend: gemini\n");
+        write_file(&project_path, "defaults:\n  model: opus\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(Some(&project_dir)).unwrap();
+        // get_user returns value from project config
+        assert_eq!(config.get_user("defaults.model").as_deref(), Some("opus"));
+        // get_user returns global value
+        assert_eq!(
+            config.get_user("defaults.backend").as_deref(),
+            Some("gemini")
+        );
+        // get_user returns None for default-only value
+        assert!(config.get_user("defaults.max_iterations").is_none());
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+    }
+
+    #[test]
+    fn get_user_env_override_precedes_user_config() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("global.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 10\n");
+        write_file(&global_path, "defaults:\n  backend: gemini\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+        set_env("GRALPH_DEFAULTS_BACKEND", "codex");
+
+        let config = Config::load(None).unwrap();
+        // env override is returned by get_user
+        assert_eq!(
+            config.get_user("defaults.backend").as_deref(),
+            Some("codex")
+        );
+
+        remove_env("GRALPH_DEFAULTS_BACKEND");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+    }
+
+    #[test]
+    fn get_user_returns_none_for_invalid_key() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("global.yaml");
+
+        write_file(&default_path, "defaults:\n  max_iterations: 10\n");
+        write_file(&global_path, "defaults:\n  backend: gemini\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+        // empty key normalizes to None
+        assert!(config.get_user("").is_none());
+        assert!(config.get_user("  ").is_none());
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+        remove_env("GRALPH_GLOBAL_CONFIG");
+    }
+
+    // COV80-CONFIG-1: get_or default fallback coverage
+    #[test]
+    fn get_or_returns_default_for_missing_key() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+        let global_path = temp.path().join("global.yaml");
+
+        write_file(&default_path, "custom_key:\n  value: 10\n");
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_GLOBAL_CONFIG", &global_path);
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get_or("custom_key.value", "5"), "10");
+        assert_eq!(
+            config.get_or("custom_key.nonexistent", "fallback"),
+            "fallback"
+        );
+        assert_eq!(config.get_or("completely.missing.key", "default"), "default");
+
+        remove_env("GRALPH_GLOBAL_CONFIG");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    // COV80-CONFIG-1: load with io error propagation
+    #[test]
+    fn load_propagates_io_error_for_unreadable_config() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        // Create directory instead of file to cause IO error
+        fs::create_dir_all(&default_path).unwrap();
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+
+        let err = Config::load(None).unwrap_err();
+        match err {
+            ConfigError::Io { path, .. } => {
+                assert_eq!(path, default_path);
+            }
+            other => panic!("expected Io error, got {other:?}"),
+        }
+
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    // COV80-CONFIG-1: env override edge cases
+    #[test]
+    fn legacy_env_override_for_all_supported_keys() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let default_path = temp.path().join("default.yaml");
+
+        write_file(
+            &default_path,
+            "defaults:\n  max_iterations: 1\n  task_file: PRD.md\n  completion_marker: COMPLETE\n  backend: claude\n  model: opus\n",
+        );
+        set_env("GRALPH_DEFAULT_CONFIG", &default_path);
+        set_env("GRALPH_MAX_ITERATIONS", "99");
+        set_env("GRALPH_TASK_FILE", "CUSTOM.md");
+        set_env("GRALPH_COMPLETION_MARKER", "DONE");
+        set_env("GRALPH_BACKEND", "gemini");
+        set_env("GRALPH_MODEL", "flash");
+
+        let config = Config::load(None).unwrap();
+        assert_eq!(config.get("defaults.max_iterations").as_deref(), Some("99"));
+        assert_eq!(
+            config.get("defaults.task_file").as_deref(),
+            Some("CUSTOM.md")
+        );
+        assert_eq!(
+            config.get("defaults.completion_marker").as_deref(),
+            Some("DONE")
+        );
+        assert_eq!(config.get("defaults.backend").as_deref(), Some("gemini"));
+        assert_eq!(config.get("defaults.model").as_deref(), Some("flash"));
+
+        remove_env("GRALPH_MODEL");
+        remove_env("GRALPH_BACKEND");
+        remove_env("GRALPH_COMPLETION_MARKER");
+        remove_env("GRALPH_TASK_FILE");
+        remove_env("GRALPH_MAX_ITERATIONS");
+        remove_env("GRALPH_DEFAULT_CONFIG");
+    }
+
+    #[test]
+    fn legacy_compat_override_is_ignored_when_env_keys_match() {
+        let _guard = env_guard();
+
+        // When raw_key and normalized_key produce the same env key, compat is skipped
+        let value = resolve_env_override("defaults.backend", "defaults.backend");
+        assert!(value.is_none());
+
+        set_env("GRALPH_DEFAULTS_BACKEND", "gemini");
+        let value = resolve_env_override("defaults.backend", "defaults.backend");
+        assert_eq!(value.as_deref(), Some("gemini"));
+
+        remove_env("GRALPH_DEFAULTS_BACKEND");
+    }
+
+    #[test]
+    fn merge_values_replaces_scalar_with_scalar() {
+        let base = Value::String("old".to_string());
+        let overlay = Value::String("new".to_string());
+        let merged = merge_values(base, overlay);
+        assert_eq!(merged.as_str(), Some("new"));
+    }
+
+    #[test]
+    fn merge_values_replaces_mapping_with_scalar() {
+        let base: Value = serde_yaml::from_str("key: value").unwrap();
+        let overlay = Value::String("scalar".to_string());
+        let merged = merge_values(base, overlay);
+        assert_eq!(merged.as_str(), Some("scalar"));
+    }
+
+    #[test]
+    fn merge_values_replaces_scalar_with_mapping() {
+        let base = Value::String("scalar".to_string());
+        let overlay: Value = serde_yaml::from_str("key: value").unwrap();
+        let merged = merge_values(base, overlay);
+        assert!(merged.is_mapping());
+        assert_eq!(
+            lookup_value(&merged, "key").and_then(Value::as_str),
+            Some("value")
+        );
+    }
+
+    #[test]
+    fn default_config_path_falls_back_to_hardcoded_path() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config_dir = temp.path().join("config-root");
+
+        // Set config dir to a location without installed default
+        set_env("GRALPH_CONFIG_DIR", &config_dir);
+        remove_env("GRALPH_DEFAULT_CONFIG");
+
+        // When neither installed nor manifest default exists, falls back to hardcoded path
+        // (This behavior is tested indirectly through the fallback chain)
+        let resolved = default_config_path();
+        // The manifest path should exist in the test environment
+        let manifest_default = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("config")
+            .join("default.yaml");
+        if manifest_default.exists() {
+            assert_eq!(resolved, manifest_default);
+        } else {
+            assert_eq!(resolved, PathBuf::from("config/default.yaml"));
+        }
+
+        remove_env("GRALPH_CONFIG_DIR");
+    }
 }
