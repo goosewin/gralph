@@ -231,7 +231,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests cover lines 277-278 cleanup edge cases.
   * Tests cover lines 355-422 parse_value edge cases.
 - **Dependencies** None
-- [ ] COV80-STATE-1 Add state store edge case tests
+- [x] COV80-STATE-1 Add state store edge case tests
 ---
 
 ### Task COV80-CONFIG-1
