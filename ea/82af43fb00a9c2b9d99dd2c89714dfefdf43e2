@@ -1,0 +1,25 @@
+CHANGELOG.md
+  8db2791377824a8d 21
+PDF.increase-coverage.invalid.md
+  8db2791377824a8d 104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "ea82af43fb00a9c2b9d99dd2c89714dfefdf43e2",
+  "prompts": {
+    "8db2791377824a8d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a03a8b13-7569-4287-9851-5d3ef1e55439",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 1,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    }
+  }
+}
