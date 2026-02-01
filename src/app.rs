@@ -1,7 +1,7 @@
 use crate::backend::{backend_from_name, command_in_path};
 use crate::cli::{
-    self, ASCII_BANNER, Cli, Command, ConfigArgs, ConfigCommand, DoctorArgs, ServerArgs,
-    VerifierArgs,
+    self, Cli, Command, ConfigArgs, ConfigCommand, DoctorArgs, ServerArgs, VerifierArgs,
+    ASCII_BANNER,
 };
 use crate::config::Config;
 use crate::core;
@@ -27,11 +27,12 @@ use prd_init::{cmd_init, cmd_prd};
 
 #[cfg(test)]
 use prd_init::{
-    ARCHITECTURE_TEMPLATE, CHANGELOG_TEMPLATE, DECISIONS_TEMPLATE, DEFAULT_PRD_TEMPLATE,
-    PROCESS_TEMPLATE, RISK_REGISTER_TEMPLATE, add_context_entry, build_context_file_list,
-    default_context_files, format_display_path, generic_markdown_template, init_template_for_path,
-    invalid_prd_path, is_markdown_path, read_prd_template_with_manifest, read_readme_context_files,
-    resolve_init_context_files, resolve_prd_output, write_allowed_context, write_atomic,
+    add_context_entry, build_context_file_list, default_context_files, format_display_path,
+    generic_markdown_template, init_template_for_path, invalid_prd_path, is_markdown_path,
+    read_prd_template_with_manifest, read_readme_context_files, resolve_init_context_files,
+    resolve_prd_output, write_allowed_context, write_atomic, ARCHITECTURE_TEMPLATE,
+    CHANGELOG_TEMPLATE, DECISIONS_TEMPLATE, DEFAULT_PRD_TEMPLATE, PROCESS_TEMPLATE,
+    RISK_REGISTER_TEMPLATE,
 };
 
 pub(crate) trait FileSystem: Send + Sync {
@@ -2038,7 +2039,7 @@ mod tests {
 
         assert_eq!(args.dir, original);
         assert!(!args.no_worktree);
-        assert!(!temp.path().join(".worktree").exists());
+        assert!(!temp.path().join(".worktrees").exists());
     }
 
     #[test]
@@ -2067,7 +2068,7 @@ mod tests {
 
         assert_eq!(args.dir, temp.path());
         assert!(!args.no_worktree);
-        assert!(!temp.path().join(".worktree").exists());
+        assert!(!temp.path().join(".worktrees").exists());
     }
 
     #[test]
@@ -2085,7 +2086,7 @@ mod tests {
 
         assert_eq!(args.dir, original);
         assert!(!args.no_worktree);
-        assert!(!temp.path().join(".worktree").exists());
+        assert!(!temp.path().join(".worktrees").exists());
     }
 
     #[test]
@@ -2099,7 +2100,7 @@ mod tests {
 
         worktree::maybe_create_auto_worktree(&mut args, &config).unwrap();
 
-        let worktrees_dir = temp.path().join(".worktree");
+        let worktrees_dir = temp.path().join(".worktrees");
         let mut entries: Vec<PathBuf> = fs::read_dir(&worktrees_dir)
             .unwrap()
             .filter_map(|entry| entry.ok().map(|entry| entry.path()))
@@ -2124,7 +2125,7 @@ mod tests {
 
         worktree::maybe_create_auto_worktree(&mut args, &config).unwrap();
 
-        let worktrees_dir = temp.path().join(".worktree");
+        let worktrees_dir = temp.path().join(".worktrees");
         let mut entries: Vec<PathBuf> = fs::read_dir(&worktrees_dir)
             .unwrap()
             .filter_map(|entry| entry.ok().map(|entry| entry.path()))
@@ -2145,7 +2146,7 @@ mod tests {
         commit_file(temp.path(), "README.md", "initial");
         let config = Config::load(Some(temp.path())).unwrap();
         let mut args = run_loop_args(temp.path().to_path_buf());
-        let worktrees_dir = temp.path().join(".worktree");
+        let worktrees_dir = temp.path().join(".worktrees");
         fs::create_dir_all(&worktrees_dir).unwrap();
 
         let timestamp = "20260126-120000";
@@ -2170,7 +2171,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");
-        let worktrees_dir = temp.path().join(".worktree");
+        let worktrees_dir = temp.path().join(".worktrees");
         fs::create_dir_all(&worktrees_dir).unwrap();
         git_status_ok(temp.path(), &["branch", "prd-collision"]);
         fs::create_dir_all(worktrees_dir.join("prd-collision-2")).unwrap();
@@ -2190,7 +2191,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");
-        let worktrees_dir = temp.path().join(".worktree");
+        let worktrees_dir = temp.path().join(".worktrees");
         fs::create_dir_all(&worktrees_dir).unwrap();
         git_status_ok(temp.path(), &["branch", "prd-collision"]);
 
@@ -2209,7 +2210,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");
-        let worktrees_dir = temp.path().join(".worktree");
+        let worktrees_dir = temp.path().join(".worktrees");
         fs::create_dir_all(&worktrees_dir).unwrap();
         fs::create_dir_all(worktrees_dir.join("prd-collision")).unwrap();
 
@@ -2228,7 +2229,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");
-        let worktrees_dir = temp.path().join(".worktree");
+        let worktrees_dir = temp.path().join(".worktrees");
         fs::create_dir_all(&worktrees_dir).unwrap();
 
         let branch = worktree::ensure_unique_worktree_branch(
@@ -2248,7 +2249,7 @@ mod tests {
         commit_file(temp.path(), "README.md", "initial");
         let branch = "task-C-1";
         git_status_ok(temp.path(), &["branch", branch]);
-        let worktree_path = temp.path().join(".worktree").join(branch);
+        let worktree_path = temp.path().join(".worktrees").join(branch);
 
         let err =
             worktree::create_worktree_at(temp.path().to_str().unwrap(), branch, &worktree_path)
@@ -2268,7 +2269,7 @@ mod tests {
         init_git_repo(temp.path());
         commit_file(temp.path(), "README.md", "initial");
         let branch = "task-C-2";
-        let worktree_path = temp.path().join(".worktree").join(branch);
+        let worktree_path = temp.path().join(".worktrees").join(branch);
         fs::create_dir_all(&worktree_path).unwrap();
 
         let err =

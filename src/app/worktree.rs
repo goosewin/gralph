@@ -1,4 +1,4 @@
-use super::{CliError, parse_bool_value, sanitize_session_name};
+use super::{parse_bool_value, sanitize_session_name, CliError};
 use crate::cli::{self, RunLoopArgs, WorktreeCommand, WorktreeCreateArgs, WorktreeFinishArgs};
 use crate::config::Config;
 use std::ffi::OsStr;
@@ -379,7 +379,7 @@ pub(super) fn maybe_create_auto_worktree_with_timestamp(
         return Ok(());
     }
 
-    let worktree_root = PathBuf::from(&repo_root).join(".worktree");
+    let worktree_root = PathBuf::from(&repo_root).join(".worktrees");
     fs::create_dir_all(&worktree_root).map_err(CliError::Io)?;
 
     let target_dir = target_dir

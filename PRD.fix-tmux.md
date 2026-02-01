@@ -2,7 +2,7 @@
 
 ## Overview
 
-Update gralph (Rust CLI) to require tmux for loop starts, always launch PRD runs inside a uniquely named tmux session, and run the loop from a .worktree/<unique-worktree> directory unless --no-worktree is set.
+Update gralph (Rust CLI) to require tmux for loop starts, always launch PRD runs inside a uniquely named tmux session, and run the loop from a .worktrees/<unique-worktree> directory unless --no-worktree is set.
 
 ## Problem Statement
 
@@ -11,7 +11,7 @@ Update gralph (Rust CLI) to require tmux for loop starts, always launch PRD runs
 
 ## Solution
 
-Make tmux a required dependency for start runs, remove --no-tmux, create a unique tmux session for every PRD start, persist that session name in state for attach and stop, add a gralph CLI attach flow, and ensure auto worktree runs always cd into .worktree/<unique-worktree> (unless --no-worktree).
+Make tmux a required dependency for start runs, remove --no-tmux, create a unique tmux session for every PRD start, persist that session name in state for attach and stop, add a gralph CLI attach flow, and ensure auto worktree runs always cd into .worktrees/<unique-worktree> (unless --no-worktree).
 
 ---
 
@@ -27,7 +27,7 @@ Users must be able to attach to the session at any time with tmux and with a gra
 
 ### FR-3: Worktree run directory
 
-When auto worktree is enabled, start must cd into .worktree/<unique-worktree> (preserving subdirectory runs) and run the loop there; when --no-worktree is set, it must run in the original directory.
+When auto worktree is enabled, start must cd into .worktrees/<unique-worktree> (preserving subdirectory runs) and run the loop there; when --no-worktree is set, it must run in the original directory.
 
 ---
 
@@ -82,9 +82,9 @@ Start must either create and record a tmux session successfully or exit with a c
 
 - **ID** WT-1
 - **Context Bundle** `PROCESS.md`, `README.md`, `ARCHITECTURE.md`, `config/default.yaml`
-- **DoD** Auto worktree runs use .worktree/<unique-worktree> as the working directory (unless --no-worktree) and docs reference the updated path.
+- **DoD** Auto worktree runs use .worktrees/<unique-worktree> as the working directory (unless --no-worktree) and docs reference the updated path.
 - **Checklist**
-  * Worktree path in docs uses .worktree/<unique-worktree>.
+  * Worktree path in docs uses .worktrees/<unique-worktree>.
   * Start runs inside the worktree when auto worktree is enabled.
   * --no-worktree keeps the original working directory.
 - **Dependencies** TMUX-2
@@ -95,7 +95,7 @@ Start must either create and record a tmux session successfully or exit with a c
 
 - gralph start always creates a unique tmux session, records it in state, and provides a reliable attach path.
 - tmux is required for start runs; --no-tmux is removed from CLI and docs.
-- Auto worktree runs execute from .worktree/<unique-worktree> unless --no-worktree.
+- Auto worktree runs execute from .worktrees/<unique-worktree> unless --no-worktree.
 
 ---
 

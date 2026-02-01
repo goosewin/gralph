@@ -69,7 +69,7 @@ Add tests that exercise auto worktree skip reasons and path mapping behavior so 
 - **DoD** Auto worktree tests cover skip reasons (not a repo, git missing, no commits, dirty repo) and subdir path mapping behavior.
 - **Checklist**
   * Use temp git repos to validate clean/dirty and no-commit cases.
-  * Assert `.worktree/<branch>` creation preserves subdir paths.
+  * Assert `.worktrees/<branch>` creation preserves subdir paths.
 - **Dependencies** None
 - [x] COV-70-3 Add auto worktree skip and path mapping tests
 ### Task COV-70-4

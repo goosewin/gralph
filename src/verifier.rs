@@ -1,5 +1,5 @@
 use crate::app::worktree::git_output_in_dir;
-use crate::app::{CliError, join_or_none, normalize_csv, parse_bool_value};
+use crate::app::{join_or_none, normalize_csv, parse_bool_value, CliError};
 use crate::config::Config;
 use crate::prd;
 use std::collections::{BTreeMap, HashMap};
@@ -1552,7 +1552,6 @@ fn default_static_allow_patterns() -> Vec<String> {
 fn default_static_ignore_patterns() -> Vec<String> {
     vec![
         "**/.git/**".to_string(),
-        "**/.worktree/**".to_string(),
         "**/.worktrees/**".to_string(),
         "**/.gralph/**".to_string(),
         "**/target/**".to_string(),
