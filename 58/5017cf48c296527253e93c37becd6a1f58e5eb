@@ -1,0 +1,25 @@
+PDF.increase-coverage.invalid.md
+  990ac245bda3b632 62
+src/core.rs
+  990ac245bda3b632 1483-1527
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "585017cf48c296527253e93c37becd6a1f58e5eb",
+  "prompts": {
+    "990ac245bda3b632": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2434d97e-4fb1-4963-9c90-2dd26cf26229",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 47,
+      "total_deletions": 1,
+      "accepted_lines": 47,
+      "overriden_lines": 0
+    }
+  }
+}
