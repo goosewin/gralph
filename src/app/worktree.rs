@@ -1,4 +1,4 @@
-use super::{parse_bool_value, sanitize_session_name, CliError};
+use super::{CliError, parse_bool_value, sanitize_session_name};
 use crate::cli::{self, RunLoopArgs, WorktreeCommand, WorktreeCreateArgs, WorktreeFinishArgs};
 use crate::config::Config;
 use std::ffi::OsStr;
@@ -626,8 +626,7 @@ mod tests {
         match result.unwrap_err() {
             CliError::Message(msg) => {
                 assert!(
-                    msg.to_lowercase().contains("not a git repository")
-                        || msg.contains("fatal"),
+                    msg.to_lowercase().contains("not a git repository") || msg.contains("fatal"),
                     "Expected git error message, got: {}",
                     msg
                 );

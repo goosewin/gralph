@@ -1690,7 +1690,10 @@ mod tests {
     #[test]
     fn parse_value_handles_bool_substrings() {
         assert_eq!(parse_value("trueish"), Value::String("trueish".to_string()));
-        assert_eq!(parse_value("falsehood"), Value::String("falsehood".to_string()));
+        assert_eq!(
+            parse_value("falsehood"),
+            Value::String("falsehood".to_string())
+        );
         assert_eq!(parse_value("atrue"), Value::String("atrue".to_string()));
         assert_eq!(parse_value("afalse"), Value::String("afalse".to_string()));
     }

@@ -1518,7 +1518,8 @@ mod tests {
     fn count_remaining_tasks_counts_unchecked_within_headers() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("PRD.md");
-        let contents = "### Task A\n- [ ] First\n- [ ] Second\n---\n### Task B\n- [x] Done\n- [ ] Third\n";
+        let contents =
+            "### Task A\n- [ ] First\n- [ ] Second\n---\n### Task B\n- [x] Done\n- [ ] Third\n";
         fs::write(&path, contents).unwrap();
 
         let count = count_remaining_tasks(&path);

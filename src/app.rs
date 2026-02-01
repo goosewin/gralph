@@ -1,7 +1,7 @@
 use crate::backend::{backend_from_name, command_in_path};
 use crate::cli::{
-    self, Cli, Command, ConfigArgs, ConfigCommand, DoctorArgs, ServerArgs, VerifierArgs,
-    ASCII_BANNER,
+    self, ASCII_BANNER, Cli, Command, ConfigArgs, ConfigCommand, DoctorArgs, ServerArgs,
+    VerifierArgs,
 };
 use crate::config::Config;
 use crate::core;
@@ -27,12 +27,12 @@ use prd_init::{cmd_init, cmd_prd};
 
 #[cfg(test)]
 use prd_init::{
-    add_context_entry, build_context_file_list, cmd_prd_check, cmd_prd_create,
-    default_context_files, format_display_path, generic_markdown_template, init_template_for_path,
-    invalid_prd_path, is_markdown_path, read_prd_template_with_manifest, read_readme_context_files,
-    resolve_init_context_files, resolve_prd_output, write_allowed_context, write_atomic,
     ARCHITECTURE_TEMPLATE, CHANGELOG_TEMPLATE, DECISIONS_TEMPLATE, DEFAULT_PRD_TEMPLATE,
-    PROCESS_TEMPLATE, RISK_REGISTER_TEMPLATE,
+    PROCESS_TEMPLATE, RISK_REGISTER_TEMPLATE, add_context_entry, build_context_file_list,
+    cmd_prd_check, cmd_prd_create, default_context_files, format_display_path,
+    generic_markdown_template, init_template_for_path, invalid_prd_path, is_markdown_path,
+    read_prd_template_with_manifest, read_readme_context_files, resolve_init_context_files,
+    resolve_prd_output, write_allowed_context, write_atomic,
 };
 
 pub(crate) trait FileSystem: Send + Sync {
@@ -959,7 +959,10 @@ mod tests {
 
     #[test]
     fn cli_error_display_io_variant() {
-        let err = CliError::Io(io::Error::new(io::ErrorKind::PermissionDenied, "access denied"));
+        let err = CliError::Io(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            "access denied",
+        ));
         let display = format!("{}", err);
         assert!(display.contains("access denied"));
     }
@@ -1036,7 +1039,10 @@ mod tests {
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         let config_path = temp.path().join("default.yaml");
-        write_file(&config_path, "defaults:\n  context_files: ARCHITECTURE.md\n");
+        write_file(
+            &config_path,
+            "defaults:\n  context_files: ARCHITECTURE.md\n",
+        );
         set_env("GRALPH_DEFAULT_CONFIG", &config_path);
         set_env("GRALPH_GLOBAL_CONFIG", temp.path().join("missing.yaml"));
 
@@ -2881,7 +2887,10 @@ mod tests {
         set_env("GRALPH_DEFAULT_CONFIG", &config_path);
         set_env("GRALPH_GLOBAL_CONFIG", temp.path().join("missing.yaml"));
         // Also create README with no context files section
-        write_file(&temp.path().join("README.md"), "# Test\n\nNo context section.\n");
+        write_file(
+            &temp.path().join("README.md"),
+            "# Test\n\nNo context section.\n",
+        );
 
         let args = InitArgs {
             dir: Some(temp.path().to_path_buf()),
@@ -2891,7 +2900,11 @@ mod tests {
 
         // Should fall back to defaults
         for file in default_context_files() {
-            assert!(temp.path().join(file).exists(), "expected {} to exist", file);
+            assert!(
+                temp.path().join(file).exists(),
+                "expected {} to exist",
+                file
+            );
         }
         clear_env_overrides();
     }
@@ -2926,10 +2939,7 @@ mod tests {
         let config_path = temp.path().join("default.yaml");
         write_file(
             &config_path,
-            &format!(
-                "defaults:\n  context_files: {}\n",
-                absolute_path.display()
-            ),
+            &format!("defaults:\n  context_files: {}\n", absolute_path.display()),
         );
         set_env("GRALPH_DEFAULT_CONFIG", &config_path);
         set_env("GRALPH_GLOBAL_CONFIG", temp.path().join("missing.yaml"));
@@ -3029,26 +3039,11 @@ mod tests {
 
     #[test]
     fn normalize_csv_handles_various_inputs() {
-        assert_eq!(
-            normalize_csv("a, b, c"),
-            vec!["a", "b", "c"]
-        );
-        assert_eq!(
-            normalize_csv("  a  ,  b  ,  c  "),
-            vec!["a", "b", "c"]
-        );
-        assert_eq!(
-            normalize_csv("a,,b,,c"),
-            vec!["a", "b", "c"]
-        );
-        assert_eq!(
-            normalize_csv(",,,"),
-            Vec::<String>::new()
-        );
-        assert_eq!(
-            normalize_csv("single"),
-            vec!["single"]
-        );
+        assert_eq!(normalize_csv("a, b, c"), vec!["a", "b", "c"]);
+        assert_eq!(normalize_csv("  a  ,  b  ,  c  "), vec!["a", "b", "c"]);
+        assert_eq!(normalize_csv("a,,b,,c"), vec!["a", "b", "c"]);
+        assert_eq!(normalize_csv(",,,"), Vec::<String>::new());
+        assert_eq!(normalize_csv("single"), vec!["single"]);
     }
 
     #[test]
@@ -3485,11 +3480,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         write_file(&temp.path().join("exists.md"), "content");
 
-        let entries = build_context_file_list(
-            temp.path(),
-            Some("exists.md,missing.md"),
-            None,
-        );
+        let entries = build_context_file_list(temp.path(), Some("exists.md,missing.md"), None);
 
         // Should only include the existing file
         assert!(entries.iter().any(|e| e.contains("exists.md")));
@@ -3502,11 +3493,7 @@ mod tests {
         write_file(&temp.path().join("config.md"), "config");
         write_file(&temp.path().join("user.md"), "user");
 
-        let entries = build_context_file_list(
-            temp.path(),
-            Some("user.md"),
-            Some("config.md"),
-        );
+        let entries = build_context_file_list(temp.path(), Some("user.md"), Some("config.md"));
 
         // Config should be processed first, appearing before user
         let config_pos = entries.iter().position(|e| e.contains("config.md"));
