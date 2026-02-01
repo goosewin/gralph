@@ -1,0 +1,27 @@
+CHANGELOG.md
+  87baa58c75ea0efe 38
+src/update.rs
+  87baa58c75ea0efe 1291-1591
+PRD.generated.md
+  87baa58c75ea0efe 286
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "e17c0b36acc9884260b22311af62b5b267e0a155",
+  "prompts": {
+    "87baa58c75ea0efe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "462a684d-8fa7-4f32-b23f-7d612216fc36",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 308,
+      "total_deletions": 6,
+      "accepted_lines": 303,
+      "overriden_lines": 0
+    }
+  }
+}
