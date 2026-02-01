@@ -1,0 +1,25 @@
+src/app/loop_session.rs
+  7cb3574db0e56af7 2112-2264,2266-2300,2302-2328,2330-2814
+PRD.generated.md
+  7cb3574db0e56af7 65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "46efd2b7aa539df512f2cf48b514839383ce355b",
+  "prompts": {
+    "7cb3574db0e56af7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1b64c1da-bc4d-446c-92b8-8ce991fd802a",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 699,
+      "total_deletions": 7,
+      "accepted_lines": 701,
+      "overriden_lines": 3
+    }
+  }
+}
