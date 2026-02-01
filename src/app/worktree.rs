@@ -372,11 +372,16 @@ pub(super) fn maybe_create_auto_worktree_with_timestamp(
     };
     if !clean {
         println!(
-            "Auto worktree skipped for {}: repository is dirty.",
+            "Auto worktree preparing for {}: repository is dirty; committing changes.",
             target_display
         );
-        print_auto_worktree_hint();
-        return Ok(());
+        auto_commit_dirty_repo(&repo_root, timestamp)?;
+        let clean = git_is_clean(&repo_root)?;
+        if !clean {
+            return Err(CliError::Message(
+                "Auto worktree requires a clean repo after auto-commit.".to_string(),
+            ));
+        }
     }
 
     let worktree_root = PathBuf::from(&repo_root).join(".worktrees");
@@ -418,6 +423,23 @@ fn print_auto_worktree_hint() {
     println!(
         "Hint: use --no-worktree or set defaults.auto_worktree: false to disable auto worktrees."
     );
+}
+
+fn auto_commit_dirty_repo(repo_root: &str, timestamp: &str) -> Result<(), CliError> {
+    git_status_in_repo(repo_root, ["add", "-A"]).map_err(|err| {
+        CliError::Message(format!(
+            "Failed to stage changes for auto worktree: {}",
+            err
+        ))
+    })?;
+    let message = format!("chore: auto-commit for worktree {}", timestamp);
+    git_status_in_repo(repo_root, ["commit", "-m", message.as_str()]).map_err(|err| {
+        CliError::Message(format!(
+            "Failed to commit changes for auto worktree: {}",
+            err
+        ))
+    })?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -569,5 +591,316 @@ mod tests {
             }
             other => panic!("unexpected error type: {other:?}"),
         }
+    }
+
+    #[test]
+    fn git_output_in_dir_success() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_repo(temp.path());
+
+        let result = git_output_in_dir(temp.path(), ["rev-parse", "--show-toplevel"]);
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(!output.trim().is_empty());
+    }
+
+    #[test]
+    fn git_output_in_dir_error_on_invalid_dir() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        let nonexistent = temp.path().join("nonexistent");
+
+        let result = git_output_in_dir(&nonexistent, ["status"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn git_output_in_dir_error_on_non_repo() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        // Don't initialize as git repo
+
+        let result = git_output_in_dir(temp.path(), ["rev-parse", "--show-toplevel"]);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CliError::Message(msg) => {
+                assert!(
+                    msg.to_lowercase().contains("not a git repository")
+                        || msg.contains("fatal"),
+                    "Expected git error message, got: {}",
+                    msg
+                );
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn create_worktree_at_rejects_existing_branch() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_repo(temp.path());
+        run_git(temp.path(), &["branch", "existing-branch"]);
+
+        let worktree_path = temp.path().join(".worktrees").join("existing-branch");
+        let result = create_worktree_at(
+            temp.path().to_str().unwrap(),
+            "existing-branch",
+            &worktree_path,
+        );
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CliError::Message(msg) => {
+                assert!(msg.contains("Branch already exists"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn create_worktree_at_rejects_existing_path() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_repo(temp.path());
+
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+        let worktree_path = worktrees_dir.join("new-branch");
+        fs::create_dir_all(&worktree_path).unwrap();
+
+        let result =
+            create_worktree_at(temp.path().to_str().unwrap(), "new-branch", &worktree_path);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CliError::Message(msg) => {
+                assert!(msg.contains("Worktree path already exists"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_worktree_create_rejects_repo_without_commits() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        // Initialize repo but don't commit
+        run_git(temp.path(), &["init"]);
+        run_git(temp.path(), &["config", "user.email", "test@example.com"]);
+        run_git(temp.path(), &["config", "user.name", "Test User"]);
+        let _dir_guard = CurrentDirGuard::set(temp.path());
+
+        let err = cmd_worktree_create(WorktreeCreateArgs {
+            id: "C-6".to_string(),
+        })
+        .unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Repository has no commits"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_worktree_finish_rejects_repo_without_commits() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        // Initialize repo but don't commit
+        run_git(temp.path(), &["init"]);
+        run_git(temp.path(), &["config", "user.email", "test@example.com"]);
+        run_git(temp.path(), &["config", "user.name", "Test User"]);
+        let _dir_guard = CurrentDirGuard::set(temp.path());
+
+        let err = cmd_worktree_finish(WorktreeFinishArgs {
+            id: "C-7".to_string(),
+        })
+        .unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Repository has no commits"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_worktree_finish_rejects_dirty_repo() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_repo(temp.path());
+        run_git(temp.path(), &["branch", "task-C-8"]);
+        let worktree_path = temp.path().join(".worktrees").join("task-C-8");
+        fs::create_dir_all(&worktree_path).unwrap();
+        // Make the repo dirty
+        fs::write(temp.path().join("README.md"), "dirty\n").unwrap();
+        let _dir_guard = CurrentDirGuard::set(temp.path());
+
+        let err = cmd_worktree_finish(WorktreeFinishArgs {
+            id: "C-8".to_string(),
+        })
+        .unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Git working tree is dirty"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cmd_worktree_finish_success() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_repo(temp.path());
+        let _dir_guard = CurrentDirGuard::set(temp.path());
+
+        // Create worktree manually using git directly
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+        let worktree_path = worktrees_dir.join("task-C-9");
+        run_git(
+            temp.path(),
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "task-C-9",
+                worktree_path.to_str().unwrap(),
+            ],
+        );
+
+        // Add .worktrees to .gitignore so the repo stays clean
+        fs::write(temp.path().join(".gitignore"), ".worktrees/\n").unwrap();
+        run_git(temp.path(), &["add", ".gitignore"]);
+        run_git(temp.path(), &["commit", "-m", "add gitignore"]);
+
+        // Add a commit in the worktree
+        assert!(worktree_path.is_dir());
+        fs::write(worktree_path.join("new_file.txt"), "content\n").unwrap();
+        run_git(&worktree_path, &["add", "."]);
+        run_git(&worktree_path, &["commit", "-m", "add new file"]);
+
+        // Finish the worktree (merges and removes)
+        cmd_worktree_finish(WorktreeFinishArgs {
+            id: "C-9".to_string(),
+        })
+        .unwrap();
+
+        // Verify worktree is removed
+        assert!(!worktree_path.exists());
+        // Verify the new file exists in main repo after merge
+        assert!(temp.path().join("new_file.txt").exists());
+    }
+
+    #[test]
+    fn validate_task_id_rejects_empty_prefix() {
+        let result = validate_task_id("-1");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CliError::Message(msg) => {
+                assert!(msg.contains("Invalid task ID format"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_task_id_rejects_empty_number() {
+        let result = validate_task_id("ABC-");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CliError::Message(msg) => {
+                assert!(msg.contains("Invalid task ID format"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_task_id_rejects_non_numeric_suffix() {
+        let result = validate_task_id("ABC-xyz");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CliError::Message(msg) => {
+                assert!(msg.contains("Invalid task ID format"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_task_id_rejects_extra_segments() {
+        let result = validate_task_id("ABC-1-2");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CliError::Message(msg) => {
+                assert!(msg.contains("Invalid task ID format"));
+            }
+            other => panic!("unexpected error type: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_task_id_accepts_valid_ids() {
+        assert!(validate_task_id("A-1").is_ok());
+        assert!(validate_task_id("ABC-123").is_ok());
+        assert!(validate_task_id("COV-80").is_ok());
+    }
+
+    #[test]
+    fn git_is_clean_detects_dirty_repo() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_repo(temp.path());
+        fs::write(temp.path().join("README.md"), "dirty\n").unwrap();
+
+        let result = git_is_clean(temp.path().to_str().unwrap());
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+    }
+
+    #[test]
+    fn git_is_clean_detects_clean_repo() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_repo(temp.path());
+
+        let result = git_is_clean(temp.path().to_str().unwrap());
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn ensure_unique_worktree_branch_increments_suffix() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_repo(temp.path());
+        let worktrees_dir = temp.path().join(".worktrees");
+        fs::create_dir_all(&worktrees_dir).unwrap();
+
+        // Create base branch and worktree path
+        run_git(temp.path(), &["branch", "test-branch"]);
+        fs::create_dir_all(worktrees_dir.join("test-branch-2")).unwrap();
+
+        let unique = ensure_unique_worktree_branch(
+            temp.path().to_str().unwrap(),
+            &worktrees_dir,
+            "test-branch",
+        );
+        // Should skip test-branch (exists as branch) and test-branch-2 (exists as path)
+        assert_eq!(unique, "test-branch-3");
+    }
+
+    #[test]
+    fn auto_worktree_branch_name_handles_empty_session() {
+        let result = auto_worktree_branch_name("", "20260101-120000");
+        assert_eq!(result, "prd-20260101-120000");
+    }
+
+    #[test]
+    fn auto_worktree_branch_name_includes_session() {
+        let result = auto_worktree_branch_name("my-session", "20260101-120000");
+        assert_eq!(result, "prd-my-session-20260101-120000");
     }
 }

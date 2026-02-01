@@ -257,7 +257,7 @@ Add tests for uncovered prd.rs paths including stack detection helpers, sanitiza
   * Tests cover lines 62-122 worktree creation.
   * Tests cover lines 151-210 worktree finish.
 - **Dependencies** None
-- [ ] COV80-WT-1 Add worktree git helper tests
+- [x] COV80-WT-1 Add worktree git helper tests
 ---
 
 ### Task COV80-PI-1
