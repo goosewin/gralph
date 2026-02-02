@@ -367,6 +367,8 @@ pub struct PrdRunArgs {
     pub model: Option<String>,
     #[arg(long)]
     pub variant: Option<String>,
+    #[arg(long, help = "Maximum retry attempts for PRD validation (default: 3)")]
+    pub max_retries: Option<u32>,
     #[arg(long, action = clap::ArgAction::SetTrue)]
     pub allow_missing_context: bool,
     #[arg(long, action = clap::ArgAction::SetTrue)]

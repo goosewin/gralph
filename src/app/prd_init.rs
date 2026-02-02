@@ -1,5 +1,5 @@
-use super::{join_or_none, normalize_csv, CliError};
-use crate::backend::{backend_from_name, Backend};
+use super::{CliError, join_or_none, normalize_csv};
+use crate::backend::{Backend, backend_from_name};
 use crate::cli::{InitArgs, PrdArgs, PrdCheckArgs, PrdCommand, PrdCreateArgs, PrdRunArgs};
 use crate::config::Config;
 use crate::prd::{self, PrdValidationError};
@@ -133,8 +133,9 @@ fn run_prd_generation(
     };
 
     let template_text = read_prd_template(target_dir)?;
+    let spec_text = read_prd_spec(target_dir)?;
     let prompt = format!(
-        "You are generating a gralph PRD in markdown. The output must be spec-compliant and grounded in the repository.\n\nProject directory: {dir}\n\nGoal:\n{goal}\n\nConstraints:\n{constraints}\n\nDetected stack summary (from repository files):\n{stack_summary}\n\nSources (authoritative URLs or references):\n{sources}\n\nWarnings (only include in the PRD if Sources is empty):\n{warnings}\n\nContext files (read these first if present):\n{context}\n\nRequirements:\n- Output only the PRD markdown with no commentary or code fences.\n- Use ASCII only.\n- Do not include an \"Open Questions\" section.\n- Do not use any checkboxes outside task blocks.\n- Context Bundle entries must be real files in the repo and must be selected from the Context files list above.\n- If a task creates new files, do not list the new files in Context Bundle; cite the closest existing files instead.\n- Use atomic, granular tasks grounded in the repo and context files.\n- Each task block must use a '### Task <ID>' header and include **ID**, **Context Bundle**, **DoD**, **Checklist**, **Dependencies**.\n- Each task block must contain exactly one unchecked task line like '- [ ] <ID> <summary>'.\n- If Sources is empty, include a 'Warnings' section with the warning text above and no checkboxes.\n- Do not invent stack, frameworks, or files not supported by the context files and stack summary.\n\nTemplate:\n{template}\n",
+        "You are generating a gralph PRD in markdown. The output must be spec-compliant and grounded in the repository.\n\nProject directory: {dir}\n\nGoal:\n{goal}\n\nConstraints:\n{constraints}\n\nDetected stack summary (from repository files):\n{stack_summary}\n\nSources (authoritative URLs or references):\n{sources}\n\nWarnings (only include in the PRD if Sources is empty):\n{warnings}\n\nContext files (read these first if present):\n{context}\n\n## PRD Specification\n\nYou MUST follow these validation rules exactly. Any violation will cause the PRD to fail validation:\n\n{spec}\n\nRequirements:\n- Output only the PRD markdown with no commentary or code fences.\n- Use ASCII only.\n- Do not include an \"Open Questions\" section.\n- Do not use any checkboxes outside task blocks.\n- Context Bundle entries must be real files in the repo and must be selected from the Context files list above.\n- If a task creates new files, do not list the new files in Context Bundle; cite the closest existing files instead.\n- Use atomic, granular tasks grounded in the repo and context files.\n- Each task block must use a '### Task <ID>' header and include **ID**, **Context Bundle**, **DoD**, **Checklist**, **Dependencies**.\n- Each task block must contain exactly one unchecked task line like '- [ ] <ID> <summary>'.\n- If Sources is empty, include a 'Warnings' section with the warning text above and no checkboxes.\n- Do not invent stack, frameworks, or files not supported by the context files and stack summary.\n\nTemplate:\n{template}\n",
         dir = target_dir.display(),
         goal = goal,
         constraints = constraints,
@@ -142,51 +143,55 @@ fn run_prd_generation(
         sources = sources_section,
         warnings = warnings_section,
         context = context_section,
+        spec = spec_text,
         template = template_text
     );
 
-    log_to_file(log_file, "Running backend iteration...");
-    let tmp_dir = env::temp_dir();
-    let output_file = tmp_dir.join(format!("gralph-prd-{}.tmp", std::process::id()));
-    backend
-        .run_iteration(
-            &prompt,
-            model.as_deref(),
-            args.variant.as_deref(),
-            &output_file,
-            target_dir,
-        )
-        .map_err(|err| CliError::Message(err.to_string()))?;
-    let result = backend
-        .parse_text(&output_file)
-        .map_err(|err| CliError::Message(err.to_string()))?;
-    if result.trim().is_empty() {
-        return Err(CliError::Message(
-            "PRD generation returned empty output.".to_string(),
-        ));
-    }
-    log_to_file(log_file, "Backend iteration complete.");
+    // Get max retries from CLI, config, or use default
+    let max_retries = args
+        .max_retries
+        .or_else(|| {
+            config
+                .get("defaults.prd_create_max_retries")
+                .and_then(|v| v.parse::<u32>().ok())
+        })
+        .unwrap_or(DEFAULT_PRD_CREATE_MAX_RETRIES);
 
-    let temp_prd = tmp_dir.join(format!("gralph-prd-{}.md", std::process::id()));
-    fs::write(&temp_prd, result).map_err(CliError::Io)?;
+    log_to_file(
+        log_file,
+        &format!(
+            "Running backend iteration with up to {} retries...",
+            max_retries
+        ),
+    );
 
     let allowed_context_file = write_allowed_context(&context_files)?;
-    prd::prd_sanitize_generated_file(&temp_prd, Some(target_dir), allowed_context_file.as_deref())
-        .map_err(|err| CliError::Message(err.to_string()))?;
 
-    if let Err(err) =
-        prd::prd_validate_file(&temp_prd, args.allow_missing_context, Some(target_dir))
-    {
+    let result = prd_create_with_retry(
+        backend.as_ref(),
+        &prompt,
+        model.as_deref(),
+        args.variant.as_deref(),
+        target_dir,
+        target_dir,
+        allowed_context_file.as_deref(),
+        args.allow_missing_context,
+        max_retries,
+    )?;
+
+    // Handle result based on validation status
+    if let Some(errors) = result.validation_errors {
         let invalid_path = invalid_prd_path(&output_path, args.force);
-        fs::rename(&temp_prd, &invalid_path).map_err(CliError::Io)?;
+        fs::write(&invalid_path, &result.content).map_err(CliError::Io)?;
         return Err(CliError::Message(format!(
-            "Generated PRD failed validation. Saved to {}. Details:\n{}",
+            "Generated PRD failed validation after {} retries. Saved to {}. Details:\n{}",
+            max_retries,
             invalid_path.display(),
-            err
+            errors
         )));
     }
 
-    fs::rename(&temp_prd, &output_path).map_err(CliError::Io)?;
+    fs::write(&output_path, &result.content).map_err(CliError::Io)?;
     log_to_file(log_file, "PRD validation passed.");
     Ok(output_path)
 }
@@ -500,6 +505,9 @@ fn spawn_prd_run(
     }
     if let Some(variant) = &args.variant {
         cmd.arg("--variant").arg(variant);
+    }
+    if let Some(max_retries) = args.max_retries {
+        cmd.arg("--max-retries").arg(max_retries.to_string());
     }
     if args.allow_missing_context {
         cmd.arg("--allow-missing-context");
@@ -893,10 +901,10 @@ pub(super) fn default_context_files() -> [&'static str; 5] {
 }
 
 pub(super) fn is_markdown_path(path: &Path) -> bool {
-    match path.extension().and_then(|ext| ext.to_str()) {
-        Some("md") | Some("markdown") => true,
-        _ => false,
-    }
+    matches!(
+        path.extension().and_then(|ext| ext.to_str()),
+        Some("md") | Some("markdown")
+    )
 }
 
 pub(super) fn format_display_path(path: &Path, base: &Path) -> String {
@@ -954,11 +962,9 @@ pub(super) fn build_context_file_list(
     let mut entries: Vec<String> = Vec::new();
     let mut seen: BTreeMap<String, bool> = BTreeMap::new();
 
-    for raw in [config_list, user_list] {
-        if let Some(list) = raw {
-            for item in normalize_csv(list) {
-                add_context_entry(target_dir, &item, &mut entries, &mut seen);
-            }
+    for list in [config_list, user_list].into_iter().flatten() {
+        for item in normalize_csv(list) {
+            add_context_entry(target_dir, &item, &mut entries, &mut seen);
         }
     }
 

@@ -189,6 +189,7 @@ _arguments "${_arguments_options[@]}" : \
 '--backend=[]:BACKEND:_default' \
 '--model=[]:MODEL:_default' \
 '--variant=[]:VARIANT:_default' \
+'--max-retries=[Maximum retry attempts for PRD validation (default\: 3)]:MAX_RETRIES:_default' \
 '--tmux-session=[]:TMUX_SESSION:_default' \
 '--allow-missing-context[]' \
 '--force[]' \
