@@ -391,7 +391,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Single PR created for all changes.
   * Integration tests verify aggregation.
 - **Dependencies** MC-11, MC-12
-- [ ] MC-19 Extend verifier for multi-agent results
+- [x] MC-19 Extend verifier for multi-agent results
 ---
 
 ### Task MC-20

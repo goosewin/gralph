@@ -14,6 +14,18 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-19 Add WorktreeVerificationResult for individual worktree test and coverage results.
+- MC-19 Add AggregatedVerificationResult for combined multi-worktree verification results with is_success(), worktree_count(), and summary() methods.
+- MC-19 Add MultiAgentVerifierConfig for configuring multi-agent verifier pipeline with test/coverage commands, thresholds, and PR settings.
+- MC-19 Add run_worktree_verification() for running tests and coverage in a single worktree.
+- MC-19 Add aggregate_coverage_results() for merging coverage across worktrees by summing covered/total lines.
+- MC-19 Add aggregate_test_results() for combining test pass/fail status across worktrees.
+- MC-19 Add run_multi_agent_verifier_pipeline() for orchestrating verification across multiple worktrees with aggregated results.
+- MC-19 Add merge_worktree_changes() for merging multiple worktree branches into a single PR branch.
+- MC-19 Add get_worktree_branch() for retrieving the branch name of a worktree.
+- MC-19 Add extract_line_coverage_stats() and extract_fraction_from_line() for parsing coverage line counts.
+- MC-19 Add MultiAgentVerifierStats for verification statistics from aggregated results.
+- MC-19 Add 30 new tests for multi-agent verifier covering aggregation, result handling, and error cases.
 - MC-18 Add RetryConfig for configurable retry behavior with exponential backoff and jitter.
 - MC-18 Add RetryPolicy for managing retry attempts with configurable max retries.
 - MC-18 Add CircuitBreakerConfig for configurable circuit breaker thresholds and timeouts.

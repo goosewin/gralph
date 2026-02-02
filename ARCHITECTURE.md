@@ -20,7 +20,7 @@ doctor diagnostics.
 `src/config.rs` loads default/global/project YAML config with env overrides.
 `src/prd.rs` provides PRD validation, sanitization, and stack detection utilities.
 `src/task.rs` centralizes task block parsing helpers shared by core and PRD validation.
-`src/verifier.rs` implements the verifier pipeline helpers for tests, coverage, static checks, PR creation, and review gating.
+`src/verifier.rs` implements the verifier pipeline helpers for tests, coverage, static checks, PR creation, and review gating. Multi-agent verification is supported via `WorktreeVerificationResult` for individual worktree outcomes, `AggregatedVerificationResult` for combined results, and `run_multi_agent_verifier_pipeline()` for orchestrating verification across multiple worktrees. Coverage is merged across worktrees by summing covered and total lines via `aggregate_coverage_results()`. Test results are aggregated via `aggregate_test_results()`. The `merge_worktree_changes()` function combines multiple worktree branches into a single PR branch for unified review.
 `src/update.rs` handles release update checks and installs.
 `src/version.rs` defines the CLI version constants.
 

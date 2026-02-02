@@ -2009,6 +2009,557 @@ fn format_static_violation_path(root: &Path, path: &Path, line: usize) -> String
     format!("{}:{}", rel.display(), line)
 }
 
+// ============================================================================
+// Multi-Agent Verifier Pipeline (MC-19)
+// ============================================================================
+
+/// Result of running tests or coverage in a single worktree.
+#[derive(Debug, Clone)]
+pub struct WorktreeVerificationResult {
+    /// Path to the worktree.
+    pub worktree_path: PathBuf,
+    /// Agent ID that owns this worktree (if known).
+    pub agent_id: Option<usize>,
+    /// Test command output.
+    pub test_output: String,
+    /// Whether tests passed.
+    pub tests_passed: bool,
+    /// Coverage command output.
+    pub coverage_output: String,
+    /// Coverage percentage (if extracted).
+    pub coverage_percent: Option<f64>,
+    /// Number of covered lines.
+    pub covered_lines: usize,
+    /// Total number of lines.
+    pub total_lines: usize,
+    /// List of errors encountered.
+    pub errors: Vec<String>,
+}
+
+impl WorktreeVerificationResult {
+    /// Creates a new verification result for a worktree.
+    pub fn new(worktree_path: PathBuf) -> Self {
+        Self {
+            worktree_path,
+            agent_id: None,
+            test_output: String::new(),
+            tests_passed: false,
+            coverage_output: String::new(),
+            coverage_percent: None,
+            covered_lines: 0,
+            total_lines: 0,
+            errors: Vec::new(),
+        }
+    }
+
+    /// Sets the agent ID for this worktree.
+    pub fn with_agent_id(mut self, id: usize) -> Self {
+        self.agent_id = Some(id);
+        self
+    }
+}
+
+/// Aggregated verification results across multiple worktrees.
+#[derive(Debug, Clone)]
+pub struct AggregatedVerificationResult {
+    /// Individual worktree results.
+    pub worktree_results: Vec<WorktreeVerificationResult>,
+    /// Combined test pass status (all must pass).
+    pub all_tests_passed: bool,
+    /// Aggregated coverage percentage.
+    pub aggregated_coverage_percent: f64,
+    /// Total covered lines across all worktrees.
+    pub total_covered_lines: usize,
+    /// Total lines across all worktrees.
+    pub total_lines: usize,
+    /// Combined error messages.
+    pub errors: Vec<String>,
+}
+
+impl AggregatedVerificationResult {
+    /// Creates a new aggregated result from individual worktree results.
+    pub fn new(results: Vec<WorktreeVerificationResult>) -> Self {
+        let all_tests_passed = results.iter().all(|r| r.tests_passed);
+
+        let mut total_covered = 0;
+        let mut total_lines = 0;
+        let mut errors = Vec::new();
+
+        for result in &results {
+            total_covered += result.covered_lines;
+            total_lines += result.total_lines;
+            for error in &result.errors {
+                errors.push(format!(
+                    "[{}] {}",
+                    result.worktree_path.display(),
+                    error
+                ));
+            }
+        }
+
+        let aggregated_coverage_percent = if total_lines > 0 {
+            (total_covered as f64 / total_lines as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        Self {
+            worktree_results: results,
+            all_tests_passed,
+            aggregated_coverage_percent,
+            total_covered_lines: total_covered,
+            total_lines,
+            errors,
+        }
+    }
+
+    /// Returns true if all verifications passed.
+    pub fn is_success(&self) -> bool {
+        self.all_tests_passed && self.errors.is_empty()
+    }
+
+    /// Returns the number of worktrees that were verified.
+    pub fn worktree_count(&self) -> usize {
+        self.worktree_results.len()
+    }
+
+    /// Returns a summary string for the aggregated results.
+    pub fn summary(&self) -> String {
+        let test_status = if self.all_tests_passed {
+            "passed"
+        } else {
+            "failed"
+        };
+        format!(
+            "{} worktree(s): tests {}, coverage {:.2}% ({}/{} lines)",
+            self.worktree_count(),
+            test_status,
+            self.aggregated_coverage_percent,
+            self.total_covered_lines,
+            self.total_lines
+        )
+    }
+}
+
+/// Configuration for multi-agent verifier pipeline.
+#[derive(Debug, Clone)]
+pub struct MultiAgentVerifierConfig {
+    /// Test command to run in each worktree.
+    pub test_command: String,
+    /// Coverage command to run in each worktree.
+    pub coverage_command: String,
+    /// Minimum coverage threshold.
+    pub coverage_min: f64,
+    /// Whether to run static checks.
+    pub run_static_checks: bool,
+    /// Whether to create a single combined PR.
+    pub create_combined_pr: bool,
+    /// Base branch for PR.
+    pub pr_base: String,
+    /// PR title template.
+    pub pr_title: String,
+}
+
+impl Default for MultiAgentVerifierConfig {
+    fn default() -> Self {
+        Self {
+            test_command: DEFAULT_TEST_COMMAND.to_string(),
+            coverage_command: DEFAULT_COVERAGE_COMMAND.to_string(),
+            coverage_min: DEFAULT_COVERAGE_MIN,
+            run_static_checks: true,
+            create_combined_pr: true,
+            pr_base: DEFAULT_PR_BASE.to_string(),
+            pr_title: "chore: multi-agent verifier run".to_string(),
+        }
+    }
+}
+
+impl MultiAgentVerifierConfig {
+    /// Creates a new config from the global Config.
+    pub fn from_config(config: &Config, repo_root: &Path) -> Result<Self, CliError> {
+        let stack_defaults = VerifierStackDefaults::from_dir(repo_root);
+        let require_explicit = stack_defaults.requires_explicit_commands();
+
+        let default_test = if stack_defaults.uses_rust_defaults() {
+            DEFAULT_TEST_COMMAND
+        } else {
+            ""
+        };
+        let default_coverage = if stack_defaults.uses_rust_defaults() {
+            DEFAULT_COVERAGE_COMMAND
+        } else {
+            ""
+        };
+
+        let test_command = resolve_verifier_command(
+            None,
+            config,
+            "verifier.test_command",
+            default_test,
+            require_explicit,
+        )?;
+        let coverage_command = resolve_verifier_command(
+            None,
+            config,
+            "verifier.coverage_command",
+            default_coverage,
+            require_explicit,
+        )?;
+        let coverage_min = resolve_verifier_coverage_min(None, config)?;
+        let pr_base = resolve_verifier_pr_base(config, repo_root)?;
+        let pr_title = config
+            .get("verifier.pr.title")
+            .filter(|v| !v.trim().is_empty())
+            .unwrap_or_else(|| "chore: multi-agent verifier run".to_string());
+
+        Ok(Self {
+            test_command,
+            coverage_command,
+            coverage_min,
+            run_static_checks: true,
+            create_combined_pr: true,
+            pr_base,
+            pr_title,
+        })
+    }
+}
+
+/// Runs verification (tests + coverage) in a single worktree.
+///
+/// Returns a `WorktreeVerificationResult` with test and coverage outcomes.
+pub fn run_worktree_verification(
+    worktree_path: &Path,
+    test_command: &str,
+    coverage_command: &str,
+) -> WorktreeVerificationResult {
+    let mut result = WorktreeVerificationResult::new(worktree_path.to_path_buf());
+
+    // Run tests
+    match run_verifier_command("Tests", worktree_path, test_command) {
+        Ok(output) => {
+            result.test_output = output;
+            result.tests_passed = true;
+        }
+        Err(err) => {
+            result.test_output = format!("Test command failed: {}", err);
+            result.tests_passed = false;
+            result.errors.push(format!("Tests failed: {}", err));
+        }
+    }
+
+    // Run coverage
+    match run_verifier_command("Coverage", worktree_path, coverage_command) {
+        Ok(output) => {
+            result.coverage_output = output.clone();
+            if let Some(percent) = extract_coverage_percent(&output) {
+                result.coverage_percent = Some(percent);
+            }
+            // Try to extract line stats from output
+            if let Some((covered, total)) = extract_line_coverage_stats(&output) {
+                result.covered_lines = covered;
+                result.total_lines = total;
+            }
+        }
+        Err(err) => {
+            result.coverage_output = format!("Coverage command failed: {}", err);
+            result.errors.push(format!("Coverage failed: {}", err));
+        }
+    }
+
+    result
+}
+
+/// Extracts covered/total line stats from coverage output.
+///
+/// Looks for patterns like "123/456 lines covered" or "lines covered: 123/456".
+fn extract_line_coverage_stats(output: &str) -> Option<(usize, usize)> {
+    for line in output.lines() {
+        let lower = line.to_lowercase();
+        if lower.contains("lines") && lower.contains("covered") {
+            // Try to find "N/M" pattern
+            if let Some(stats) = extract_fraction_from_line(line) {
+                return Some(stats);
+            }
+        }
+        // Try pattern like "X% coverage, Y/Z lines covered"
+        if lower.contains("coverage") && lower.contains("lines") {
+            if let Some(stats) = extract_fraction_from_line(line) {
+                return Some(stats);
+            }
+        }
+    }
+    None
+}
+
+/// Extracts a fraction (numerator/denominator) from a line.
+fn extract_fraction_from_line(line: &str) -> Option<(usize, usize)> {
+    let bytes = line.as_bytes();
+    for (idx, ch) in bytes.iter().enumerate() {
+        if *ch != b'/' {
+            continue;
+        }
+        // Parse number before slash
+        let mut left = idx;
+        while left > 0 && bytes[left - 1].is_ascii_digit() {
+            left -= 1;
+        }
+        if left == idx {
+            continue;
+        }
+        let numerator: usize = std::str::from_utf8(&bytes[left..idx])
+            .ok()?
+            .parse()
+            .ok()?;
+
+        // Parse number after slash
+        let mut right = idx + 1;
+        while right < bytes.len() && bytes[right].is_ascii_digit() {
+            right += 1;
+        }
+        if right == idx + 1 {
+            continue;
+        }
+        let denominator: usize = std::str::from_utf8(&bytes[idx + 1..right])
+            .ok()?
+            .parse()
+            .ok()?;
+
+        if denominator > 0 {
+            return Some((numerator, denominator));
+        }
+    }
+    None
+}
+
+/// Aggregates coverage results from multiple worktrees.
+///
+/// Takes individual worktree results and produces a combined coverage metric
+/// by summing covered and total lines across all worktrees.
+pub fn aggregate_coverage_results(results: &[WorktreeVerificationResult]) -> (f64, usize, usize) {
+    let mut total_covered = 0;
+    let mut total_lines = 0;
+
+    for result in results {
+        total_covered += result.covered_lines;
+        total_lines += result.total_lines;
+    }
+
+    let percent = if total_lines > 0 {
+        (total_covered as f64 / total_lines as f64) * 100.0
+    } else {
+        // Fall back to averaging percentages if line counts not available
+        let valid_percents: Vec<f64> = results
+            .iter()
+            .filter_map(|r| r.coverage_percent)
+            .collect();
+        if valid_percents.is_empty() {
+            0.0
+        } else {
+            valid_percents.iter().sum::<f64>() / valid_percents.len() as f64
+        }
+    };
+
+    (percent, total_covered, total_lines)
+}
+
+/// Aggregates test results from multiple worktrees.
+///
+/// Returns (all_passed, passed_count, total_count).
+pub fn aggregate_test_results(results: &[WorktreeVerificationResult]) -> (bool, usize, usize) {
+    let total = results.len();
+    let passed = results.iter().filter(|r| r.tests_passed).count();
+    let all_passed = passed == total;
+    (all_passed, passed, total)
+}
+
+/// Runs the multi-agent verifier pipeline across multiple worktrees.
+///
+/// This function:
+/// 1. Runs tests and coverage in each worktree
+/// 2. Aggregates the results
+/// 3. Validates against thresholds
+/// 4. Optionally creates a combined PR
+pub fn run_multi_agent_verifier_pipeline(
+    worktree_paths: &[PathBuf],
+    config: &MultiAgentVerifierConfig,
+    repo_root: &Path,
+    global_config: &Config,
+) -> Result<AggregatedVerificationResult, CliError> {
+    if worktree_paths.is_empty() {
+        return Err(CliError::Message(
+            "No worktrees provided for multi-agent verification.".to_string(),
+        ));
+    }
+
+    println!(
+        "Multi-agent verifier running across {} worktree(s)",
+        worktree_paths.len()
+    );
+
+    // Run verification in each worktree
+    let mut results = Vec::new();
+    for (idx, worktree_path) in worktree_paths.iter().enumerate() {
+        println!(
+            "\n==> Verifying worktree {}/{}: {}",
+            idx + 1,
+            worktree_paths.len(),
+            worktree_path.display()
+        );
+
+        let result = run_worktree_verification(
+            worktree_path,
+            &config.test_command,
+            &config.coverage_command,
+        );
+
+        if result.tests_passed {
+            println!("  Tests: PASSED");
+        } else {
+            println!("  Tests: FAILED");
+        }
+
+        if let Some(percent) = result.coverage_percent {
+            println!("  Coverage: {:.2}%", percent);
+        }
+
+        results.push(result);
+    }
+
+    // Aggregate results
+    let aggregated = AggregatedVerificationResult::new(results);
+
+    println!("\n==> Aggregated results");
+    println!("  {}", aggregated.summary());
+
+    // Check test results
+    let (all_passed, passed, total) = aggregate_test_results(&aggregated.worktree_results);
+    if !all_passed {
+        return Err(CliError::Message(format!(
+            "Tests failed in {} of {} worktree(s).",
+            total - passed,
+            total
+        )));
+    }
+    println!("Aggregated tests OK: {}/{} worktree(s) passed.", passed, total);
+
+    // Check coverage threshold
+    if aggregated.aggregated_coverage_percent + f64::EPSILON < config.coverage_min {
+        return Err(CliError::Message(format!(
+            "Aggregated coverage {:.2}% below required {:.2}%.",
+            aggregated.aggregated_coverage_percent, config.coverage_min
+        )));
+    }
+    println!(
+        "Aggregated coverage OK: {:.2}% (>= {:.2}%)",
+        aggregated.aggregated_coverage_percent, config.coverage_min
+    );
+
+    // Run static checks on repo root
+    if config.run_static_checks {
+        run_verifier_static_checks(repo_root, global_config)?;
+    }
+
+    // Create combined PR if enabled
+    if config.create_combined_pr {
+        let pr_url = run_verifier_pr_create(repo_root, global_config)?;
+        run_verifier_review_gate(repo_root, global_config, pr_url.as_deref())?;
+    }
+
+    Ok(aggregated)
+}
+
+/// Merges changes from multiple worktrees into a single branch for PR.
+///
+/// This function:
+/// 1. Creates a new merge branch from the base
+/// 2. Merges each worktree branch into the merge branch
+/// 3. Returns the merge branch name
+pub fn merge_worktree_changes(
+    repo_root: &Path,
+    worktree_branches: &[String],
+    base_branch: &str,
+    merge_branch_name: &str,
+) -> Result<String, CliError> {
+    if worktree_branches.is_empty() {
+        return Err(CliError::Message(
+            "No worktree branches provided for merge.".to_string(),
+        ));
+    }
+
+    // Create merge branch from base
+    let checkout_output = git_output_in_dir(repo_root, ["checkout", "-b", merge_branch_name, base_branch]);
+    if let Err(err) = checkout_output {
+        return Err(CliError::Message(format!(
+            "Failed to create merge branch '{}': {}",
+            merge_branch_name, err
+        )));
+    }
+
+    // Merge each worktree branch
+    for branch in worktree_branches {
+        println!("Merging branch: {}", branch);
+        let merge_result = git_output_in_dir(
+            repo_root,
+            ["merge", "--no-ff", "-m", &format!("Merge {} into {}", branch, merge_branch_name), branch],
+        );
+        if let Err(err) = merge_result {
+            // Abort the merge and switch back
+            let _ = git_output_in_dir(repo_root, ["merge", "--abort"]);
+            let _ = git_output_in_dir(repo_root, ["checkout", base_branch]);
+            let _ = git_output_in_dir(repo_root, ["branch", "-D", merge_branch_name]);
+            return Err(CliError::Message(format!(
+                "Failed to merge branch '{}': {}",
+                branch, err
+            )));
+        }
+    }
+
+    Ok(merge_branch_name.to_string())
+}
+
+/// Gets the branch name for a worktree.
+pub fn get_worktree_branch(worktree_path: &Path) -> Result<String, CliError> {
+    let output = git_output_in_dir(worktree_path, ["rev-parse", "--abbrev-ref", "HEAD"])?;
+    let branch = output.trim();
+    if branch.is_empty() || branch == "HEAD" {
+        return Err(CliError::Message(format!(
+            "Unable to determine branch for worktree: {}",
+            worktree_path.display()
+        )));
+    }
+    Ok(branch.to_string())
+}
+
+/// Statistics for multi-agent verification.
+#[derive(Debug, Clone)]
+pub struct MultiAgentVerifierStats {
+    /// Number of worktrees verified.
+    pub worktree_count: usize,
+    /// Number of worktrees with passing tests.
+    pub tests_passed_count: usize,
+    /// Aggregated coverage percentage.
+    pub aggregated_coverage: f64,
+    /// Total covered lines.
+    pub total_covered_lines: usize,
+    /// Total lines.
+    pub total_lines: usize,
+    /// Whether all checks passed.
+    pub all_passed: bool,
+}
+
+impl From<&AggregatedVerificationResult> for MultiAgentVerifierStats {
+    fn from(result: &AggregatedVerificationResult) -> Self {
+        Self {
+            worktree_count: result.worktree_count(),
+            tests_passed_count: result.worktree_results.iter().filter(|r| r.tests_passed).count(),
+            aggregated_coverage: result.aggregated_coverage_percent,
+            total_covered_lines: result.total_covered_lines,
+            total_lines: result.total_lines,
+            all_passed: result.is_success(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5192,5 +5743,359 @@ Coverage Results: 85.50% (171/200 lines)
         let line = "Coverage: % pending";
         let result = parse_percent_from_line(line);
         assert!(result.is_none());
+    }
+
+    // ============================================================================
+    // Multi-Agent Verifier Tests (MC-19)
+    // ============================================================================
+
+    #[test]
+    fn worktree_verification_result_new_creates_empty_result() {
+        let path = PathBuf::from("/test/worktree");
+        let result = WorktreeVerificationResult::new(path.clone());
+
+        assert_eq!(result.worktree_path, path);
+        assert!(result.agent_id.is_none());
+        assert!(result.test_output.is_empty());
+        assert!(!result.tests_passed);
+        assert!(result.coverage_output.is_empty());
+        assert!(result.coverage_percent.is_none());
+        assert_eq!(result.covered_lines, 0);
+        assert_eq!(result.total_lines, 0);
+        assert!(result.errors.is_empty());
+    }
+
+    #[test]
+    fn worktree_verification_result_with_agent_id() {
+        let path = PathBuf::from("/test/worktree");
+        let result = WorktreeVerificationResult::new(path).with_agent_id(42);
+
+        assert_eq!(result.agent_id, Some(42));
+    }
+
+    #[test]
+    fn aggregated_verification_result_all_passed() {
+        let mut r1 = WorktreeVerificationResult::new(PathBuf::from("/wt1"));
+        r1.tests_passed = true;
+        r1.covered_lines = 80;
+        r1.total_lines = 100;
+
+        let mut r2 = WorktreeVerificationResult::new(PathBuf::from("/wt2"));
+        r2.tests_passed = true;
+        r2.covered_lines = 90;
+        r2.total_lines = 100;
+
+        let aggregated = AggregatedVerificationResult::new(vec![r1, r2]);
+
+        assert!(aggregated.all_tests_passed);
+        assert_eq!(aggregated.total_covered_lines, 170);
+        assert_eq!(aggregated.total_lines, 200);
+        assert!((aggregated.aggregated_coverage_percent - 85.0).abs() < 0.01);
+        assert!(aggregated.is_success());
+        assert_eq!(aggregated.worktree_count(), 2);
+    }
+
+    #[test]
+    fn aggregated_verification_result_some_failed() {
+        let mut r1 = WorktreeVerificationResult::new(PathBuf::from("/wt1"));
+        r1.tests_passed = true;
+        r1.covered_lines = 80;
+        r1.total_lines = 100;
+
+        let mut r2 = WorktreeVerificationResult::new(PathBuf::from("/wt2"));
+        r2.tests_passed = false;
+        r2.errors.push("Tests failed".to_string());
+        r2.covered_lines = 50;
+        r2.total_lines = 100;
+
+        let aggregated = AggregatedVerificationResult::new(vec![r1, r2]);
+
+        assert!(!aggregated.all_tests_passed);
+        assert_eq!(aggregated.total_covered_lines, 130);
+        assert_eq!(aggregated.total_lines, 200);
+        assert!(!aggregated.is_success());
+        assert_eq!(aggregated.errors.len(), 1);
+    }
+
+    #[test]
+    fn aggregated_verification_result_empty_worktrees() {
+        let aggregated = AggregatedVerificationResult::new(vec![]);
+
+        assert!(aggregated.all_tests_passed);
+        assert_eq!(aggregated.total_covered_lines, 0);
+        assert_eq!(aggregated.total_lines, 0);
+        assert!((aggregated.aggregated_coverage_percent - 0.0).abs() < 0.01);
+        assert!(aggregated.is_success());
+        assert_eq!(aggregated.worktree_count(), 0);
+    }
+
+    #[test]
+    fn aggregated_verification_result_summary() {
+        let mut r1 = WorktreeVerificationResult::new(PathBuf::from("/wt1"));
+        r1.tests_passed = true;
+        r1.covered_lines = 90;
+        r1.total_lines = 100;
+
+        let aggregated = AggregatedVerificationResult::new(vec![r1]);
+        let summary = aggregated.summary();
+
+        assert!(summary.contains("1 worktree(s)"));
+        assert!(summary.contains("tests passed"));
+        assert!(summary.contains("90.00%"));
+    }
+
+    #[test]
+    fn aggregate_coverage_results_sums_lines() {
+        let mut r1 = WorktreeVerificationResult::new(PathBuf::from("/wt1"));
+        r1.covered_lines = 100;
+        r1.total_lines = 200;
+
+        let mut r2 = WorktreeVerificationResult::new(PathBuf::from("/wt2"));
+        r2.covered_lines = 150;
+        r2.total_lines = 200;
+
+        let (percent, covered, total) = aggregate_coverage_results(&[r1, r2]);
+
+        assert_eq!(covered, 250);
+        assert_eq!(total, 400);
+        assert!((percent - 62.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn aggregate_coverage_results_falls_back_to_percentages() {
+        let mut r1 = WorktreeVerificationResult::new(PathBuf::from("/wt1"));
+        r1.coverage_percent = Some(80.0);
+        r1.covered_lines = 0;
+        r1.total_lines = 0;
+
+        let mut r2 = WorktreeVerificationResult::new(PathBuf::from("/wt2"));
+        r2.coverage_percent = Some(90.0);
+        r2.covered_lines = 0;
+        r2.total_lines = 0;
+
+        let (percent, covered, total) = aggregate_coverage_results(&[r1, r2]);
+
+        assert_eq!(covered, 0);
+        assert_eq!(total, 0);
+        assert!((percent - 85.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn aggregate_coverage_results_empty() {
+        let (percent, covered, total) = aggregate_coverage_results(&[]);
+
+        assert_eq!(covered, 0);
+        assert_eq!(total, 0);
+        assert!((percent - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn aggregate_test_results_all_passed() {
+        let mut r1 = WorktreeVerificationResult::new(PathBuf::from("/wt1"));
+        r1.tests_passed = true;
+
+        let mut r2 = WorktreeVerificationResult::new(PathBuf::from("/wt2"));
+        r2.tests_passed = true;
+
+        let (all_passed, passed, total) = aggregate_test_results(&[r1, r2]);
+
+        assert!(all_passed);
+        assert_eq!(passed, 2);
+        assert_eq!(total, 2);
+    }
+
+    #[test]
+    fn aggregate_test_results_some_failed() {
+        let mut r1 = WorktreeVerificationResult::new(PathBuf::from("/wt1"));
+        r1.tests_passed = true;
+
+        let mut r2 = WorktreeVerificationResult::new(PathBuf::from("/wt2"));
+        r2.tests_passed = false;
+
+        let mut r3 = WorktreeVerificationResult::new(PathBuf::from("/wt3"));
+        r3.tests_passed = true;
+
+        let (all_passed, passed, total) = aggregate_test_results(&[r1, r2, r3]);
+
+        assert!(!all_passed);
+        assert_eq!(passed, 2);
+        assert_eq!(total, 3);
+    }
+
+    #[test]
+    fn aggregate_test_results_empty() {
+        let (all_passed, passed, total) = aggregate_test_results(&[]);
+
+        assert!(all_passed);
+        assert_eq!(passed, 0);
+        assert_eq!(total, 0);
+    }
+
+    #[test]
+    fn extract_line_coverage_stats_parses_fraction() {
+        let output = "Coverage Results: 85.00% coverage, 170/200 lines covered";
+        let result = extract_line_coverage_stats(output);
+
+        assert_eq!(result, Some((170, 200)));
+    }
+
+    #[test]
+    fn extract_line_coverage_stats_parses_multiple_lines() {
+        let output = "Running tests...\nOK\n85.00% coverage, 85/100 lines covered\nDone.";
+        let result = extract_line_coverage_stats(output);
+
+        assert_eq!(result, Some((85, 100)));
+    }
+
+    #[test]
+    fn extract_line_coverage_stats_returns_none_without_pattern() {
+        let output = "Tests passed. Coverage: 85%";
+        let result = extract_line_coverage_stats(output);
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn extract_fraction_from_line_parses_simple_fraction() {
+        let line = "170/200 lines";
+        let result = extract_fraction_from_line(line);
+
+        assert_eq!(result, Some((170, 200)));
+    }
+
+    #[test]
+    fn extract_fraction_from_line_parses_fraction_with_context() {
+        let line = "Coverage: 85/100 lines covered";
+        let result = extract_fraction_from_line(line);
+
+        assert_eq!(result, Some((85, 100)));
+    }
+
+    #[test]
+    fn extract_fraction_from_line_ignores_invalid_denominator() {
+        let line = "100/0 lines";
+        let result = extract_fraction_from_line(line);
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn extract_fraction_from_line_returns_none_without_fraction() {
+        let line = "Coverage: 85%";
+        let result = extract_fraction_from_line(line);
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn multi_agent_verifier_config_default() {
+        let config = MultiAgentVerifierConfig::default();
+
+        assert_eq!(config.test_command, DEFAULT_TEST_COMMAND);
+        assert_eq!(config.coverage_command, DEFAULT_COVERAGE_COMMAND);
+        assert!((config.coverage_min - DEFAULT_COVERAGE_MIN).abs() < 0.01);
+        assert!(config.run_static_checks);
+        assert!(config.create_combined_pr);
+        assert_eq!(config.pr_base, DEFAULT_PR_BASE);
+    }
+
+    #[test]
+    fn multi_agent_verifier_stats_from_aggregated_result() {
+        let mut r1 = WorktreeVerificationResult::new(PathBuf::from("/wt1"));
+        r1.tests_passed = true;
+        r1.covered_lines = 80;
+        r1.total_lines = 100;
+
+        let mut r2 = WorktreeVerificationResult::new(PathBuf::from("/wt2"));
+        r2.tests_passed = false;
+        r2.covered_lines = 70;
+        r2.total_lines = 100;
+
+        let aggregated = AggregatedVerificationResult::new(vec![r1, r2]);
+        let stats = MultiAgentVerifierStats::from(&aggregated);
+
+        assert_eq!(stats.worktree_count, 2);
+        assert_eq!(stats.tests_passed_count, 1);
+        assert!((stats.aggregated_coverage - 75.0).abs() < 0.01);
+        assert_eq!(stats.total_covered_lines, 150);
+        assert_eq!(stats.total_lines, 200);
+        assert!(!stats.all_passed);
+    }
+
+    #[test]
+    fn run_multi_agent_verifier_pipeline_fails_with_no_worktrees() {
+        let config = MultiAgentVerifierConfig::default();
+        let temp = tempfile::tempdir().unwrap();
+        let global_config = Config::load(None).unwrap();
+
+        let result = run_multi_agent_verifier_pipeline(
+            &[],
+            &config,
+            temp.path(),
+            &global_config,
+        );
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CliError::Message(msg) => {
+                assert!(msg.contains("No worktrees"));
+            }
+            _ => panic!("Expected CliError::Message"),
+        }
+    }
+
+    #[test]
+    fn get_worktree_branch_fails_outside_repo() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = get_worktree_branch(temp.path());
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn merge_worktree_changes_fails_with_empty_branches() {
+        let temp = tempfile::tempdir().unwrap();
+        let result = merge_worktree_changes(
+            temp.path(),
+            &[],
+            "main",
+            "merge-branch",
+        );
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CliError::Message(msg) => {
+                assert!(msg.contains("No worktree branches"));
+            }
+            _ => panic!("Expected CliError::Message"),
+        }
+    }
+
+    #[test]
+    fn aggregated_result_with_errors_is_not_success() {
+        let mut r1 = WorktreeVerificationResult::new(PathBuf::from("/wt1"));
+        r1.tests_passed = true;
+        r1.errors.push("Some error".to_string());
+
+        let aggregated = AggregatedVerificationResult::new(vec![r1]);
+
+        assert!(aggregated.all_tests_passed);
+        assert!(!aggregated.is_success()); // Has errors, so not success
+    }
+
+    #[test]
+    fn extract_line_coverage_stats_handles_tarpaulin_format() {
+        let output = "|| Tested/Total Lines:\n|| src/lib.rs: 45/50\n|| \n|| 90.00% coverage, 45/50 lines covered";
+        let result = extract_line_coverage_stats(output);
+
+        assert_eq!(result, Some((45, 50)));
+    }
+
+    #[test]
+    fn extract_line_coverage_stats_handles_lcov_format() {
+        let output = "Lines covered: 123/456";
+        let result = extract_line_coverage_stats(output);
+
+        assert_eq!(result, Some((123, 456)));
     }
 }
