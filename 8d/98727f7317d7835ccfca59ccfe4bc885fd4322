@@ -1,0 +1,25 @@
+PRD.fix-prd-create.md
+  8b342e1f46613c69 151
+CHANGELOG.md
+  8b342e1f46613c69 17-19,26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "8d98727f7317d7835ccfca59ccfe4bc885fd4322",
+  "prompts": {
+    "8b342e1f46613c69": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2507af46-0366-458c-94fd-d60df347ea45",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 6,
+      "total_deletions": 1,
+      "accepted_lines": 6,
+      "overriden_lines": 0
+    }
+  }
+}
