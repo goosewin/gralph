@@ -1,0 +1,55 @@
+frontend/src/hooks/useSessions.ts
+  253c325afb5e6752 1-99
+frontend/src/types/session.ts
+  253c325afb5e6752 1-46
+frontend/src/App.tsx
+  253c325afb5e6752 1-20,22-52,59-67,70,73
+frontend/package.json
+  253c325afb5e6752 11-13,20-21,30,32-33
+frontend/src/components/SessionDashboard.test.tsx
+  253c325afb5e6752 1-182
+frontend/src/components/StatusBadge.test.tsx
+  253c325afb5e6752 1-63
+frontend/src/components/SessionCard.test.tsx
+  253c325afb5e6752 1-123
+frontend/src/components/SessionCard.tsx
+  253c325afb5e6752 1-137
+frontend/src/components/SessionDashboard.tsx
+  253c325afb5e6752 1-130
+frontend/src/components/StatusBadge.tsx
+  253c325afb5e6752 1-32
+frontend/src/hooks/useWebSocket.ts
+  253c325afb5e6752 1-183
+frontend/src/test/setup.ts
+  253c325afb5e6752 1
+CHANGELOG.md
+  253c325afb5e6752 17-23
+frontend/vitest.config.ts
+  253c325afb5e6752 1-11
+ARCHITECTURE.md
+  253c325afb5e6752 34-40
+PRD.ultimate.md
+  253c325afb5e6752 181
+frontend/src/index.css
+  253c325afb5e6752 52-491
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "925f9eb6dd4fe97d50e2179a0e9b0d34ba7e1758",
+  "prompts": {
+    "253c325afb5e6752": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9321d250-0a5e-4973-885b-06ea2551b47e",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 1545,
+      "total_deletions": 20,
+      "accepted_lines": 1532,
+      "overriden_lines": 0
+    }
+  }
+}
