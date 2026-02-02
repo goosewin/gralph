@@ -7,68 +7,55 @@
 
 use predicates::prelude::*;
 use std::env;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 mod support;
 
-static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-const ENV_KEYS: [&str; 8] = [
-    "GRALPH_DEFAULT_CONFIG",
-    "GRALPH_GLOBAL_CONFIG",
-    "GRALPH_PROJECT_CONFIG_NAME",
-    "GRALPH_CONFIG_DIR",
-    "GRALPH_STATE_DIR",
-    "GRALPH_STATE_FILE",
-    "GRALPH_LOCK_FILE",
-    "GRALPH_LOCK_TIMEOUT",
-];
-
-struct EnvGuard {
-    _lock: std::sync::MutexGuard<'static, ()>,
-    originals: Vec<(String, Option<OsString>)>,
+/// Environment configuration to apply to child commands.
+/// Instead of modifying the parent process environment (which is unsafe in multi-threaded contexts),
+/// we collect the env vars and apply them directly to the Command.
+struct TestEnv {
+    vars: Vec<(String, OsString)>,
+    path_prefix: Option<PathBuf>,
 }
 
-impl EnvGuard {
-    fn new(keys: &[&str]) -> Self {
-        let lock = ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner());
-        let originals = keys
-            .iter()
-            .map(|key| ((*key).to_string(), env::var_os(key)))
-            .collect();
+impl TestEnv {
+    fn new() -> Self {
         Self {
-            _lock: lock,
-            originals,
+            vars: Vec::new(),
+            path_prefix: None,
         }
     }
 
-    fn set(&self, key: &str, value: impl AsRef<OsStr>) {
-        unsafe {
-            env::set_var(key, value);
-        }
+    fn set(&mut self, key: &str, value: impl Into<OsString>) {
+        self.vars.push((key.to_string(), value.into()));
     }
-}
 
-impl Drop for EnvGuard {
-    fn drop(&mut self) {
-        for (key, value) in self.originals.drain(..) {
-            match value {
-                Some(original) => unsafe {
-                    env::set_var(&key, original);
-                },
-                None => unsafe {
-                    env::remove_var(&key);
-                },
+    fn prepend_path(&mut self, dir: PathBuf) {
+        self.path_prefix = Some(dir);
+    }
+
+    /// Apply environment variables to a Command
+    fn apply(&self, cmd: &mut assert_cmd::Command) {
+        for (key, value) in &self.vars {
+            cmd.env(key, value);
+        }
+        if let Some(prefix) = &self.path_prefix {
+            let mut paths = vec![prefix.clone()];
+            if let Some(existing) = env::var_os("PATH") {
+                paths.extend(env::split_paths(&existing));
+            }
+            if let Ok(joined) = env::join_paths(&paths) {
+                cmd.env("PATH", joined);
             }
         }
     }
 }
 
-fn prepare_env(base: &Path) -> EnvGuard {
-    let guard = EnvGuard::new(&ENV_KEYS);
+fn prepare_env(base: &Path) -> TestEnv {
+    let mut env = TestEnv::new();
     let config_dir = base.join("config");
     fs::create_dir_all(&config_dir).unwrap();
     let default_path = config_dir.join("default.yaml");
@@ -80,15 +67,15 @@ fn prepare_env(base: &Path) -> EnvGuard {
     .unwrap();
     fs::write(&global_path, "defaults: {}\n").unwrap();
 
-    guard.set("GRALPH_DEFAULT_CONFIG", &default_path);
-    guard.set("GRALPH_GLOBAL_CONFIG", &global_path);
-    guard.set("GRALPH_CONFIG_DIR", &config_dir);
-    guard.set("GRALPH_PROJECT_CONFIG_NAME", "missing.yaml");
-    guard.set("GRALPH_STATE_DIR", base.join("state"));
-    guard.set("GRALPH_STATE_FILE", base.join("state").join("state.json"));
-    guard.set("GRALPH_LOCK_FILE", base.join("state").join("state.lock"));
-    guard.set("GRALPH_LOCK_TIMEOUT", "1");
-    guard
+    env.set("GRALPH_DEFAULT_CONFIG", &default_path);
+    env.set("GRALPH_GLOBAL_CONFIG", &global_path);
+    env.set("GRALPH_CONFIG_DIR", &config_dir);
+    env.set("GRALPH_PROJECT_CONFIG_NAME", "missing.yaml");
+    env.set("GRALPH_STATE_DIR", base.join("state"));
+    env.set("GRALPH_STATE_FILE", base.join("state").join("state.json"));
+    env.set("GRALPH_LOCK_FILE", base.join("state").join("state.lock"));
+    env.set("GRALPH_LOCK_TIMEOUT", "1");
+    env
 }
 
 fn valid_prd_content(context_file: &str) -> String {
@@ -245,42 +232,6 @@ fn script_name(name: &str) -> String {
     }
 }
 
-fn prepend_to_path(dir: &Path) -> std::io::Result<PathGuard> {
-    static PATH_LOCK: Mutex<()> = Mutex::new(());
-    let lock = PATH_LOCK
-        .lock()
-        .unwrap_or_else(|poison| poison.into_inner());
-    let original = env::var_os("PATH");
-    let mut paths = Vec::new();
-    paths.push(dir.to_path_buf());
-    if let Some(existing) = &original {
-        paths.extend(env::split_paths(existing));
-    }
-    let joined = env::join_paths(paths)
-        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidInput, err))?;
-    unsafe {
-        env::set_var("PATH", joined);
-    }
-    Ok(PathGuard {
-        original,
-        _lock: lock,
-    })
-}
-
-struct PathGuard {
-    original: Option<OsString>,
-    _lock: std::sync::MutexGuard<'static, ()>,
-}
-
-impl Drop for PathGuard {
-    fn drop(&mut self) {
-        match &self.original {
-            Some(value) => unsafe { env::set_var("PATH", value) },
-            None => unsafe { env::remove_var("PATH") },
-        }
-    }
-}
-
 /// Test: Valid first attempt returns immediately without retry.
 ///
 /// When the backend returns a valid PRD on the first attempt, the retry loop
@@ -288,7 +239,7 @@ impl Drop for PathGuard {
 #[test]
 fn prd_create_valid_first_attempt_no_retry() {
     let temp = tempfile::tempdir().unwrap();
-    let _guard = prepare_env(temp.path());
+    let mut test_env = prepare_env(temp.path());
 
     let project = temp.path().join("project");
     fs::create_dir_all(&project).unwrap();
@@ -301,10 +252,11 @@ fn prd_create_valid_first_attempt_no_retry() {
     // Create fake CLI that returns valid PRD on first call
     let fake_dir = temp.path().join("fake");
     let bin_dir = create_stateful_fake_cli(&fake_dir, "codex", &[&valid_prd]).unwrap();
-    let _path_guard = prepend_to_path(&bin_dir).unwrap();
+    test_env.prepend_path(bin_dir);
 
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("gralph");
     cmd.current_dir(&project);
+    test_env.apply(&mut cmd);
     cmd.args([
         "prd",
         "create",
@@ -338,7 +290,7 @@ fn prd_create_valid_first_attempt_no_retry() {
 #[test]
 fn prd_create_retries_on_validation_failure() {
     let temp = tempfile::tempdir().unwrap();
-    let _guard = prepare_env(temp.path());
+    let mut test_env = prepare_env(temp.path());
 
     let project = temp.path().join("project");
     fs::create_dir_all(&project).unwrap();
@@ -353,10 +305,11 @@ fn prd_create_retries_on_validation_failure() {
     let fake_dir = temp.path().join("fake");
     let bin_dir =
         create_stateful_fake_cli(&fake_dir, "codex", &[&invalid_prd, &valid_prd]).unwrap();
-    let _path_guard = prepend_to_path(&bin_dir).unwrap();
+    test_env.prepend_path(bin_dir);
 
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("gralph");
     cmd.current_dir(&project);
+    test_env.apply(&mut cmd);
     cmd.args([
         "prd",
         "create",
@@ -390,7 +343,7 @@ fn prd_create_retries_on_validation_failure() {
 #[test]
 fn prd_create_retry_exhaustion_returns_best_attempt() {
     let temp = tempfile::tempdir().unwrap();
-    let _guard = prepare_env(temp.path());
+    let mut test_env = prepare_env(temp.path());
 
     let project = temp.path().join("project");
     fs::create_dir_all(&project).unwrap();
@@ -409,10 +362,11 @@ fn prd_create_retry_exhaustion_returns_best_attempt() {
         &[&invalid_prd, &invalid_prd, &invalid_prd, &invalid_prd],
     )
     .unwrap();
-    let _path_guard = prepend_to_path(&bin_dir).unwrap();
+    test_env.prepend_path(bin_dir);
 
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("gralph");
     cmd.current_dir(&project);
+    test_env.apply(&mut cmd);
     cmd.args([
         "prd",
         "create",
@@ -431,7 +385,9 @@ fn prd_create_retry_exhaustion_returns_best_attempt() {
     cmd.assert()
         .failure()
         .stderr(predicate::str::contains("Retry limit reached"))
-        .stderr(predicate::str::contains("failed validation after 2 retries"));
+        .stderr(predicate::str::contains(
+            "failed validation after 2 retries",
+        ));
 
     // The invalid PRD file should be written (best attempt)
     assert!(invalid_output.exists());
