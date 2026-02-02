@@ -1,0 +1,53 @@
+frontend/src/components/TaskCard.test.tsx
+  c89cfbb42d16b905 1-159
+PRD.ultimate.md
+  c89cfbb42d16b905 196
+src/server.rs
+  c89cfbb42d16b905 5,226-233,477-649
+frontend/src/App.tsx
+  c89cfbb42d16b905 1-2,5,23-24,30-31,34,54-61,63-64,71-88,90-93,99-119,122-123,131-144,146-147
+frontend/src/components/KanbanBoard.test.tsx
+  c89cfbb42d16b905 1-264
+frontend/src/hooks/useTasks.ts
+  c89cfbb42d16b905 1-113
+frontend/src/components/KanbanBoard.tsx
+  c89cfbb42d16b905 1-241
+src/prd.rs
+  c89cfbb42d16b905 1255-1564
+frontend/src/components/KanbanColumn.test.tsx
+  c89cfbb42d16b905 1-116
+frontend/src/components/SessionDashboard.tsx
+  c89cfbb42d16b905 13,24,125
+frontend/src/components/SessionCard.tsx
+  c89cfbb42d16b905 7,31,126-134
+CHANGELOG.md
+  c89cfbb42d16b905 17-26
+frontend/src/components/KanbanColumn.tsx
+  c89cfbb42d16b905 1-88
+ARCHITECTURE.md
+  c89cfbb42d16b905 34,38-40,43-44
+frontend/src/components/TaskCard.tsx
+  c89cfbb42d16b905 1-94
+frontend/src/types/session.ts
+  c89cfbb42d16b905 47-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "c5ff3e31d965a4e7ee67479971948da65b0e97ab",
+  "prompts": {
+    "c89cfbb42d16b905": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0cbc50a3-354c-4c79-8b1b-c681a64260fd",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 1720,
+      "total_deletions": 22,
+      "accepted_lines": 1707,
+      "overriden_lines": 0
+    }
+  }
+}
