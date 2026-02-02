@@ -13,6 +13,394 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AgentId(pub usize);
 
+// ============================================================================
+// Agent Specialization Implementation (MC-16)
+// ============================================================================
+
+/// Specialization types for agents.
+///
+/// Different agent specializations are optimized for different types of tasks:
+/// - CodeGen: Specialized for code generation and implementation tasks.
+/// - Testing: Specialized for writing and running tests.
+/// - Review: Specialized for code review and quality analysis.
+/// - Documentation: Specialized for writing documentation.
+/// - General: Can handle any task type (fallback).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum AgentSpecialization {
+    /// General-purpose agent that can handle any task type.
+    #[default]
+    General,
+    /// Specialized for code generation and implementation.
+    CodeGen,
+    /// Specialized for writing and running tests.
+    Testing,
+    /// Specialized for code review and quality analysis.
+    Review,
+    /// Specialized for writing documentation.
+    Documentation,
+}
+
+impl AgentSpecialization {
+    /// Returns all available specialization types.
+    pub fn all() -> Vec<AgentSpecialization> {
+        vec![
+            AgentSpecialization::General,
+            AgentSpecialization::CodeGen,
+            AgentSpecialization::Testing,
+            AgentSpecialization::Review,
+            AgentSpecialization::Documentation,
+        ]
+    }
+
+    /// Checks if this specialization can handle the given task type.
+    ///
+    /// General agents can handle any task type.
+    /// Specialized agents can only handle their designated task type.
+    pub fn can_handle(&self, task_type: TaskType) -> bool {
+        match self {
+            AgentSpecialization::General => true,
+            AgentSpecialization::CodeGen => task_type == TaskType::CodeGen,
+            AgentSpecialization::Testing => task_type == TaskType::Testing,
+            AgentSpecialization::Review => task_type == TaskType::Review,
+            AgentSpecialization::Documentation => task_type == TaskType::Documentation,
+        }
+    }
+
+    /// Returns the priority for handling a specific task type.
+    ///
+    /// Specialized agents have higher priority (lower number) for their task type.
+    /// General agents have lower priority (higher number) but can handle any task.
+    pub fn priority_for(&self, task_type: TaskType) -> u8 {
+        match (self, task_type) {
+            // Exact match: highest priority
+            (AgentSpecialization::CodeGen, TaskType::CodeGen) => 0,
+            (AgentSpecialization::Testing, TaskType::Testing) => 0,
+            (AgentSpecialization::Review, TaskType::Review) => 0,
+            (AgentSpecialization::Documentation, TaskType::Documentation) => 0,
+            // General agent: lower priority
+            (AgentSpecialization::General, _) => 1,
+            // Mismatch: cannot handle
+            _ => u8::MAX,
+        }
+    }
+}
+
+impl fmt::Display for AgentSpecialization {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AgentSpecialization::General => write!(f, "general"),
+            AgentSpecialization::CodeGen => write!(f, "code-gen"),
+            AgentSpecialization::Testing => write!(f, "testing"),
+            AgentSpecialization::Review => write!(f, "review"),
+            AgentSpecialization::Documentation => write!(f, "documentation"),
+        }
+    }
+}
+
+/// Task type classification for routing to specialized agents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum TaskType {
+    /// General task type (default).
+    #[default]
+    General,
+    /// Code generation or implementation task.
+    CodeGen,
+    /// Test writing or execution task.
+    Testing,
+    /// Code review task.
+    Review,
+    /// Documentation writing task.
+    Documentation,
+}
+
+impl TaskType {
+    /// Infers the task type from task content using keyword analysis.
+    ///
+    /// Examines the task content for keywords that indicate the task type:
+    /// - Testing: "test", "coverage", "spec", "assert"
+    /// - Review: "review", "audit", "analyze", "check"
+    /// - Documentation: "doc", "readme", "comment", "guide"
+    /// - CodeGen: "implement", "add", "create", "build", "fix"
+    pub fn infer_from_content(content: &str) -> TaskType {
+        let lower = content.to_lowercase();
+
+        // Check for testing keywords first (more specific)
+        let testing_keywords = ["test", "coverage", "spec", "assert", "unit test", "integration test"];
+        if testing_keywords.iter().any(|kw| lower.contains(kw)) {
+            return TaskType::Testing;
+        }
+
+        // Check for review keywords
+        let review_keywords = ["review", "audit", "analyze", "check quality", "code review"];
+        if review_keywords.iter().any(|kw| lower.contains(kw)) {
+            return TaskType::Review;
+        }
+
+        // Check for documentation keywords
+        let doc_keywords = ["doc", "readme", "comment", "guide", "tutorial", "documentation"];
+        if doc_keywords.iter().any(|kw| lower.contains(kw)) {
+            return TaskType::Documentation;
+        }
+
+        // Check for code generation keywords
+        let codegen_keywords = ["implement", "add", "create", "build", "fix", "feat", "refactor"];
+        if codegen_keywords.iter().any(|kw| lower.contains(kw)) {
+            return TaskType::CodeGen;
+        }
+
+        // Default to general
+        TaskType::General
+    }
+}
+
+impl fmt::Display for TaskType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TaskType::General => write!(f, "general"),
+            TaskType::CodeGen => write!(f, "code-gen"),
+            TaskType::Testing => write!(f, "testing"),
+            TaskType::Review => write!(f, "review"),
+            TaskType::Documentation => write!(f, "documentation"),
+        }
+    }
+}
+
+/// Configuration for agent specialization.
+#[derive(Debug, Clone)]
+pub struct AgentSpecializationConfig {
+    /// The agent's specialization.
+    pub specialization: AgentSpecialization,
+    /// Whether to allow fallback to general tasks when no specialized tasks are available.
+    pub allow_fallback_to_general: bool,
+    /// Custom keywords for task type inference (optional override).
+    pub custom_keywords: Option<HashMap<TaskType, Vec<String>>>,
+}
+
+impl Default for AgentSpecializationConfig {
+    fn default() -> Self {
+        Self {
+            specialization: AgentSpecialization::General,
+            allow_fallback_to_general: true,
+            custom_keywords: None,
+        }
+    }
+}
+
+impl AgentSpecializationConfig {
+    /// Creates a new config with the specified specialization.
+    pub fn new(specialization: AgentSpecialization) -> Self {
+        Self {
+            specialization,
+            allow_fallback_to_general: true,
+            custom_keywords: None,
+        }
+    }
+
+    /// Sets whether to allow fallback to general tasks.
+    pub fn with_fallback(mut self, allow_fallback: bool) -> Self {
+        self.allow_fallback_to_general = allow_fallback;
+        self
+    }
+
+    /// Adds custom keywords for task type inference.
+    pub fn with_custom_keywords(mut self, keywords: HashMap<TaskType, Vec<String>>) -> Self {
+        self.custom_keywords = Some(keywords);
+        self
+    }
+}
+
+/// Router for directing tasks to specialized agents.
+///
+/// The `SpecializationRouter` manages task routing based on agent specializations.
+/// It maintains a pool of agents with their specializations and routes tasks
+/// to the most appropriate agent based on task type.
+#[derive(Debug)]
+pub struct SpecializationRouter {
+    /// Agent specializations indexed by agent ID.
+    agent_specializations: RwLock<HashMap<AgentId, AgentSpecializationConfig>>,
+    /// Whether to enable automatic task type inference.
+    auto_infer_task_type: bool,
+    /// Whether to allow fallback to general agents when no specialized agent is available.
+    allow_general_fallback: bool,
+}
+
+impl SpecializationRouter {
+    /// Creates a new specialization router.
+    pub fn new() -> Self {
+        Self {
+            agent_specializations: RwLock::new(HashMap::new()),
+            auto_infer_task_type: true,
+            allow_general_fallback: true,
+        }
+    }
+
+    /// Enables or disables automatic task type inference.
+    pub fn with_auto_infer(mut self, enabled: bool) -> Self {
+        self.auto_infer_task_type = enabled;
+        self
+    }
+
+    /// Enables or disables fallback to general agents.
+    pub fn with_general_fallback(mut self, enabled: bool) -> Self {
+        self.allow_general_fallback = enabled;
+        self
+    }
+
+    /// Registers an agent with a specialization.
+    pub fn register_agent(&self, agent_id: AgentId, config: AgentSpecializationConfig) {
+        let mut specs = self.agent_specializations.write().unwrap();
+        specs.insert(agent_id, config);
+    }
+
+    /// Registers an agent with a simple specialization (default config).
+    pub fn register_agent_simple(&self, agent_id: AgentId, specialization: AgentSpecialization) {
+        self.register_agent(agent_id, AgentSpecializationConfig::new(specialization));
+    }
+
+    /// Unregisters an agent from the router.
+    pub fn unregister_agent(&self, agent_id: AgentId) {
+        let mut specs = self.agent_specializations.write().unwrap();
+        specs.remove(&agent_id);
+    }
+
+    /// Gets the specialization config for an agent.
+    pub fn get_agent_config(&self, agent_id: AgentId) -> Option<AgentSpecializationConfig> {
+        let specs = self.agent_specializations.read().unwrap();
+        specs.get(&agent_id).cloned()
+    }
+
+    /// Gets the specialization for an agent.
+    pub fn get_agent_specialization(&self, agent_id: AgentId) -> Option<AgentSpecialization> {
+        self.get_agent_config(agent_id).map(|c| c.specialization)
+    }
+
+    /// Infers the task type from task content.
+    ///
+    /// Uses keyword analysis to determine the most likely task type.
+    pub fn infer_task_type(&self, task_content: &str) -> TaskType {
+        if !self.auto_infer_task_type {
+            return TaskType::General;
+        }
+        TaskType::infer_from_content(task_content)
+    }
+
+    /// Routes a task to the best available agent based on specialization.
+    ///
+    /// Returns the agent ID of the best match, considering:
+    /// 1. Specialized agents matching the task type (highest priority)
+    /// 2. General agents (if fallback is enabled)
+    /// 3. None if no suitable agent is found
+    ///
+    /// The `available_agents` parameter should contain agent IDs that are
+    /// currently available (idle) for task assignment.
+    pub fn route_task(
+        &self,
+        task_content: &str,
+        available_agents: &[AgentId],
+    ) -> Option<AgentId> {
+        if available_agents.is_empty() {
+            return None;
+        }
+
+        let task_type = self.infer_task_type(task_content);
+        self.route_task_by_type(task_type, available_agents)
+    }
+
+    /// Routes a task with an explicit task type to the best available agent.
+    pub fn route_task_by_type(
+        &self,
+        task_type: TaskType,
+        available_agents: &[AgentId],
+    ) -> Option<AgentId> {
+        if available_agents.is_empty() {
+            return None;
+        }
+
+        let specs = self.agent_specializations.read().unwrap();
+
+        // Find agents that can handle this task type, sorted by priority
+        let mut candidates: Vec<(AgentId, u8)> = available_agents
+            .iter()
+            .filter_map(|&agent_id| {
+                let config = specs.get(&agent_id)?;
+                let priority = config.specialization.priority_for(task_type);
+                if priority == u8::MAX {
+                    // Agent cannot handle this task type
+                    None
+                } else if priority > 0 && !self.allow_general_fallback {
+                    // General agent, but fallback is disabled
+                    None
+                } else {
+                    Some((agent_id, priority))
+                }
+            })
+            .collect();
+
+        // Sort by priority (lowest first)
+        candidates.sort_by_key(|(_, priority)| *priority);
+
+        // Return the best candidate
+        candidates.first().map(|(id, _)| *id)
+    }
+
+    /// Gets all agents with a specific specialization.
+    pub fn get_agents_by_specialization(&self, specialization: AgentSpecialization) -> Vec<AgentId> {
+        let specs = self.agent_specializations.read().unwrap();
+        specs
+            .iter()
+            .filter(|(_, config)| config.specialization == specialization)
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    /// Gets statistics about agent specializations.
+    pub fn stats(&self) -> SpecializationRouterStats {
+        let specs = self.agent_specializations.read().unwrap();
+
+        let mut counts: HashMap<AgentSpecialization, usize> = HashMap::new();
+        for config in specs.values() {
+            *counts.entry(config.specialization).or_insert(0) += 1;
+        }
+
+        SpecializationRouterStats {
+            total_agents: specs.len(),
+            general_agents: counts.get(&AgentSpecialization::General).copied().unwrap_or(0),
+            codegen_agents: counts.get(&AgentSpecialization::CodeGen).copied().unwrap_or(0),
+            testing_agents: counts.get(&AgentSpecialization::Testing).copied().unwrap_or(0),
+            review_agents: counts.get(&AgentSpecialization::Review).copied().unwrap_or(0),
+            documentation_agents: counts.get(&AgentSpecialization::Documentation).copied().unwrap_or(0),
+        }
+    }
+
+    /// Returns the number of registered agents.
+    pub fn agent_count(&self) -> usize {
+        self.agent_specializations.read().unwrap().len()
+    }
+}
+
+impl Default for SpecializationRouter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Statistics about agent specializations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpecializationRouterStats {
+    /// Total number of registered agents.
+    pub total_agents: usize,
+    /// Number of general-purpose agents.
+    pub general_agents: usize,
+    /// Number of code generation agents.
+    pub codegen_agents: usize,
+    /// Number of testing agents.
+    pub testing_agents: usize,
+    /// Number of review agents.
+    pub review_agents: usize,
+    /// Number of documentation agents.
+    pub documentation_agents: usize,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentStatus {
     Idle,
@@ -26,6 +414,8 @@ pub struct Agent {
     pub status: AgentStatus,
     pub worktree_path: Option<PathBuf>,
     pub current_task: Option<String>,
+    /// Agent specialization for task routing.
+    pub specialization: AgentSpecialization,
 }
 
 impl Agent {
@@ -35,11 +425,18 @@ impl Agent {
             status: AgentStatus::Idle,
             worktree_path: None,
             current_task: None,
+            specialization: AgentSpecialization::General,
         }
     }
 
     pub fn with_worktree(mut self, path: PathBuf) -> Self {
         self.worktree_path = Some(path);
+        self
+    }
+
+    /// Sets the agent's specialization.
+    pub fn with_specialization(mut self, specialization: AgentSpecialization) -> Self {
+        self.specialization = specialization;
         self
     }
 }
@@ -549,6 +946,38 @@ impl Coordinator {
         Some(id)
     }
 
+    /// Spawns a new specialized agent.
+    ///
+    /// Creates an agent with the specified specialization for task routing.
+    pub fn spawn_specialized_agent(&mut self, specialization: AgentSpecialization) -> Option<AgentId> {
+        if self.agents.len() >= self.max_agents {
+            return None;
+        }
+
+        let id = AgentId(self.next_agent_id.fetch_add(1, Ordering::SeqCst));
+        let agent = Agent::new(id).with_specialization(specialization);
+        self.agents.push(agent);
+        Some(id)
+    }
+
+    /// Spawns a new specialized agent with a worktree.
+    pub fn spawn_specialized_agent_with_worktree(
+        &mut self,
+        specialization: AgentSpecialization,
+        worktree_path: PathBuf,
+    ) -> Option<AgentId> {
+        if self.agents.len() >= self.max_agents {
+            return None;
+        }
+
+        let id = AgentId(self.next_agent_id.fetch_add(1, Ordering::SeqCst));
+        let agent = Agent::new(id)
+            .with_specialization(specialization)
+            .with_worktree(worktree_path);
+        self.agents.push(agent);
+        Some(id)
+    }
+
     /// Spawns a new agent with an automatically created isolated worktree.
     ///
     /// Requires a worktree manager to be configured. Returns the agent ID and worktree path.
@@ -670,6 +1099,104 @@ impl Coordinator {
         }
 
         Some((agent_id, task))
+    }
+
+    /// Assigns a task to the best specialized agent based on task content.
+    ///
+    /// This method routes tasks to agents based on their specialization:
+    /// 1. Infers the task type from the task content
+    /// 2. Finds the best matching idle agent (specialized > general)
+    /// 3. Falls back to any idle agent if no specialized agent is available
+    ///
+    /// Returns the assigned agent ID and task, or None if no agent is available.
+    pub fn assign_task_by_specialization(&mut self) -> Option<(AgentId, TaskNode)> {
+        // Get the next ready task to examine its content
+        let task = {
+            let mut queue = self.work_queue.lock().unwrap();
+            queue.get_ready_task()?
+        };
+
+        // Infer the task type from content
+        let task_type = TaskType::infer_from_content(&task.content);
+
+        // Find the best agent for this task type
+        let agent_id = self.find_best_agent_for_task_type(task_type)?;
+
+        // Mark task as in progress and update agent status
+        {
+            let mut queue = self.work_queue.lock().unwrap();
+            queue.mark_in_progress(&task.id, agent_id);
+        }
+
+        if let Some(agent) = self.get_agent_mut(agent_id) {
+            agent.status = AgentStatus::Working;
+            agent.current_task = Some(task.id.clone());
+        }
+
+        Some((agent_id, task))
+    }
+
+    /// Finds the best idle agent for a given task type.
+    ///
+    /// Priority order:
+    /// 1. Specialized agent matching the task type (highest priority)
+    /// 2. General agent (fallback)
+    ///
+    /// Returns None if no suitable idle agent is available.
+    pub fn find_best_agent_for_task_type(&self, task_type: TaskType) -> Option<AgentId> {
+        let idle_agents: Vec<&Agent> = self.agents
+            .iter()
+            .filter(|a| a.status == AgentStatus::Idle)
+            .collect();
+
+        if idle_agents.is_empty() {
+            return None;
+        }
+
+        // Sort by priority for this task type
+        let mut candidates: Vec<(&Agent, u8)> = idle_agents
+            .into_iter()
+            .filter_map(|agent| {
+                let priority = agent.specialization.priority_for(task_type);
+                if priority == u8::MAX {
+                    None
+                } else {
+                    Some((agent, priority))
+                }
+            })
+            .collect();
+
+        candidates.sort_by_key(|(_, priority)| *priority);
+        candidates.first().map(|(agent, _)| agent.id)
+    }
+
+    /// Gets all idle agents with a specific specialization.
+    pub fn get_idle_agents_by_specialization(&self, specialization: AgentSpecialization) -> Vec<AgentId> {
+        self.agents
+            .iter()
+            .filter(|a| a.status == AgentStatus::Idle && a.specialization == specialization)
+            .map(|a| a.id)
+            .collect()
+    }
+
+    /// Gets the count of agents by specialization.
+    pub fn specialization_counts(&self) -> HashMap<AgentSpecialization, usize> {
+        let mut counts = HashMap::new();
+        for agent in &self.agents {
+            *counts.entry(agent.specialization).or_insert(0) += 1;
+        }
+        counts
+    }
+
+    /// Gets the count of idle agents by specialization.
+    pub fn idle_specialization_counts(&self) -> HashMap<AgentSpecialization, usize> {
+        let mut counts = HashMap::new();
+        for agent in &self.agents {
+            if agent.status == AgentStatus::Idle {
+                *counts.entry(agent.specialization).or_insert(0) += 1;
+            }
+        }
+        counts
     }
 
     pub fn complete_task(&mut self, agent_id: AgentId, task_id: &str) {
@@ -4841,5 +5368,501 @@ mod tests {
         let changes = result.unwrap();
         assert!(changes.contains_key("src/main.rs"));
         assert!(!changes.get("src/main.rs").unwrap().is_empty());
+    }
+
+    // ============================================================================
+    // Agent Specialization Tests (MC-16)
+    // ============================================================================
+
+    #[test]
+    fn agent_specialization_default_is_general() {
+        assert_eq!(AgentSpecialization::default(), AgentSpecialization::General);
+    }
+
+    #[test]
+    fn agent_specialization_all_returns_all_types() {
+        let all = AgentSpecialization::all();
+        assert_eq!(all.len(), 5);
+        assert!(all.contains(&AgentSpecialization::General));
+        assert!(all.contains(&AgentSpecialization::CodeGen));
+        assert!(all.contains(&AgentSpecialization::Testing));
+        assert!(all.contains(&AgentSpecialization::Review));
+        assert!(all.contains(&AgentSpecialization::Documentation));
+    }
+
+    #[test]
+    fn agent_specialization_can_handle_exact_match() {
+        assert!(AgentSpecialization::CodeGen.can_handle(TaskType::CodeGen));
+        assert!(AgentSpecialization::Testing.can_handle(TaskType::Testing));
+        assert!(AgentSpecialization::Review.can_handle(TaskType::Review));
+        assert!(AgentSpecialization::Documentation.can_handle(TaskType::Documentation));
+    }
+
+    #[test]
+    fn agent_specialization_general_can_handle_all() {
+        assert!(AgentSpecialization::General.can_handle(TaskType::General));
+        assert!(AgentSpecialization::General.can_handle(TaskType::CodeGen));
+        assert!(AgentSpecialization::General.can_handle(TaskType::Testing));
+        assert!(AgentSpecialization::General.can_handle(TaskType::Review));
+        assert!(AgentSpecialization::General.can_handle(TaskType::Documentation));
+    }
+
+    #[test]
+    fn agent_specialization_cannot_handle_mismatch() {
+        assert!(!AgentSpecialization::CodeGen.can_handle(TaskType::Testing));
+        assert!(!AgentSpecialization::Testing.can_handle(TaskType::CodeGen));
+        assert!(!AgentSpecialization::Review.can_handle(TaskType::Documentation));
+        assert!(!AgentSpecialization::Documentation.can_handle(TaskType::Review));
+    }
+
+    #[test]
+    fn agent_specialization_priority_exact_match_highest() {
+        assert_eq!(AgentSpecialization::CodeGen.priority_for(TaskType::CodeGen), 0);
+        assert_eq!(AgentSpecialization::Testing.priority_for(TaskType::Testing), 0);
+        assert_eq!(AgentSpecialization::Review.priority_for(TaskType::Review), 0);
+        assert_eq!(AgentSpecialization::Documentation.priority_for(TaskType::Documentation), 0);
+    }
+
+    #[test]
+    fn agent_specialization_priority_general_lower() {
+        assert_eq!(AgentSpecialization::General.priority_for(TaskType::CodeGen), 1);
+        assert_eq!(AgentSpecialization::General.priority_for(TaskType::Testing), 1);
+        assert_eq!(AgentSpecialization::General.priority_for(TaskType::Review), 1);
+        assert_eq!(AgentSpecialization::General.priority_for(TaskType::Documentation), 1);
+    }
+
+    #[test]
+    fn agent_specialization_priority_mismatch_max() {
+        assert_eq!(AgentSpecialization::CodeGen.priority_for(TaskType::Testing), u8::MAX);
+        assert_eq!(AgentSpecialization::Testing.priority_for(TaskType::Review), u8::MAX);
+    }
+
+    #[test]
+    fn agent_specialization_display() {
+        assert_eq!(format!("{}", AgentSpecialization::General), "general");
+        assert_eq!(format!("{}", AgentSpecialization::CodeGen), "code-gen");
+        assert_eq!(format!("{}", AgentSpecialization::Testing), "testing");
+        assert_eq!(format!("{}", AgentSpecialization::Review), "review");
+        assert_eq!(format!("{}", AgentSpecialization::Documentation), "documentation");
+    }
+
+    #[test]
+    fn task_type_default_is_general() {
+        assert_eq!(TaskType::default(), TaskType::General);
+    }
+
+    #[test]
+    fn task_type_infer_testing() {
+        assert_eq!(TaskType::infer_from_content("Add unit tests for the module"), TaskType::Testing);
+        assert_eq!(TaskType::infer_from_content("Increase test coverage"), TaskType::Testing);
+        assert_eq!(TaskType::infer_from_content("Write spec for parser"), TaskType::Testing);
+        assert_eq!(TaskType::infer_from_content("Add assert statements"), TaskType::Testing);
+    }
+
+    #[test]
+    fn task_type_infer_review() {
+        assert_eq!(TaskType::infer_from_content("Review the pull request"), TaskType::Review);
+        assert_eq!(TaskType::infer_from_content("Audit security of module"), TaskType::Review);
+        assert_eq!(TaskType::infer_from_content("Analyze code quality"), TaskType::Review);
+        assert_eq!(TaskType::infer_from_content("Code review for changes"), TaskType::Review);
+    }
+
+    #[test]
+    fn task_type_infer_documentation() {
+        assert_eq!(TaskType::infer_from_content("Update documentation"), TaskType::Documentation);
+        assert_eq!(TaskType::infer_from_content("Write README for project"), TaskType::Documentation);
+        assert_eq!(TaskType::infer_from_content("Add code comments"), TaskType::Documentation);
+        assert_eq!(TaskType::infer_from_content("Create user guide"), TaskType::Documentation);
+    }
+
+    #[test]
+    fn task_type_infer_codegen() {
+        assert_eq!(TaskType::infer_from_content("Implement new feature"), TaskType::CodeGen);
+        assert_eq!(TaskType::infer_from_content("Add login functionality"), TaskType::CodeGen);
+        assert_eq!(TaskType::infer_from_content("Create API endpoint"), TaskType::CodeGen);
+        assert_eq!(TaskType::infer_from_content("Build user interface"), TaskType::CodeGen);
+        assert_eq!(TaskType::infer_from_content("Fix bug in parser"), TaskType::CodeGen);
+        assert_eq!(TaskType::infer_from_content("Refactor database module"), TaskType::CodeGen);
+    }
+
+    #[test]
+    fn task_type_infer_general_fallback() {
+        assert_eq!(TaskType::infer_from_content("Do something"), TaskType::General);
+        assert_eq!(TaskType::infer_from_content(""), TaskType::General);
+        assert_eq!(TaskType::infer_from_content("Random task"), TaskType::General);
+    }
+
+    #[test]
+    fn task_type_display() {
+        assert_eq!(format!("{}", TaskType::General), "general");
+        assert_eq!(format!("{}", TaskType::CodeGen), "code-gen");
+        assert_eq!(format!("{}", TaskType::Testing), "testing");
+        assert_eq!(format!("{}", TaskType::Review), "review");
+        assert_eq!(format!("{}", TaskType::Documentation), "documentation");
+    }
+
+    #[test]
+    fn agent_specialization_config_default() {
+        let config = AgentSpecializationConfig::default();
+        assert_eq!(config.specialization, AgentSpecialization::General);
+        assert!(config.allow_fallback_to_general);
+        assert!(config.custom_keywords.is_none());
+    }
+
+    #[test]
+    fn agent_specialization_config_new() {
+        let config = AgentSpecializationConfig::new(AgentSpecialization::CodeGen);
+        assert_eq!(config.specialization, AgentSpecialization::CodeGen);
+        assert!(config.allow_fallback_to_general);
+    }
+
+    #[test]
+    fn agent_specialization_config_with_fallback() {
+        let config = AgentSpecializationConfig::new(AgentSpecialization::Testing)
+            .with_fallback(false);
+        assert!(!config.allow_fallback_to_general);
+    }
+
+    #[test]
+    fn agent_specialization_config_with_custom_keywords() {
+        let mut keywords = HashMap::new();
+        keywords.insert(TaskType::Testing, vec!["verify".to_string()]);
+        let config = AgentSpecializationConfig::new(AgentSpecialization::Testing)
+            .with_custom_keywords(keywords.clone());
+        assert!(config.custom_keywords.is_some());
+        assert_eq!(config.custom_keywords.unwrap(), keywords);
+    }
+
+    #[test]
+    fn specialization_router_new() {
+        let router = SpecializationRouter::new();
+        assert_eq!(router.agent_count(), 0);
+    }
+
+    #[test]
+    fn specialization_router_register_agent() {
+        let router = SpecializationRouter::new();
+        router.register_agent_simple(AgentId(0), AgentSpecialization::CodeGen);
+        router.register_agent_simple(AgentId(1), AgentSpecialization::Testing);
+        assert_eq!(router.agent_count(), 2);
+    }
+
+    #[test]
+    fn specialization_router_unregister_agent() {
+        let router = SpecializationRouter::new();
+        router.register_agent_simple(AgentId(0), AgentSpecialization::CodeGen);
+        assert_eq!(router.agent_count(), 1);
+        router.unregister_agent(AgentId(0));
+        assert_eq!(router.agent_count(), 0);
+    }
+
+    #[test]
+    fn specialization_router_get_agent_config() {
+        let router = SpecializationRouter::new();
+        let config = AgentSpecializationConfig::new(AgentSpecialization::Review)
+            .with_fallback(false);
+        router.register_agent(AgentId(0), config);
+
+        let retrieved = router.get_agent_config(AgentId(0)).unwrap();
+        assert_eq!(retrieved.specialization, AgentSpecialization::Review);
+        assert!(!retrieved.allow_fallback_to_general);
+
+        assert!(router.get_agent_config(AgentId(999)).is_none());
+    }
+
+    #[test]
+    fn specialization_router_get_agent_specialization() {
+        let router = SpecializationRouter::new();
+        router.register_agent_simple(AgentId(0), AgentSpecialization::Documentation);
+
+        assert_eq!(
+            router.get_agent_specialization(AgentId(0)),
+            Some(AgentSpecialization::Documentation)
+        );
+        assert!(router.get_agent_specialization(AgentId(999)).is_none());
+    }
+
+    #[test]
+    fn specialization_router_infer_task_type() {
+        let router = SpecializationRouter::new();
+        assert_eq!(router.infer_task_type("Add unit tests"), TaskType::Testing);
+        assert_eq!(router.infer_task_type("Implement feature"), TaskType::CodeGen);
+    }
+
+    #[test]
+    fn specialization_router_infer_task_type_disabled() {
+        let router = SpecializationRouter::new().with_auto_infer(false);
+        assert_eq!(router.infer_task_type("Add unit tests"), TaskType::General);
+    }
+
+    #[test]
+    fn specialization_router_route_task_empty_agents() {
+        let router = SpecializationRouter::new();
+        router.register_agent_simple(AgentId(0), AgentSpecialization::CodeGen);
+
+        let result = router.route_task("Implement feature", &[]);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn specialization_router_route_task_exact_match() {
+        let router = SpecializationRouter::new();
+        router.register_agent_simple(AgentId(0), AgentSpecialization::CodeGen);
+        router.register_agent_simple(AgentId(1), AgentSpecialization::Testing);
+
+        let result = router.route_task("Add unit tests", &[AgentId(0), AgentId(1)]);
+        assert_eq!(result, Some(AgentId(1))); // Testing agent
+    }
+
+    #[test]
+    fn specialization_router_route_task_fallback_to_general() {
+        let router = SpecializationRouter::new();
+        router.register_agent_simple(AgentId(0), AgentSpecialization::General);
+        router.register_agent_simple(AgentId(1), AgentSpecialization::CodeGen);
+
+        // Testing task, but only CodeGen and General available
+        let result = router.route_task("Add unit tests", &[AgentId(0), AgentId(1)]);
+        assert_eq!(result, Some(AgentId(0))); // General agent (fallback)
+    }
+
+    #[test]
+    fn specialization_router_route_task_no_fallback() {
+        let router = SpecializationRouter::new().with_general_fallback(false);
+        router.register_agent_simple(AgentId(0), AgentSpecialization::General);
+        router.register_agent_simple(AgentId(1), AgentSpecialization::CodeGen);
+
+        // Testing task, but fallback is disabled
+        let result = router.route_task("Add unit tests", &[AgentId(0), AgentId(1)]);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn specialization_router_route_task_by_type() {
+        let router = SpecializationRouter::new();
+        router.register_agent_simple(AgentId(0), AgentSpecialization::Review);
+        router.register_agent_simple(AgentId(1), AgentSpecialization::Documentation);
+
+        let result = router.route_task_by_type(TaskType::Documentation, &[AgentId(0), AgentId(1)]);
+        assert_eq!(result, Some(AgentId(1)));
+    }
+
+    #[test]
+    fn specialization_router_get_agents_by_specialization() {
+        let router = SpecializationRouter::new();
+        router.register_agent_simple(AgentId(0), AgentSpecialization::CodeGen);
+        router.register_agent_simple(AgentId(1), AgentSpecialization::CodeGen);
+        router.register_agent_simple(AgentId(2), AgentSpecialization::Testing);
+
+        let codegen_agents = router.get_agents_by_specialization(AgentSpecialization::CodeGen);
+        assert_eq!(codegen_agents.len(), 2);
+        assert!(codegen_agents.contains(&AgentId(0)));
+        assert!(codegen_agents.contains(&AgentId(1)));
+
+        let testing_agents = router.get_agents_by_specialization(AgentSpecialization::Testing);
+        assert_eq!(testing_agents.len(), 1);
+        assert!(testing_agents.contains(&AgentId(2)));
+
+        let review_agents = router.get_agents_by_specialization(AgentSpecialization::Review);
+        assert!(review_agents.is_empty());
+    }
+
+    #[test]
+    fn specialization_router_stats() {
+        let router = SpecializationRouter::new();
+        router.register_agent_simple(AgentId(0), AgentSpecialization::General);
+        router.register_agent_simple(AgentId(1), AgentSpecialization::CodeGen);
+        router.register_agent_simple(AgentId(2), AgentSpecialization::CodeGen);
+        router.register_agent_simple(AgentId(3), AgentSpecialization::Testing);
+        router.register_agent_simple(AgentId(4), AgentSpecialization::Review);
+        router.register_agent_simple(AgentId(5), AgentSpecialization::Documentation);
+
+        let stats = router.stats();
+        assert_eq!(stats.total_agents, 6);
+        assert_eq!(stats.general_agents, 1);
+        assert_eq!(stats.codegen_agents, 2);
+        assert_eq!(stats.testing_agents, 1);
+        assert_eq!(stats.review_agents, 1);
+        assert_eq!(stats.documentation_agents, 1);
+    }
+
+    #[test]
+    fn agent_with_specialization() {
+        let agent = Agent::new(AgentId(0)).with_specialization(AgentSpecialization::Testing);
+        assert_eq!(agent.specialization, AgentSpecialization::Testing);
+    }
+
+    #[test]
+    fn coordinator_spawn_specialized_agent() {
+        let mut coordinator = Coordinator::new(5);
+        let id = coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen).unwrap();
+
+        let agent = coordinator.get_agent(id).unwrap();
+        assert_eq!(agent.specialization, AgentSpecialization::CodeGen);
+    }
+
+    #[test]
+    fn coordinator_spawn_specialized_agent_with_worktree() {
+        let mut coordinator = Coordinator::new(5);
+        let path = PathBuf::from("/tmp/worktree-test");
+        let id = coordinator.spawn_specialized_agent_with_worktree(
+            AgentSpecialization::Testing,
+            path.clone(),
+        ).unwrap();
+
+        let agent = coordinator.get_agent(id).unwrap();
+        assert_eq!(agent.specialization, AgentSpecialization::Testing);
+        assert_eq!(agent.worktree_path, Some(path));
+    }
+
+    #[test]
+    fn coordinator_find_best_agent_for_task_type_exact_match() {
+        let mut coordinator = Coordinator::new(5);
+        coordinator.spawn_specialized_agent(AgentSpecialization::General);
+        coordinator.spawn_specialized_agent(AgentSpecialization::Testing);
+        coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen);
+
+        let best = coordinator.find_best_agent_for_task_type(TaskType::Testing);
+        assert!(best.is_some());
+
+        // Should select the Testing specialist (AgentId(1))
+        let agent = coordinator.get_agent(best.unwrap()).unwrap();
+        assert_eq!(agent.specialization, AgentSpecialization::Testing);
+    }
+
+    #[test]
+    fn coordinator_find_best_agent_for_task_type_fallback_to_general() {
+        let mut coordinator = Coordinator::new(5);
+        coordinator.spawn_specialized_agent(AgentSpecialization::General);
+        coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen);
+
+        // No Testing specialist, should fallback to General
+        let best = coordinator.find_best_agent_for_task_type(TaskType::Testing);
+        assert!(best.is_some());
+
+        let agent = coordinator.get_agent(best.unwrap()).unwrap();
+        assert_eq!(agent.specialization, AgentSpecialization::General);
+    }
+
+    #[test]
+    fn coordinator_find_best_agent_no_idle() {
+        let mut coordinator = Coordinator::new(5);
+        let id = coordinator.spawn_specialized_agent(AgentSpecialization::Testing).unwrap();
+
+        // Mark agent as working
+        coordinator.get_agent_mut(id).unwrap().status = AgentStatus::Working;
+
+        let best = coordinator.find_best_agent_for_task_type(TaskType::Testing);
+        assert!(best.is_none());
+    }
+
+    #[test]
+    fn coordinator_get_idle_agents_by_specialization() {
+        let mut coordinator = Coordinator::new(5);
+        let id1 = coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen).unwrap();
+        let id2 = coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen).unwrap();
+        coordinator.spawn_specialized_agent(AgentSpecialization::Testing);
+
+        // Mark one as working
+        coordinator.get_agent_mut(id1).unwrap().status = AgentStatus::Working;
+
+        let idle_codegen = coordinator.get_idle_agents_by_specialization(AgentSpecialization::CodeGen);
+        assert_eq!(idle_codegen.len(), 1);
+        assert!(idle_codegen.contains(&id2));
+    }
+
+    #[test]
+    fn coordinator_specialization_counts() {
+        let mut coordinator = Coordinator::new(10);
+        coordinator.spawn_specialized_agent(AgentSpecialization::General);
+        coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen);
+        coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen);
+        coordinator.spawn_specialized_agent(AgentSpecialization::Testing);
+
+        let counts = coordinator.specialization_counts();
+        assert_eq!(counts.get(&AgentSpecialization::General), Some(&1));
+        assert_eq!(counts.get(&AgentSpecialization::CodeGen), Some(&2));
+        assert_eq!(counts.get(&AgentSpecialization::Testing), Some(&1));
+        assert_eq!(counts.get(&AgentSpecialization::Review), None);
+    }
+
+    #[test]
+    fn coordinator_idle_specialization_counts() {
+        let mut coordinator = Coordinator::new(10);
+        let id1 = coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen).unwrap();
+        coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen);
+        coordinator.spawn_specialized_agent(AgentSpecialization::Testing);
+
+        // Mark one CodeGen as working
+        coordinator.get_agent_mut(id1).unwrap().status = AgentStatus::Working;
+
+        let counts = coordinator.idle_specialization_counts();
+        assert_eq!(counts.get(&AgentSpecialization::CodeGen), Some(&1));
+        assert_eq!(counts.get(&AgentSpecialization::Testing), Some(&1));
+    }
+
+    #[test]
+    fn coordinator_assign_task_by_specialization() {
+        let mut coordinator = Coordinator::new(5);
+        coordinator.spawn_specialized_agent(AgentSpecialization::General);
+        coordinator.spawn_specialized_agent(AgentSpecialization::Testing);
+
+        // Add a testing task
+        let task = TaskNode::new("T-1".to_string(), "Add unit tests for parser".to_string());
+        coordinator.add_task(task);
+
+        let result = coordinator.assign_task_by_specialization();
+        assert!(result.is_some());
+
+        let (agent_id, task) = result.unwrap();
+        assert_eq!(task.id, "T-1");
+
+        // Should be assigned to the Testing specialist
+        let agent = coordinator.get_agent(agent_id).unwrap();
+        assert_eq!(agent.specialization, AgentSpecialization::Testing);
+        assert_eq!(agent.status, AgentStatus::Working);
+    }
+
+    #[test]
+    fn coordinator_assign_task_by_specialization_fallback() {
+        let mut coordinator = Coordinator::new(5);
+        coordinator.spawn_specialized_agent(AgentSpecialization::General);
+        coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen);
+
+        // Add a testing task, but no Testing specialist
+        let task = TaskNode::new("T-1".to_string(), "Add unit tests".to_string());
+        coordinator.add_task(task);
+
+        let result = coordinator.assign_task_by_specialization();
+        assert!(result.is_some());
+
+        let (agent_id, _) = result.unwrap();
+        // Should fallback to General agent
+        let agent = coordinator.get_agent(agent_id).unwrap();
+        assert_eq!(agent.specialization, AgentSpecialization::General);
+    }
+
+    #[test]
+    fn coordinator_assign_task_by_specialization_no_task() {
+        let mut coordinator = Coordinator::new(5);
+        coordinator.spawn_specialized_agent(AgentSpecialization::Testing);
+
+        // No tasks in queue
+        let result = coordinator.assign_task_by_specialization();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn coordinator_assign_task_by_specialization_no_suitable_agent() {
+        let mut coordinator = Coordinator::new(5);
+        let id = coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen).unwrap();
+        // Mark as working
+        coordinator.get_agent_mut(id).unwrap().status = AgentStatus::Working;
+
+        let task = TaskNode::new("T-1".to_string(), "Add tests".to_string());
+        coordinator.add_task(task);
+
+        // No idle agents
+        let result = coordinator.assign_task_by_specialization();
+        assert!(result.is_none());
     }
 }

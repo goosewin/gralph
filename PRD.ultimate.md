@@ -349,7 +349,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Fallback to general agents.
   * Unit tests verify routing.
 - **Dependencies** MC-11
-- [ ] MC-16 Add agent specialization support
+- [x] MC-16 Add agent specialization support
 ---
 
 ### Task MC-17

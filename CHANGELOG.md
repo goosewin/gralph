@@ -14,6 +14,17 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-16 Add AgentSpecialization enum with General, CodeGen, Testing, Review, and Documentation types.
+- MC-16 Add TaskType enum for task classification with infer_from_content() keyword analysis.
+- MC-16 Add AgentSpecializationConfig for per-agent specialization settings with fallback options.
+- MC-16 Add SpecializationRouter for task routing based on agent specializations.
+- MC-16 Add Coordinator.spawn_specialized_agent() for creating agents with specific specializations.
+- MC-16 Add Coordinator.spawn_specialized_agent_with_worktree() for specialized agents with worktrees.
+- MC-16 Add Coordinator.assign_task_by_specialization() for routing tasks to best matching agent.
+- MC-16 Add Coordinator.find_best_agent_for_task_type() for optimal agent selection.
+- MC-16 Add Coordinator.get_idle_agents_by_specialization() and specialization_counts() helpers.
+- MC-16 Add Agent.with_specialization() builder method.
+- MC-16 Add 51 new tests for agent specialization covering routing, fallback, and task inference.
 - MC-15 Add ConflictDetector for detecting overlapping changes from parallel agents.
 - MC-15 Add ConflictReport struct for aggregated conflict information with severity tracking.
 - MC-15 Add FileConflict struct for per-file conflict details with line-level change tracking.
