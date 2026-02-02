@@ -6,11 +6,13 @@ export interface KanbanColumnProps {
   title: string;
   tasks: Task[];
   draggingTaskId: string | null;
+  selectedTaskId?: string | null;
   onDragStart: (taskId: string, event: React.DragEvent) => void;
   onDragEnd: (event: React.DragEvent) => void;
   onDragOver: (status: TaskStatus, event: React.DragEvent) => void;
   onDrop: (status: TaskStatus, event: React.DragEvent) => void;
   onTaskKeyDown: (taskId: string, event: React.KeyboardEvent) => void;
+  onTaskTouch?: (taskId: string) => void;
 }
 
 const COLUMN_CONFIG: Record<TaskStatus, { className: string }> = {
@@ -24,11 +26,13 @@ export function KanbanColumn({
   title,
   tasks,
   draggingTaskId,
+  selectedTaskId,
   onDragStart,
   onDragEnd,
   onDragOver,
   onDrop,
   onTaskKeyDown,
+  onTaskTouch,
 }: KanbanColumnProps) {
   const config = COLUMN_CONFIG[status] || COLUMN_CONFIG.pending;
 
@@ -74,9 +78,11 @@ export function KanbanColumn({
               <TaskCard
                 task={task}
                 isDragging={draggingTaskId === task.id}
+                isSelected={selectedTaskId === task.id}
                 onDragStart={onDragStart}
                 onDragEnd={onDragEnd}
                 onKeyDown={onTaskKeyDown}
+                onTouch={onTaskTouch}
                 tabIndex={index === 0 ? 0 : -1}
               />
             </div>

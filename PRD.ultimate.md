@@ -221,7 +221,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Touch swipe gestures on Kanban.
   * Visual regression tests pass.
 - **Dependencies** MC-4, MC-5
-- [ ] MC-7 Implement responsive mobile-first layout
+- [x] MC-7 Implement responsive mobile-first layout
 ---
 
 ### Task MC-8

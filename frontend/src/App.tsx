@@ -1,7 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { HamburgerMenu } from './components/HamburgerMenu';
 import { KanbanBoard } from './components/KanbanBoard';
 import { SessionDashboard } from './components/SessionDashboard';
 import { ThemeToggle } from './components/ThemeToggle';
+import { useBreakpoints } from './hooks/useMediaQuery';
 import { useSessions } from './hooks/useSessions';
 import { useTasks } from './hooks/useTasks';
 import { useTheme } from './hooks/useTheme';
@@ -31,8 +33,25 @@ function App() {
 
   const [activeTab, setActiveTab] = useState<Tab>('sessions');
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const { theme, setTheme } = useTheme();
+  const { isMobile } = useBreakpoints();
+
+  // Close mobile menu when switching to desktop view
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileMenuOpen(false);
+    }
+  }, [isMobile]);
+
+  const toggleMobileMenu = useCallback(() => {
+    setMobileMenuOpen((prev) => !prev);
+  }, []);
+
+  const closeMobileMenu = useCallback(() => {
+    setMobileMenuOpen(false);
+  }, []);
 
   const {
     loading: sessionsLoading,
@@ -83,10 +102,11 @@ function App() {
 
   const handleTabChange = useCallback((tab: Tab) => {
     setActiveTab(tab);
+    closeMobileMenu();
     if (tab === 'tasks' && selectedSession) {
       fetchTasks();
     }
-  }, [selectedSession, fetchTasks]);
+  }, [selectedSession, fetchTasks, closeMobileMenu]);
 
   const error = wsError || fetchError || tasksError;
   const loading = sessionsLoading || tasksLoading;
@@ -98,10 +118,32 @@ function App() {
 
   return (
     <div className="app">
+      {/* Mobile nav overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="mobile-nav-overlay mobile-nav-overlay--open"
+          onClick={closeMobileMenu}
+          aria-hidden="true"
+        />
+      )}
       <header className="header">
-        <h1>Gralph Mission Control</h1>
+        <div className="header__mobile-controls">
+          <h1>Gralph Mission Control</h1>
+          {isMobile && (
+            <HamburgerMenu
+              isOpen={mobileMenuOpen}
+              onToggle={toggleMobileMenu}
+              aria-controls="main-nav"
+            />
+          )}
+        </div>
         <div className="header__right">
-          <nav className="header__nav" role="tablist" aria-label="Main navigation">
+          <nav
+            id="main-nav"
+            className={`header__nav ${mobileMenuOpen ? 'header__nav--mobile-open' : ''}`}
+            role="tablist"
+            aria-label="Main navigation"
+          >
             <button
               role="tab"
               aria-selected={activeTab === 'sessions'}

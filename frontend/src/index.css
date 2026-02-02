@@ -794,6 +794,12 @@ body {
   cursor: grabbing;
 }
 
+.task-card--selected {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-bg);
+  background-color: var(--color-primary-bg);
+}
+
 .task-card__header {
   display: flex;
   justify-content: space-between;
@@ -828,26 +834,307 @@ body {
   margin-bottom: 0.25rem;
 }
 
-/* Responsive adjustments */
-@media (max-width: 768px) {
+/* ==============================================
+   Responsive Breakpoints (Mobile-First Approach)
+   - sm: 640px
+   - md: 768px
+   - lg: 1024px
+   ============================================== */
+
+/* Mobile Base Styles (< 640px) */
+.app {
+  padding: 0.75rem;
+}
+
+.header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+.header h1 {
+  font-size: 1.5rem;
+}
+
+.header__right {
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.header__nav {
+  display: none;
+}
+
+.header__nav--mobile-open {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* Hamburger Menu Button */
+.hamburger-menu {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  width: 2rem;
+  height: 1.5rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  z-index: 10;
+}
+
+.hamburger-menu__line {
+  width: 100%;
+  height: 3px;
+  background-color: var(--color-text);
+  border-radius: 2px;
+  transition: all 0.3s ease;
+  transform-origin: center;
+}
+
+.hamburger-menu--open .hamburger-menu__line:nth-child(1) {
+  transform: rotate(45deg) translate(5px, 5px);
+}
+
+.hamburger-menu--open .hamburger-menu__line:nth-child(2) {
+  opacity: 0;
+}
+
+.hamburger-menu--open .hamburger-menu__line:nth-child(3) {
+  transform: rotate(-45deg) translate(5px, -5px);
+}
+
+.header__mobile-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+/* Mobile navigation overlay */
+.mobile-nav-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 5;
+}
+
+.mobile-nav-overlay--open {
+  display: block;
+}
+
+/* Mobile Kanban (stacked columns) */
+.kanban-board__columns {
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+/* Mobile session grid */
+.session-dashboard__grid {
+  grid-template-columns: 1fr;
+}
+
+/* Mobile stats - horizontal scroll */
+.session-dashboard__stats {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-bottom: 0.5rem;
+}
+
+.session-dashboard__stats::-webkit-scrollbar {
+  display: none;
+}
+
+.stat-item {
+  min-width: 70px;
+  padding: 0.5rem 1rem;
+}
+
+.stat-value {
+  font-size: 1.25rem;
+}
+
+/* Mobile task cards - touch friendly */
+.task-card {
+  padding: 1rem;
+  touch-action: pan-y pinch-zoom;
+}
+
+/* Touch-friendly drop zone indicators */
+.kanban-column--touch-target {
+  min-height: 150px;
+}
+
+/* Swipe hint indicator */
+.kanban-board__swipe-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.kanban-board__swipe-indicator {
+  display: inline-block;
+  animation: swipeHint 2s infinite ease-in-out;
+}
+
+@keyframes swipeHint {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(10px); }
+}
+
+/* Small screens (>= 640px) */
+@media (min-width: 640px) {
   .app {
     padding: 1rem;
-  }
-
-  .header {
-    flex-direction: column;
-    align-items: flex-start;
   }
 
   .header h1 {
     font-size: 1.75rem;
   }
 
-  .kanban-board__columns {
-    grid-template-columns: 1fr;
+  .header__right {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .session-dashboard__stats {
+    overflow-x: visible;
+    flex-wrap: wrap;
+  }
+
+  .stat-item {
+    padding: 0.75rem 1.25rem;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
   }
 
   .session-dashboard__grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+
+  .kanban-board__swipe-hint {
+    display: none;
+  }
+}
+
+/* Medium screens (>= 768px) */
+@media (min-width: 768px) {
+  .app {
+    padding: 1.5rem;
+  }
+
+  .header {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .header h1 {
+    font-size: 2rem;
+  }
+
+  .hamburger-menu {
+    display: none;
+  }
+
+  .header__mobile-controls {
+    display: contents;
+  }
+
+  .header__nav {
+    display: flex;
+  }
+
+  .header__nav--mobile-open {
+    flex-direction: row;
+  }
+
+  .kanban-board__columns {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .session-dashboard__grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
+
+  .task-card {
+    padding: 0.75rem;
+  }
+}
+
+/* Large screens (>= 1024px) */
+@media (min-width: 1024px) {
+  .app {
+    padding: 2rem;
+  }
+
+  .header h1 {
+    font-size: 2.5rem;
+  }
+
+  .kanban-board__columns {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .session-dashboard__grid {
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .task-card {
+    cursor: default;
+  }
+
+  .task-card:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
+
+  /* Larger touch targets */
+  .header__tab {
+    padding: 0.75rem 1.25rem;
+    min-height: 44px;
+  }
+
+  .session-card__button,
+  .session-dashboard__refresh,
+  .kanban-board__refresh {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .theme-toggle__button {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  /* Hide drag hint on touch devices */
+  .task-card__drag-hint {
+    display: none;
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .hamburger-menu__line,
+  .task-card,
+  .kanban-board__swipe-indicator {
+    transition: none;
+    animation: none;
   }
 }

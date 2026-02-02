@@ -14,6 +14,13 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-7 Add responsive mobile-first layout with breakpoints at 640px, 768px, and 1024px.
+- MC-7 Add HamburgerMenu component for mobile navigation with animated toggle.
+- MC-7 Add useTouchSwipe hook for touch gesture detection on mobile devices.
+- MC-7 Add useMediaQuery and useBreakpoints hooks for responsive component logic.
+- MC-7 Add touch swipe gestures on Kanban board to move tasks between columns.
+- MC-7 Add mobile-optimized CSS with touch-friendly targets and reduced motion support.
+- MC-7 Add 35 new tests for HamburgerMenu, useTouchSwipe, and useMediaQuery.
 - MC-6 Add dark mode support with theme toggle in header.
 - MC-6 Add useTheme hook for theme state management with localStorage persistence.
 - MC-6 Add system preference detection (prefers-color-scheme) for automatic theme selection.

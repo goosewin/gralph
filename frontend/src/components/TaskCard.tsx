@@ -3,9 +3,11 @@ import type { Task, TaskStatus } from '../types/session';
 export interface TaskCardProps {
   task: Task;
   isDragging?: boolean;
+  isSelected?: boolean;
   onDragStart?: (taskId: string, event: React.DragEvent) => void;
   onDragEnd?: (event: React.DragEvent) => void;
   onKeyDown?: (taskId: string, event: React.KeyboardEvent) => void;
+  onTouch?: (taskId: string) => void;
   tabIndex?: number;
 }
 
@@ -18,9 +20,11 @@ const STATUS_CONFIG: Record<TaskStatus, { label: string; className: string }> = 
 export function TaskCard({
   task,
   isDragging = false,
+  isSelected = false,
   onDragStart,
   onDragEnd,
   onKeyDown,
+  onTouch,
   tabIndex = 0,
 }: TaskCardProps) {
   const statusConfig = STATUS_CONFIG[task.status] || STATUS_CONFIG.pending;
@@ -39,17 +43,30 @@ export function TaskCard({
     onKeyDown?.(task.id, event);
   };
 
+  const handleClick = () => {
+    onTouch?.(task.id);
+  };
+
+  const classNames = [
+    'task-card',
+    statusConfig.className,
+    isDragging ? 'task-card--dragging' : '',
+    isSelected ? 'task-card--selected' : '',
+  ].filter(Boolean).join(' ');
+
   return (
     <article
-      className={`task-card ${statusConfig.className} ${isDragging ? 'task-card--dragging' : ''}`}
+      className={classNames}
       draggable
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onKeyDown={handleKeyDown}
+      onClick={handleClick}
       tabIndex={tabIndex}
       role="article"
-      aria-label={`Task ${task.id}: ${task.title}. Status: ${statusConfig.label}`}
+      aria-label={`Task ${task.id}: ${task.title}. Status: ${statusConfig.label}${isSelected ? '. Selected for swipe movement' : ''}`}
       aria-grabbed={isDragging}
+      aria-selected={isSelected}
       data-task-id={task.id}
     >
       <header className="task-card__header">

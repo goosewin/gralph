@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { useBreakpoints } from '../hooks/useMediaQuery';
+import { useTouchSwipe } from '../hooks/useTouchSwipe';
 import type { Task, TaskStatus, ConnectionState } from '../types/session';
 import { KanbanColumn } from './KanbanColumn';
 
@@ -34,7 +36,9 @@ export function KanbanBoard({
 }: KanbanBoardProps) {
   const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState<string>('');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const announcementTimeoutRef = useRef<number | null>(null);
+  const { isTouchDevice, isMobile } = useBreakpoints();
 
   // Group tasks by status
   const tasksByStatus = useMemo(() => {
@@ -62,6 +66,50 @@ export function KanbanBoard({
     announcementTimeoutRef.current = window.setTimeout(() => {
       setAnnouncement('');
     }, 1000);
+  }, []);
+
+  // Handle swipe to move selected task
+  const handleSwipeMove = useCallback(
+    async (direction: 'left' | 'right') => {
+      if (!selectedTaskId || !onUpdateTaskStatus) return;
+
+      const task = tasks.find((t) => t.id === selectedTaskId);
+      if (!task) return;
+
+      const currentIndex = STATUS_ORDER.indexOf(task.status);
+      let newIndex: number;
+
+      if (direction === 'left') {
+        newIndex = Math.max(0, currentIndex - 1);
+      } else {
+        newIndex = Math.min(STATUS_ORDER.length - 1, currentIndex + 1);
+      }
+
+      if (newIndex !== currentIndex) {
+        const newStatus = STATUS_ORDER[newIndex];
+        const columnTitle = COLUMNS.find((c) => c.status === newStatus)?.title || newStatus;
+        try {
+          await onUpdateTaskStatus(selectedTaskId, newStatus);
+          announce(`Moved task ${task.id} to ${columnTitle}`);
+        } catch (err) {
+          announce(`Failed to move task ${task.id}`);
+        }
+      }
+    },
+    [selectedTaskId, tasks, onUpdateTaskStatus, announce]
+  );
+
+  // Touch swipe gesture support
+  const { handlers: swipeHandlers, swiping } = useTouchSwipe({
+    enabled: isTouchDevice && !!selectedTaskId,
+    minSwipeDistance: 50,
+    onSwipeLeft: () => handleSwipeMove('right'), // Swipe left moves task right (forward)
+    onSwipeRight: () => handleSwipeMove('left'), // Swipe right moves task left (backward)
+  });
+
+  // Handle task selection for touch swipe
+  const handleTaskTouch = useCallback((taskId: string) => {
+    setSelectedTaskId((prev) => (prev === taskId ? null : taskId));
   }, []);
 
   // Drag and drop handlers
@@ -212,9 +260,25 @@ export function KanbanBoard({
         <p>
           <strong>Keyboard:</strong> Use arrow keys to navigate. Left/Right moves tasks between columns.
         </p>
+        {isTouchDevice && (
+          <p>
+            <strong>Touch:</strong> Tap a task to select it, then swipe left/right to move between columns.
+          </p>
+        )}
       </div>
 
-      <div className="kanban-board__columns">
+      {/* Swipe hint for mobile */}
+      {isMobile && tasks.length > 0 && (
+        <div className="kanban-board__swipe-hint" aria-hidden="true">
+          <span className="kanban-board__swipe-indicator">👆</span>
+          <span>Tap to select, swipe to move</span>
+        </div>
+      )}
+
+      <div
+        className={`kanban-board__columns ${swiping ? 'kanban-board__columns--swiping' : ''}`}
+        {...swipeHandlers}
+      >
         {COLUMNS.map((column) => (
           <KanbanColumn
             key={column.status}
@@ -222,11 +286,13 @@ export function KanbanBoard({
             title={column.title}
             tasks={tasksByStatus[column.status]}
             draggingTaskId={draggingTaskId}
+            selectedTaskId={selectedTaskId}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             onTaskKeyDown={handleTaskKeyDown}
+            onTaskTouch={handleTaskTouch}
           />
         ))}
       </div>
