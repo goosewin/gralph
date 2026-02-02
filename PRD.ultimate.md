@@ -335,7 +335,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Manual or automatic resolution options.
   * Integration tests with conflicting changes.
 - **Dependencies** MC-12
-- [ ] MC-15 Implement agent conflict detection
+- [x] MC-15 Implement agent conflict detection
 ---
 
 ### Task MC-16

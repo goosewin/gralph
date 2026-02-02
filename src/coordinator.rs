@@ -1612,6 +1612,715 @@ pub struct LoadBalancerStats {
     pub strategy: LoadBalanceStrategy,
 }
 
+// ============================================================================
+// Conflict Detection Implementation (MC-15)
+// ============================================================================
+
+/// Strategy for resolving conflicts between parallel agents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ConflictResolutionStrategy {
+    /// Manual resolution required - user must intervene.
+    #[default]
+    Manual,
+    /// Automatic resolution using the first agent's changes (oldest wins).
+    FirstWins,
+    /// Automatic resolution using the last agent's changes (newest wins).
+    LastWins,
+    /// Automatic resolution by merging non-overlapping changes.
+    MergeNonOverlapping,
+}
+
+/// Severity level for detected conflicts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ConflictSeverity {
+    /// Low severity: conflicts are in comments or whitespace.
+    Low,
+    /// Medium severity: conflicts in non-critical code sections.
+    Medium,
+    /// High severity: conflicts in critical code paths.
+    High,
+    /// Critical severity: conflicts that may break compilation or tests.
+    Critical,
+}
+
+/// Represents a single file conflict between two agents.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileConflict {
+    /// Path to the conflicting file relative to repo root.
+    pub file_path: String,
+    /// Agent that made the first change.
+    pub agent_a: AgentId,
+    /// Agent that made the conflicting change.
+    pub agent_b: AgentId,
+    /// Lines changed by agent A.
+    pub lines_a: Vec<LineChange>,
+    /// Lines changed by agent B.
+    pub lines_b: Vec<LineChange>,
+    /// Severity of the conflict.
+    pub severity: ConflictSeverity,
+    /// Whether the conflict is a true overlap (same lines) or adjacent changes.
+    pub is_overlapping: bool,
+}
+
+/// Represents a change to a specific line or range of lines.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LineChange {
+    /// Starting line number (1-based).
+    pub start_line: usize,
+    /// Ending line number (inclusive, 1-based).
+    pub end_line: usize,
+    /// Type of change.
+    pub change_type: ChangeType,
+    /// Content of the changed lines (for additions/modifications).
+    pub content: Option<String>,
+}
+
+/// Type of change made to lines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChangeType {
+    /// Lines were added.
+    Added,
+    /// Lines were deleted.
+    Deleted,
+    /// Lines were modified.
+    Modified,
+}
+
+/// Aggregated conflict report for multiple agents and files.
+#[derive(Debug, Clone)]
+pub struct ConflictReport {
+    /// Individual file conflicts.
+    pub conflicts: Vec<FileConflict>,
+    /// Total number of conflicting files.
+    pub total_files: usize,
+    /// Total number of conflicting lines.
+    pub total_lines: usize,
+    /// Highest severity among all conflicts.
+    pub max_severity: ConflictSeverity,
+    /// Resolution strategy to apply.
+    pub resolution_strategy: ConflictResolutionStrategy,
+    /// Whether automatic resolution is possible.
+    pub can_auto_resolve: bool,
+    /// Suggested resolution actions.
+    pub suggestions: Vec<String>,
+}
+
+impl ConflictReport {
+    /// Creates an empty conflict report.
+    pub fn new() -> Self {
+        Self {
+            conflicts: Vec::new(),
+            total_files: 0,
+            total_lines: 0,
+            max_severity: ConflictSeverity::Low,
+            resolution_strategy: ConflictResolutionStrategy::Manual,
+            can_auto_resolve: true,
+            suggestions: Vec::new(),
+        }
+    }
+
+    /// Adds a conflict to the report.
+    pub fn add_conflict(&mut self, conflict: FileConflict) {
+        if conflict.severity > self.max_severity {
+            self.max_severity = conflict.severity;
+        }
+        if conflict.is_overlapping {
+            self.can_auto_resolve = false;
+        }
+        self.total_lines += conflict.lines_a.len() + conflict.lines_b.len();
+        self.conflicts.push(conflict);
+        self.total_files = self.conflicts.iter().map(|c| &c.file_path).collect::<std::collections::HashSet<_>>().len();
+    }
+
+    /// Returns true if any conflicts were detected.
+    pub fn has_conflicts(&self) -> bool {
+        !self.conflicts.is_empty()
+    }
+
+    /// Returns the number of high or critical severity conflicts.
+    pub fn critical_count(&self) -> usize {
+        self.conflicts
+            .iter()
+            .filter(|c| c.severity >= ConflictSeverity::High)
+            .count()
+    }
+
+    /// Sets the resolution strategy.
+    pub fn with_strategy(mut self, strategy: ConflictResolutionStrategy) -> Self {
+        self.resolution_strategy = strategy;
+        self
+    }
+
+    /// Adds a suggestion for conflict resolution.
+    pub fn add_suggestion(&mut self, suggestion: String) {
+        self.suggestions.push(suggestion);
+    }
+
+    /// Generates a summary of the conflict report.
+    pub fn summary(&self) -> String {
+        if !self.has_conflicts() {
+            return "No conflicts detected.".to_string();
+        }
+
+        let mut summary = format!(
+            "Detected {} conflict(s) in {} file(s) ({} lines affected).\n",
+            self.conflicts.len(),
+            self.total_files,
+            self.total_lines
+        );
+        summary.push_str(&format!("Max severity: {:?}\n", self.max_severity));
+        summary.push_str(&format!(
+            "Auto-resolve possible: {}\n",
+            if self.can_auto_resolve { "yes" } else { "no" }
+        ));
+
+        if !self.suggestions.is_empty() {
+            summary.push_str("\nSuggestions:\n");
+            for (i, suggestion) in self.suggestions.iter().enumerate() {
+                summary.push_str(&format!("  {}. {}\n", i + 1, suggestion));
+            }
+        }
+
+        summary
+    }
+}
+
+impl Default for ConflictReport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Configuration for conflict detection.
+#[derive(Debug, Clone)]
+pub struct ConflictDetectionConfig {
+    /// Default resolution strategy.
+    pub default_strategy: ConflictResolutionStrategy,
+    /// Whether to auto-resolve when possible.
+    pub auto_resolve: bool,
+    /// Number of context lines around changes for conflict detection.
+    pub context_lines: usize,
+    /// File patterns to ignore when detecting conflicts.
+    pub ignore_patterns: Vec<String>,
+    /// Whether to treat adjacent (non-overlapping) changes as conflicts.
+    pub strict_mode: bool,
+}
+
+impl Default for ConflictDetectionConfig {
+    fn default() -> Self {
+        Self {
+            default_strategy: ConflictResolutionStrategy::Manual,
+            auto_resolve: false,
+            context_lines: 3,
+            ignore_patterns: vec![
+                "*.lock".to_string(),
+                "*.log".to_string(),
+                ".gitignore".to_string(),
+            ],
+            strict_mode: false,
+        }
+    }
+}
+
+impl ConflictDetectionConfig {
+    /// Sets the default resolution strategy.
+    pub fn with_strategy(mut self, strategy: ConflictResolutionStrategy) -> Self {
+        self.default_strategy = strategy;
+        self
+    }
+
+    /// Enables or disables auto-resolution.
+    pub fn with_auto_resolve(mut self, auto_resolve: bool) -> Self {
+        self.auto_resolve = auto_resolve;
+        self
+    }
+
+    /// Sets the number of context lines.
+    pub fn with_context_lines(mut self, lines: usize) -> Self {
+        self.context_lines = lines;
+        self
+    }
+
+    /// Adds patterns to ignore.
+    pub fn with_ignore_patterns(mut self, patterns: Vec<String>) -> Self {
+        self.ignore_patterns = patterns;
+        self
+    }
+
+    /// Enables or disables strict mode.
+    pub fn with_strict_mode(mut self, strict: bool) -> Self {
+        self.strict_mode = strict;
+        self
+    }
+}
+
+/// Detects and analyzes conflicts between changes made by parallel agents.
+///
+/// The `ConflictDetector` compares changes from multiple agent worktrees
+/// against a common base and identifies overlapping modifications.
+#[derive(Debug)]
+pub struct ConflictDetector {
+    /// Configuration for conflict detection.
+    config: ConflictDetectionConfig,
+    /// Repository root path.
+    repo_root: PathBuf,
+    /// Base commit or branch to compare against.
+    base_ref: String,
+}
+
+impl ConflictDetector {
+    /// Creates a new conflict detector for the given repository.
+    ///
+    /// # Arguments
+    /// * `repo_root` - Path to the git repository root
+    /// * `base_ref` - Git reference (commit, branch, tag) to use as the base for comparison
+    pub fn new(repo_root: PathBuf, base_ref: String) -> Self {
+        Self {
+            config: ConflictDetectionConfig::default(),
+            repo_root,
+            base_ref,
+        }
+    }
+
+    /// Creates a conflict detector with custom configuration.
+    pub fn with_config(mut self, config: ConflictDetectionConfig) -> Self {
+        self.config = config;
+        self
+    }
+
+    /// Returns the repository root path.
+    pub fn repo_root(&self) -> &Path {
+        &self.repo_root
+    }
+
+    /// Returns the current configuration.
+    pub fn config(&self) -> &ConflictDetectionConfig {
+        &self.config
+    }
+
+    /// Detects conflicts between changes from two worktrees.
+    ///
+    /// Compares the changes each worktree made relative to the base reference
+    /// and identifies any overlapping or conflicting modifications.
+    pub fn detect_conflicts(
+        &self,
+        worktree_a: &Path,
+        agent_a: AgentId,
+        worktree_b: &Path,
+        agent_b: AgentId,
+    ) -> Result<ConflictReport, ConflictDetectionError> {
+        let changes_a = self.get_changes(worktree_a)?;
+        let changes_b = self.get_changes(worktree_b)?;
+
+        let mut report = ConflictReport::new();
+        report.resolution_strategy = self.config.default_strategy;
+
+        // Find files changed by both agents
+        let files_a: HashSet<_> = changes_a.keys().collect();
+        let files_b: HashSet<_> = changes_b.keys().collect();
+        let common_files: Vec<_> = files_a.intersection(&files_b).collect();
+
+        for file_path in common_files {
+            if self.should_ignore(file_path) {
+                continue;
+            }
+
+            let lines_a = changes_a.get(*file_path).unwrap();
+            let lines_b = changes_b.get(*file_path).unwrap();
+
+            if let Some(conflict) = self.analyze_file_conflict(
+                file_path,
+                agent_a,
+                agent_b,
+                lines_a,
+                lines_b,
+            ) {
+                report.add_conflict(conflict);
+            }
+        }
+
+        // Add suggestions based on conflict analysis
+        self.add_resolution_suggestions(&mut report);
+
+        Ok(report)
+    }
+
+    /// Detects conflicts across multiple worktrees.
+    ///
+    /// Performs pairwise comparison of all worktrees and aggregates conflicts.
+    pub fn detect_conflicts_multi(
+        &self,
+        worktrees: &[(AgentId, &Path)],
+    ) -> Result<ConflictReport, ConflictDetectionError> {
+        let mut report = ConflictReport::new();
+        report.resolution_strategy = self.config.default_strategy;
+
+        // Compare each pair of worktrees
+        for i in 0..worktrees.len() {
+            for j in (i + 1)..worktrees.len() {
+                let (agent_a, path_a) = worktrees[i];
+                let (agent_b, path_b) = worktrees[j];
+
+                let pair_report = self.detect_conflicts(path_a, agent_a, path_b, agent_b)?;
+                for conflict in pair_report.conflicts {
+                    report.add_conflict(conflict);
+                }
+            }
+        }
+
+        self.add_resolution_suggestions(&mut report);
+        Ok(report)
+    }
+
+    /// Gets the list of changed files and their modified lines in a worktree.
+    fn get_changes(&self, worktree: &Path) -> Result<HashMap<String, Vec<LineChange>>, ConflictDetectionError> {
+        // Get the diff between base and worktree HEAD
+        let diff_output = self.git_diff(worktree, &self.base_ref, "HEAD")?;
+        self.parse_diff_output(&diff_output)
+    }
+
+    /// Runs git diff between two refs in a worktree.
+    fn git_diff(&self, worktree: &Path, from: &str, to: &str) -> Result<String, ConflictDetectionError> {
+        let output = ProcCommand::new("git")
+            .arg("-C")
+            .arg(worktree)
+            .args(["diff", "--unified=0", from, to])
+            .output()
+            .map_err(|e| ConflictDetectionError::GitError(e.to_string()))?;
+
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            Err(ConflictDetectionError::GitError(stderr.to_string()))
+        }
+    }
+
+    /// Parses git diff output into a map of file paths to line changes.
+    fn parse_diff_output(&self, diff: &str) -> Result<HashMap<String, Vec<LineChange>>, ConflictDetectionError> {
+        let mut changes: HashMap<String, Vec<LineChange>> = HashMap::new();
+        let mut current_file: Option<String> = None;
+
+        for line in diff.lines() {
+            // Parse file headers: "diff --git a/path b/path" or "+++ b/path"
+            if let Some(rest) = line.strip_prefix("+++ b/") {
+                current_file = Some(rest.to_string());
+                if !changes.contains_key(rest) {
+                    changes.insert(rest.to_string(), Vec::new());
+                }
+                continue;
+            }
+
+            // Parse hunk headers: "@@ -start,count +start,count @@"
+            if line.starts_with("@@") {
+                if let Some(file) = &current_file {
+                    if let Some(line_change) = self.parse_hunk_header(line) {
+                        changes.get_mut(file).unwrap().push(line_change);
+                    }
+                }
+            }
+        }
+
+        Ok(changes)
+    }
+
+    /// Parses a git diff hunk header into a LineChange.
+    fn parse_hunk_header(&self, header: &str) -> Option<LineChange> {
+        // Format: @@ -old_start,old_count +new_start,new_count @@
+        let parts: Vec<&str> = header.split_whitespace().collect();
+        if parts.len() < 3 {
+            return None;
+        }
+
+        let new_range = parts[2]; // +start,count or +start
+        let new_range = new_range.strip_prefix('+')?;
+
+        let (start, count) = if let Some(idx) = new_range.find(',') {
+            let start: usize = new_range[..idx].parse().ok()?;
+            let count: usize = new_range[idx + 1..].parse().ok()?;
+            (start, count)
+        } else {
+            let start: usize = new_range.parse().ok()?;
+            (start, 1)
+        };
+
+        if count == 0 {
+            return None; // Pure deletion
+        }
+
+        let change_type = if parts[1].contains(",0") {
+            ChangeType::Added
+        } else {
+            ChangeType::Modified
+        };
+
+        Some(LineChange {
+            start_line: start.max(1),
+            end_line: (start + count).saturating_sub(1).max(1),
+            change_type,
+            content: None,
+        })
+    }
+
+    /// Analyzes whether changes to a file from two agents conflict.
+    fn analyze_file_conflict(
+        &self,
+        file_path: &str,
+        agent_a: AgentId,
+        agent_b: AgentId,
+        lines_a: &[LineChange],
+        lines_b: &[LineChange],
+    ) -> Option<FileConflict> {
+        let mut overlapping = false;
+        let context = self.config.context_lines;
+
+        // Check for overlapping line ranges
+        for change_a in lines_a {
+            for change_b in lines_b {
+                let range_a = (
+                    change_a.start_line.saturating_sub(context),
+                    change_a.end_line + context,
+                );
+                let range_b = (
+                    change_b.start_line.saturating_sub(context),
+                    change_b.end_line + context,
+                );
+
+                // Check if ranges overlap
+                if range_a.0 <= range_b.1 && range_b.0 <= range_a.1 {
+                    // True overlap (same lines) or adjacent (within context)
+                    let true_overlap = change_a.start_line <= change_b.end_line
+                        && change_b.start_line <= change_a.end_line;
+
+                    if true_overlap || self.config.strict_mode {
+                        overlapping = true;
+                        break;
+                    }
+                }
+            }
+            if overlapping {
+                break;
+            }
+        }
+
+        // If no overlap and not in strict mode, no conflict
+        if !overlapping && !self.config.strict_mode {
+            return None;
+        }
+
+        // Determine severity based on file type and change extent
+        let severity = self.assess_severity(file_path, lines_a, lines_b);
+
+        Some(FileConflict {
+            file_path: file_path.to_string(),
+            agent_a,
+            agent_b,
+            lines_a: lines_a.to_vec(),
+            lines_b: lines_b.to_vec(),
+            severity,
+            is_overlapping: overlapping,
+        })
+    }
+
+    /// Assesses the severity of a conflict based on file type and extent.
+    fn assess_severity(
+        &self,
+        file_path: &str,
+        lines_a: &[LineChange],
+        lines_b: &[LineChange],
+    ) -> ConflictSeverity {
+        // Critical files
+        let critical_patterns = ["Cargo.toml", "Cargo.lock", "package.json", "go.mod", "pyproject.toml"];
+        if critical_patterns.iter().any(|p| file_path.ends_with(p)) {
+            return ConflictSeverity::Critical;
+        }
+
+        // Configuration files
+        let config_patterns = [".yml", ".yaml", ".json", ".toml", ".ini", ".env"];
+        if config_patterns.iter().any(|p| file_path.ends_with(p)) {
+            return ConflictSeverity::High;
+        }
+
+        // Assess based on number of conflicting lines
+        let total_lines = lines_a.len() + lines_b.len();
+        if total_lines > 20 {
+            return ConflictSeverity::High;
+        }
+        if total_lines > 5 {
+            return ConflictSeverity::Medium;
+        }
+
+        ConflictSeverity::Low
+    }
+
+    /// Checks if a file should be ignored based on configured patterns.
+    ///
+    /// Supports glob-like patterns:
+    /// - `*.ext` matches any file ending with `.ext`
+    /// - `*-lock*` matches files containing `-lock` (e.g., `package-lock.json`)
+    /// - Exact matches for filenames
+    fn should_ignore(&self, file_path: &str) -> bool {
+        let filename = file_path.rsplit('/').next().unwrap_or(file_path);
+
+        for pattern in &self.config.ignore_patterns {
+            if pattern.starts_with('*') && pattern.ends_with('*') {
+                // Pattern like *-lock* - check if filename contains the middle part
+                let middle = &pattern[1..pattern.len() - 1];
+                if filename.contains(middle) {
+                    return true;
+                }
+            } else if pattern.starts_with('*') {
+                // Pattern like *.ext - check suffix
+                let suffix = &pattern[1..];
+                if filename.ends_with(suffix) {
+                    return true;
+                }
+            } else if file_path == pattern || filename == pattern {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Adds resolution suggestions to a conflict report.
+    fn add_resolution_suggestions(&self, report: &mut ConflictReport) {
+        if !report.has_conflicts() {
+            return;
+        }
+
+        if report.can_auto_resolve && self.config.auto_resolve {
+            report.add_suggestion(format!(
+                "Conflicts can be auto-resolved using {:?} strategy.",
+                self.config.default_strategy
+            ));
+        }
+
+        if report.max_severity >= ConflictSeverity::High {
+            report.add_suggestion("High severity conflicts detected. Manual review recommended.".to_string());
+        }
+
+        if report.critical_count() > 0 {
+            report.add_suggestion(format!(
+                "{} critical conflict(s) require immediate attention.",
+                report.critical_count()
+            ));
+        }
+
+        // Suggest based on overlap patterns
+        let overlapping_count = report.conflicts.iter().filter(|c| c.is_overlapping).count();
+        if overlapping_count == 0 && report.has_conflicts() {
+            report.add_suggestion(
+                "All conflicts are in adjacent (non-overlapping) regions. \
+                Consider using MergeNonOverlapping strategy.".to_string()
+            );
+        }
+    }
+
+    /// Attempts to auto-resolve conflicts using the configured strategy.
+    ///
+    /// Returns the resolved content for each conflicting file, or an error
+    /// if auto-resolution is not possible.
+    pub fn resolve(
+        &self,
+        report: &ConflictReport,
+        worktree_a: &Path,
+        worktree_b: &Path,
+    ) -> Result<HashMap<String, String>, ConflictDetectionError> {
+        if !report.can_auto_resolve && report.resolution_strategy != ConflictResolutionStrategy::Manual {
+            return Err(ConflictDetectionError::CannotAutoResolve);
+        }
+
+        match report.resolution_strategy {
+            ConflictResolutionStrategy::Manual => {
+                Err(ConflictDetectionError::ManualResolutionRequired)
+            }
+            ConflictResolutionStrategy::FirstWins => {
+                self.resolve_with_preference(report, worktree_a)
+            }
+            ConflictResolutionStrategy::LastWins => {
+                self.resolve_with_preference(report, worktree_b)
+            }
+            ConflictResolutionStrategy::MergeNonOverlapping => {
+                self.resolve_merge_non_overlapping(report, worktree_a, worktree_b)
+            }
+        }
+    }
+
+    /// Resolves by taking all content from the preferred worktree.
+    fn resolve_with_preference(
+        &self,
+        report: &ConflictReport,
+        preferred: &Path,
+    ) -> Result<HashMap<String, String>, ConflictDetectionError> {
+        let mut resolved = HashMap::new();
+
+        for conflict in &report.conflicts {
+            let file_path = preferred.join(&conflict.file_path);
+            let content = fs::read_to_string(&file_path)
+                .map_err(|e| ConflictDetectionError::IoError(e.to_string()))?;
+            resolved.insert(conflict.file_path.clone(), content);
+        }
+
+        Ok(resolved)
+    }
+
+    /// Resolves by merging non-overlapping changes from both worktrees.
+    fn resolve_merge_non_overlapping(
+        &self,
+        report: &ConflictReport,
+        _worktree_a: &Path,
+        _worktree_b: &Path,
+    ) -> Result<HashMap<String, String>, ConflictDetectionError> {
+        // Check if merge is possible
+        let has_overlapping = report.conflicts.iter().any(|c| c.is_overlapping);
+        if has_overlapping {
+            return Err(ConflictDetectionError::CannotAutoResolve);
+        }
+
+        // For now, return an error indicating this strategy requires implementation
+        // In a full implementation, this would:
+        // 1. Read base file content
+        // 2. Apply non-overlapping changes from both worktrees
+        // 3. Return merged content
+        Err(ConflictDetectionError::CannotAutoResolve)
+    }
+}
+
+/// Errors that can occur during conflict detection.
+#[derive(Debug)]
+pub enum ConflictDetectionError {
+    /// Git command failed.
+    GitError(String),
+    /// I/O error reading files.
+    IoError(String),
+    /// Conflicts cannot be automatically resolved.
+    CannotAutoResolve,
+    /// Manual resolution is required.
+    ManualResolutionRequired,
+    /// Invalid worktree path.
+    InvalidWorktree(String),
+}
+
+impl fmt::Display for ConflictDetectionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConflictDetectionError::GitError(msg) => write!(f, "git error: {}", msg),
+            ConflictDetectionError::IoError(msg) => write!(f, "i/o error: {}", msg),
+            ConflictDetectionError::CannotAutoResolve => {
+                write!(f, "conflicts cannot be automatically resolved")
+            }
+            ConflictDetectionError::ManualResolutionRequired => {
+                write!(f, "manual resolution is required")
+            }
+            ConflictDetectionError::InvalidWorktree(path) => {
+                write!(f, "invalid worktree path: {}", path)
+            }
+        }
+    }
+}
+
+impl Error for ConflictDetectionError {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3406,5 +4115,731 @@ mod tests {
         // With weights 1:4 and 50 tasks, expect ~10 for agent 0 and ~40 for agent 1
         assert_eq!(count_0, 10);
         assert_eq!(count_1, 40);
+    }
+
+    // =========================================================================
+    // Conflict Detection Tests (MC-15)
+    // =========================================================================
+
+    #[test]
+    fn conflict_report_new_is_empty() {
+        let report = ConflictReport::new();
+        assert!(!report.has_conflicts());
+        assert_eq!(report.total_files, 0);
+        assert_eq!(report.total_lines, 0);
+        assert!(report.can_auto_resolve);
+    }
+
+    #[test]
+    fn conflict_report_add_conflict_updates_stats() {
+        let mut report = ConflictReport::new();
+
+        let conflict = FileConflict {
+            file_path: "src/main.rs".to_string(),
+            agent_a: AgentId(0),
+            agent_b: AgentId(1),
+            lines_a: vec![LineChange {
+                start_line: 10,
+                end_line: 15,
+                change_type: ChangeType::Modified,
+                content: None,
+            }],
+            lines_b: vec![LineChange {
+                start_line: 12,
+                end_line: 18,
+                change_type: ChangeType::Modified,
+                content: None,
+            }],
+            severity: ConflictSeverity::Medium,
+            is_overlapping: true,
+        };
+
+        report.add_conflict(conflict);
+
+        assert!(report.has_conflicts());
+        assert_eq!(report.conflicts.len(), 1);
+        assert_eq!(report.total_files, 1);
+        assert_eq!(report.total_lines, 2);
+        assert!(!report.can_auto_resolve); // Overlapping conflicts can't be auto-resolved
+    }
+
+    #[test]
+    fn conflict_report_tracks_max_severity() {
+        let mut report = ConflictReport::new();
+
+        let low_conflict = FileConflict {
+            file_path: "README.md".to_string(),
+            agent_a: AgentId(0),
+            agent_b: AgentId(1),
+            lines_a: vec![],
+            lines_b: vec![],
+            severity: ConflictSeverity::Low,
+            is_overlapping: false,
+        };
+
+        let high_conflict = FileConflict {
+            file_path: "src/lib.rs".to_string(),
+            agent_a: AgentId(0),
+            agent_b: AgentId(1),
+            lines_a: vec![],
+            lines_b: vec![],
+            severity: ConflictSeverity::High,
+            is_overlapping: false,
+        };
+
+        report.add_conflict(low_conflict);
+        assert_eq!(report.max_severity, ConflictSeverity::Low);
+
+        report.add_conflict(high_conflict);
+        assert_eq!(report.max_severity, ConflictSeverity::High);
+    }
+
+    #[test]
+    fn conflict_report_critical_count() {
+        let mut report = ConflictReport::new();
+
+        // Add one high severity conflict
+        report.add_conflict(FileConflict {
+            file_path: "src/main.rs".to_string(),
+            agent_a: AgentId(0),
+            agent_b: AgentId(1),
+            lines_a: vec![],
+            lines_b: vec![],
+            severity: ConflictSeverity::High,
+            is_overlapping: false,
+        });
+
+        // Add one critical severity conflict
+        report.add_conflict(FileConflict {
+            file_path: "Cargo.toml".to_string(),
+            agent_a: AgentId(0),
+            agent_b: AgentId(1),
+            lines_a: vec![],
+            lines_b: vec![],
+            severity: ConflictSeverity::Critical,
+            is_overlapping: false,
+        });
+
+        // Add one low severity conflict
+        report.add_conflict(FileConflict {
+            file_path: "README.md".to_string(),
+            agent_a: AgentId(0),
+            agent_b: AgentId(1),
+            lines_a: vec![],
+            lines_b: vec![],
+            severity: ConflictSeverity::Low,
+            is_overlapping: false,
+        });
+
+        assert_eq!(report.critical_count(), 2); // High + Critical
+    }
+
+    #[test]
+    fn conflict_report_summary_no_conflicts() {
+        let report = ConflictReport::new();
+        let summary = report.summary();
+        assert_eq!(summary, "No conflicts detected.");
+    }
+
+    #[test]
+    fn conflict_report_summary_with_conflicts() {
+        let mut report = ConflictReport::new();
+        report.add_conflict(FileConflict {
+            file_path: "src/main.rs".to_string(),
+            agent_a: AgentId(0),
+            agent_b: AgentId(1),
+            lines_a: vec![LineChange {
+                start_line: 10,
+                end_line: 10,
+                change_type: ChangeType::Modified,
+                content: None,
+            }],
+            lines_b: vec![],
+            severity: ConflictSeverity::Medium,
+            is_overlapping: false,
+        });
+
+        let summary = report.summary();
+        assert!(summary.contains("1 conflict(s)"));
+        assert!(summary.contains("1 file(s)"));
+        assert!(summary.contains("Medium"));
+    }
+
+    #[test]
+    fn conflict_report_with_strategy() {
+        let report = ConflictReport::new()
+            .with_strategy(ConflictResolutionStrategy::FirstWins);
+        assert_eq!(report.resolution_strategy, ConflictResolutionStrategy::FirstWins);
+    }
+
+    #[test]
+    fn conflict_report_add_suggestion() {
+        let mut report = ConflictReport::new();
+        report.add_suggestion("Test suggestion".to_string());
+        assert_eq!(report.suggestions.len(), 1);
+        assert_eq!(report.suggestions[0], "Test suggestion");
+    }
+
+    #[test]
+    fn conflict_detection_config_defaults() {
+        let config = ConflictDetectionConfig::default();
+        assert_eq!(config.default_strategy, ConflictResolutionStrategy::Manual);
+        assert!(!config.auto_resolve);
+        assert_eq!(config.context_lines, 3);
+        assert!(!config.strict_mode);
+        assert!(!config.ignore_patterns.is_empty());
+    }
+
+    #[test]
+    fn conflict_detection_config_builder() {
+        let config = ConflictDetectionConfig::default()
+            .with_strategy(ConflictResolutionStrategy::LastWins)
+            .with_auto_resolve(true)
+            .with_context_lines(5)
+            .with_strict_mode(true)
+            .with_ignore_patterns(vec!["*.bak".to_string()]);
+
+        assert_eq!(config.default_strategy, ConflictResolutionStrategy::LastWins);
+        assert!(config.auto_resolve);
+        assert_eq!(config.context_lines, 5);
+        assert!(config.strict_mode);
+        assert_eq!(config.ignore_patterns, vec!["*.bak".to_string()]);
+    }
+
+    #[test]
+    fn conflict_resolution_strategy_default() {
+        let strategy = ConflictResolutionStrategy::default();
+        assert_eq!(strategy, ConflictResolutionStrategy::Manual);
+    }
+
+    #[test]
+    fn conflict_severity_ordering() {
+        assert!(ConflictSeverity::Low < ConflictSeverity::Medium);
+        assert!(ConflictSeverity::Medium < ConflictSeverity::High);
+        assert!(ConflictSeverity::High < ConflictSeverity::Critical);
+    }
+
+    #[test]
+    fn line_change_types() {
+        let added = LineChange {
+            start_line: 1,
+            end_line: 5,
+            change_type: ChangeType::Added,
+            content: Some("new content".to_string()),
+        };
+
+        let deleted = LineChange {
+            start_line: 10,
+            end_line: 15,
+            change_type: ChangeType::Deleted,
+            content: None,
+        };
+
+        let modified = LineChange {
+            start_line: 20,
+            end_line: 25,
+            change_type: ChangeType::Modified,
+            content: Some("modified content".to_string()),
+        };
+
+        assert_eq!(added.change_type, ChangeType::Added);
+        assert_eq!(deleted.change_type, ChangeType::Deleted);
+        assert_eq!(modified.change_type, ChangeType::Modified);
+    }
+
+    #[test]
+    fn file_conflict_structure() {
+        let conflict = FileConflict {
+            file_path: "src/lib.rs".to_string(),
+            agent_a: AgentId(0),
+            agent_b: AgentId(1),
+            lines_a: vec![LineChange {
+                start_line: 10,
+                end_line: 20,
+                change_type: ChangeType::Modified,
+                content: None,
+            }],
+            lines_b: vec![LineChange {
+                start_line: 15,
+                end_line: 25,
+                change_type: ChangeType::Modified,
+                content: None,
+            }],
+            severity: ConflictSeverity::High,
+            is_overlapping: true,
+        };
+
+        assert_eq!(conflict.file_path, "src/lib.rs");
+        assert_eq!(conflict.agent_a, AgentId(0));
+        assert_eq!(conflict.agent_b, AgentId(1));
+        assert!(conflict.is_overlapping);
+    }
+
+    #[test]
+    fn conflict_detection_error_display() {
+        let git_err = ConflictDetectionError::GitError("command failed".to_string());
+        assert!(git_err.to_string().contains("git error"));
+
+        let io_err = ConflictDetectionError::IoError("file not found".to_string());
+        assert!(io_err.to_string().contains("i/o error"));
+
+        let auto_err = ConflictDetectionError::CannotAutoResolve;
+        assert!(auto_err.to_string().contains("cannot be automatically resolved"));
+
+        let manual_err = ConflictDetectionError::ManualResolutionRequired;
+        assert!(manual_err.to_string().contains("manual resolution"));
+
+        let worktree_err = ConflictDetectionError::InvalidWorktree("/bad/path".to_string());
+        assert!(worktree_err.to_string().contains("invalid worktree"));
+    }
+
+    #[test]
+    fn conflict_detector_config() {
+        let config = ConflictDetectionConfig::default()
+            .with_strategy(ConflictResolutionStrategy::MergeNonOverlapping);
+
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        ).with_config(config);
+
+        assert_eq!(
+            detector.config().default_strategy,
+            ConflictResolutionStrategy::MergeNonOverlapping
+        );
+    }
+
+    #[test]
+    fn conflict_report_non_overlapping_can_auto_resolve() {
+        let mut report = ConflictReport::new();
+
+        // Add a non-overlapping conflict
+        report.add_conflict(FileConflict {
+            file_path: "src/main.rs".to_string(),
+            agent_a: AgentId(0),
+            agent_b: AgentId(1),
+            lines_a: vec![],
+            lines_b: vec![],
+            severity: ConflictSeverity::Low,
+            is_overlapping: false,
+        });
+
+        assert!(report.can_auto_resolve);
+    }
+
+    #[test]
+    fn conflict_report_overlapping_cannot_auto_resolve() {
+        let mut report = ConflictReport::new();
+
+        // Add an overlapping conflict
+        report.add_conflict(FileConflict {
+            file_path: "src/main.rs".to_string(),
+            agent_a: AgentId(0),
+            agent_b: AgentId(1),
+            lines_a: vec![],
+            lines_b: vec![],
+            severity: ConflictSeverity::Low,
+            is_overlapping: true,
+        });
+
+        assert!(!report.can_auto_resolve);
+    }
+
+    #[test]
+    fn conflict_report_tracks_unique_files() {
+        let mut report = ConflictReport::new();
+
+        // Add two conflicts in the same file
+        report.add_conflict(FileConflict {
+            file_path: "src/main.rs".to_string(),
+            agent_a: AgentId(0),
+            agent_b: AgentId(1),
+            lines_a: vec![],
+            lines_b: vec![],
+            severity: ConflictSeverity::Low,
+            is_overlapping: false,
+        });
+
+        report.add_conflict(FileConflict {
+            file_path: "src/main.rs".to_string(),
+            agent_a: AgentId(0),
+            agent_b: AgentId(2),
+            lines_a: vec![],
+            lines_b: vec![],
+            severity: ConflictSeverity::Low,
+            is_overlapping: false,
+        });
+
+        // Add one conflict in a different file
+        report.add_conflict(FileConflict {
+            file_path: "src/lib.rs".to_string(),
+            agent_a: AgentId(1),
+            agent_b: AgentId(2),
+            lines_a: vec![],
+            lines_b: vec![],
+            severity: ConflictSeverity::Low,
+            is_overlapping: false,
+        });
+
+        assert_eq!(report.conflicts.len(), 3);
+        assert_eq!(report.total_files, 2); // Only 2 unique files
+    }
+
+    #[test]
+    fn conflict_report_default_is_new() {
+        let report = ConflictReport::default();
+        assert!(!report.has_conflicts());
+        assert!(report.suggestions.is_empty());
+    }
+
+    #[test]
+    fn conflict_report_summary_includes_suggestions() {
+        let mut report = ConflictReport::new();
+        report.add_conflict(FileConflict {
+            file_path: "src/main.rs".to_string(),
+            agent_a: AgentId(0),
+            agent_b: AgentId(1),
+            lines_a: vec![],
+            lines_b: vec![],
+            severity: ConflictSeverity::Medium,
+            is_overlapping: false,
+        });
+        report.add_suggestion("First suggestion".to_string());
+        report.add_suggestion("Second suggestion".to_string());
+
+        let summary = report.summary();
+        assert!(summary.contains("Suggestions:"));
+        assert!(summary.contains("First suggestion"));
+        assert!(summary.contains("Second suggestion"));
+    }
+
+    #[test]
+    fn conflict_detector_parse_hunk_header_basic() {
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        );
+
+        // Test "@@ -10,5 +15,7 @@" format
+        let result = detector.parse_hunk_header("@@ -10,5 +15,7 @@");
+        assert!(result.is_some());
+        let change = result.unwrap();
+        assert_eq!(change.start_line, 15);
+        assert_eq!(change.end_line, 21); // 15 + 7 - 1
+    }
+
+    #[test]
+    fn conflict_detector_parse_hunk_header_single_line() {
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        );
+
+        // Test "@@ -10,1 +15 @@" format (single line addition)
+        let result = detector.parse_hunk_header("@@ -10,1 +15 @@");
+        assert!(result.is_some());
+        let change = result.unwrap();
+        assert_eq!(change.start_line, 15);
+        assert_eq!(change.end_line, 15);
+    }
+
+    #[test]
+    fn conflict_detector_parse_hunk_header_addition() {
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        );
+
+        // Test "@@ -10,0 +15,3 @@" format (pure addition)
+        let result = detector.parse_hunk_header("@@ -10,0 +15,3 @@");
+        assert!(result.is_some());
+        let change = result.unwrap();
+        assert_eq!(change.change_type, ChangeType::Added);
+    }
+
+    #[test]
+    fn conflict_detector_parse_hunk_header_deletion() {
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        );
+
+        // Test "@@ -10,3 +10,0 @@" format (pure deletion)
+        let result = detector.parse_hunk_header("@@ -10,3 +10,0 @@");
+        assert!(result.is_none()); // Deletions have count 0, so None
+    }
+
+    #[test]
+    fn conflict_detector_should_ignore_patterns() {
+        let config = ConflictDetectionConfig::default()
+            .with_ignore_patterns(vec![
+                "*.lock".to_string(),
+                "*-lock*".to_string(),
+                ".gitignore".to_string(),
+            ]);
+
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        ).with_config(config);
+
+        assert!(detector.should_ignore("Cargo.lock"));
+        assert!(detector.should_ignore("package-lock.json"));
+        assert!(detector.should_ignore(".gitignore"));
+        assert!(!detector.should_ignore("src/main.rs"));
+        assert!(!detector.should_ignore("README.md"));
+    }
+
+    #[test]
+    fn conflict_detector_assess_severity_critical_files() {
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        );
+
+        let severity = detector.assess_severity("Cargo.toml", &[], &[]);
+        assert_eq!(severity, ConflictSeverity::Critical);
+
+        let severity = detector.assess_severity("package.json", &[], &[]);
+        assert_eq!(severity, ConflictSeverity::Critical);
+
+        let severity = detector.assess_severity("go.mod", &[], &[]);
+        assert_eq!(severity, ConflictSeverity::Critical);
+    }
+
+    #[test]
+    fn conflict_detector_assess_severity_config_files() {
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        );
+
+        let severity = detector.assess_severity("config.yml", &[], &[]);
+        assert_eq!(severity, ConflictSeverity::High);
+
+        let severity = detector.assess_severity("settings.json", &[], &[]);
+        assert_eq!(severity, ConflictSeverity::High);
+    }
+
+    #[test]
+    fn conflict_detector_assess_severity_by_line_count() {
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        );
+
+        // Few lines = Low severity
+        let lines_a = vec![LineChange {
+            start_line: 1,
+            end_line: 1,
+            change_type: ChangeType::Modified,
+            content: None,
+        }];
+        let severity = detector.assess_severity("src/main.rs", &lines_a, &[]);
+        assert_eq!(severity, ConflictSeverity::Low);
+
+        // Many lines = High severity
+        let lines_a: Vec<_> = (0..15).map(|i| LineChange {
+            start_line: i + 1,
+            end_line: i + 1,
+            change_type: ChangeType::Modified,
+            content: None,
+        }).collect();
+        let lines_b: Vec<_> = (0..10).map(|i| LineChange {
+            start_line: i + 20,
+            end_line: i + 20,
+            change_type: ChangeType::Modified,
+            content: None,
+        }).collect();
+        let severity = detector.assess_severity("src/main.rs", &lines_a, &lines_b);
+        assert_eq!(severity, ConflictSeverity::High);
+    }
+
+    #[test]
+    fn conflict_detector_analyze_file_conflict_overlapping() {
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        );
+
+        let lines_a = vec![LineChange {
+            start_line: 10,
+            end_line: 20,
+            change_type: ChangeType::Modified,
+            content: None,
+        }];
+
+        let lines_b = vec![LineChange {
+            start_line: 15,
+            end_line: 25,
+            change_type: ChangeType::Modified,
+            content: None,
+        }];
+
+        let conflict = detector.analyze_file_conflict(
+            "src/main.rs",
+            AgentId(0),
+            AgentId(1),
+            &lines_a,
+            &lines_b,
+        );
+
+        assert!(conflict.is_some());
+        let conflict = conflict.unwrap();
+        assert!(conflict.is_overlapping);
+    }
+
+    #[test]
+    fn conflict_detector_analyze_file_conflict_non_overlapping() {
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        );
+
+        let lines_a = vec![LineChange {
+            start_line: 10,
+            end_line: 15,
+            change_type: ChangeType::Modified,
+            content: None,
+        }];
+
+        let lines_b = vec![LineChange {
+            start_line: 100,
+            end_line: 110,
+            change_type: ChangeType::Modified,
+            content: None,
+        }];
+
+        // In non-strict mode, non-overlapping changes should not be conflicts
+        let conflict = detector.analyze_file_conflict(
+            "src/main.rs",
+            AgentId(0),
+            AgentId(1),
+            &lines_a,
+            &lines_b,
+        );
+
+        assert!(conflict.is_none());
+    }
+
+    #[test]
+    fn conflict_detector_analyze_file_conflict_strict_mode() {
+        let config = ConflictDetectionConfig::default()
+            .with_strict_mode(true);
+
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        ).with_config(config);
+
+        let lines_a = vec![LineChange {
+            start_line: 10,
+            end_line: 15,
+            change_type: ChangeType::Modified,
+            content: None,
+        }];
+
+        let lines_b = vec![LineChange {
+            start_line: 100,
+            end_line: 110,
+            change_type: ChangeType::Modified,
+            content: None,
+        }];
+
+        // In strict mode, any changes to the same file are conflicts
+        let conflict = detector.analyze_file_conflict(
+            "src/main.rs",
+            AgentId(0),
+            AgentId(1),
+            &lines_a,
+            &lines_b,
+        );
+
+        assert!(conflict.is_some());
+        assert!(!conflict.unwrap().is_overlapping);
+    }
+
+    #[test]
+    fn conflict_detector_resolve_manual_returns_error() {
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        );
+
+        let report = ConflictReport::new()
+            .with_strategy(ConflictResolutionStrategy::Manual);
+
+        let result = detector.resolve(
+            &report,
+            Path::new("/tmp/worktree_a"),
+            Path::new("/tmp/worktree_b"),
+        );
+
+        assert!(matches!(result, Err(ConflictDetectionError::ManualResolutionRequired)));
+    }
+
+    #[test]
+    fn conflict_detector_resolve_cannot_auto_resolve() {
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        );
+
+        let mut report = ConflictReport::new()
+            .with_strategy(ConflictResolutionStrategy::FirstWins);
+
+        // Add an overlapping conflict (can't auto-resolve)
+        report.add_conflict(FileConflict {
+            file_path: "src/main.rs".to_string(),
+            agent_a: AgentId(0),
+            agent_b: AgentId(1),
+            lines_a: vec![],
+            lines_b: vec![],
+            severity: ConflictSeverity::High,
+            is_overlapping: true,
+        });
+
+        let result = detector.resolve(
+            &report,
+            Path::new("/tmp/worktree_a"),
+            Path::new("/tmp/worktree_b"),
+        );
+
+        assert!(matches!(result, Err(ConflictDetectionError::CannotAutoResolve)));
+    }
+
+    #[test]
+    fn conflict_detector_parse_diff_output_empty() {
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        );
+
+        let result = detector.parse_diff_output("");
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+    }
+
+    #[test]
+    fn conflict_detector_parse_diff_output_single_file() {
+        let detector = ConflictDetector::new(
+            PathBuf::from("/tmp/repo"),
+            "main".to_string(),
+        );
+
+        let diff = r#"diff --git a/src/main.rs b/src/main.rs
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -10,0 +11,3 @@ fn main() {
++    let x = 1;
++    let y = 2;
++    let z = 3;
+"#;
+
+        let result = detector.parse_diff_output(diff);
+        assert!(result.is_ok());
+        let changes = result.unwrap();
+        assert!(changes.contains_key("src/main.rs"));
+        assert!(!changes.get("src/main.rs").unwrap().is_empty());
     }
 }

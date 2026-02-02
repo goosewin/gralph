@@ -14,6 +14,18 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-15 Add ConflictDetector for detecting overlapping changes from parallel agents.
+- MC-15 Add ConflictReport struct for aggregated conflict information with severity tracking.
+- MC-15 Add FileConflict struct for per-file conflict details with line-level change tracking.
+- MC-15 Add ConflictResolutionStrategy enum with Manual, FirstWins, LastWins, and MergeNonOverlapping options.
+- MC-15 Add ConflictSeverity enum (Low, Medium, High, Critical) for conflict prioritization.
+- MC-15 Add ConflictDetectionConfig for configurable resolution strategy, auto-resolve, and ignore patterns.
+- MC-15 Add ConflictDetector.detect_conflicts() for pairwise worktree conflict analysis using git diff.
+- MC-15 Add ConflictDetector.detect_conflicts_multi() for detecting conflicts across multiple worktrees.
+- MC-15 Add ConflictDetector.resolve() with automatic resolution for non-overlapping conflicts.
+- MC-15 Add ConflictDetectionError for git errors, I/O errors, and resolution failures.
+- MC-15 Add LineChange and ChangeType for tracking line-level modifications.
+- MC-15 Add 34 new tests for conflict detection covering reports, detection config, severity, and resolution.
 - MC-14 Add LoadBalancer struct for distributing tasks based on agent capacity and backend availability.
 - MC-14 Add LoadBalanceStrategy enum with RoundRobin, Weighted, and LeastLoaded distribution strategies.
 - MC-14 Add HealthStatus enum (Healthy, Unhealthy, Unknown) for agent health tracking.
