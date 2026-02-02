@@ -1,0 +1,27 @@
+CHANGELOG.md
+  0e6f6491eccb7171 23
+src/verifier.rs
+  0e6f6491eccb7171 6067-6218
+PRD.loop-verifier-hardening.md
+  0e6f6491eccb7171 166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "b3aeab7dada26985e2a3ef5151eb8f8de54c5683",
+  "prompts": {
+    "0e6f6491eccb7171": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9f5d09c5-5f5a-4860-b624-f8a7e0dfc2df",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 154,
+      "total_deletions": 1,
+      "accepted_lines": 154,
+      "overriden_lines": 0
+    }
+  }
+}
