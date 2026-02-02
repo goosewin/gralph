@@ -1,0 +1,29 @@
+src/coordinator.rs
+  8a11a6b82695c877 4,6-8,10,95-411,493-494,505,507-520,524-526,551-607,1255-1737
+CHANGELOG.md
+  8a11a6b82695c877 17-23
+ARCHITECTURE.md
+  8a11a6b82695c877 28
+PRD.ultimate.md
+  8a11a6b82695c877 296
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "f51e0349969497b7542d0be1d9c9f8beedae29a2",
+  "prompts": {
+    "8a11a6b82695c877": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "12155ba7-2f46-4dc3-9d72-9ff174dc4a58",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 894,
+      "total_deletions": 4,
+      "accepted_lines": 894,
+      "overriden_lines": 0
+    }
+  }
+}
