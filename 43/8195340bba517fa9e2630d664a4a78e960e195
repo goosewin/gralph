@@ -1,0 +1,33 @@
+PRD.ultimate.md
+  a9ae54ab2dd708cd 455
+src/lib.rs
+  a9ae54ab2dd708cd 1
+ARCHITECTURE.md
+  a9ae54ab2dd708cd 13
+src/audit.rs
+  a9ae54ab2dd708cd 1-1062
+src/server.rs
+  a9ae54ab2dd708cd 17-18,202,225-239,245,305-313,1299-1561,1957,2359,2387,2419,2451,2483,2516,2548,4153-4670
+CHANGELOG.md
+  a9ae54ab2dd708cd 17-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "438195340bba517fa9e2630d664a4a78e960e195",
+  "prompts": {
+    "a9ae54ab2dd708cd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "463c7360-e587-4b3e-a465-b14c7c0b369a",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 1906,
+      "total_deletions": 14,
+      "accepted_lines": 1894,
+      "overriden_lines": 0
+    }
+  }
+}
