@@ -1,0 +1,29 @@
+README.md
+  ca9a97fdb97361ac 135-142
+PRD.loop-verifier-hardening.md
+  ca9a97fdb97361ac 153
+config/default.yaml
+  ca9a97fdb97361ac 26-29
+CHANGELOG.md
+  ca9a97fdb97361ac 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "31cac5edb84ef7a3a989e4ba488ae9b16da7bc08",
+  "prompts": {
+    "ca9a97fdb97361ac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d004546f-feba-4af2-a08d-9a688f4811f9",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 14,
+      "total_deletions": 1,
+      "accepted_lines": 14,
+      "overriden_lines": 0
+    }
+  }
+}
