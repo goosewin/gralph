@@ -68,7 +68,7 @@ Each task block must contain exactly one unchecked task line.
   * Rules for forbidden sections documented.
   * Rules for stray checkboxes documented.
 - **Dependencies** None
-- [ ] PRD-1 Create PRD specification document
+- [x] PRD-1 Create PRD specification document
 ---
 
 ### Task PRD-2
