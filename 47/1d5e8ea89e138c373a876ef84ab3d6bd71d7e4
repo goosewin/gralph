@@ -1,0 +1,31 @@
+src/lib.rs
+  89487b41e98b3c11 10
+src/oauth2.rs
+  89487b41e98b3c11 1-1954
+ARCHITECTURE.md
+  89487b41e98b3c11 15
+CHANGELOG.md
+  89487b41e98b3c11 17-52
+PRD.ultimate.md
+  89487b41e98b3c11 500
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "471d5e8ea89e138c373a876ef84ab3d6bd71d7e4",
+  "prompts": {
+    "89487b41e98b3c11": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2c7cc64a-ab58-4b29-b60c-a3a50c50e1c4",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 1994,
+      "total_deletions": 2,
+      "accepted_lines": 1993,
+      "overriden_lines": 0
+    }
+  }
+}
