@@ -377,7 +377,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Circuit breaker state machine.
   * Unit tests verify retry behavior.
 - **Dependencies** MC-11
-- [ ] MC-18 Add retry and circuit breaker patterns
+- [x] MC-18 Add retry and circuit breaker patterns
 ---
 
 ### Task MC-19

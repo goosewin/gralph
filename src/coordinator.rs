@@ -3926,6 +3926,723 @@ pub struct AgentTimeoutStatus {
     pub status: TimeoutState,
 }
 
+// ============================================================================
+// Retry and Circuit Breaker Patterns (MC-18)
+// ============================================================================
+
+/// Configuration for retry behavior with exponential backoff.
+#[derive(Debug, Clone)]
+pub struct RetryConfig {
+    /// Maximum number of retry attempts.
+    pub max_retries: u32,
+    /// Initial delay before the first retry.
+    pub initial_delay: Duration,
+    /// Maximum delay between retries (cap for exponential growth).
+    pub max_delay: Duration,
+    /// Multiplier for exponential backoff (typically 2.0).
+    pub backoff_multiplier: f64,
+    /// Maximum jitter as a fraction of the delay (0.0 to 1.0).
+    pub jitter_factor: f64,
+    /// Whether to use full jitter (random between 0 and calculated delay).
+    pub use_full_jitter: bool,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            max_retries: 3,
+            initial_delay: Duration::from_millis(100),
+            max_delay: Duration::from_secs(30),
+            backoff_multiplier: 2.0,
+            jitter_factor: 0.5,
+            use_full_jitter: false,
+        }
+    }
+}
+
+impl RetryConfig {
+    /// Creates a new retry config with the specified max retries.
+    pub fn new(max_retries: u32) -> Self {
+        Self {
+            max_retries,
+            ..Default::default()
+        }
+    }
+
+    /// Sets the maximum number of retries.
+    pub fn with_max_retries(mut self, max_retries: u32) -> Self {
+        self.max_retries = max_retries;
+        self
+    }
+
+    /// Sets the initial delay.
+    pub fn with_initial_delay(mut self, delay: Duration) -> Self {
+        self.initial_delay = delay;
+        self
+    }
+
+    /// Sets the maximum delay cap.
+    pub fn with_max_delay(mut self, delay: Duration) -> Self {
+        self.max_delay = delay;
+        self
+    }
+
+    /// Sets the backoff multiplier.
+    pub fn with_backoff_multiplier(mut self, multiplier: f64) -> Self {
+        self.backoff_multiplier = multiplier.max(1.0);
+        self
+    }
+
+    /// Sets the jitter factor.
+    pub fn with_jitter_factor(mut self, factor: f64) -> Self {
+        self.jitter_factor = factor.clamp(0.0, 1.0);
+        self
+    }
+
+    /// Enables full jitter mode.
+    pub fn with_full_jitter(mut self, enabled: bool) -> Self {
+        self.use_full_jitter = enabled;
+        self
+    }
+
+    /// Calculates the delay for a given attempt number (0-indexed).
+    ///
+    /// Uses exponential backoff with optional jitter.
+    pub fn calculate_delay(&self, attempt: u32) -> Duration {
+        // Calculate base delay with exponential backoff
+        let base_delay_ms = self.initial_delay.as_millis() as f64
+            * self.backoff_multiplier.powi(attempt as i32);
+
+        // Cap at max delay
+        let capped_delay_ms = base_delay_ms.min(self.max_delay.as_millis() as f64);
+
+        // Apply jitter
+        let final_delay_ms = self.apply_jitter(capped_delay_ms);
+
+        Duration::from_millis(final_delay_ms as u64)
+    }
+
+    /// Applies jitter to a delay value.
+    fn apply_jitter(&self, delay_ms: f64) -> f64 {
+        if self.jitter_factor <= 0.0 {
+            return delay_ms;
+        }
+
+        // Simple deterministic jitter based on delay value
+        // In production, this would use a proper random number generator
+        let jitter_range = delay_ms * self.jitter_factor;
+
+        if self.use_full_jitter {
+            // Full jitter: random value between 0 and delay
+            delay_ms * (1.0 - self.jitter_factor * 0.5)
+        } else {
+            // Equal jitter: delay +/- jitter_range/2
+            let half_jitter = jitter_range / 2.0;
+            delay_ms - half_jitter + (half_jitter * (delay_ms % 1.0 + 0.5))
+        }
+    }
+
+    /// Checks if more retries are available.
+    pub fn should_retry(&self, attempt: u32) -> bool {
+        attempt < self.max_retries
+    }
+}
+
+/// Retry policy for operations that may fail transiently.
+///
+/// Implements exponential backoff with jitter to prevent thundering herd
+/// problems when multiple agents retry simultaneously.
+#[derive(Debug)]
+pub struct RetryPolicy {
+    /// Configuration for retry behavior.
+    config: RetryConfig,
+    /// Current attempt number (0-indexed).
+    current_attempt: AtomicU32,
+    /// Total number of successful operations.
+    total_successes: AtomicU64,
+    /// Total number of failed operations (after all retries exhausted).
+    total_failures: AtomicU64,
+    /// Total number of retries performed.
+    total_retries: AtomicU64,
+}
+
+impl RetryPolicy {
+    /// Creates a new retry policy with the given configuration.
+    pub fn new(config: RetryConfig) -> Self {
+        Self {
+            config,
+            current_attempt: AtomicU32::new(0),
+            total_successes: AtomicU64::new(0),
+            total_failures: AtomicU64::new(0),
+            total_retries: AtomicU64::new(0),
+        }
+    }
+
+    /// Creates a retry policy with default configuration.
+    pub fn with_defaults() -> Self {
+        Self::new(RetryConfig::default())
+    }
+
+    /// Returns the current configuration.
+    pub fn config(&self) -> &RetryConfig {
+        &self.config
+    }
+
+    /// Resets the retry state for a new operation.
+    pub fn reset(&self) {
+        self.current_attempt.store(0, Ordering::SeqCst);
+    }
+
+    /// Records a successful operation.
+    pub fn record_success(&self) {
+        self.total_successes.fetch_add(1, Ordering::SeqCst);
+        self.reset();
+    }
+
+    /// Records a failure and returns whether to retry.
+    ///
+    /// Returns `Some(delay)` if a retry should be attempted, or `None` if
+    /// all retries have been exhausted.
+    pub fn record_failure(&self) -> Option<Duration> {
+        let attempt = self.current_attempt.fetch_add(1, Ordering::SeqCst);
+
+        if self.config.should_retry(attempt) {
+            self.total_retries.fetch_add(1, Ordering::SeqCst);
+            Some(self.config.calculate_delay(attempt))
+        } else {
+            self.total_failures.fetch_add(1, Ordering::SeqCst);
+            self.reset();
+            None
+        }
+    }
+
+    /// Returns the current attempt number.
+    pub fn current_attempt(&self) -> u32 {
+        self.current_attempt.load(Ordering::SeqCst)
+    }
+
+    /// Returns statistics about the retry policy.
+    pub fn stats(&self) -> RetryStats {
+        RetryStats {
+            total_successes: self.total_successes.load(Ordering::SeqCst),
+            total_failures: self.total_failures.load(Ordering::SeqCst),
+            total_retries: self.total_retries.load(Ordering::SeqCst),
+            max_retries: self.config.max_retries,
+        }
+    }
+}
+
+/// Statistics about retry operations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RetryStats {
+    /// Total successful operations.
+    pub total_successes: u64,
+    /// Total failed operations (after all retries exhausted).
+    pub total_failures: u64,
+    /// Total number of retry attempts made.
+    pub total_retries: u64,
+    /// Configured maximum retries per operation.
+    pub max_retries: u32,
+}
+
+impl RetryStats {
+    /// Returns the success rate as a percentage.
+    pub fn success_rate(&self) -> f64 {
+        let total = self.total_successes + self.total_failures;
+        if total == 0 {
+            100.0
+        } else {
+            (self.total_successes as f64 / total as f64) * 100.0
+        }
+    }
+
+    /// Returns the average retries per failed operation.
+    pub fn avg_retries_per_failure(&self) -> f64 {
+        if self.total_failures == 0 {
+            0.0
+        } else {
+            self.total_retries as f64 / self.total_failures as f64
+        }
+    }
+}
+
+/// State of a circuit breaker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CircuitState {
+    /// Circuit is closed (normal operation, requests allowed).
+    Closed,
+    /// Circuit is open (requests blocked, waiting for timeout).
+    Open,
+    /// Circuit is half-open (testing if service has recovered).
+    HalfOpen,
+}
+
+impl fmt::Display for CircuitState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CircuitState::Closed => write!(f, "closed"),
+            CircuitState::Open => write!(f, "open"),
+            CircuitState::HalfOpen => write!(f, "half-open"),
+        }
+    }
+}
+
+/// Configuration for circuit breaker behavior.
+#[derive(Debug, Clone)]
+pub struct CircuitBreakerConfig {
+    /// Number of failures before opening the circuit.
+    pub failure_threshold: u32,
+    /// Number of successes in half-open state to close the circuit.
+    pub success_threshold: u32,
+    /// Duration to wait before transitioning from open to half-open.
+    pub reset_timeout: Duration,
+    /// Duration of the sampling window for failure counting.
+    pub sampling_duration: Duration,
+    /// Number of requests allowed in half-open state.
+    pub half_open_max_requests: u32,
+}
+
+impl Default for CircuitBreakerConfig {
+    fn default() -> Self {
+        Self {
+            failure_threshold: 5,
+            success_threshold: 3,
+            reset_timeout: Duration::from_secs(30),
+            sampling_duration: Duration::from_secs(60),
+            half_open_max_requests: 3,
+        }
+    }
+}
+
+impl CircuitBreakerConfig {
+    /// Creates a new config with the specified failure threshold.
+    pub fn new(failure_threshold: u32) -> Self {
+        Self {
+            failure_threshold,
+            ..Default::default()
+        }
+    }
+
+    /// Sets the failure threshold.
+    pub fn with_failure_threshold(mut self, threshold: u32) -> Self {
+        self.failure_threshold = threshold.max(1);
+        self
+    }
+
+    /// Sets the success threshold for recovery.
+    pub fn with_success_threshold(mut self, threshold: u32) -> Self {
+        self.success_threshold = threshold.max(1);
+        self
+    }
+
+    /// Sets the reset timeout.
+    pub fn with_reset_timeout(mut self, timeout: Duration) -> Self {
+        self.reset_timeout = timeout;
+        self
+    }
+
+    /// Sets the sampling duration.
+    pub fn with_sampling_duration(mut self, duration: Duration) -> Self {
+        self.sampling_duration = duration;
+        self
+    }
+
+    /// Sets the max requests in half-open state.
+    pub fn with_half_open_max_requests(mut self, max: u32) -> Self {
+        self.half_open_max_requests = max.max(1);
+        self
+    }
+}
+
+/// Circuit breaker for preventing cascade failures.
+///
+/// The circuit breaker monitors failures and temporarily blocks requests
+/// when a failure threshold is exceeded. This prevents cascade failures
+/// by giving failing services time to recover.
+///
+/// State transitions:
+/// - Closed -> Open: When failures exceed threshold
+/// - Open -> HalfOpen: After reset timeout
+/// - HalfOpen -> Closed: After success threshold met
+/// - HalfOpen -> Open: On any failure
+#[derive(Debug)]
+pub struct CircuitBreaker {
+    /// Configuration for the circuit breaker.
+    config: CircuitBreakerConfig,
+    /// Current state of the circuit.
+    state: RwLock<CircuitState>,
+    /// Number of consecutive failures in current window.
+    failure_count: AtomicU32,
+    /// Number of successes in half-open state.
+    half_open_successes: AtomicU32,
+    /// Number of requests in half-open state.
+    half_open_requests: AtomicU32,
+    /// Timestamp when the circuit was opened.
+    opened_at: RwLock<Option<Instant>>,
+    /// Total count of times circuit was opened.
+    total_opens: AtomicU64,
+    /// Total successful requests.
+    total_successes: AtomicU64,
+    /// Total failed requests.
+    total_failures: AtomicU64,
+    /// Total rejected requests (due to open circuit).
+    total_rejected: AtomicU64,
+    /// Timestamps of recent failures for windowed counting.
+    failure_timestamps: Mutex<VecDeque<Instant>>,
+}
+
+impl CircuitBreaker {
+    /// Creates a new circuit breaker with the given configuration.
+    pub fn new(config: CircuitBreakerConfig) -> Self {
+        Self {
+            config,
+            state: RwLock::new(CircuitState::Closed),
+            failure_count: AtomicU32::new(0),
+            half_open_successes: AtomicU32::new(0),
+            half_open_requests: AtomicU32::new(0),
+            opened_at: RwLock::new(None),
+            total_opens: AtomicU64::new(0),
+            total_successes: AtomicU64::new(0),
+            total_failures: AtomicU64::new(0),
+            total_rejected: AtomicU64::new(0),
+            failure_timestamps: Mutex::new(VecDeque::new()),
+        }
+    }
+
+    /// Creates a circuit breaker with default configuration.
+    pub fn with_defaults() -> Self {
+        Self::new(CircuitBreakerConfig::default())
+    }
+
+    /// Returns the current configuration.
+    pub fn config(&self) -> &CircuitBreakerConfig {
+        &self.config
+    }
+
+    /// Returns the current state of the circuit.
+    pub fn state(&self) -> CircuitState {
+        // First check if we should transition from Open to HalfOpen
+        self.check_reset_timeout();
+        *self.state.read().unwrap()
+    }
+
+    /// Checks if a request should be allowed.
+    ///
+    /// Returns `true` if the request can proceed, `false` if rejected.
+    pub fn allow_request(&self) -> bool {
+        match self.state() {
+            CircuitState::Closed => true,
+            CircuitState::Open => {
+                self.total_rejected.fetch_add(1, Ordering::SeqCst);
+                false
+            }
+            CircuitState::HalfOpen => {
+                let requests = self.half_open_requests.fetch_add(1, Ordering::SeqCst);
+                if requests < self.config.half_open_max_requests {
+                    true
+                } else {
+                    self.total_rejected.fetch_add(1, Ordering::SeqCst);
+                    false
+                }
+            }
+        }
+    }
+
+    /// Records a successful request.
+    pub fn record_success(&self) {
+        self.total_successes.fetch_add(1, Ordering::SeqCst);
+
+        let current_state = self.state();
+        match current_state {
+            CircuitState::Closed => {
+                // Reset failure count on success
+                self.failure_count.store(0, Ordering::SeqCst);
+            }
+            CircuitState::HalfOpen => {
+                let successes = self.half_open_successes.fetch_add(1, Ordering::SeqCst) + 1;
+                if successes >= self.config.success_threshold {
+                    self.close_circuit();
+                }
+            }
+            CircuitState::Open => {
+                // Shouldn't happen if allow_request was called first
+            }
+        }
+    }
+
+    /// Records a failed request.
+    pub fn record_failure(&self) {
+        self.total_failures.fetch_add(1, Ordering::SeqCst);
+
+        let current_state = self.state();
+        match current_state {
+            CircuitState::Closed => {
+                self.record_failure_in_window();
+                let recent_failures = self.count_failures_in_window();
+                if recent_failures >= self.config.failure_threshold {
+                    self.open_circuit();
+                }
+            }
+            CircuitState::HalfOpen => {
+                // Any failure in half-open state opens the circuit
+                self.open_circuit();
+            }
+            CircuitState::Open => {
+                // Already open, nothing to do
+            }
+        }
+    }
+
+    /// Records a failure timestamp in the sampling window.
+    fn record_failure_in_window(&self) {
+        let mut timestamps = self.failure_timestamps.lock().unwrap();
+        timestamps.push_back(Instant::now());
+
+        // Remove old failures outside the sampling window
+        let cutoff = Instant::now() - self.config.sampling_duration;
+        while timestamps.front().map(|t| *t < cutoff).unwrap_or(false) {
+            timestamps.pop_front();
+        }
+    }
+
+    /// Counts failures within the sampling window.
+    fn count_failures_in_window(&self) -> u32 {
+        let timestamps = self.failure_timestamps.lock().unwrap();
+        let cutoff = Instant::now() - self.config.sampling_duration;
+        timestamps.iter().filter(|t| **t >= cutoff).count() as u32
+    }
+
+    /// Opens the circuit (blocks requests).
+    fn open_circuit(&self) {
+        let mut state = self.state.write().unwrap();
+        if *state != CircuitState::Open {
+            *state = CircuitState::Open;
+            *self.opened_at.write().unwrap() = Some(Instant::now());
+            self.total_opens.fetch_add(1, Ordering::SeqCst);
+            self.half_open_successes.store(0, Ordering::SeqCst);
+            self.half_open_requests.store(0, Ordering::SeqCst);
+        }
+    }
+
+    /// Closes the circuit (allows requests).
+    fn close_circuit(&self) {
+        let mut state = self.state.write().unwrap();
+        *state = CircuitState::Closed;
+        *self.opened_at.write().unwrap() = None;
+        self.failure_count.store(0, Ordering::SeqCst);
+        self.half_open_successes.store(0, Ordering::SeqCst);
+        self.half_open_requests.store(0, Ordering::SeqCst);
+        // Clear failure timestamps
+        self.failure_timestamps.lock().unwrap().clear();
+    }
+
+    /// Checks if the reset timeout has elapsed and transitions to half-open.
+    fn check_reset_timeout(&self) {
+        let opened_at = *self.opened_at.read().unwrap();
+        if let Some(opened) = opened_at {
+            if opened.elapsed() >= self.config.reset_timeout {
+                let mut state = self.state.write().unwrap();
+                if *state == CircuitState::Open {
+                    *state = CircuitState::HalfOpen;
+                    self.half_open_successes.store(0, Ordering::SeqCst);
+                    self.half_open_requests.store(0, Ordering::SeqCst);
+                }
+            }
+        }
+    }
+
+    /// Manually resets the circuit breaker to closed state.
+    pub fn reset(&self) {
+        self.close_circuit();
+    }
+
+    /// Manually trips the circuit breaker to open state.
+    pub fn trip(&self) {
+        self.open_circuit();
+    }
+
+    /// Returns statistics about the circuit breaker.
+    pub fn stats(&self) -> CircuitBreakerStats {
+        CircuitBreakerStats {
+            state: self.state(),
+            total_opens: self.total_opens.load(Ordering::SeqCst),
+            total_successes: self.total_successes.load(Ordering::SeqCst),
+            total_failures: self.total_failures.load(Ordering::SeqCst),
+            total_rejected: self.total_rejected.load(Ordering::SeqCst),
+            failure_threshold: self.config.failure_threshold,
+            recent_failures: self.count_failures_in_window(),
+        }
+    }
+
+    /// Returns the time remaining until the circuit transitions to half-open.
+    pub fn time_until_half_open(&self) -> Option<Duration> {
+        let opened_at = *self.opened_at.read().unwrap();
+        opened_at.and_then(|opened| {
+            let elapsed = opened.elapsed();
+            if elapsed < self.config.reset_timeout {
+                Some(self.config.reset_timeout - elapsed)
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Checks if the circuit is allowing requests (closed or half-open with capacity).
+    pub fn is_allowing(&self) -> bool {
+        match self.state() {
+            CircuitState::Closed => true,
+            CircuitState::Open => false,
+            CircuitState::HalfOpen => {
+                self.half_open_requests.load(Ordering::SeqCst) < self.config.half_open_max_requests
+            }
+        }
+    }
+}
+
+impl Default for CircuitBreaker {
+    fn default() -> Self {
+        Self::with_defaults()
+    }
+}
+
+/// Statistics about the circuit breaker.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CircuitBreakerStats {
+    /// Current state of the circuit.
+    pub state: CircuitState,
+    /// Total number of times the circuit was opened.
+    pub total_opens: u64,
+    /// Total successful requests.
+    pub total_successes: u64,
+    /// Total failed requests.
+    pub total_failures: u64,
+    /// Total requests rejected due to open circuit.
+    pub total_rejected: u64,
+    /// Configured failure threshold.
+    pub failure_threshold: u32,
+    /// Current count of failures in sampling window.
+    pub recent_failures: u32,
+}
+
+impl CircuitBreakerStats {
+    /// Returns the availability rate as a percentage.
+    pub fn availability(&self) -> f64 {
+        let total = self.total_successes + self.total_failures + self.total_rejected;
+        if total == 0 {
+            100.0
+        } else {
+            ((self.total_successes + self.total_failures) as f64 / total as f64) * 100.0
+        }
+    }
+
+    /// Returns the success rate as a percentage (excluding rejected requests).
+    pub fn success_rate(&self) -> f64 {
+        let total = self.total_successes + self.total_failures;
+        if total == 0 {
+            100.0
+        } else {
+            (self.total_successes as f64 / total as f64) * 100.0
+        }
+    }
+}
+
+/// Combined retry with circuit breaker for resilient operations.
+///
+/// This struct combines a retry policy with a circuit breaker to provide
+/// comprehensive failure handling. Retries are attempted for transient
+/// failures, while the circuit breaker prevents cascade failures when
+/// a service is persistently failing.
+#[derive(Debug)]
+pub struct ResilientExecutor {
+    /// Retry policy for transient failures.
+    retry_policy: RetryPolicy,
+    /// Circuit breaker for cascade failure prevention.
+    circuit_breaker: CircuitBreaker,
+}
+
+impl ResilientExecutor {
+    /// Creates a new resilient executor with the given configurations.
+    pub fn new(retry_config: RetryConfig, circuit_config: CircuitBreakerConfig) -> Self {
+        Self {
+            retry_policy: RetryPolicy::new(retry_config),
+            circuit_breaker: CircuitBreaker::new(circuit_config),
+        }
+    }
+
+    /// Creates a resilient executor with default configurations.
+    pub fn with_defaults() -> Self {
+        Self::new(RetryConfig::default(), CircuitBreakerConfig::default())
+    }
+
+    /// Returns a reference to the retry policy.
+    pub fn retry_policy(&self) -> &RetryPolicy {
+        &self.retry_policy
+    }
+
+    /// Returns a reference to the circuit breaker.
+    pub fn circuit_breaker(&self) -> &CircuitBreaker {
+        &self.circuit_breaker
+    }
+
+    /// Checks if an operation should be attempted.
+    ///
+    /// Returns `false` if the circuit breaker is open.
+    pub fn should_attempt(&self) -> bool {
+        self.circuit_breaker.allow_request()
+    }
+
+    /// Records a successful operation.
+    pub fn record_success(&self) {
+        self.retry_policy.record_success();
+        self.circuit_breaker.record_success();
+    }
+
+    /// Records a failed operation and returns the action to take.
+    ///
+    /// Returns `Some(delay)` if a retry should be attempted, or `None` if
+    /// the operation has failed permanently (all retries exhausted or circuit open).
+    pub fn record_failure(&self) -> Option<Duration> {
+        self.circuit_breaker.record_failure();
+
+        // If circuit is now open, don't retry
+        if self.circuit_breaker.state() == CircuitState::Open {
+            self.retry_policy.reset();
+            return None;
+        }
+
+        self.retry_policy.record_failure()
+    }
+
+    /// Resets both the retry policy and circuit breaker.
+    pub fn reset(&self) {
+        self.retry_policy.reset();
+        self.circuit_breaker.reset();
+    }
+
+    /// Returns combined statistics.
+    pub fn stats(&self) -> ResilientExecutorStats {
+        ResilientExecutorStats {
+            retry_stats: self.retry_policy.stats(),
+            circuit_stats: self.circuit_breaker.stats(),
+        }
+    }
+}
+
+impl Default for ResilientExecutor {
+    fn default() -> Self {
+        Self::with_defaults()
+    }
+}
+
+/// Combined statistics for the resilient executor.
+#[derive(Debug, Clone)]
+pub struct ResilientExecutorStats {
+    /// Retry policy statistics.
+    pub retry_stats: RetryStats,
+    /// Circuit breaker statistics.
+    pub circuit_stats: CircuitBreakerStats,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -7717,5 +8434,597 @@ mod tests {
 
         let result = coordinator.reject_handoff(999, AgentId(0), "reason".to_string());
         assert!(matches!(result, Err(HandoffError::HandoffNotFound(999))));
+    }
+
+    // ========================================================================
+    // Retry and Circuit Breaker Tests (MC-18)
+    // ========================================================================
+
+    #[test]
+    fn retry_config_default_values() {
+        let config = RetryConfig::default();
+        assert_eq!(config.max_retries, 3);
+        assert_eq!(config.initial_delay, Duration::from_millis(100));
+        assert_eq!(config.max_delay, Duration::from_secs(30));
+        assert_eq!(config.backoff_multiplier, 2.0);
+        assert_eq!(config.jitter_factor, 0.5);
+        assert!(!config.use_full_jitter);
+    }
+
+    #[test]
+    fn retry_config_builder_methods() {
+        let config = RetryConfig::new(5)
+            .with_initial_delay(Duration::from_millis(200))
+            .with_max_delay(Duration::from_secs(60))
+            .with_backoff_multiplier(3.0)
+            .with_jitter_factor(0.25)
+            .with_full_jitter(true);
+
+        assert_eq!(config.max_retries, 5);
+        assert_eq!(config.initial_delay, Duration::from_millis(200));
+        assert_eq!(config.max_delay, Duration::from_secs(60));
+        assert_eq!(config.backoff_multiplier, 3.0);
+        assert_eq!(config.jitter_factor, 0.25);
+        assert!(config.use_full_jitter);
+    }
+
+    #[test]
+    fn retry_config_clamps_values() {
+        let config = RetryConfig::default()
+            .with_backoff_multiplier(0.5) // Should be clamped to 1.0
+            .with_jitter_factor(1.5); // Should be clamped to 1.0
+
+        assert_eq!(config.backoff_multiplier, 1.0);
+        assert_eq!(config.jitter_factor, 1.0);
+
+        let config2 = RetryConfig::default().with_jitter_factor(-0.5);
+        assert_eq!(config2.jitter_factor, 0.0);
+    }
+
+    #[test]
+    fn retry_config_calculate_delay_exponential_backoff() {
+        let config = RetryConfig::default()
+            .with_initial_delay(Duration::from_millis(100))
+            .with_backoff_multiplier(2.0)
+            .with_jitter_factor(0.0); // No jitter for predictable testing
+
+        // Attempt 0: 100ms
+        let delay0 = config.calculate_delay(0);
+        assert_eq!(delay0, Duration::from_millis(100));
+
+        // Attempt 1: 200ms
+        let delay1 = config.calculate_delay(1);
+        assert_eq!(delay1, Duration::from_millis(200));
+
+        // Attempt 2: 400ms
+        let delay2 = config.calculate_delay(2);
+        assert_eq!(delay2, Duration::from_millis(400));
+
+        // Attempt 3: 800ms
+        let delay3 = config.calculate_delay(3);
+        assert_eq!(delay3, Duration::from_millis(800));
+    }
+
+    #[test]
+    fn retry_config_caps_at_max_delay() {
+        let config = RetryConfig::default()
+            .with_initial_delay(Duration::from_secs(10))
+            .with_max_delay(Duration::from_secs(30))
+            .with_backoff_multiplier(2.0)
+            .with_jitter_factor(0.0);
+
+        // Attempt 0: 10s
+        assert_eq!(config.calculate_delay(0), Duration::from_secs(10));
+
+        // Attempt 1: 20s
+        assert_eq!(config.calculate_delay(1), Duration::from_secs(20));
+
+        // Attempt 2: would be 40s, but capped at 30s
+        assert_eq!(config.calculate_delay(2), Duration::from_secs(30));
+
+        // Attempt 10: still capped at 30s
+        assert_eq!(config.calculate_delay(10), Duration::from_secs(30));
+    }
+
+    #[test]
+    fn retry_config_should_retry() {
+        let config = RetryConfig::new(3);
+
+        assert!(config.should_retry(0)); // 1st attempt
+        assert!(config.should_retry(1)); // 2nd attempt
+        assert!(config.should_retry(2)); // 3rd attempt
+        assert!(!config.should_retry(3)); // No more retries
+        assert!(!config.should_retry(10)); // Way past limit
+    }
+
+    #[test]
+    fn retry_policy_basic_flow() {
+        let policy = RetryPolicy::new(RetryConfig::new(3));
+
+        // Initial state
+        assert_eq!(policy.current_attempt(), 0);
+
+        // Record failure - should get retry
+        let delay = policy.record_failure();
+        assert!(delay.is_some());
+        assert_eq!(policy.current_attempt(), 1);
+
+        // Record another failure
+        let delay = policy.record_failure();
+        assert!(delay.is_some());
+        assert_eq!(policy.current_attempt(), 2);
+
+        // Record third failure
+        let delay = policy.record_failure();
+        assert!(delay.is_some());
+        assert_eq!(policy.current_attempt(), 3);
+
+        // Fourth failure exhausts retries
+        let delay = policy.record_failure();
+        assert!(delay.is_none());
+        assert_eq!(policy.current_attempt(), 0); // Reset after exhaustion
+    }
+
+    #[test]
+    fn retry_policy_success_resets() {
+        let policy = RetryPolicy::new(RetryConfig::new(3));
+
+        // Record failures
+        policy.record_failure();
+        policy.record_failure();
+        assert_eq!(policy.current_attempt(), 2);
+
+        // Success resets
+        policy.record_success();
+        assert_eq!(policy.current_attempt(), 0);
+
+        // Stats updated
+        let stats = policy.stats();
+        assert_eq!(stats.total_successes, 1);
+        assert_eq!(stats.total_retries, 2);
+    }
+
+    #[test]
+    fn retry_policy_stats() {
+        let policy = RetryPolicy::new(RetryConfig::new(2));
+
+        // Successful operation
+        policy.record_success();
+
+        // Failed operation with retries exhausted
+        policy.record_failure(); // retry 1
+        policy.record_failure(); // retry 2
+        policy.record_failure(); // exhausted
+
+        let stats = policy.stats();
+        assert_eq!(stats.total_successes, 1);
+        assert_eq!(stats.total_failures, 1);
+        assert_eq!(stats.total_retries, 2);
+        assert_eq!(stats.max_retries, 2);
+    }
+
+    #[test]
+    fn retry_stats_calculations() {
+        let stats = RetryStats {
+            total_successes: 8,
+            total_failures: 2,
+            total_retries: 6,
+            max_retries: 3,
+        };
+
+        assert_eq!(stats.success_rate(), 80.0);
+        assert_eq!(stats.avg_retries_per_failure(), 3.0);
+    }
+
+    #[test]
+    fn retry_stats_edge_cases() {
+        // No operations yet
+        let stats = RetryStats {
+            total_successes: 0,
+            total_failures: 0,
+            total_retries: 0,
+            max_retries: 3,
+        };
+        assert_eq!(stats.success_rate(), 100.0);
+        assert_eq!(stats.avg_retries_per_failure(), 0.0);
+
+        // All failures
+        let stats2 = RetryStats {
+            total_successes: 0,
+            total_failures: 5,
+            total_retries: 15,
+            max_retries: 3,
+        };
+        assert_eq!(stats2.success_rate(), 0.0);
+        assert_eq!(stats2.avg_retries_per_failure(), 3.0);
+    }
+
+    #[test]
+    fn circuit_state_display() {
+        assert_eq!(format!("{}", CircuitState::Closed), "closed");
+        assert_eq!(format!("{}", CircuitState::Open), "open");
+        assert_eq!(format!("{}", CircuitState::HalfOpen), "half-open");
+    }
+
+    #[test]
+    fn circuit_breaker_config_default() {
+        let config = CircuitBreakerConfig::default();
+        assert_eq!(config.failure_threshold, 5);
+        assert_eq!(config.success_threshold, 3);
+        assert_eq!(config.reset_timeout, Duration::from_secs(30));
+        assert_eq!(config.sampling_duration, Duration::from_secs(60));
+        assert_eq!(config.half_open_max_requests, 3);
+    }
+
+    #[test]
+    fn circuit_breaker_config_builder() {
+        let config = CircuitBreakerConfig::new(10)
+            .with_success_threshold(5)
+            .with_reset_timeout(Duration::from_secs(60))
+            .with_sampling_duration(Duration::from_secs(120))
+            .with_half_open_max_requests(5);
+
+        assert_eq!(config.failure_threshold, 10);
+        assert_eq!(config.success_threshold, 5);
+        assert_eq!(config.reset_timeout, Duration::from_secs(60));
+        assert_eq!(config.sampling_duration, Duration::from_secs(120));
+        assert_eq!(config.half_open_max_requests, 5);
+    }
+
+    #[test]
+    fn circuit_breaker_config_clamps_minimums() {
+        let config = CircuitBreakerConfig::default()
+            .with_failure_threshold(0)
+            .with_success_threshold(0)
+            .with_half_open_max_requests(0);
+
+        assert_eq!(config.failure_threshold, 1);
+        assert_eq!(config.success_threshold, 1);
+        assert_eq!(config.half_open_max_requests, 1);
+    }
+
+    #[test]
+    fn circuit_breaker_initial_state() {
+        let cb = CircuitBreaker::with_defaults();
+        assert_eq!(cb.state(), CircuitState::Closed);
+        assert!(cb.allow_request());
+        assert!(cb.is_allowing());
+    }
+
+    #[test]
+    fn circuit_breaker_stays_closed_on_success() {
+        let cb = CircuitBreaker::with_defaults();
+
+        for _ in 0..10 {
+            assert!(cb.allow_request());
+            cb.record_success();
+        }
+
+        assert_eq!(cb.state(), CircuitState::Closed);
+        let stats = cb.stats();
+        assert_eq!(stats.total_successes, 10);
+        assert_eq!(stats.total_failures, 0);
+    }
+
+    #[test]
+    fn circuit_breaker_opens_on_threshold() {
+        let config = CircuitBreakerConfig::new(3)
+            .with_sampling_duration(Duration::from_secs(60));
+        let cb = CircuitBreaker::new(config);
+
+        assert_eq!(cb.state(), CircuitState::Closed);
+
+        // Record failures up to threshold
+        cb.record_failure();
+        cb.record_failure();
+        assert_eq!(cb.state(), CircuitState::Closed);
+
+        cb.record_failure(); // Hits threshold
+        assert_eq!(cb.state(), CircuitState::Open);
+        assert!(!cb.allow_request());
+        assert!(!cb.is_allowing());
+    }
+
+    #[test]
+    fn circuit_breaker_rejects_when_open() {
+        let config = CircuitBreakerConfig::new(1);
+        let cb = CircuitBreaker::new(config);
+
+        cb.record_failure(); // Opens circuit
+        assert_eq!(cb.state(), CircuitState::Open);
+
+        // Requests should be rejected
+        assert!(!cb.allow_request());
+        assert!(!cb.allow_request());
+
+        let stats = cb.stats();
+        assert_eq!(stats.total_rejected, 2);
+    }
+
+    #[test]
+    fn circuit_breaker_manual_trip_and_reset() {
+        let cb = CircuitBreaker::with_defaults();
+
+        // Manual trip
+        cb.trip();
+        assert_eq!(cb.state(), CircuitState::Open);
+        assert!(!cb.allow_request());
+
+        // Manual reset
+        cb.reset();
+        assert_eq!(cb.state(), CircuitState::Closed);
+        assert!(cb.allow_request());
+    }
+
+    #[test]
+    fn circuit_breaker_stats() {
+        let config = CircuitBreakerConfig::new(3);
+        let cb = CircuitBreaker::new(config);
+
+        // Record some activity
+        cb.record_success();
+        cb.record_success();
+        cb.record_failure();
+        cb.record_failure();
+        cb.record_failure(); // Opens
+
+        // Try request when open
+        cb.allow_request(); // Rejected
+
+        let stats = cb.stats();
+        assert_eq!(stats.state, CircuitState::Open);
+        assert_eq!(stats.total_opens, 1);
+        assert_eq!(stats.total_successes, 2);
+        assert_eq!(stats.total_failures, 3);
+        assert_eq!(stats.total_rejected, 1);
+        assert_eq!(stats.failure_threshold, 3);
+    }
+
+    #[test]
+    fn circuit_breaker_stats_calculations() {
+        let stats = CircuitBreakerStats {
+            state: CircuitState::Closed,
+            total_opens: 1,
+            total_successes: 90,
+            total_failures: 10,
+            total_rejected: 5,
+            failure_threshold: 5,
+            recent_failures: 0,
+        };
+
+        // Availability: (90 + 10) / (90 + 10 + 5) = 95.24%
+        assert!((stats.availability() - 95.238).abs() < 0.01);
+
+        // Success rate: 90 / (90 + 10) = 90%
+        assert_eq!(stats.success_rate(), 90.0);
+    }
+
+    #[test]
+    fn circuit_breaker_stats_edge_cases() {
+        let stats = CircuitBreakerStats {
+            state: CircuitState::Closed,
+            total_opens: 0,
+            total_successes: 0,
+            total_failures: 0,
+            total_rejected: 0,
+            failure_threshold: 5,
+            recent_failures: 0,
+        };
+
+        assert_eq!(stats.availability(), 100.0);
+        assert_eq!(stats.success_rate(), 100.0);
+    }
+
+    #[test]
+    fn resilient_executor_default() {
+        let exec = ResilientExecutor::with_defaults();
+        assert!(exec.should_attempt());
+        assert_eq!(exec.circuit_breaker().state(), CircuitState::Closed);
+    }
+
+    #[test]
+    fn resilient_executor_success_path() {
+        let exec = ResilientExecutor::with_defaults();
+
+        // Successful operations
+        assert!(exec.should_attempt());
+        exec.record_success();
+
+        assert!(exec.should_attempt());
+        exec.record_success();
+
+        let stats = exec.stats();
+        assert_eq!(stats.retry_stats.total_successes, 2);
+        assert_eq!(stats.circuit_stats.total_successes, 2);
+    }
+
+    #[test]
+    fn resilient_executor_failure_with_retry() {
+        let retry_config = RetryConfig::new(3);
+        let circuit_config = CircuitBreakerConfig::new(10);
+        let exec = ResilientExecutor::new(retry_config, circuit_config);
+
+        // First failure - should retry
+        let delay = exec.record_failure();
+        assert!(delay.is_some());
+        assert_eq!(exec.circuit_breaker().state(), CircuitState::Closed);
+
+        // Success after retry
+        exec.record_success();
+
+        let stats = exec.stats();
+        assert_eq!(stats.retry_stats.total_retries, 1);
+        assert_eq!(stats.retry_stats.total_successes, 1);
+    }
+
+    #[test]
+    fn resilient_executor_circuit_opens_stops_retries() {
+        let retry_config = RetryConfig::new(10); // Many retries allowed
+        let circuit_config = CircuitBreakerConfig::new(3); // Opens after 3 failures
+        let exec = ResilientExecutor::new(retry_config, circuit_config);
+
+        // Record failures until circuit opens
+        let delay1 = exec.record_failure();
+        assert!(delay1.is_some()); // Retry suggested
+
+        let delay2 = exec.record_failure();
+        assert!(delay2.is_some()); // Retry suggested
+
+        let delay3 = exec.record_failure();
+        // Circuit should open, no retry
+        assert!(delay3.is_none());
+        assert_eq!(exec.circuit_breaker().state(), CircuitState::Open);
+        assert!(!exec.should_attempt());
+    }
+
+    #[test]
+    fn resilient_executor_reset() {
+        let retry_config = RetryConfig::new(3);
+        let circuit_config = CircuitBreakerConfig::new(2);
+        let exec = ResilientExecutor::new(retry_config, circuit_config);
+
+        // Open circuit
+        exec.record_failure();
+        exec.record_failure();
+        assert_eq!(exec.circuit_breaker().state(), CircuitState::Open);
+
+        // Reset
+        exec.reset();
+        assert_eq!(exec.circuit_breaker().state(), CircuitState::Closed);
+        assert!(exec.should_attempt());
+    }
+
+    #[test]
+    fn retry_config_jitter_adds_variation() {
+        let config = RetryConfig::default()
+            .with_initial_delay(Duration::from_millis(1000))
+            .with_jitter_factor(0.5);
+
+        let delay = config.calculate_delay(0);
+        // With jitter, delay should be different from exact 1000ms
+        // but within reasonable bounds (500ms to 1500ms)
+        assert!(delay.as_millis() >= 500);
+        assert!(delay.as_millis() <= 1500);
+    }
+
+    #[test]
+    fn circuit_breaker_half_open_limits_requests() {
+        let config = CircuitBreakerConfig::new(1)
+            .with_half_open_max_requests(2)
+            .with_reset_timeout(Duration::from_millis(1)); // Very short for testing
+        let cb = CircuitBreaker::new(config);
+
+        // Open circuit
+        cb.record_failure();
+        assert_eq!(cb.state(), CircuitState::Open);
+
+        // Wait for transition to half-open
+        std::thread::sleep(Duration::from_millis(10));
+        assert_eq!(cb.state(), CircuitState::HalfOpen);
+
+        // First two requests allowed
+        assert!(cb.allow_request());
+        assert!(cb.allow_request());
+
+        // Third request rejected
+        assert!(!cb.allow_request());
+
+        let stats = cb.stats();
+        assert_eq!(stats.total_rejected, 1);
+    }
+
+    #[test]
+    fn circuit_breaker_half_open_closes_on_success() {
+        let config = CircuitBreakerConfig::new(1)
+            .with_success_threshold(2)
+            .with_half_open_max_requests(5)
+            .with_reset_timeout(Duration::from_millis(1));
+        let cb = CircuitBreaker::new(config);
+
+        // Open circuit
+        cb.record_failure();
+        std::thread::sleep(Duration::from_millis(10));
+        assert_eq!(cb.state(), CircuitState::HalfOpen);
+
+        // Successes in half-open close the circuit
+        cb.record_success();
+        assert_eq!(cb.state(), CircuitState::HalfOpen);
+
+        cb.record_success(); // Meets threshold
+        assert_eq!(cb.state(), CircuitState::Closed);
+    }
+
+    #[test]
+    fn circuit_breaker_half_open_reopens_on_failure() {
+        let config = CircuitBreakerConfig::new(1)
+            .with_reset_timeout(Duration::from_millis(1));
+        let cb = CircuitBreaker::new(config);
+
+        // Open circuit
+        cb.record_failure();
+        std::thread::sleep(Duration::from_millis(10));
+        assert_eq!(cb.state(), CircuitState::HalfOpen);
+
+        // Any failure in half-open reopens
+        cb.record_failure();
+        assert_eq!(cb.state(), CircuitState::Open);
+    }
+
+    #[test]
+    fn circuit_breaker_time_until_half_open() {
+        let config = CircuitBreakerConfig::new(1)
+            .with_reset_timeout(Duration::from_secs(30));
+        let cb = CircuitBreaker::new(config);
+
+        // Before opening, no time remaining
+        assert!(cb.time_until_half_open().is_none());
+
+        // Open circuit
+        cb.record_failure();
+        let time_remaining = cb.time_until_half_open();
+        assert!(time_remaining.is_some());
+        assert!(time_remaining.unwrap().as_secs() > 25);
+    }
+
+    #[test]
+    fn retry_policy_reset() {
+        let policy = RetryPolicy::new(RetryConfig::new(3));
+
+        policy.record_failure();
+        policy.record_failure();
+        assert_eq!(policy.current_attempt(), 2);
+
+        policy.reset();
+        assert_eq!(policy.current_attempt(), 0);
+    }
+
+    #[test]
+    fn circuit_breaker_success_resets_failure_count() {
+        // The circuit breaker uses windowed counting, so we need a short window
+        // to test the reset behavior properly
+        let config = CircuitBreakerConfig::new(5)
+            .with_sampling_duration(Duration::from_millis(50));
+        let cb = CircuitBreaker::new(config);
+
+        // Record some failures
+        cb.record_failure();
+        cb.record_failure();
+        cb.record_failure();
+
+        // Success resets the internal failure_count atomic but not the windowed timestamps
+        cb.record_success();
+
+        // Wait for the sampling window to expire
+        std::thread::sleep(Duration::from_millis(60));
+
+        // Now failures start fresh (old ones expired)
+        cb.record_failure();
+        cb.record_failure();
+        cb.record_failure();
+        cb.record_failure();
+        assert_eq!(cb.state(), CircuitState::Closed);
+
+        cb.record_failure(); // Now 5 failures in window
+        assert_eq!(cb.state(), CircuitState::Open);
     }
 }

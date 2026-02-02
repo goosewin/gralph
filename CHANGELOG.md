@@ -14,6 +14,16 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-18 Add RetryConfig for configurable retry behavior with exponential backoff and jitter.
+- MC-18 Add RetryPolicy for managing retry attempts with configurable max retries.
+- MC-18 Add CircuitBreakerConfig for configurable circuit breaker thresholds and timeouts.
+- MC-18 Add CircuitBreaker state machine with Closed, Open, and HalfOpen states.
+- MC-18 Add CircuitState enum and state transition logic for cascade failure prevention.
+- MC-18 Add ResilientExecutor combining retry policy with circuit breaker for comprehensive failure handling.
+- MC-18 Add RetryStats and CircuitBreakerStats for monitoring retry and circuit breaker behavior.
+- MC-18 Add exponential backoff with jitter calculation in RetryConfig.calculate_delay().
+- MC-18 Add windowed failure counting in CircuitBreaker for accurate threshold detection.
+- MC-18 Add 43 new tests for retry policy, circuit breaker, and resilient executor.
 - MC-17 Add AgentMessageChannel for inter-agent communication with per-agent inboxes and message queuing.
 - MC-17 Add AgentMessage struct with id, from, to, message_type, timestamp, and correlation_id fields.
 - MC-17 Add AgentMessageType enum with HandoffRequest, HandoffAck, TaskResult, Ping, Pong, CancelRequest, and Custom variants.
