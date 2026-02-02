@@ -1,0 +1,27 @@
+src/verifier.rs
+  3b269d92412856e0 34-35,469-534,546,4199-4313,4376-4378,4404-4406,4438-4440,4461-4463
+PRD.loop-verifier-hardening.md
+  3b269d92412856e0 103
+CHANGELOG.md
+  3b269d92412856e0 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "35a0eb10a482ec6beee0d6efda22f5dff241ae51",
+  "prompts": {
+    "3b269d92412856e0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3d5b02bf-e68f-4834-ac33-b375d49b0a86",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 198,
+      "total_deletions": 1,
+      "accepted_lines": 198,
+      "overriden_lines": 0
+    }
+  }
+}
