@@ -6043,7 +6043,11 @@ Coverage Results: 85.50% (171/200 lines)
         let _guard = env_guard();
         let config = load_project_config("verifier:\n  post_prd_comment: false\n");
         // Should not panic or attempt gh command when disabled
-        post_prd_as_pr_comment(&config, "https://github.com/test/repo/pull/1", Some("# PRD"));
+        post_prd_as_pr_comment(
+            &config,
+            "https://github.com/test/repo/pull/1",
+            Some("# PRD"),
+        );
     }
 
     #[test]
@@ -6059,7 +6063,11 @@ Coverage Results: 85.50% (171/200 lines)
         let _guard = env_guard();
         let config = load_project_config("verifier:\n  post_prd_comment: true\n");
         // Should not panic when PRD is empty/whitespace
-        post_prd_as_pr_comment(&config, "https://github.com/test/repo/pull/1", Some("   \n  \n"));
+        post_prd_as_pr_comment(
+            &config,
+            "https://github.com/test/repo/pull/1",
+            Some("   \n  \n"),
+        );
     }
 
     // TEST-1: Additional unit tests for verifier helpers
@@ -6077,7 +6085,11 @@ Coverage Results: 85.50% (171/200 lines)
 
         let config = load_project_config("verifier:\n  post_prd_comment: true\n");
         // Should not panic and should complete successfully
-        post_prd_as_pr_comment(&config, "https://github.com/test/repo/pull/1", Some("# Test PRD\n\nSome content.\n"));
+        post_prd_as_pr_comment(
+            &config,
+            "https://github.com/test/repo/pull/1",
+            Some("# Test PRD\n\nSome content.\n"),
+        );
     }
 
     #[cfg(unix)]
@@ -6095,7 +6107,11 @@ Coverage Results: 85.50% (171/200 lines)
         let long_content = "x".repeat(70000);
         let config = load_project_config("verifier:\n  post_prd_comment: true\n");
         // Should not panic and should complete (truncation happens internally)
-        post_prd_as_pr_comment(&config, "https://github.com/test/repo/pull/1", Some(&long_content));
+        post_prd_as_pr_comment(
+            &config,
+            "https://github.com/test/repo/pull/1",
+            Some(&long_content),
+        );
     }
 
     #[cfg(unix)]
@@ -6111,16 +6127,25 @@ Coverage Results: 85.50% (171/200 lines)
 
         let config = load_project_config("verifier:\n  post_prd_comment: true\n");
         // Should not panic - warnings are printed but function completes
-        post_prd_as_pr_comment(&config, "https://github.com/test/repo/pull/1", Some("# Test PRD\n"));
+        post_prd_as_pr_comment(
+            &config,
+            "https://github.com/test/repo/pull/1",
+            Some("# Test PRD\n"),
+        );
     }
 
     #[test]
     fn post_prd_as_pr_comment_uses_config_task_file() {
         let _guard = env_guard();
-        let config =
-            load_project_config("verifier:\n  post_prd_comment: true\ndefaults:\n  task_file: TASKS.md\n");
+        let config = load_project_config(
+            "verifier:\n  post_prd_comment: true\ndefaults:\n  task_file: TASKS.md\n",
+        );
         // Should not panic when passing content directly (task_file no longer used for reading)
-        post_prd_as_pr_comment(&config, "https://github.com/test/repo/pull/1", Some("# Custom Tasks\n"));
+        post_prd_as_pr_comment(
+            &config,
+            "https://github.com/test/repo/pull/1",
+            Some("# Custom Tasks\n"),
+        );
     }
 
     #[test]
