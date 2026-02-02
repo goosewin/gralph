@@ -293,7 +293,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Cleanup removes worktrees on agent exit.
   * Integration tests verify isolation.
 - **Dependencies** MC-11
-- [ ] MC-12 Implement agent worktree isolation
+- [x] MC-12 Implement agent worktree isolation
 ---
 
 ### Task MC-13

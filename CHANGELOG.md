@@ -14,6 +14,13 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-12 Add AgentWorktreeManager for thread-safe creation and cleanup of isolated agent worktrees.
+- MC-12 Add Coordinator.with_worktree_manager() for creating coordinators with worktree isolation.
+- MC-12 Add Coordinator.spawn_agent_with_isolated_worktree() to spawn agents with unique worktrees.
+- MC-12 Add Coordinator.remove_agent() for cleanup of agent and associated worktree.
+- MC-12 Add Coordinator.cleanup_all_worktrees() for shutdown cleanup.
+- MC-12 Add WorktreeError enum with variants for git, io, already exists, not found, not a repository, and no commits errors.
+- MC-12 Add 23 new tests for AgentWorktreeManager and Coordinator worktree integration.
 - MC-11 Add multi-agent coordinator module (`src/coordinator.rs`) for parallel task orchestration.
 - MC-11 Add Coordinator struct managing agent pool with configurable max_agents limit.
 - MC-11 Add WorkQueue for task distribution with dependency-aware scheduling.

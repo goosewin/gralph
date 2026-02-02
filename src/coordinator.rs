@@ -1,10 +1,13 @@
 use crate::task::{is_unchecked_line, task_blocks_from_contents};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fmt;
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command as ProcCommand;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AgentId(pub usize);
@@ -89,6 +92,323 @@ impl fmt::Display for CoordinatorError {
 
 impl Error for CoordinatorError {}
 
+/// Manages isolated git worktrees for parallel agents.
+///
+/// Thread-safe: uses RwLock internally to allow concurrent reads and exclusive writes.
+/// Each agent gets a unique worktree to operate in isolation from other agents.
+#[derive(Debug)]
+pub struct AgentWorktreeManager {
+    /// Root directory containing all agent worktrees.
+    worktrees_root: PathBuf,
+    /// Repository root for creating worktrees from.
+    repo_root: PathBuf,
+    /// Map of agent IDs to their worktree paths.
+    agent_worktrees: RwLock<HashMap<AgentId, PathBuf>>,
+    /// Counter for generating unique worktree names.
+    worktree_counter: AtomicUsize,
+    /// Prefix for agent worktree branch names.
+    branch_prefix: String,
+}
+
+/// Error types specific to worktree operations.
+#[derive(Debug)]
+pub enum WorktreeError {
+    /// Git command failed.
+    GitError(String),
+    /// IO operation failed.
+    IoError(std::io::Error),
+    /// Worktree already exists for agent.
+    AlreadyExists(AgentId),
+    /// No worktree found for agent.
+    NotFound(AgentId),
+    /// Repository is not a git repository.
+    NotARepository,
+    /// Repository has no commits.
+    NoCommits,
+}
+
+impl fmt::Display for WorktreeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            WorktreeError::GitError(msg) => write!(f, "git error: {}", msg),
+            WorktreeError::IoError(err) => write!(f, "io error: {}", err),
+            WorktreeError::AlreadyExists(id) => {
+                write!(f, "worktree already exists for agent {}", id.0)
+            }
+            WorktreeError::NotFound(id) => write!(f, "no worktree found for agent {}", id.0),
+            WorktreeError::NotARepository => write!(f, "not a git repository"),
+            WorktreeError::NoCommits => write!(f, "repository has no commits"),
+        }
+    }
+}
+
+impl Error for WorktreeError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            WorktreeError::IoError(err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
+impl From<std::io::Error> for WorktreeError {
+    fn from(err: std::io::Error) -> Self {
+        WorktreeError::IoError(err)
+    }
+}
+
+impl AgentWorktreeManager {
+    /// Creates a new worktree manager for the given repository.
+    ///
+    /// # Arguments
+    /// * `repo_root` - Path to the git repository root
+    /// * `worktrees_root` - Optional custom path for worktrees directory (defaults to repo_root/.worktrees/agents)
+    /// * `branch_prefix` - Optional prefix for branch names (defaults to "agent")
+    pub fn new(
+        repo_root: PathBuf,
+        worktrees_root: Option<PathBuf>,
+        branch_prefix: Option<String>,
+    ) -> Result<Self, WorktreeError> {
+        // Verify repo_root is a git repository
+        let repo_root = Self::resolve_repo_root(&repo_root)?;
+
+        // Check repository has commits
+        if !Self::repo_has_commits(&repo_root) {
+            return Err(WorktreeError::NoCommits);
+        }
+
+        let worktrees_root =
+            worktrees_root.unwrap_or_else(|| repo_root.join(".worktrees").join("agents"));
+
+        fs::create_dir_all(&worktrees_root)?;
+
+        Ok(Self {
+            worktrees_root,
+            repo_root,
+            agent_worktrees: RwLock::new(HashMap::new()),
+            worktree_counter: AtomicUsize::new(0),
+            branch_prefix: branch_prefix.unwrap_or_else(|| "agent".to_string()),
+        })
+    }
+
+    /// Creates a worktree for an agent with optional timestamp for unique naming.
+    ///
+    /// Thread-safe: acquires write lock only for the duration of registration.
+    pub fn create_worktree_for_agent(
+        &self,
+        agent_id: AgentId,
+        timestamp: Option<&str>,
+    ) -> Result<PathBuf, WorktreeError> {
+        // Check if worktree already exists for this agent
+        {
+            let worktrees = self.agent_worktrees.read().unwrap();
+            if worktrees.contains_key(&agent_id) {
+                return Err(WorktreeError::AlreadyExists(agent_id));
+            }
+        }
+
+        // Generate unique branch and path names
+        let counter = self.worktree_counter.fetch_add(1, Ordering::SeqCst);
+        let timestamp_str = timestamp.unwrap_or("");
+        let branch_name = if timestamp_str.is_empty() {
+            format!("{}-{}-{}", self.branch_prefix, agent_id.0, counter)
+        } else {
+            format!(
+                "{}-{}-{}-{}",
+                self.branch_prefix, agent_id.0, counter, timestamp_str
+            )
+        };
+
+        // Ensure branch name is unique
+        let branch_name = self.ensure_unique_branch(&branch_name);
+        let worktree_path = self.worktrees_root.join(&branch_name);
+
+        // Create the worktree using git
+        self.git_create_worktree(&branch_name, &worktree_path)?;
+
+        // Register the worktree for this agent
+        {
+            let mut worktrees = self.agent_worktrees.write().unwrap();
+            worktrees.insert(agent_id, worktree_path.clone());
+        }
+
+        Ok(worktree_path)
+    }
+
+    /// Gets the worktree path for an agent if it exists.
+    pub fn get_worktree(&self, agent_id: AgentId) -> Option<PathBuf> {
+        let worktrees = self.agent_worktrees.read().unwrap();
+        worktrees.get(&agent_id).cloned()
+    }
+
+    /// Removes the worktree for an agent, cleaning up both the directory and git state.
+    ///
+    /// This should be called when an agent exits (successfully or due to failure).
+    /// Thread-safe: acquires write lock only for the duration of deregistration.
+    pub fn cleanup_agent_worktree(&self, agent_id: AgentId) -> Result<(), WorktreeError> {
+        let worktree_path = {
+            let worktrees = self.agent_worktrees.read().unwrap();
+            worktrees
+                .get(&agent_id)
+                .cloned()
+                .ok_or(WorktreeError::NotFound(agent_id))?
+        };
+
+        // Remove from git first
+        self.git_remove_worktree(&worktree_path)?;
+
+        // Clean up any remaining files (git worktree remove --force may leave some)
+        if worktree_path.exists() {
+            let _ = fs::remove_dir_all(&worktree_path);
+        }
+
+        // Remove from our tracking
+        {
+            let mut worktrees = self.agent_worktrees.write().unwrap();
+            worktrees.remove(&agent_id);
+        }
+
+        Ok(())
+    }
+
+    /// Cleans up all agent worktrees. Called during coordinator shutdown.
+    pub fn cleanup_all(&self) -> Vec<(AgentId, Result<(), WorktreeError>)> {
+        let agent_ids: Vec<AgentId> = {
+            let worktrees = self.agent_worktrees.read().unwrap();
+            worktrees.keys().cloned().collect()
+        };
+
+        agent_ids
+            .into_iter()
+            .map(|id| {
+                let result = self.cleanup_agent_worktree(id);
+                (id, result)
+            })
+            .collect()
+    }
+
+    /// Returns the number of active agent worktrees.
+    pub fn active_count(&self) -> usize {
+        let worktrees = self.agent_worktrees.read().unwrap();
+        worktrees.len()
+    }
+
+    /// Returns a list of all active agent worktree paths.
+    pub fn list_worktrees(&self) -> Vec<(AgentId, PathBuf)> {
+        let worktrees = self.agent_worktrees.read().unwrap();
+        worktrees
+            .iter()
+            .map(|(id, path)| (*id, path.clone()))
+            .collect()
+    }
+
+    // Helper: resolve repository root from a path
+    fn resolve_repo_root(path: &Path) -> Result<PathBuf, WorktreeError> {
+        let output = ProcCommand::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(["rev-parse", "--show-toplevel"])
+            .output()
+            .map_err(|e| WorktreeError::IoError(e))?;
+
+        if output.status.success() {
+            let root = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            Ok(PathBuf::from(root))
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if stderr.to_lowercase().contains("not a git repository") {
+                Err(WorktreeError::NotARepository)
+            } else {
+                Err(WorktreeError::GitError(stderr.to_string()))
+            }
+        }
+    }
+
+    // Helper: check if repository has commits
+    fn repo_has_commits(repo_root: &Path) -> bool {
+        Self::git_cmd_in_dir(repo_root, ["rev-parse", "--verify", "HEAD"]).is_ok()
+    }
+
+    // Helper: run git command in directory
+    fn git_cmd_in_dir(
+        dir: &Path,
+        args: impl IntoIterator<Item = impl AsRef<OsStr>>,
+    ) -> Result<String, WorktreeError> {
+        let output = ProcCommand::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .map_err(|e| WorktreeError::IoError(e))?;
+
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        } else {
+            Err(WorktreeError::GitError(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ))
+        }
+    }
+
+    // Helper: check if branch exists
+    fn branch_exists(&self, branch: &str) -> bool {
+        Self::git_cmd_in_dir(
+            &self.repo_root,
+            [
+                "show-ref",
+                "--verify",
+                "--quiet",
+                &format!("refs/heads/{}", branch),
+            ],
+        )
+        .is_ok()
+    }
+
+    // Helper: ensure unique branch name
+    fn ensure_unique_branch(&self, base: &str) -> String {
+        let mut candidate = base.to_string();
+        let mut suffix = 2;
+        while self.branch_exists(&candidate) || self.worktrees_root.join(&candidate).exists() {
+            candidate = format!("{}-{}", base, suffix);
+            suffix += 1;
+        }
+        candidate
+    }
+
+    // Helper: create git worktree
+    fn git_create_worktree(&self, branch: &str, path: &Path) -> Result<(), WorktreeError> {
+        Self::git_cmd_in_dir(
+            &self.repo_root,
+            [
+                "worktree",
+                "add",
+                "-b",
+                branch,
+                path.to_string_lossy().as_ref(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    // Helper: remove git worktree
+    fn git_remove_worktree(&self, path: &Path) -> Result<(), WorktreeError> {
+        // Try force removal to handle locked/incomplete worktrees
+        let result = Self::git_cmd_in_dir(
+            &self.repo_root,
+            ["worktree", "remove", "--force", path.to_string_lossy().as_ref()],
+        );
+
+        // If worktree is already gone or doesn't exist, that's fine
+        if let Err(WorktreeError::GitError(msg)) = &result {
+            if msg.contains("is not a working tree") || msg.contains("does not exist") {
+                return Ok(());
+            }
+        }
+
+        result.map(|_| ())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct WorkQueue {
     pending: VecDeque<TaskNode>,
@@ -170,6 +490,8 @@ pub struct Coordinator {
     max_agents: usize,
     next_agent_id: AtomicUsize,
     shutdown: AtomicBool,
+    /// Optional worktree manager for agent isolation.
+    worktree_manager: Option<Arc<AgentWorktreeManager>>,
 }
 
 impl Coordinator {
@@ -180,7 +502,28 @@ impl Coordinator {
             max_agents,
             next_agent_id: AtomicUsize::new(0),
             shutdown: AtomicBool::new(false),
+            worktree_manager: None,
         }
+    }
+
+    /// Creates a new coordinator with an attached worktree manager for agent isolation.
+    pub fn with_worktree_manager(
+        max_agents: usize,
+        worktree_manager: AgentWorktreeManager,
+    ) -> Self {
+        Self {
+            agents: Vec::new(),
+            work_queue: Arc::new(Mutex::new(WorkQueue::new())),
+            max_agents,
+            next_agent_id: AtomicUsize::new(0),
+            shutdown: AtomicBool::new(false),
+            worktree_manager: Some(Arc::new(worktree_manager)),
+        }
+    }
+
+    /// Returns a reference to the worktree manager if configured.
+    pub fn worktree_manager(&self) -> Option<&AgentWorktreeManager> {
+        self.worktree_manager.as_ref().map(|arc| arc.as_ref())
     }
 
     pub fn spawn_agent(&mut self) -> Option<AgentId> {
@@ -203,6 +546,63 @@ impl Coordinator {
         let agent = Agent::new(id).with_worktree(worktree_path);
         self.agents.push(agent);
         Some(id)
+    }
+
+    /// Spawns a new agent with an automatically created isolated worktree.
+    ///
+    /// Requires a worktree manager to be configured. Returns the agent ID and worktree path.
+    pub fn spawn_agent_with_isolated_worktree(
+        &mut self,
+        timestamp: Option<&str>,
+    ) -> Result<(AgentId, PathBuf), CoordinatorError> {
+        if self.agents.len() >= self.max_agents {
+            return Err(CoordinatorError::NoAvailableAgents);
+        }
+
+        let manager = self
+            .worktree_manager
+            .as_ref()
+            .ok_or_else(|| CoordinatorError::WorktreeError("no worktree manager configured".to_string()))?;
+
+        let id = AgentId(self.next_agent_id.fetch_add(1, Ordering::SeqCst));
+
+        let worktree_path = manager
+            .create_worktree_for_agent(id, timestamp)
+            .map_err(|e| CoordinatorError::WorktreeError(e.to_string()))?;
+
+        let agent = Agent::new(id).with_worktree(worktree_path.clone());
+        self.agents.push(agent);
+
+        Ok((id, worktree_path))
+    }
+
+    /// Removes an agent and cleans up its worktree if one was allocated.
+    pub fn remove_agent(&mut self, agent_id: AgentId) -> Result<(), CoordinatorError> {
+        // Find and remove the agent
+        let agent_index = self.agents.iter().position(|a| a.id == agent_id);
+        if agent_index.is_none() {
+            return Err(CoordinatorError::AgentFailed {
+                agent_id,
+                reason: "agent not found".to_string(),
+            });
+        }
+        let agent = self.agents.remove(agent_index.unwrap());
+
+        // Clean up worktree if manager is configured and agent had a worktree
+        if agent.worktree_path.is_some() {
+            if let Some(manager) = &self.worktree_manager {
+                let _ = manager.cleanup_agent_worktree(agent_id);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Cleans up all agent worktrees during shutdown.
+    pub fn cleanup_all_worktrees(&self) {
+        if let Some(manager) = &self.worktree_manager {
+            manager.cleanup_all();
+        }
     }
 
     pub fn get_agent(&self, id: AgentId) -> Option<&Agent> {
@@ -851,5 +1251,488 @@ mod tests {
 
         let sorted = topological_sort(&tasks).unwrap();
         assert_eq!(sorted, vec!["T-2".to_string()]);
+    }
+
+    #[test]
+    fn worktree_error_display() {
+        let err = WorktreeError::GitError("failed".to_string());
+        assert_eq!(err.to_string(), "git error: failed");
+
+        let err = WorktreeError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "missing"));
+        assert!(err.to_string().contains("io error:"));
+
+        let err = WorktreeError::AlreadyExists(AgentId(1));
+        assert_eq!(err.to_string(), "worktree already exists for agent 1");
+
+        let err = WorktreeError::NotFound(AgentId(2));
+        assert_eq!(err.to_string(), "no worktree found for agent 2");
+
+        let err = WorktreeError::NotARepository;
+        assert_eq!(err.to_string(), "not a git repository");
+
+        let err = WorktreeError::NoCommits;
+        assert_eq!(err.to_string(), "repository has no commits");
+    }
+
+    #[test]
+    fn worktree_error_source() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "missing");
+        let err = WorktreeError::IoError(io_err);
+        assert!(err.source().is_some());
+
+        let err = WorktreeError::GitError("failed".to_string());
+        assert!(err.source().is_none());
+    }
+
+    #[test]
+    fn worktree_error_from_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "missing");
+        let err: WorktreeError = io_err.into();
+        assert!(matches!(err, WorktreeError::IoError(_)));
+    }
+
+    #[test]
+    fn coordinator_with_worktree_manager_returns_manager() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_test_repo(temp.path());
+
+        let manager = AgentWorktreeManager::new(temp.path().to_path_buf(), None, None).unwrap();
+        let coordinator = Coordinator::with_worktree_manager(5, manager);
+
+        assert!(coordinator.worktree_manager().is_some());
+    }
+
+    #[test]
+    fn coordinator_without_worktree_manager() {
+        let coordinator = Coordinator::new(5);
+        assert!(coordinator.worktree_manager().is_none());
+    }
+
+    #[test]
+    fn coordinator_spawn_isolated_worktree_fails_without_manager() {
+        let mut coordinator = Coordinator::new(5);
+        let result = coordinator.spawn_agent_with_isolated_worktree(None);
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CoordinatorError::WorktreeError(msg) => {
+                assert!(msg.contains("no worktree manager"));
+            }
+            other => panic!("unexpected error: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn coordinator_spawn_isolated_worktree_creates_worktree() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_test_repo(temp.path());
+
+        let manager = AgentWorktreeManager::new(temp.path().to_path_buf(), None, None).unwrap();
+        let mut coordinator = Coordinator::with_worktree_manager(5, manager);
+
+        let result = coordinator.spawn_agent_with_isolated_worktree(Some("20260201-120000"));
+        assert!(result.is_ok());
+
+        let (agent_id, worktree_path) = result.unwrap();
+        assert!(worktree_path.exists());
+
+        // Verify agent has worktree path set
+        let agent = coordinator.get_agent(agent_id).unwrap();
+        assert_eq!(agent.worktree_path, Some(worktree_path.clone()));
+
+        // Cleanup
+        coordinator.cleanup_all_worktrees();
+    }
+
+    #[test]
+    fn coordinator_remove_agent_cleans_up_worktree() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_test_repo(temp.path());
+
+        let manager = AgentWorktreeManager::new(temp.path().to_path_buf(), None, None).unwrap();
+        let mut coordinator = Coordinator::with_worktree_manager(5, manager);
+
+        let (agent_id, worktree_path) = coordinator
+            .spawn_agent_with_isolated_worktree(None)
+            .unwrap();
+
+        assert!(worktree_path.exists());
+
+        // Remove agent should cleanup worktree
+        coordinator.remove_agent(agent_id).unwrap();
+
+        // Worktree should be removed
+        assert!(!worktree_path.exists());
+        assert!(coordinator.get_agent(agent_id).is_none());
+    }
+
+    #[test]
+    fn coordinator_remove_agent_not_found() {
+        let mut coordinator = Coordinator::new(5);
+        let result = coordinator.remove_agent(AgentId(999));
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CoordinatorError::AgentFailed { agent_id, .. } => {
+                assert_eq!(agent_id, AgentId(999));
+            }
+            other => panic!("unexpected error: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn coordinator_cleanup_all_worktrees_cleans_up() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_test_repo(temp.path());
+
+        let manager = AgentWorktreeManager::new(temp.path().to_path_buf(), None, None).unwrap();
+        let mut coordinator = Coordinator::with_worktree_manager(5, manager);
+
+        // Spawn multiple agents with worktrees
+        let (_, path1) = coordinator
+            .spawn_agent_with_isolated_worktree(Some("t1"))
+            .unwrap();
+        let (_, path2) = coordinator
+            .spawn_agent_with_isolated_worktree(Some("t2"))
+            .unwrap();
+
+        assert!(path1.exists());
+        assert!(path2.exists());
+
+        // Cleanup all
+        coordinator.cleanup_all_worktrees();
+
+        // Both should be removed
+        assert!(!path1.exists());
+        assert!(!path2.exists());
+    }
+
+    // Agent worktree manager tests
+
+    #[test]
+    fn agent_worktree_manager_requires_git_repo() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        // Don't initialize as git repo
+
+        let result = AgentWorktreeManager::new(temp.path().to_path_buf(), None, None);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            WorktreeError::NotARepository => {}
+            other => panic!("expected NotARepository, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn agent_worktree_manager_requires_commits() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        // Initialize repo but no commits
+        run_git(temp.path(), &["init"]);
+
+        let result = AgentWorktreeManager::new(temp.path().to_path_buf(), None, None);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            WorktreeError::NoCommits => {}
+            other => panic!("expected NoCommits, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn agent_worktree_manager_creates_worktrees_root() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_test_repo(temp.path());
+
+        let worktrees_root = temp.path().join("custom-worktrees");
+        let manager = AgentWorktreeManager::new(
+            temp.path().to_path_buf(),
+            Some(worktrees_root.clone()),
+            None,
+        )
+        .unwrap();
+
+        assert!(worktrees_root.exists());
+        drop(manager);
+    }
+
+    #[test]
+    fn agent_worktree_manager_creates_unique_worktrees() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_test_repo(temp.path());
+
+        let manager = AgentWorktreeManager::new(temp.path().to_path_buf(), None, None).unwrap();
+
+        let agent1 = AgentId(0);
+        let agent2 = AgentId(1);
+
+        let path1 = manager.create_worktree_for_agent(agent1, None).unwrap();
+        let path2 = manager.create_worktree_for_agent(agent2, None).unwrap();
+
+        // Paths should be different
+        assert_ne!(path1, path2);
+        assert!(path1.exists());
+        assert!(path2.exists());
+
+        // Both should be tracked
+        assert_eq!(manager.active_count(), 2);
+
+        // Cleanup
+        manager.cleanup_all();
+    }
+
+    #[test]
+    fn agent_worktree_manager_prevents_duplicate_worktrees() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_test_repo(temp.path());
+
+        let manager = AgentWorktreeManager::new(temp.path().to_path_buf(), None, None).unwrap();
+        let agent_id = AgentId(0);
+
+        manager.create_worktree_for_agent(agent_id, None).unwrap();
+
+        // Second attempt should fail
+        let result = manager.create_worktree_for_agent(agent_id, None);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            WorktreeError::AlreadyExists(id) => {
+                assert_eq!(id, agent_id);
+            }
+            other => panic!("expected AlreadyExists, got: {:?}", other),
+        }
+
+        // Cleanup
+        manager.cleanup_all();
+    }
+
+    #[test]
+    fn agent_worktree_manager_get_worktree() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_test_repo(temp.path());
+
+        let manager = AgentWorktreeManager::new(temp.path().to_path_buf(), None, None).unwrap();
+        let agent_id = AgentId(0);
+
+        assert!(manager.get_worktree(agent_id).is_none());
+
+        let path = manager.create_worktree_for_agent(agent_id, None).unwrap();
+        assert_eq!(manager.get_worktree(agent_id), Some(path));
+
+        // Cleanup
+        manager.cleanup_all();
+    }
+
+    #[test]
+    fn agent_worktree_manager_cleanup_removes_worktree() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_test_repo(temp.path());
+
+        let manager = AgentWorktreeManager::new(temp.path().to_path_buf(), None, None).unwrap();
+        let agent_id = AgentId(0);
+
+        let path = manager.create_worktree_for_agent(agent_id, None).unwrap();
+        assert!(path.exists());
+        assert_eq!(manager.active_count(), 1);
+
+        manager.cleanup_agent_worktree(agent_id).unwrap();
+
+        assert!(!path.exists());
+        assert_eq!(manager.active_count(), 0);
+        assert!(manager.get_worktree(agent_id).is_none());
+    }
+
+    #[test]
+    fn agent_worktree_manager_cleanup_not_found() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_test_repo(temp.path());
+
+        let manager = AgentWorktreeManager::new(temp.path().to_path_buf(), None, None).unwrap();
+        let result = manager.cleanup_agent_worktree(AgentId(999));
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            WorktreeError::NotFound(id) => {
+                assert_eq!(id, AgentId(999));
+            }
+            other => panic!("expected NotFound, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn agent_worktree_manager_list_worktrees() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_test_repo(temp.path());
+
+        let manager = AgentWorktreeManager::new(temp.path().to_path_buf(), None, None).unwrap();
+
+        let agent1 = AgentId(0);
+        let agent2 = AgentId(1);
+
+        let path1 = manager.create_worktree_for_agent(agent1, None).unwrap();
+        let path2 = manager.create_worktree_for_agent(agent2, None).unwrap();
+
+        let list = manager.list_worktrees();
+        assert_eq!(list.len(), 2);
+
+        let ids: Vec<_> = list.iter().map(|(id, _)| *id).collect();
+        assert!(ids.contains(&agent1));
+        assert!(ids.contains(&agent2));
+
+        let paths: Vec<_> = list.iter().map(|(_, p)| p.clone()).collect();
+        assert!(paths.contains(&path1));
+        assert!(paths.contains(&path2));
+
+        // Cleanup
+        manager.cleanup_all();
+    }
+
+    #[test]
+    fn agent_worktree_manager_cleanup_all() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_test_repo(temp.path());
+
+        let manager = AgentWorktreeManager::new(temp.path().to_path_buf(), None, None).unwrap();
+
+        let path1 = manager.create_worktree_for_agent(AgentId(0), None).unwrap();
+        let path2 = manager.create_worktree_for_agent(AgentId(1), None).unwrap();
+
+        assert_eq!(manager.active_count(), 2);
+
+        let results = manager.cleanup_all();
+        assert_eq!(results.len(), 2);
+
+        // All should succeed
+        for (_, result) in &results {
+            assert!(result.is_ok());
+        }
+
+        assert_eq!(manager.active_count(), 0);
+        assert!(!path1.exists());
+        assert!(!path2.exists());
+    }
+
+    #[test]
+    fn agent_worktree_manager_custom_branch_prefix() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_test_repo(temp.path());
+
+        let manager = AgentWorktreeManager::new(
+            temp.path().to_path_buf(),
+            None,
+            Some("worker".to_string()),
+        )
+        .unwrap();
+
+        let path = manager.create_worktree_for_agent(AgentId(0), None).unwrap();
+
+        // Path should include the custom prefix
+        let path_str = path.to_string_lossy();
+        assert!(path_str.contains("worker-0"));
+
+        // Cleanup
+        manager.cleanup_all();
+    }
+
+    #[test]
+    fn agent_worktree_manager_with_timestamp() {
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_test_repo(temp.path());
+
+        let manager = AgentWorktreeManager::new(temp.path().to_path_buf(), None, None).unwrap();
+
+        let path = manager
+            .create_worktree_for_agent(AgentId(0), Some("20260201-120000"))
+            .unwrap();
+
+        // Path should include timestamp
+        let path_str = path.to_string_lossy();
+        assert!(path_str.contains("20260201-120000"));
+
+        // Cleanup
+        manager.cleanup_all();
+    }
+
+    #[test]
+    fn agent_worktree_manager_thread_safety() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let _lock = crate::test_support::env_lock();
+        let temp = tempfile::tempdir().unwrap();
+        init_test_repo(temp.path());
+
+        let manager =
+            Arc::new(AgentWorktreeManager::new(temp.path().to_path_buf(), None, None).unwrap());
+
+        let mut handles = vec![];
+
+        // Spawn multiple threads that create worktrees
+        for i in 0..5 {
+            let manager_clone = Arc::clone(&manager);
+            let handle = thread::spawn(move || {
+                let agent_id = AgentId(i);
+                manager_clone.create_worktree_for_agent(agent_id, None)
+            });
+            handles.push(handle);
+        }
+
+        // Collect results
+        let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+
+        // All should succeed
+        for result in &results {
+            assert!(result.is_ok());
+        }
+
+        // Should have 5 active worktrees
+        assert_eq!(manager.active_count(), 5);
+
+        // All paths should be unique
+        let paths: Vec<_> = results.iter().filter_map(|r| r.as_ref().ok()).collect();
+        let unique_paths: HashSet<_> = paths.iter().collect();
+        assert_eq!(unique_paths.len(), 5);
+
+        // Cleanup
+        manager.cleanup_all();
+    }
+
+    // Helper functions for tests
+
+    fn run_git(dir: &Path, args: &[&str]) {
+        let output = ProcCommand::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}{}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn init_test_repo(dir: &Path) {
+        run_git(dir, &["init"]);
+        run_git(dir, &["config", "user.email", "test@example.com"]);
+        run_git(dir, &["config", "user.name", "Test User"]);
+        fs::write(dir.join("README.md"), "init\n").unwrap();
+        run_git(dir, &["add", "."]);
+        run_git(dir, &["commit", "-m", "init"]);
     }
 }
