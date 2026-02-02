@@ -452,7 +452,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Log retention policy configurable.
   * Integration tests verify logging.
 - **Dependencies** MC-22
-- [ ] MC-23 Create audit logging system
+- [x] MC-23 Create audit logging system
 ---
 
 ### Task MC-24

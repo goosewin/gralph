@@ -14,6 +14,18 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-23 Add audit logging module (`src/audit.rs`) for tracking all authenticated actions.
+- MC-23 Add AuditAction enum with 22 action types covering auth, session, task, and admin operations.
+- MC-23 Add AuditOutcome enum with Success, Failure, and Denied variants.
+- MC-23 Add AuditEntry struct recording actor, action, resource, outcome, timestamp, and metadata.
+- MC-23 Add AuditLogConfig for configurable max entries and retention age.
+- MC-23 Add AuditQuery struct for filtering by actor, action, resource, outcome, time range, and pagination.
+- MC-23 Add AuditLog thread-safe in-memory store with automatic old entry cleanup.
+- MC-23 Add GET /audit endpoint for querying audit logs with filtering and pagination.
+- MC-23 Add GET /audit/stats endpoint for audit log statistics (total entries, actions breakdown, outcomes).
+- MC-23 Add environment variable configuration: GRALPH_AUDIT_MAX_ENTRIES and GRALPH_AUDIT_RETENTION_DAYS.
+- MC-23 Add Permission::AuditLogRead for RBAC protection of audit endpoints (Admin only).
+- MC-23 Add 33 new tests for audit logging module and server endpoints.
 - MC-22 Add Permission enum with session, task, user, org, and system permission types.
 - MC-22 Add UserRole.permissions() returning all permissions granted to Admin, Developer, or Viewer roles.
 - MC-22 Add UserRole.has_permission() for checking single permission on a role.

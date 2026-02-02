@@ -14,7 +14,8 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
-use crate::auth::{AuthError, AuthService, JwtConfig, RateLimitConfig};
+use crate::audit::{AuditAction, AuditEntry, AuditLog, AuditLogConfig, AuditOutcome, AuditQuery};
+use crate::auth::{AuthError, AuthService, JwtConfig, Permission, RateLimitConfig};
 use crate::core::{count_remaining_tasks, last_error_line, last_log_line, raw_log_path};
 use crate::prd;
 use crate::state::{StateError, StateStore};
@@ -198,6 +199,7 @@ struct AppState {
     store: StateStore,
     broadcaster: StateBroadcaster,
     auth_service: AuthService,
+    audit_log: AuditLog,
 }
 
 pub async fn run_server(config: ServerConfig) -> Result<(), ServerError> {
@@ -220,11 +222,27 @@ pub async fn run_server(config: ServerConfig) -> Result<(), ServerError> {
     };
     let auth_service = AuthService::new(jwt_config).with_rate_limit(rate_limit_config);
 
+    // Initialize audit log with configurable retention from environment
+    let audit_max_entries = env::var("GRALPH_AUDIT_MAX_ENTRIES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10000);
+    let audit_max_age_days = env::var("GRALPH_AUDIT_RETENTION_DAYS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(30);
+    let audit_log = AuditLog::new(
+        AuditLogConfig::default()
+            .with_max_entries(audit_max_entries)
+            .with_max_age_secs(audit_max_age_days * 24 * 60 * 60),
+    );
+
     let app_state = Arc::new(AppState {
         config,
         store,
         broadcaster,
         auth_service,
+        audit_log,
     });
     let app = build_router(app_state.clone());
     let addr = app_state.config.addr()?;
@@ -283,6 +301,15 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route(
             "/auth/me",
             get(auth_me_handler).options(options_handler),
+        )
+        // Audit log endpoints
+        .route(
+            "/audit",
+            get(audit_log_handler).options(options_handler),
+        )
+        .route(
+            "/audit/stats",
+            get(audit_stats_handler).options(options_handler),
         )
         .route("/ws", get(ws_handler))
         .route("/assets/*path", get(static_handler))
@@ -1269,6 +1296,269 @@ async fn auth_me_handler(
     }
 }
 
+// Audit log query request parameters
+#[derive(Debug, serde::Deserialize)]
+struct AuditLogQueryParams {
+    /// Filter by actor ID
+    actor_id: Option<String>,
+    /// Filter by action type (e.g., "user.login", "session.stop")
+    action: Option<String>,
+    /// Filter by resource type
+    resource_type: Option<String>,
+    /// Filter by resource ID
+    resource_id: Option<String>,
+    /// Filter by outcome (success, failure, denied)
+    outcome: Option<String>,
+    /// Filter by minimum timestamp (Unix seconds)
+    from_timestamp: Option<u64>,
+    /// Filter by maximum timestamp (Unix seconds)
+    to_timestamp: Option<u64>,
+    /// Maximum number of results (default: 100, max: 1000)
+    limit: Option<usize>,
+    /// Offset for pagination
+    offset: Option<usize>,
+}
+
+fn parse_audit_action(action: &str) -> Option<AuditAction> {
+    match action {
+        "user.register" => Some(AuditAction::UserRegister),
+        "user.login" => Some(AuditAction::UserLogin),
+        "user.logout" => Some(AuditAction::UserLogout),
+        "token.refresh" => Some(AuditAction::TokenRefresh),
+        "session.create" => Some(AuditAction::SessionCreate),
+        "session.stop" => Some(AuditAction::SessionStop),
+        "session.view" => Some(AuditAction::SessionView),
+        "task.view" => Some(AuditAction::TaskView),
+        "task.update" => Some(AuditAction::TaskUpdate),
+        "logs.view" => Some(AuditAction::LogsView),
+        "orchestration.view" => Some(AuditAction::OrchestrationView),
+        "user.create" => Some(AuditAction::UserCreate),
+        "user.update" => Some(AuditAction::UserUpdate),
+        "user.delete" => Some(AuditAction::UserDelete),
+        "role.change" => Some(AuditAction::RoleChange),
+        "org.create" => Some(AuditAction::OrgCreate),
+        "org.update" => Some(AuditAction::OrgUpdate),
+        "org.delete" => Some(AuditAction::OrgDelete),
+        "org.member.add" => Some(AuditAction::OrgMemberAdd),
+        "org.member.remove" => Some(AuditAction::OrgMemberRemove),
+        "config.change" => Some(AuditAction::ConfigChange),
+        "audit.query" => Some(AuditAction::AuditLogQuery),
+        _ => None,
+    }
+}
+
+fn parse_audit_outcome(outcome: &str) -> Option<AuditOutcome> {
+    match outcome {
+        "success" => Some(AuditOutcome::Success),
+        "failure" => Some(AuditOutcome::Failure),
+        "denied" => Some(AuditOutcome::Denied),
+        _ => None,
+    }
+}
+
+/// Handler for querying audit logs.
+/// Requires AuditLogRead permission (Admin only).
+async fn audit_log_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(params): Query<AuditLogQueryParams>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+
+    // Check bearer token auth first (for legacy/API key auth)
+    if let Some(response) = check_auth(&headers, &state, cors_origin.as_deref()) {
+        return response;
+    }
+
+    // For JWT auth, check permission
+    let actor_info = extract_actor_info(&headers, &state);
+
+    // If we have actor info from JWT, verify AuditLogRead permission
+    if let Some((ref actor_id, ref actor_email, role)) = actor_info {
+        if !role.has_permission(Permission::AuditLogRead) {
+            // Record the denied access attempt
+            let client_ip = get_client_ip(&headers, connect_info.as_ref().map(|c| &c.0));
+            state.audit_log.record(
+                AuditEntry::new(
+                    Some(actor_id.clone()),
+                    Some(actor_email.clone()),
+                    client_ip,
+                    AuditAction::AuditLogQuery,
+                    AuditOutcome::Denied,
+                )
+                .with_details("Insufficient permissions for audit log access"),
+            );
+
+            return error_response(
+                StatusCode::FORBIDDEN,
+                "Permission denied: audit:read required".to_string(),
+                cors_origin,
+            );
+        }
+    }
+
+    // Build the query
+    let mut query = AuditQuery::new();
+
+    if let Some(ref actor_id) = params.actor_id {
+        query = query.with_actor_id(actor_id);
+    }
+    if let Some(ref action) = params.action {
+        if let Some(parsed_action) = parse_audit_action(action) {
+            query = query.with_action(parsed_action);
+        }
+    }
+    if let Some(ref resource_type) = params.resource_type {
+        query = query.with_resource_type(resource_type);
+    }
+    if let Some(ref resource_id) = params.resource_id {
+        query = query.with_resource_id(resource_id);
+    }
+    if let Some(ref outcome) = params.outcome {
+        if let Some(parsed_outcome) = parse_audit_outcome(outcome) {
+            query = query.with_outcome(parsed_outcome);
+        }
+    }
+    if let Some(from) = params.from_timestamp {
+        if let Some(to) = params.to_timestamp {
+            query = query.with_time_range(from, to);
+        }
+    }
+    if let Some(limit) = params.limit {
+        query = query.with_limit(limit);
+    }
+    if let Some(offset) = params.offset {
+        query = query.with_offset(offset);
+    }
+
+    // Execute query
+    let result = state.audit_log.query(&query);
+
+    // Record the audit log query itself
+    let client_ip = get_client_ip(&headers, connect_info.as_ref().map(|c| &c.0));
+    if let Some((actor_id, actor_email, _)) = actor_info {
+        state.audit_log.record(
+            AuditEntry::new(
+                Some(actor_id),
+                Some(actor_email),
+                client_ip,
+                AuditAction::AuditLogQuery,
+                AuditOutcome::Success,
+            )
+            .with_details(&format!(
+                "Query returned {} of {} total entries",
+                result.entries.len(),
+                result.total_count
+            )),
+        );
+    }
+
+    json_response(
+        StatusCode::OK,
+        json!({
+            "entries": result.entries,
+            "total_count": result.total_count,
+            "has_more": result.has_more,
+        }),
+        cors_origin,
+    )
+}
+
+/// Handler for getting audit log statistics.
+async fn audit_stats_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+
+    // Check bearer token auth first
+    if let Some(response) = check_auth(&headers, &state, cors_origin.as_deref()) {
+        return response;
+    }
+
+    // For JWT auth, check permission
+    let actor_info = extract_actor_info(&headers, &state);
+    if let Some((_, _, role)) = actor_info {
+        if !role.has_permission(Permission::AuditLogRead) {
+            return error_response(
+                StatusCode::FORBIDDEN,
+                "Permission denied: audit:read required".to_string(),
+                cors_origin,
+            );
+        }
+    }
+
+    let stats = state.audit_log.stats();
+
+    json_response(
+        StatusCode::OK,
+        json!({
+            "stats": stats,
+            "config": {
+                "max_entries": state.audit_log.config().max_entries,
+                "max_age_secs": state.audit_log.config().max_age_secs,
+                "retention_days": state.audit_log.config().max_age_secs / (24 * 60 * 60),
+            },
+        }),
+        cors_origin,
+    )
+}
+
+/// Extract actor info (user_id, email, role) from JWT token in Authorization header.
+fn extract_actor_info(
+    headers: &HeaderMap,
+    state: &AppState,
+) -> Option<(String, String, crate::auth::UserRole)> {
+    let auth_header = headers.get(header::AUTHORIZATION)?;
+    let header_str = auth_header.to_str().ok()?;
+    let token = header_str.strip_prefix("Bearer ")?;
+
+    // Try to validate as JWT access token
+    let claims = state.auth_service.validate_access_token(token).ok()?;
+    Some((claims.sub, claims.email, claims.role))
+}
+
+/// Helper to record an audit entry for an action.
+fn record_audit_entry(
+    state: &AppState,
+    headers: &HeaderMap,
+    connect_info: Option<&SocketAddr>,
+    action: AuditAction,
+    outcome: AuditOutcome,
+    resource_type: Option<&str>,
+    resource_id: Option<&str>,
+    details: Option<&str>,
+) {
+    let client_ip = get_client_ip(headers, connect_info);
+    let actor_info = extract_actor_info(headers, state);
+
+    let mut entry = AuditEntry::new(
+        actor_info.as_ref().map(|(id, _, _)| id.clone()),
+        actor_info.as_ref().map(|(_, email, _)| email.clone()),
+        client_ip,
+        action,
+        outcome,
+    );
+
+    if let (Some(rt), Some(ri)) = (resource_type, resource_id) {
+        entry = entry.with_resource(rt, ri);
+    }
+
+    if let Some(d) = details {
+        entry = entry.with_details(d);
+    }
+
+    // Extract user agent if available
+    if let Some(ua) = headers.get(header::USER_AGENT) {
+        if let Ok(ua_str) = ua.to_str() {
+            entry = entry.with_user_agent(ua_str);
+        }
+    }
+
+    state.audit_log.record(entry);
+}
+
 /// Check JWT authentication for protected routes.
 /// Returns Some(Response) if authentication failed, None if successful.
 /// On success, the claims can be accessed via check_jwt_auth_with_claims.
@@ -1664,6 +1954,7 @@ mod tests {
             store,
             broadcaster: StateBroadcaster::new(100),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
+            audit_log: AuditLog::new(AuditLogConfig::default()),
         })
     }
 
@@ -2065,6 +2356,7 @@ mod tests {
             store,
             broadcaster: StateBroadcaster::new(10),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
+            audit_log: AuditLog::new(AuditLogConfig::default()),
         };
         let headers = HeaderMap::new();
 
@@ -2092,6 +2384,7 @@ mod tests {
             store,
             broadcaster: StateBroadcaster::new(10),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
+            audit_log: AuditLog::new(AuditLogConfig::default()),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -2123,6 +2416,7 @@ mod tests {
             store,
             broadcaster: StateBroadcaster::new(10),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
+            audit_log: AuditLog::new(AuditLogConfig::default()),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -2154,6 +2448,7 @@ mod tests {
             store,
             broadcaster: StateBroadcaster::new(10),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
+            audit_log: AuditLog::new(AuditLogConfig::default()),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -2185,6 +2480,7 @@ mod tests {
             store,
             broadcaster: StateBroadcaster::new(10),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
+            audit_log: AuditLog::new(AuditLogConfig::default()),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -2217,6 +2513,7 @@ mod tests {
             store,
             broadcaster: StateBroadcaster::new(10),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
+            audit_log: AuditLog::new(AuditLogConfig::default()),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -2248,6 +2545,7 @@ mod tests {
             store,
             broadcaster: StateBroadcaster::new(10),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
+            audit_log: AuditLog::new(AuditLogConfig::default()),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -3851,5 +4149,523 @@ mod tests {
         // Returns 400 (Bad Request) because there's no WebSocket upgrade headers
         // but importantly not 401 (Unauthorized)
         assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // ========== Audit Log Tests ==========
+
+    #[tokio::test]
+    async fn audit_log_endpoint_returns_empty_list_initially() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = app_state_for_test(config, store);
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/audit")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["total_count"], 0);
+        assert!(body["entries"].as_array().unwrap().is_empty());
+        assert_eq!(body["has_more"], false);
+    }
+
+    #[tokio::test]
+    async fn audit_log_endpoint_requires_auth_when_token_enabled() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = app_state_for_test(config, store);
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/audit")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn audit_log_endpoint_returns_entries_with_valid_token() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = app_state_for_test(config, store);
+
+        // Add some audit entries
+        state.audit_log.record(AuditEntry::new(
+            Some("user-1".to_string()),
+            Some("test@example.com".to_string()),
+            "127.0.0.1".to_string(),
+            AuditAction::UserLogin,
+            AuditOutcome::Success,
+        ));
+        state.audit_log.record(AuditEntry::new(
+            Some("user-1".to_string()),
+            Some("test@example.com".to_string()),
+            "127.0.0.1".to_string(),
+            AuditAction::SessionView,
+            AuditOutcome::Success,
+        ));
+
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/audit")
+                    .method("GET")
+                    .header("Authorization", "Bearer secret")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        // Note: The handler itself records one more entry for the audit query
+        assert!(body["total_count"].as_i64().unwrap() >= 2);
+        assert!(!body["entries"].as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn audit_log_endpoint_filters_by_action() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = app_state_for_test(config, store);
+
+        // Add different action types
+        state.audit_log.record(AuditEntry::new(
+            None,
+            None,
+            "127.0.0.1".to_string(),
+            AuditAction::UserLogin,
+            AuditOutcome::Success,
+        ));
+        state.audit_log.record(AuditEntry::new(
+            None,
+            None,
+            "127.0.0.1".to_string(),
+            AuditAction::SessionStop,
+            AuditOutcome::Success,
+        ));
+        state.audit_log.record(AuditEntry::new(
+            None,
+            None,
+            "127.0.0.1".to_string(),
+            AuditAction::UserLogin,
+            AuditOutcome::Failure,
+        ));
+
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/audit?action=user.login")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["total_count"], 2);
+    }
+
+    #[tokio::test]
+    async fn audit_log_endpoint_filters_by_outcome() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = app_state_for_test(config, store);
+
+        state.audit_log.record(AuditEntry::new(
+            None,
+            None,
+            "127.0.0.1".to_string(),
+            AuditAction::UserLogin,
+            AuditOutcome::Success,
+        ));
+        state.audit_log.record(AuditEntry::new(
+            None,
+            None,
+            "127.0.0.1".to_string(),
+            AuditAction::UserLogin,
+            AuditOutcome::Failure,
+        ));
+        state.audit_log.record(AuditEntry::new(
+            None,
+            None,
+            "127.0.0.1".to_string(),
+            AuditAction::TaskUpdate,
+            AuditOutcome::Denied,
+        ));
+
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/audit?outcome=failure")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["total_count"], 1);
+    }
+
+    #[tokio::test]
+    async fn audit_log_endpoint_supports_pagination() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = app_state_for_test(config, store);
+
+        // Add 10 entries
+        for i in 0..10 {
+            state.audit_log.record(AuditEntry::new(
+                Some(format!("user-{}", i)),
+                None,
+                "127.0.0.1".to_string(),
+                AuditAction::UserLogin,
+                AuditOutcome::Success,
+            ));
+        }
+
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/audit?limit=3&offset=0")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["entries"].as_array().unwrap().len(), 3);
+        assert_eq!(body["total_count"], 10);
+        assert_eq!(body["has_more"], true);
+    }
+
+    #[tokio::test]
+    async fn audit_stats_endpoint_returns_statistics() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = app_state_for_test(config, store);
+
+        // Add some entries
+        state.audit_log.record(AuditEntry::new(
+            None,
+            None,
+            "127.0.0.1".to_string(),
+            AuditAction::UserLogin,
+            AuditOutcome::Success,
+        ));
+
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/audit/stats")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert!(body["stats"]["total_entries"].as_i64().unwrap() >= 1);
+        assert!(body["config"]["max_entries"].as_i64().unwrap() > 0);
+        assert!(body["config"]["retention_days"].as_i64().unwrap() > 0);
+    }
+
+    #[tokio::test]
+    async fn audit_stats_endpoint_requires_auth_when_token_enabled() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = app_state_for_test(config, store);
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/audit/stats")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn audit_log_endpoint_filters_by_actor_id() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = app_state_for_test(config, store);
+
+        state.audit_log.record(AuditEntry::new(
+            Some("user-1".to_string()),
+            None,
+            "127.0.0.1".to_string(),
+            AuditAction::UserLogin,
+            AuditOutcome::Success,
+        ));
+        state.audit_log.record(AuditEntry::new(
+            Some("user-2".to_string()),
+            None,
+            "127.0.0.1".to_string(),
+            AuditAction::UserLogin,
+            AuditOutcome::Success,
+        ));
+        state.audit_log.record(AuditEntry::new(
+            Some("user-1".to_string()),
+            None,
+            "127.0.0.1".to_string(),
+            AuditAction::UserLogout,
+            AuditOutcome::Success,
+        ));
+
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/audit?actor_id=user-1")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["total_count"], 2);
+    }
+
+    #[tokio::test]
+    async fn audit_log_endpoint_filters_by_resource() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = app_state_for_test(config, store);
+
+        state.audit_log.record(
+            AuditEntry::new(
+                None,
+                None,
+                "127.0.0.1".to_string(),
+                AuditAction::SessionStop,
+                AuditOutcome::Success,
+            )
+            .with_resource("session", "session-1"),
+        );
+        state.audit_log.record(
+            AuditEntry::new(
+                None,
+                None,
+                "127.0.0.1".to_string(),
+                AuditAction::TaskUpdate,
+                AuditOutcome::Success,
+            )
+            .with_resource("task", "task-1"),
+        );
+        state.audit_log.record(
+            AuditEntry::new(
+                None,
+                None,
+                "127.0.0.1".to_string(),
+                AuditAction::SessionStop,
+                AuditOutcome::Success,
+            )
+            .with_resource("session", "session-2"),
+        );
+
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/audit?resource_type=session")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["total_count"], 2);
+
+        // Test filtering by both resource_type and resource_id
+        let state2 = Arc::new(AppState {
+            config: ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 0,
+                token: None,
+                open: false,
+                max_body_bytes: 4096,
+            },
+            store: store_for_test(temp.path()),
+            broadcaster: StateBroadcaster::new(100),
+            auth_service: AuthService::new(JwtConfig::new("test-secret")),
+            audit_log: AuditLog::new(AuditLogConfig::default()),
+        });
+        state2.store.init_state().unwrap();
+        state2.audit_log.record(
+            AuditEntry::new(
+                None,
+                None,
+                "127.0.0.1".to_string(),
+                AuditAction::SessionStop,
+                AuditOutcome::Success,
+            )
+            .with_resource("session", "session-1"),
+        );
+        state2.audit_log.record(
+            AuditEntry::new(
+                None,
+                None,
+                "127.0.0.1".to_string(),
+                AuditAction::SessionStop,
+                AuditOutcome::Success,
+            )
+            .with_resource("session", "session-2"),
+        );
+
+        let app2 = build_router(state2);
+        let response2 = app2
+            .oneshot(
+                Request::builder()
+                    .uri("/audit?resource_type=session&resource_id=session-1")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response2.status(), StatusCode::OK);
+        let body2 = to_bytes(response2.into_body(), usize::MAX).await.unwrap();
+        let body2: Value = serde_json::from_slice(&body2).unwrap();
+        assert_eq!(body2["total_count"], 1);
     }
 }
