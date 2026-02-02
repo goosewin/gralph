@@ -1,0 +1,25 @@
+docs/PRD_SPEC.md
+  9dfc2adf6e677dff 1-213
+PRD.fix-prd-create.md
+  9dfc2adf6e677dff 71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "5daac5c1cc25edb41a4dec7f7d513eebd9517762",
+  "prompts": {
+    "9dfc2adf6e677dff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cf37d36c-0f5a-4cc2-9727-affece3c1b3f",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 214,
+      "total_deletions": 1,
+      "accepted_lines": 214,
+      "overriden_lines": 0
+    }
+  }
+}
