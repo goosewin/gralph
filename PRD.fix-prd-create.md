@@ -81,7 +81,7 @@ Each task block must contain exactly one unchecked task line.
   * Specification appended to system prompt.
   * Unit test verifies prompt contains specification text.
 - **Dependencies** PRD-1
-- [ ] PRD-2 Inject specification into LLM system prompt
+- [x] PRD-2 Inject specification into LLM system prompt
 ---
 
 ### Task PRD-3

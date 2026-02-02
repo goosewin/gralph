@@ -169,8 +169,9 @@ pub(super) fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
     };
 
     let template_text = read_prd_template(&target_dir)?;
+    let spec_text = read_prd_spec(&target_dir)?;
     let prompt = format!(
-        "You are generating a gralph PRD in markdown. The output must be spec-compliant and grounded in the repository.\n\nProject directory: {dir}\n\nGoal:\n{goal}\n\nConstraints:\n{constraints}\n\nDetected stack summary (from repository files):\n{stack_summary}\n\nSources (authoritative URLs or references):\n{sources}\n\nWarnings (only include in the PRD if Sources is empty):\n{warnings}\n\nContext files (read these first if present):\n{context}\n\nRequirements:\n- Output only the PRD markdown with no commentary or code fences.\n- Use ASCII only.\n- Do not include an \"Open Questions\" section.\n- Do not use any checkboxes outside task blocks.\n- Context Bundle entries must be real files in the repo and must be selected from the Context files list above.\n- If a task creates new files, do not list the new files in Context Bundle; cite the closest existing files instead.\n- Use atomic, granular tasks grounded in the repo and context files.\n- Each task block must use a '### Task <ID>' header and include **ID**, **Context Bundle**, **DoD**, **Checklist**, **Dependencies**.\n- Each task block must contain exactly one unchecked task line like '- [ ] <ID> <summary>'.\n- If Sources is empty, include a 'Warnings' section with the warning text above and no checkboxes.\n- Do not invent stack, frameworks, or files not supported by the context files and stack summary.\n\nTemplate:\n{template}\n",
+        "You are generating a gralph PRD in markdown. The output must be spec-compliant and grounded in the repository.\n\nProject directory: {dir}\n\nGoal:\n{goal}\n\nConstraints:\n{constraints}\n\nDetected stack summary (from repository files):\n{stack_summary}\n\nSources (authoritative URLs or references):\n{sources}\n\nWarnings (only include in the PRD if Sources is empty):\n{warnings}\n\nContext files (read these first if present):\n{context}\n\n## PRD Specification\n\nYou MUST follow these validation rules exactly. Any violation will cause the PRD to fail validation:\n\n{spec}\n\nRequirements:\n- Output only the PRD markdown with no commentary or code fences.\n- Use ASCII only.\n- Do not include an \"Open Questions\" section.\n- Do not use any checkboxes outside task blocks.\n- Context Bundle entries must be real files in the repo and must be selected from the Context files list above.\n- If a task creates new files, do not list the new files in Context Bundle; cite the closest existing files instead.\n- Use atomic, granular tasks grounded in the repo and context files.\n- Each task block must use a '### Task <ID>' header and include **ID**, **Context Bundle**, **DoD**, **Checklist**, **Dependencies**.\n- Each task block must contain exactly one unchecked task line like '- [ ] <ID> <summary>'.\n- If Sources is empty, include a 'Warnings' section with the warning text above and no checkboxes.\n- Do not invent stack, frameworks, or files not supported by the context files and stack summary.\n\nTemplate:\n{template}\n",
         dir = target_dir.display(),
         goal = goal,
         constraints = constraints,
@@ -178,6 +179,7 @@ pub(super) fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
         sources = sources_section,
         warnings = warnings_section,
         context = context_section,
+        spec = spec_text,
         template = template_text
     );
 
@@ -277,6 +279,27 @@ pub(super) fn read_prd_template_with_manifest(
     }
 
     Ok(DEFAULT_PRD_TEMPLATE.to_string())
+}
+
+fn read_prd_spec(dir: &Path) -> Result<String, CliError> {
+    read_prd_spec_with_manifest(dir, Path::new(env!("CARGO_MANIFEST_DIR")))
+}
+
+pub(super) fn read_prd_spec_with_manifest(
+    dir: &Path,
+    manifest_dir: &Path,
+) -> Result<String, CliError> {
+    let candidates = [
+        dir.join("docs/PRD_SPEC.md"),
+        manifest_dir.join("docs/PRD_SPEC.md"),
+    ];
+    for path in candidates {
+        if path.is_file() {
+            return fs::read_to_string(&path).map_err(CliError::Io);
+        }
+    }
+
+    Ok(DEFAULT_PRD_SPEC.to_string())
 }
 
 pub(super) fn resolve_init_context_files(
@@ -556,6 +579,8 @@ pub(super) fn write_allowed_context(entries: &[String]) -> Result<Option<PathBuf
 }
 
 pub(super) const DEFAULT_PRD_TEMPLATE: &str = "## Overview\n\nBriefly describe the project, goals, and intended users.\n\n## Problem Statement\n\n- What problem does this solve?\n- What pain points exist today?\n\n## Solution\n\nHigh-level solution summary.\n\n---\n\n## Functional Requirements\n\n### FR-1: Core Feature\n\nDescribe the primary user-facing behavior.\n\n### FR-2: Secondary Feature\n\nDescribe supporting behavior.\n\n---\n\n## Non-Functional Requirements\n\n### NFR-1: Performance\n\n- Example: Response times under 200ms for key operations.\n\n### NFR-2: Reliability\n\n- Example: Crash recovery or retries where appropriate.\n\n---\n\n## Implementation Tasks\n\nEach task must use a `### Task <ID>` block header and include the required fields.\nEach task block must contain exactly one unchecked task line.\n\n### Task EX-1\n\n- **ID** EX-1\n- **Context Bundle** `path/to/file`, `path/to/other`\n- **DoD** Define the done criteria for this task.\n- **Checklist**\n  * First verification item.\n  * Second verification item.\n- **Dependencies** None\n- [ ] EX-1 Short task summary\n\n---\n\n## Success Criteria\n\n- Define measurable outcomes that indicate completion.\n\n---\n\n## Sources\n\n- List authoritative URLs used as source of truth.\n\n---\n\n## Warnings\n\n- Only include this section if no reliable sources were found.\n- State what is missing and what must be verified.\n";
+
+pub(super) const DEFAULT_PRD_SPEC: &str = "# PRD Specification\n\n## Document-Level Rules\n\n1. Non-Empty Content: The PRD file must not be empty.\n2. Forbidden Sections: Do not include an 'Open Questions' section.\n3. Stray Checkboxes: Unchecked task lines ('- [ ]') outside task blocks are invalid.\n\n## Task Block Rules\n\nEach task must be defined in a block starting with '### Task <ID>'.\n\n### Required Fields\n\n- **ID** <task-id>\n- **Context Bundle** `<path>`, `<path>`, ...\n- **DoD** <description>\n- **Checklist** with * items\n- **Dependencies** <list or \"None\">\n\n### Unchecked Task Line\n\nEach task block must contain exactly one line: '- [ ] <ID> <description>'\n\n### Block Termination\n\nEnd each task block with '---' or an H2 heading.\n";
 
 pub(super) const ARCHITECTURE_TEMPLATE: &str = "# Architecture\n\n## Overview\n\nDescribe the system at a high level.\n\n## Modules\n\nList key modules and what they own.\n\n## Runtime Flow\n\nDescribe the primary runtime path.\n\n## Storage\n\nRecord where state or data is stored.\n";
 
