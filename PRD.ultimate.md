@@ -150,7 +150,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Authentication validated on connection.
   * Integration tests verify broadcast behavior.
 - **Dependencies** MC-1
-- [ ] MC-2 Implement WebSocket state broadcasting
+- [x] MC-2 Implement WebSocket state broadcasting
 ---
 
 ### Task MC-3

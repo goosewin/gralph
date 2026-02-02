@@ -17,6 +17,10 @@ CI=<status/link>; PR=<link if final PRD task>
 - MC-1 Add static file serving to Axum server from embedded assets directory.
 - MC-1 Add health check endpoint (`/health`) that returns 200 OK with healthy status.
 - MC-1 Add rust-embed dependency for bundling static assets at compile time.
+- MC-2 Add WebSocket endpoint (`/ws`) for real-time state broadcasting to connected clients.
+- MC-2 Add StateBroadcaster for broadcasting session state changes via tokio broadcast channels.
+- MC-2 Add WebSocket authentication via query parameter token validation.
+- MC-2 Add tokio-tungstenite and futures-util dependencies for WebSocket support.
 - PRD-7 Add retry loop for PRD generation with configurable max retries (`prd_create_max_retries`).
 - PRD-7 Add PRD specification document (`docs/PRD_SPEC.md`) defining validation rules for LLM prompt injection.
 

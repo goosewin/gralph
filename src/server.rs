@@ -1,8 +1,10 @@
-use axum::extract::{Path, State};
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use futures_util::{SinkExt, StreamExt};
 use rust_embed::Embed;
 use serde_json::{Map, Value, json};
 use std::env;
@@ -10,6 +12,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio::sync::broadcast;
 
 use crate::core::{count_remaining_tasks, last_error_line, last_log_line, raw_log_path};
 use crate::prd;
@@ -111,17 +114,100 @@ impl From<StateError> for ServerError {
     }
 }
 
+/// State change event broadcast to WebSocket clients
+#[derive(Debug, Clone)]
+pub struct StateChangeEvent {
+    pub event_type: String,
+    pub session_name: Option<String>,
+    pub data: Value,
+}
+
+impl StateChangeEvent {
+    pub fn to_json(&self) -> Value {
+        json!({
+            "type": self.event_type,
+            "session": self.session_name,
+            "data": self.data,
+        })
+    }
+}
+
+/// Broadcaster for state change events to WebSocket clients
+#[derive(Clone)]
+pub struct StateBroadcaster {
+    sender: broadcast::Sender<StateChangeEvent>,
+}
+
+impl StateBroadcaster {
+    pub fn new(capacity: usize) -> Self {
+        let (sender, _) = broadcast::channel(capacity);
+        Self { sender }
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<StateChangeEvent> {
+        self.sender.subscribe()
+    }
+
+    pub fn broadcast(&self, event: StateChangeEvent) -> usize {
+        self.sender.send(event).unwrap_or(0)
+    }
+
+    pub fn broadcast_session_update(&self, session_name: &str, session: Value) -> usize {
+        self.broadcast(StateChangeEvent {
+            event_type: "session_update".to_string(),
+            session_name: Some(session_name.to_string()),
+            data: session,
+        })
+    }
+
+    pub fn broadcast_session_created(&self, session_name: &str, session: Value) -> usize {
+        self.broadcast(StateChangeEvent {
+            event_type: "session_created".to_string(),
+            session_name: Some(session_name.to_string()),
+            data: session,
+        })
+    }
+
+    pub fn broadcast_session_deleted(&self, session_name: &str) -> usize {
+        self.broadcast(StateChangeEvent {
+            event_type: "session_deleted".to_string(),
+            session_name: Some(session_name.to_string()),
+            data: Value::Null,
+        })
+    }
+
+    pub fn broadcast_sessions_refresh(&self, sessions: Vec<Value>) -> usize {
+        self.broadcast(StateChangeEvent {
+            event_type: "sessions_refresh".to_string(),
+            session_name: None,
+            data: json!(sessions),
+        })
+    }
+}
+
+impl Default for StateBroadcaster {
+    fn default() -> Self {
+        Self::new(100)
+    }
+}
+
 #[derive(Clone)]
 struct AppState {
     config: ServerConfig,
     store: StateStore,
+    broadcaster: StateBroadcaster,
 }
 
 pub async fn run_server(config: ServerConfig) -> Result<(), ServerError> {
     config.validate()?;
     let store = StateStore::new_from_env();
     store.init_state()?;
-    let app_state = Arc::new(AppState { config, store });
+    let broadcaster = StateBroadcaster::new(100);
+    let app_state = Arc::new(AppState {
+        config,
+        store,
+        broadcaster,
+    });
     let app = build_router(app_state.clone());
     let listener = TcpListener::bind(app_state.config.addr()?).await?;
     axum::serve(listener, app).await.map_err(ServerError::Io)
@@ -137,9 +223,106 @@ fn build_router(state: Arc<AppState>) -> Router {
             get(status_name_handler).options(options_handler),
         )
         .route("/stop/:name", post(stop_handler).options(options_handler))
+        .route("/ws", get(ws_handler))
         .route("/assets/*path", get(static_handler))
         .fallback(fallback_handler)
         .with_state(state)
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct WsQueryParams {
+    token: Option<String>,
+}
+
+async fn ws_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<WsQueryParams>,
+    ws: Option<WebSocketUpgrade>,
+) -> Response {
+    // Validate token from query parameter for WebSocket connections
+    if let Some(expected) = state.config.token.as_deref() {
+        match params.token.as_deref() {
+            Some(token) if token == expected => {}
+            _ => {
+                return json_response(
+                    StatusCode::UNAUTHORIZED,
+                    json!({"error": "Invalid or missing token"}),
+                    None,
+                );
+            }
+        }
+    }
+
+    // Check if this is a valid WebSocket upgrade request
+    let Some(ws) = ws else {
+        return json_response(
+            StatusCode::BAD_REQUEST,
+            json!({"error": "Expected WebSocket upgrade"}),
+            None,
+        );
+    };
+
+    ws.on_upgrade(move |socket| handle_websocket(socket, state))
+}
+
+async fn handle_websocket(socket: WebSocket, state: Arc<AppState>) {
+    let (mut sender, mut receiver) = socket.split();
+
+    // Send initial state snapshot
+    if let Ok(sessions) = state.store.list_sessions() {
+        let enriched: Vec<Value> = sessions.into_iter().map(enrich_session).collect();
+        let initial_message = json!({
+            "type": "initial_state",
+            "data": enriched,
+        });
+        if let Ok(text) = serde_json::to_string(&initial_message) {
+            let _ = sender.send(Message::Text(text.into())).await;
+        }
+    }
+
+    // Subscribe to state change broadcasts
+    let mut rx = state.broadcaster.subscribe();
+
+    // Spawn a task to forward broadcast messages to the WebSocket client
+    let send_task = tokio::spawn(async move {
+        loop {
+            match rx.recv().await {
+                Ok(event) => {
+                    let message = event.to_json();
+                    if let Ok(text) = serde_json::to_string(&message) {
+                        if sender.send(Message::Text(text.into())).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    // Client fell behind, continue receiving
+                    continue;
+                }
+                Err(broadcast::error::RecvError::Closed) => {
+                    break;
+                }
+            }
+        }
+    });
+
+    // Handle incoming messages from the client (for ping/pong and close)
+    while let Some(result) = receiver.next().await {
+        match result {
+            Ok(Message::Close(_)) => break,
+            Ok(Message::Ping(data)) => {
+                // Pong is handled automatically by the WebSocket layer
+                let _ = data;
+            }
+            Ok(_) => {
+                // Ignore other message types
+            }
+            Err(_) => break,
+        }
+    }
+
+    // Cancel the send task when client disconnects
+    send_task.abort();
 }
 
 async fn options_handler(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
@@ -644,6 +827,14 @@ mod tests {
         )
     }
 
+    fn app_state_for_test(config: ServerConfig, store: StateStore) -> Arc<AppState> {
+        Arc::new(AppState {
+            config,
+            store,
+            broadcaster: StateBroadcaster::new(100),
+        })
+    }
+
     fn assert_cors_headers(headers: &HeaderMap, origin: &str) {
         assert_eq!(
             headers
@@ -1040,6 +1231,7 @@ mod tests {
                 max_body_bytes: 4096,
             },
             store,
+            broadcaster: StateBroadcaster::new(10),
         };
         let headers = HeaderMap::new();
 
@@ -1065,6 +1257,7 @@ mod tests {
                 max_body_bytes: 4096,
             },
             store,
+            broadcaster: StateBroadcaster::new(10),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -1094,6 +1287,7 @@ mod tests {
                 max_body_bytes: 4096,
             },
             store,
+            broadcaster: StateBroadcaster::new(10),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -1123,6 +1317,7 @@ mod tests {
                 max_body_bytes: 4096,
             },
             store,
+            broadcaster: StateBroadcaster::new(10),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -1152,6 +1347,7 @@ mod tests {
                 max_body_bytes: 4096,
             },
             store,
+            broadcaster: StateBroadcaster::new(10),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -1182,6 +1378,7 @@ mod tests {
                 max_body_bytes: 4096,
             },
             store,
+            broadcaster: StateBroadcaster::new(10),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -1211,6 +1408,7 @@ mod tests {
                 max_body_bytes: 4096,
             },
             store,
+            broadcaster: StateBroadcaster::new(10),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -1235,7 +1433,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -1271,7 +1469,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -1304,7 +1502,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -1340,7 +1538,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -1382,7 +1580,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -1423,7 +1621,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -1474,7 +1672,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -1519,7 +1717,7 @@ mod tests {
             open: true,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -1553,7 +1751,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -1634,7 +1832,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -1667,7 +1865,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -1700,7 +1898,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -1735,7 +1933,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -1772,7 +1970,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state.clone());
 
         let response = app
@@ -1822,7 +2020,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state.clone());
 
         let response = app
@@ -1869,7 +2067,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state.clone());
 
         let response = app
@@ -1905,7 +2103,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -1938,7 +2136,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -1970,7 +2168,7 @@ mod tests {
             open: true,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -2003,7 +2201,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -2038,7 +2236,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -2075,7 +2273,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -2109,7 +2307,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -2389,7 +2587,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -2421,7 +2619,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -2453,7 +2651,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -2484,7 +2682,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -2520,7 +2718,7 @@ mod tests {
             open: false,
             max_body_bytes: 4096,
         };
-        let state = Arc::new(AppState { config, store });
+        let state = app_state_for_test(config, store);
         let app = build_router(state);
 
         let response = app
@@ -2575,5 +2773,244 @@ mod tests {
     fn serve_static_file_returns_not_found_for_missing() {
         let response = serve_static_file("nonexistent.html");
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    // WebSocket tests
+
+    #[test]
+    fn state_change_event_to_json_formats_correctly() {
+        let event = StateChangeEvent {
+            event_type: "session_update".to_string(),
+            session_name: Some("test-session".to_string()),
+            data: json!({"status": "running"}),
+        };
+        let json = event.to_json();
+        assert_eq!(json["type"], "session_update");
+        assert_eq!(json["session"], "test-session");
+        assert_eq!(json["data"]["status"], "running");
+    }
+
+    #[test]
+    fn state_change_event_to_json_handles_null_session() {
+        let event = StateChangeEvent {
+            event_type: "sessions_refresh".to_string(),
+            session_name: None,
+            data: json!([]),
+        };
+        let json = event.to_json();
+        assert_eq!(json["type"], "sessions_refresh");
+        assert!(json["session"].is_null());
+    }
+
+    #[test]
+    fn state_broadcaster_subscribe_receives_events() {
+        let broadcaster = StateBroadcaster::new(10);
+        let mut rx = broadcaster.subscribe();
+
+        let event = StateChangeEvent {
+            event_type: "test".to_string(),
+            session_name: Some("session".to_string()),
+            data: json!({"key": "value"}),
+        };
+
+        let sent = broadcaster.broadcast(event.clone());
+        assert_eq!(sent, 1);
+
+        let received = rx.try_recv().unwrap();
+        assert_eq!(received.event_type, "test");
+        assert_eq!(received.session_name, Some("session".to_string()));
+    }
+
+    #[test]
+    fn state_broadcaster_broadcast_session_update() {
+        let broadcaster = StateBroadcaster::new(10);
+        let mut rx = broadcaster.subscribe();
+
+        broadcaster.broadcast_session_update("my-session", json!({"status": "complete"}));
+
+        let received = rx.try_recv().unwrap();
+        assert_eq!(received.event_type, "session_update");
+        assert_eq!(received.session_name, Some("my-session".to_string()));
+        assert_eq!(received.data["status"], "complete");
+    }
+
+    #[test]
+    fn state_broadcaster_broadcast_session_created() {
+        let broadcaster = StateBroadcaster::new(10);
+        let mut rx = broadcaster.subscribe();
+
+        broadcaster.broadcast_session_created("new-session", json!({"status": "starting"}));
+
+        let received = rx.try_recv().unwrap();
+        assert_eq!(received.event_type, "session_created");
+        assert_eq!(received.session_name, Some("new-session".to_string()));
+    }
+
+    #[test]
+    fn state_broadcaster_broadcast_session_deleted() {
+        let broadcaster = StateBroadcaster::new(10);
+        let mut rx = broadcaster.subscribe();
+
+        broadcaster.broadcast_session_deleted("old-session");
+
+        let received = rx.try_recv().unwrap();
+        assert_eq!(received.event_type, "session_deleted");
+        assert_eq!(received.session_name, Some("old-session".to_string()));
+        assert!(received.data.is_null());
+    }
+
+    #[test]
+    fn state_broadcaster_broadcast_sessions_refresh() {
+        let broadcaster = StateBroadcaster::new(10);
+        let mut rx = broadcaster.subscribe();
+
+        broadcaster.broadcast_sessions_refresh(vec![json!({"name": "session1"})]);
+
+        let received = rx.try_recv().unwrap();
+        assert_eq!(received.event_type, "sessions_refresh");
+        assert!(received.session_name.is_none());
+        let sessions = received.data.as_array().unwrap();
+        assert_eq!(sessions.len(), 1);
+    }
+
+    #[test]
+    fn state_broadcaster_returns_zero_with_no_subscribers() {
+        let broadcaster = StateBroadcaster::new(10);
+        // No subscribers
+        let event = StateChangeEvent {
+            event_type: "test".to_string(),
+            session_name: None,
+            data: Value::Null,
+        };
+        let sent = broadcaster.broadcast(event);
+        assert_eq!(sent, 0);
+    }
+
+    #[test]
+    fn state_broadcaster_multiple_subscribers() {
+        let broadcaster = StateBroadcaster::new(10);
+        let mut rx1 = broadcaster.subscribe();
+        let mut rx2 = broadcaster.subscribe();
+
+        let event = StateChangeEvent {
+            event_type: "multi".to_string(),
+            session_name: None,
+            data: Value::Null,
+        };
+
+        let sent = broadcaster.broadcast(event);
+        assert_eq!(sent, 2);
+
+        assert!(rx1.try_recv().is_ok());
+        assert!(rx2.try_recv().is_ok());
+    }
+
+    #[test]
+    fn state_broadcaster_default_creates_with_capacity() {
+        let broadcaster = StateBroadcaster::default();
+        let _rx = broadcaster.subscribe();
+        // Should not panic
+        let event = StateChangeEvent {
+            event_type: "default".to_string(),
+            session_name: None,
+            data: Value::Null,
+        };
+        broadcaster.broadcast(event);
+    }
+
+    #[tokio::test]
+    async fn ws_handler_rejects_missing_token() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = app_state_for_test(config, store);
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/ws")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["error"], "Invalid or missing token");
+    }
+
+    #[tokio::test]
+    async fn ws_handler_rejects_wrong_token() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = app_state_for_test(config, store);
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/ws?token=wrong")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["error"], "Invalid or missing token");
+    }
+
+    #[tokio::test]
+    async fn ws_handler_allows_no_token_when_disabled() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = app_state_for_test(config, store);
+        let app = build_router(state);
+
+        // Without WebSocket upgrade headers, this won't upgrade but should not return 401
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/ws")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        // Returns 400 (Bad Request) because there's no WebSocket upgrade headers
+        // but importantly not 401 (Unauthorized)
+        assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }

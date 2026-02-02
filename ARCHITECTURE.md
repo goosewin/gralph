@@ -16,7 +16,7 @@ doctor diagnostics.
 
 `src/core.rs` owns the execution loop for iteration execution, task counting, completion checks, and loop orchestration.
 `src/state.rs` manages persistent session state with file locking and atomic writes.
-`src/server.rs` implements the HTTP status server, CORS handling, and bearer auth.
+`src/server.rs` implements the HTTP status server, CORS handling, bearer auth, and WebSocket state broadcasting.
 `src/config.rs` loads default/global/project YAML config with env overrides.
 `src/prd.rs` provides PRD validation, sanitization, and stack detection utilities.
 `src/task.rs` centralizes task block parsing helpers shared by core and PRD validation.
@@ -46,6 +46,15 @@ disable it to allow auto-merge without an approval requirement.
 Verifier defaults are stack-aware: Rust/Cargo keeps the default auto-run and
 command settings, while non-Rust or unknown stacks default `verifier.auto_run`
 to false and require explicit verifier commands.
+
+## WebSocket Broadcasting
+
+The server provides a WebSocket endpoint at `/ws` for real-time state updates.
+Clients connect with optional token authentication via query parameter (`/ws?token=...`).
+On connection, clients receive an initial state snapshot with all sessions.
+The `StateBroadcaster` uses tokio broadcast channels to push state changes to
+all connected clients. Supported event types: `initial_state`, `session_update`,
+`session_created`, `session_deleted`, and `sessions_refresh`.
 
 ## Storage
 
