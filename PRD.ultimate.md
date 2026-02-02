@@ -438,7 +438,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Viewer has read-only access.
   * Unit tests verify permission enforcement.
 - **Dependencies** MC-21
-- [ ] MC-22 Add role-based access control middleware
+- [x] MC-22 Add role-based access control middleware
 ---
 
 ### Task MC-23

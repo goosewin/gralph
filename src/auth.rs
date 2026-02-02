@@ -19,7 +19,10 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-/// User role for RBAC (to be extended in MC-22).
+/// User role for RBAC.
+/// - Admin: Full access to all resources and actions
+/// - Developer: Can execute sessions and modify resources
+/// - Viewer: Read-only access to resources
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum UserRole {
@@ -41,6 +44,272 @@ impl std::fmt::Display for UserRole {
             UserRole::Developer => write!(f, "developer"),
             UserRole::Viewer => write!(f, "viewer"),
         }
+    }
+}
+
+/// Permission types for RBAC enforcement.
+/// Each permission represents an action that can be performed on resources.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Permission {
+    // Session permissions
+    SessionRead,
+    SessionCreate,
+    SessionStop,
+    SessionExecute,
+
+    // Task permissions
+    TaskRead,
+    TaskUpdate,
+
+    // User management permissions
+    UserRead,
+    UserCreate,
+    UserUpdate,
+    UserDelete,
+    UserManageRoles,
+
+    // Organization permissions
+    OrgRead,
+    OrgCreate,
+    OrgUpdate,
+    OrgDelete,
+    OrgManageMembers,
+
+    // System permissions
+    SystemConfig,
+    AuditLogRead,
+}
+
+impl std::fmt::Display for Permission {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Permission::SessionRead => write!(f, "session:read"),
+            Permission::SessionCreate => write!(f, "session:create"),
+            Permission::SessionStop => write!(f, "session:stop"),
+            Permission::SessionExecute => write!(f, "session:execute"),
+            Permission::TaskRead => write!(f, "task:read"),
+            Permission::TaskUpdate => write!(f, "task:update"),
+            Permission::UserRead => write!(f, "user:read"),
+            Permission::UserCreate => write!(f, "user:create"),
+            Permission::UserUpdate => write!(f, "user:update"),
+            Permission::UserDelete => write!(f, "user:delete"),
+            Permission::UserManageRoles => write!(f, "user:manage_roles"),
+            Permission::OrgRead => write!(f, "org:read"),
+            Permission::OrgCreate => write!(f, "org:create"),
+            Permission::OrgUpdate => write!(f, "org:update"),
+            Permission::OrgDelete => write!(f, "org:delete"),
+            Permission::OrgManageMembers => write!(f, "org:manage_members"),
+            Permission::SystemConfig => write!(f, "system:config"),
+            Permission::AuditLogRead => write!(f, "audit:read"),
+        }
+    }
+}
+
+impl UserRole {
+    /// Returns the list of permissions granted to this role.
+    pub fn permissions(&self) -> Vec<Permission> {
+        match self {
+            UserRole::Admin => vec![
+                // Admin has all permissions
+                Permission::SessionRead,
+                Permission::SessionCreate,
+                Permission::SessionStop,
+                Permission::SessionExecute,
+                Permission::TaskRead,
+                Permission::TaskUpdate,
+                Permission::UserRead,
+                Permission::UserCreate,
+                Permission::UserUpdate,
+                Permission::UserDelete,
+                Permission::UserManageRoles,
+                Permission::OrgRead,
+                Permission::OrgCreate,
+                Permission::OrgUpdate,
+                Permission::OrgDelete,
+                Permission::OrgManageMembers,
+                Permission::SystemConfig,
+                Permission::AuditLogRead,
+            ],
+            UserRole::Developer => vec![
+                // Developer can read and execute, but not manage users or system config
+                Permission::SessionRead,
+                Permission::SessionCreate,
+                Permission::SessionStop,
+                Permission::SessionExecute,
+                Permission::TaskRead,
+                Permission::TaskUpdate,
+                Permission::UserRead,
+                Permission::OrgRead,
+            ],
+            UserRole::Viewer => vec![
+                // Viewer has read-only access
+                Permission::SessionRead,
+                Permission::TaskRead,
+                Permission::UserRead,
+                Permission::OrgRead,
+            ],
+        }
+    }
+
+    /// Check if this role has a specific permission.
+    pub fn has_permission(&self, permission: Permission) -> bool {
+        self.permissions().contains(&permission)
+    }
+
+    /// Check if this role has all of the specified permissions.
+    pub fn has_all_permissions(&self, permissions: &[Permission]) -> bool {
+        let role_permissions = self.permissions();
+        permissions.iter().all(|p| role_permissions.contains(p))
+    }
+
+    /// Check if this role has any of the specified permissions.
+    pub fn has_any_permission(&self, permissions: &[Permission]) -> bool {
+        let role_permissions = self.permissions();
+        permissions.iter().any(|p| role_permissions.contains(p))
+    }
+
+    /// Returns true if this role can be assigned to a user.
+    /// Admin can assign any role, Developer can assign Viewer, Viewer cannot assign roles.
+    pub fn can_assign_role(&self, target_role: UserRole) -> bool {
+        match self {
+            UserRole::Admin => true,
+            UserRole::Developer => target_role == UserRole::Viewer,
+            UserRole::Viewer => false,
+        }
+    }
+}
+
+/// RBAC error types for permission enforcement.
+#[derive(Debug, Clone)]
+pub enum RbacError {
+    /// User lacks the required permission
+    PermissionDenied(Permission),
+    /// User lacks the required role
+    InsufficientRole { required: UserRole, actual: UserRole },
+    /// User cannot assign the target role
+    CannotAssignRole(UserRole),
+    /// Multiple permissions required but not all present
+    MissingPermissions(Vec<Permission>),
+}
+
+impl std::fmt::Display for RbacError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RbacError::PermissionDenied(permission) => {
+                write!(f, "permission denied: {} required", permission)
+            }
+            RbacError::InsufficientRole { required, actual } => {
+                write!(
+                    f,
+                    "insufficient role: {} required, {} provided",
+                    required, actual
+                )
+            }
+            RbacError::CannotAssignRole(role) => {
+                write!(f, "cannot assign role: {}", role)
+            }
+            RbacError::MissingPermissions(permissions) => {
+                let perms: Vec<String> = permissions.iter().map(|p| p.to_string()).collect();
+                write!(f, "missing permissions: {}", perms.join(", "))
+            }
+        }
+    }
+}
+
+impl std::error::Error for RbacError {}
+
+/// RBAC middleware helpers for checking permissions on API endpoints.
+pub struct RbacMiddleware;
+
+impl RbacMiddleware {
+    /// Check if the user has the required permission.
+    /// Returns Ok(()) if permitted, Err(RbacError) if denied.
+    pub fn require_permission(role: UserRole, permission: Permission) -> Result<(), RbacError> {
+        if role.has_permission(permission) {
+            Ok(())
+        } else {
+            Err(RbacError::PermissionDenied(permission))
+        }
+    }
+
+    /// Check if the user has all of the required permissions.
+    /// Returns Ok(()) if all permitted, Err(RbacError) with missing permissions if denied.
+    pub fn require_all_permissions(
+        role: UserRole,
+        permissions: &[Permission],
+    ) -> Result<(), RbacError> {
+        let role_permissions = role.permissions();
+        let missing: Vec<Permission> = permissions
+            .iter()
+            .filter(|p| !role_permissions.contains(p))
+            .copied()
+            .collect();
+
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(RbacError::MissingPermissions(missing))
+        }
+    }
+
+    /// Check if the user has any of the required permissions.
+    /// Returns Ok(()) if at least one permitted, Err(RbacError) if none are present.
+    pub fn require_any_permission(
+        role: UserRole,
+        permissions: &[Permission],
+    ) -> Result<(), RbacError> {
+        if role.has_any_permission(permissions) {
+            Ok(())
+        } else {
+            Err(RbacError::MissingPermissions(permissions.to_vec()))
+        }
+    }
+
+    /// Check if the user has at least the required role level.
+    /// Admin > Developer > Viewer
+    pub fn require_role(actual: UserRole, required: UserRole) -> Result<(), RbacError> {
+        let actual_level = match actual {
+            UserRole::Admin => 2,
+            UserRole::Developer => 1,
+            UserRole::Viewer => 0,
+        };
+        let required_level = match required {
+            UserRole::Admin => 2,
+            UserRole::Developer => 1,
+            UserRole::Viewer => 0,
+        };
+
+        if actual_level >= required_level {
+            Ok(())
+        } else {
+            Err(RbacError::InsufficientRole { required, actual })
+        }
+    }
+
+    /// Check if the user can assign a role to another user.
+    pub fn can_assign_role(assigner_role: UserRole, target_role: UserRole) -> Result<(), RbacError> {
+        if assigner_role.can_assign_role(target_role) {
+            Ok(())
+        } else {
+            Err(RbacError::CannotAssignRole(target_role))
+        }
+    }
+
+    /// Convenience method to check read-only access.
+    /// All roles have read access.
+    pub fn require_read_access(role: UserRole) -> Result<(), RbacError> {
+        Self::require_role(role, UserRole::Viewer)
+    }
+
+    /// Convenience method to check write/execute access.
+    /// Developer and Admin have write access.
+    pub fn require_write_access(role: UserRole) -> Result<(), RbacError> {
+        Self::require_role(role, UserRole::Developer)
+    }
+
+    /// Convenience method to check admin-only access.
+    pub fn require_admin_access(role: UserRole) -> Result<(), RbacError> {
+        Self::require_role(role, UserRole::Admin)
     }
 }
 
@@ -1296,5 +1565,279 @@ mod tests {
         assert_eq!(format!("{}", AuthError::TokenExpired), "token has expired");
         assert!(format!("{}", AuthError::RateLimited(StdDuration::from_secs(60)))
             .contains("60 seconds"));
+    }
+
+    // RBAC Permission tests
+
+    #[test]
+    fn permission_display_formats_correctly() {
+        assert_eq!(format!("{}", Permission::SessionRead), "session:read");
+        assert_eq!(format!("{}", Permission::SessionCreate), "session:create");
+        assert_eq!(format!("{}", Permission::SessionStop), "session:stop");
+        assert_eq!(format!("{}", Permission::SessionExecute), "session:execute");
+        assert_eq!(format!("{}", Permission::TaskRead), "task:read");
+        assert_eq!(format!("{}", Permission::TaskUpdate), "task:update");
+        assert_eq!(format!("{}", Permission::UserRead), "user:read");
+        assert_eq!(format!("{}", Permission::UserCreate), "user:create");
+        assert_eq!(format!("{}", Permission::UserManageRoles), "user:manage_roles");
+        assert_eq!(format!("{}", Permission::OrgRead), "org:read");
+        assert_eq!(format!("{}", Permission::SystemConfig), "system:config");
+        assert_eq!(format!("{}", Permission::AuditLogRead), "audit:read");
+    }
+
+    #[test]
+    fn admin_has_all_permissions() {
+        let admin = UserRole::Admin;
+        assert!(admin.has_permission(Permission::SessionRead));
+        assert!(admin.has_permission(Permission::SessionCreate));
+        assert!(admin.has_permission(Permission::SessionStop));
+        assert!(admin.has_permission(Permission::SessionExecute));
+        assert!(admin.has_permission(Permission::TaskRead));
+        assert!(admin.has_permission(Permission::TaskUpdate));
+        assert!(admin.has_permission(Permission::UserRead));
+        assert!(admin.has_permission(Permission::UserCreate));
+        assert!(admin.has_permission(Permission::UserUpdate));
+        assert!(admin.has_permission(Permission::UserDelete));
+        assert!(admin.has_permission(Permission::UserManageRoles));
+        assert!(admin.has_permission(Permission::OrgRead));
+        assert!(admin.has_permission(Permission::OrgCreate));
+        assert!(admin.has_permission(Permission::OrgUpdate));
+        assert!(admin.has_permission(Permission::OrgDelete));
+        assert!(admin.has_permission(Permission::OrgManageMembers));
+        assert!(admin.has_permission(Permission::SystemConfig));
+        assert!(admin.has_permission(Permission::AuditLogRead));
+    }
+
+    #[test]
+    fn developer_has_execute_permissions() {
+        let dev = UserRole::Developer;
+        assert!(dev.has_permission(Permission::SessionRead));
+        assert!(dev.has_permission(Permission::SessionCreate));
+        assert!(dev.has_permission(Permission::SessionStop));
+        assert!(dev.has_permission(Permission::SessionExecute));
+        assert!(dev.has_permission(Permission::TaskRead));
+        assert!(dev.has_permission(Permission::TaskUpdate));
+        assert!(dev.has_permission(Permission::UserRead));
+        assert!(dev.has_permission(Permission::OrgRead));
+    }
+
+    #[test]
+    fn developer_lacks_admin_permissions() {
+        let dev = UserRole::Developer;
+        assert!(!dev.has_permission(Permission::UserCreate));
+        assert!(!dev.has_permission(Permission::UserUpdate));
+        assert!(!dev.has_permission(Permission::UserDelete));
+        assert!(!dev.has_permission(Permission::UserManageRoles));
+        assert!(!dev.has_permission(Permission::OrgCreate));
+        assert!(!dev.has_permission(Permission::OrgUpdate));
+        assert!(!dev.has_permission(Permission::OrgDelete));
+        assert!(!dev.has_permission(Permission::OrgManageMembers));
+        assert!(!dev.has_permission(Permission::SystemConfig));
+        assert!(!dev.has_permission(Permission::AuditLogRead));
+    }
+
+    #[test]
+    fn viewer_has_read_only_permissions() {
+        let viewer = UserRole::Viewer;
+        assert!(viewer.has_permission(Permission::SessionRead));
+        assert!(viewer.has_permission(Permission::TaskRead));
+        assert!(viewer.has_permission(Permission::UserRead));
+        assert!(viewer.has_permission(Permission::OrgRead));
+    }
+
+    #[test]
+    fn viewer_lacks_write_permissions() {
+        let viewer = UserRole::Viewer;
+        assert!(!viewer.has_permission(Permission::SessionCreate));
+        assert!(!viewer.has_permission(Permission::SessionStop));
+        assert!(!viewer.has_permission(Permission::SessionExecute));
+        assert!(!viewer.has_permission(Permission::TaskUpdate));
+        assert!(!viewer.has_permission(Permission::UserCreate));
+        assert!(!viewer.has_permission(Permission::UserUpdate));
+        assert!(!viewer.has_permission(Permission::UserDelete));
+        assert!(!viewer.has_permission(Permission::UserManageRoles));
+        assert!(!viewer.has_permission(Permission::OrgCreate));
+        assert!(!viewer.has_permission(Permission::OrgUpdate));
+        assert!(!viewer.has_permission(Permission::OrgDelete));
+        assert!(!viewer.has_permission(Permission::OrgManageMembers));
+        assert!(!viewer.has_permission(Permission::SystemConfig));
+        assert!(!viewer.has_permission(Permission::AuditLogRead));
+    }
+
+    #[test]
+    fn has_all_permissions_returns_true_when_all_present() {
+        let admin = UserRole::Admin;
+        let perms = vec![Permission::SessionRead, Permission::UserManageRoles];
+        assert!(admin.has_all_permissions(&perms));
+    }
+
+    #[test]
+    fn has_all_permissions_returns_false_when_some_missing() {
+        let viewer = UserRole::Viewer;
+        let perms = vec![Permission::SessionRead, Permission::SessionCreate];
+        assert!(!viewer.has_all_permissions(&perms));
+    }
+
+    #[test]
+    fn has_any_permission_returns_true_when_at_least_one_present() {
+        let viewer = UserRole::Viewer;
+        let perms = vec![Permission::SessionRead, Permission::SessionCreate];
+        assert!(viewer.has_any_permission(&perms));
+    }
+
+    #[test]
+    fn has_any_permission_returns_false_when_none_present() {
+        let viewer = UserRole::Viewer;
+        let perms = vec![Permission::SessionCreate, Permission::SystemConfig];
+        assert!(!viewer.has_any_permission(&perms));
+    }
+
+    // Role assignment tests
+
+    #[test]
+    fn admin_can_assign_any_role() {
+        assert!(UserRole::Admin.can_assign_role(UserRole::Admin));
+        assert!(UserRole::Admin.can_assign_role(UserRole::Developer));
+        assert!(UserRole::Admin.can_assign_role(UserRole::Viewer));
+    }
+
+    #[test]
+    fn developer_can_only_assign_viewer() {
+        assert!(!UserRole::Developer.can_assign_role(UserRole::Admin));
+        assert!(!UserRole::Developer.can_assign_role(UserRole::Developer));
+        assert!(UserRole::Developer.can_assign_role(UserRole::Viewer));
+    }
+
+    #[test]
+    fn viewer_cannot_assign_roles() {
+        assert!(!UserRole::Viewer.can_assign_role(UserRole::Admin));
+        assert!(!UserRole::Viewer.can_assign_role(UserRole::Developer));
+        assert!(!UserRole::Viewer.can_assign_role(UserRole::Viewer));
+    }
+
+    // RbacMiddleware tests
+
+    #[test]
+    fn require_permission_allows_when_permission_present() {
+        let result = RbacMiddleware::require_permission(UserRole::Admin, Permission::SystemConfig);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn require_permission_denies_when_permission_absent() {
+        let result = RbacMiddleware::require_permission(UserRole::Viewer, Permission::SystemConfig);
+        assert!(matches!(result, Err(RbacError::PermissionDenied(Permission::SystemConfig))));
+    }
+
+    #[test]
+    fn require_all_permissions_allows_when_all_present() {
+        let perms = vec![Permission::SessionRead, Permission::TaskRead];
+        let result = RbacMiddleware::require_all_permissions(UserRole::Viewer, &perms);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn require_all_permissions_denies_when_some_missing() {
+        let perms = vec![Permission::SessionRead, Permission::SessionCreate];
+        let result = RbacMiddleware::require_all_permissions(UserRole::Viewer, &perms);
+        assert!(matches!(result, Err(RbacError::MissingPermissions(_))));
+        if let Err(RbacError::MissingPermissions(missing)) = result {
+            assert_eq!(missing.len(), 1);
+            assert_eq!(missing[0], Permission::SessionCreate);
+        }
+    }
+
+    #[test]
+    fn require_any_permission_allows_when_at_least_one_present() {
+        let perms = vec![Permission::SessionRead, Permission::SystemConfig];
+        let result = RbacMiddleware::require_any_permission(UserRole::Viewer, &perms);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn require_any_permission_denies_when_none_present() {
+        let perms = vec![Permission::SessionCreate, Permission::SystemConfig];
+        let result = RbacMiddleware::require_any_permission(UserRole::Viewer, &perms);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn require_role_allows_equal_or_higher_role() {
+        // Admin >= Admin
+        assert!(RbacMiddleware::require_role(UserRole::Admin, UserRole::Admin).is_ok());
+        // Admin >= Developer
+        assert!(RbacMiddleware::require_role(UserRole::Admin, UserRole::Developer).is_ok());
+        // Admin >= Viewer
+        assert!(RbacMiddleware::require_role(UserRole::Admin, UserRole::Viewer).is_ok());
+        // Developer >= Developer
+        assert!(RbacMiddleware::require_role(UserRole::Developer, UserRole::Developer).is_ok());
+        // Developer >= Viewer
+        assert!(RbacMiddleware::require_role(UserRole::Developer, UserRole::Viewer).is_ok());
+        // Viewer >= Viewer
+        assert!(RbacMiddleware::require_role(UserRole::Viewer, UserRole::Viewer).is_ok());
+    }
+
+    #[test]
+    fn require_role_denies_lower_role() {
+        // Viewer < Developer
+        let result = RbacMiddleware::require_role(UserRole::Viewer, UserRole::Developer);
+        assert!(matches!(result, Err(RbacError::InsufficientRole { .. })));
+        // Viewer < Admin
+        let result = RbacMiddleware::require_role(UserRole::Viewer, UserRole::Admin);
+        assert!(matches!(result, Err(RbacError::InsufficientRole { .. })));
+        // Developer < Admin
+        let result = RbacMiddleware::require_role(UserRole::Developer, UserRole::Admin);
+        assert!(matches!(result, Err(RbacError::InsufficientRole { .. })));
+    }
+
+    #[test]
+    fn can_assign_role_allows_valid_assignments() {
+        assert!(RbacMiddleware::can_assign_role(UserRole::Admin, UserRole::Developer).is_ok());
+        assert!(RbacMiddleware::can_assign_role(UserRole::Developer, UserRole::Viewer).is_ok());
+    }
+
+    #[test]
+    fn can_assign_role_denies_invalid_assignments() {
+        let result = RbacMiddleware::can_assign_role(UserRole::Viewer, UserRole::Viewer);
+        assert!(matches!(result, Err(RbacError::CannotAssignRole(_))));
+        let result = RbacMiddleware::can_assign_role(UserRole::Developer, UserRole::Admin);
+        assert!(matches!(result, Err(RbacError::CannotAssignRole(_))));
+    }
+
+    #[test]
+    fn require_read_access_allows_all_roles() {
+        assert!(RbacMiddleware::require_read_access(UserRole::Admin).is_ok());
+        assert!(RbacMiddleware::require_read_access(UserRole::Developer).is_ok());
+        assert!(RbacMiddleware::require_read_access(UserRole::Viewer).is_ok());
+    }
+
+    #[test]
+    fn require_write_access_allows_developer_and_admin() {
+        assert!(RbacMiddleware::require_write_access(UserRole::Admin).is_ok());
+        assert!(RbacMiddleware::require_write_access(UserRole::Developer).is_ok());
+        assert!(RbacMiddleware::require_write_access(UserRole::Viewer).is_err());
+    }
+
+    #[test]
+    fn require_admin_access_allows_only_admin() {
+        assert!(RbacMiddleware::require_admin_access(UserRole::Admin).is_ok());
+        assert!(RbacMiddleware::require_admin_access(UserRole::Developer).is_err());
+        assert!(RbacMiddleware::require_admin_access(UserRole::Viewer).is_err());
+    }
+
+    // RbacError display tests
+
+    #[test]
+    fn rbac_error_display_formats_correctly() {
+        assert!(format!("{}", RbacError::PermissionDenied(Permission::SessionRead))
+            .contains("session:read"));
+        assert!(format!("{}", RbacError::InsufficientRole {
+            required: UserRole::Admin,
+            actual: UserRole::Viewer
+        }).contains("admin"));
+        assert!(format!("{}", RbacError::CannotAssignRole(UserRole::Admin))
+            .contains("admin"));
+        assert!(format!("{}", RbacError::MissingPermissions(vec![Permission::SessionRead]))
+            .contains("session:read"));
     }
 }

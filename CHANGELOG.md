@@ -14,6 +14,18 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-22 Add Permission enum with session, task, user, org, and system permission types.
+- MC-22 Add UserRole.permissions() returning all permissions granted to Admin, Developer, or Viewer roles.
+- MC-22 Add UserRole.has_permission() for checking single permission on a role.
+- MC-22 Add UserRole.has_all_permissions() for checking multiple permissions are all present.
+- MC-22 Add UserRole.has_any_permission() for checking at least one permission is present.
+- MC-22 Add UserRole.can_assign_role() for role assignment authorization (Admin can assign any, Developer can assign Viewer only).
+- MC-22 Add RbacError enum with PermissionDenied, InsufficientRole, CannotAssignRole, and MissingPermissions variants.
+- MC-22 Add RbacMiddleware with require_permission(), require_all_permissions(), require_any_permission() for permission checks.
+- MC-22 Add RbacMiddleware.require_role() for role level checks (Admin > Developer > Viewer).
+- MC-22 Add RbacMiddleware.can_assign_role() for validating role assignment authorization.
+- MC-22 Add RbacMiddleware convenience methods: require_read_access(), require_write_access(), require_admin_access().
+- MC-22 Add 27 new tests for RBAC permission enforcement covering all roles and permission scenarios.
 - MC-21 Add user authentication module (`src/auth.rs`) with email/password registration and JWT tokens.
 - MC-21 Add User struct with argon2 password hashing and role-based access (Admin, Developer, Viewer).
 - MC-21 Add JwtConfig for configurable access token (15 min default) and refresh token (7 days default) expiry.
