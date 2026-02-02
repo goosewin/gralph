@@ -706,9 +706,15 @@ fn delete_prd_before_pr(dir: &Path, config: &Config) -> Result<(), CliError> {
         )));
     }
 
+    // Use -c flags to set identity for the commit in case global git config is missing.
+    // This ensures the commit works in CI environments without global git identity.
     let commit_output = ProcCommand::new("git")
         .arg("-C")
         .arg(dir)
+        .arg("-c")
+        .arg("user.name=gralph-verifier")
+        .arg("-c")
+        .arg("user.email=verifier@gralph.local")
         .arg("commit")
         .arg("-m")
         .arg("chore: remove task PRD before PR")
@@ -717,10 +723,12 @@ fn delete_prd_before_pr(dir: &Path, config: &Config) -> Result<(), CliError> {
 
     if !commit_output.status.success() {
         let stderr = String::from_utf8_lossy(&commit_output.stderr);
-        return Err(CliError::Message(format!(
-            "Failed to commit PRD deletion: {}",
+        // Non-fatal: PRD deletion is optional cleanup, warn and continue
+        eprintln!(
+            "Warning: Failed to commit PRD deletion (non-fatal): {}",
             stderr.trim()
-        )));
+        );
+        return Ok(());
     }
 
     println!("Task PRD deleted and committed.");
