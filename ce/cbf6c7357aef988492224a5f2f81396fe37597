@@ -1,0 +1,29 @@
+ARCHITECTURE.md
+  f1ce8fe3d5c44893 12
+src/auth.rs
+  f1ce8fe3d5c44893 23-25,50-312,1569-1842
+CHANGELOG.md
+  f1ce8fe3d5c44893 17-28
+PRD.ultimate.md
+  f1ce8fe3d5c44893 441
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "cecbf6c7357aef988492224a5f2f81396fe37597",
+  "prompts": {
+    "f1ce8fe3d5c44893": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73ef5efe-42a2-48ec-8d92-e91b4e4023cb",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 558,
+      "total_deletions": 3,
+      "accepted_lines": 557,
+      "overriden_lines": 0
+    }
+  }
+}
