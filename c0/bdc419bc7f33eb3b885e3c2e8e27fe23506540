@@ -1,0 +1,33 @@
+src/cli.rs
+  4c9f522b2fc2f313 370-371
+tests/prd_retry_integration.rs
+  4c9f522b2fc2f313 7-9,242,253-256,268,271-274,302,313-316,330,333-336,364,375-377,396,399-402
+src/app/prd_init.rs
+  4c9f522b2fc2f313 136,138,146,150-158,160-164,170-179,182-183,185,187-188,190,194,509-511,904-905,907,965
+tests/support/mod.rs
+  4c9f522b2fc2f313 6,12,68,77,86,93
+src/app.rs
+  4c9f522b2fc2f313 150
+completions/gralph.bash
+  4c9f522b2fc2f313 1038,1080-1083
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "c0bdc419bc7f33eb3b885e3c2e8e27fe23506540",
+  "prompts": {
+    "4c9f522b2fc2f313": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "592667ac-a4d6-4d0a-8fa8-b393c862e9cd",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 97,
+      "total_deletions": 52,
+      "accepted_lines": 89,
+      "overriden_lines": 0
+    }
+  }
+}
