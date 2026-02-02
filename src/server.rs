@@ -15,9 +15,10 @@ use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
 use crate::audit::{AuditAction, AuditEntry, AuditLog, AuditLogConfig, AuditOutcome, AuditQuery};
-use crate::auth::{AuthError, AuthService, JwtConfig, Permission, RateLimitConfig};
+use crate::auth::{AuthError, AuthService, JwtConfig, Permission, RateLimitConfig, UserStore};
 use crate::core::{count_remaining_tasks, last_error_line, last_log_line, raw_log_path};
 use crate::prd;
+use crate::saml::{SamlAuthService, SamlConfig, SamlServiceProvider};
 use crate::state::{StateError, StateStore};
 
 #[derive(Embed)]
@@ -200,6 +201,7 @@ struct AppState {
     broadcaster: StateBroadcaster,
     auth_service: AuthService,
     audit_log: AuditLog,
+    saml_service: Option<Arc<SamlAuthService>>,
 }
 
 pub async fn run_server(config: ServerConfig) -> Result<(), ServerError> {
@@ -220,6 +222,7 @@ pub async fn run_server(config: ServerConfig) -> Result<(), ServerError> {
         window_secs: 60,
         lockout_secs: 300,
     };
+    let jwt_config_for_saml = jwt_config.clone();
     let auth_service = AuthService::new(jwt_config).with_rate_limit(rate_limit_config);
 
     // Initialize audit log with configurable retention from environment
@@ -237,12 +240,19 @@ pub async fn run_server(config: ServerConfig) -> Result<(), ServerError> {
             .with_max_age_secs(audit_max_age_days * 24 * 60 * 60),
     );
 
+    // Initialize SAML service if configured
+    let saml_service = create_saml_service_from_env(
+        auth_service.user_store.clone(),
+        jwt_config_for_saml,
+    );
+
     let app_state = Arc::new(AppState {
         config,
         store,
         broadcaster,
         auth_service,
         audit_log,
+        saml_service,
     });
     let app = build_router(app_state.clone());
     let addr = app_state.config.addr()?;
@@ -310,6 +320,19 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route(
             "/audit/stats",
             get(audit_stats_handler).options(options_handler),
+        )
+        // SAML SSO endpoints
+        .route(
+            "/saml/metadata",
+            get(saml_metadata_handler).options(options_handler),
+        )
+        .route(
+            "/saml/login",
+            get(saml_login_handler).options(options_handler),
+        )
+        .route(
+            "/saml/acs",
+            post(saml_acs_handler).options(options_handler),
         )
         .route("/ws", get(ws_handler))
         .route("/assets/*path", get(static_handler))
@@ -1505,6 +1528,173 @@ async fn audit_stats_handler(
     )
 }
 
+// --- SAML SSO Handlers ---
+
+/// SAML Service Provider metadata endpoint.
+/// Returns SP metadata XML for IdP configuration.
+async fn saml_metadata_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+
+    let Some(ref saml_service) = state.saml_service else {
+        return error_response(
+            StatusCode::NOT_FOUND,
+            "SAML SSO is not configured".to_string(),
+            cors_origin,
+        );
+    };
+
+    let metadata = saml_service.metadata();
+
+    let mut response = Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/xml")
+        .body(axum::body::Body::from(metadata))
+        .unwrap();
+
+    if let Some(origin) = cors_origin {
+        response.headers_mut().insert(
+            header::ACCESS_CONTROL_ALLOW_ORIGIN,
+            HeaderValue::from_str(&origin).unwrap_or(HeaderValue::from_static("*")),
+        );
+    }
+
+    response
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct SamlLoginQuery {
+    relay_state: Option<String>,
+}
+
+/// SAML login initiation endpoint.
+/// Redirects to IdP with an AuthnRequest.
+async fn saml_login_handler(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<SamlLoginQuery>,
+    headers: HeaderMap,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+
+    let Some(ref saml_service) = state.saml_service else {
+        return error_response(
+            StatusCode::NOT_FOUND,
+            "SAML SSO is not configured".to_string(),
+            cors_origin,
+        );
+    };
+
+    let relay_state = query.relay_state.as_deref();
+    let (redirect_url, _request_id) = saml_service.start_auth(relay_state.map(String::from));
+
+    Response::builder()
+        .status(StatusCode::FOUND)
+        .header(header::LOCATION, redirect_url)
+        .body(axum::body::Body::empty())
+        .unwrap()
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct SamlAcsForm {
+    #[serde(rename = "SAMLResponse")]
+    saml_response: String,
+    #[serde(rename = "RelayState")]
+    relay_state: Option<String>,
+}
+
+/// SAML Assertion Consumer Service endpoint.
+/// Processes SAML responses from IdP and creates user sessions.
+async fn saml_acs_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    axum::extract::Form(form): axum::extract::Form<SamlAcsForm>,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+    let ip_addr = connect_info.as_ref().map(|ci| ci.0);
+
+    let Some(ref saml_service) = state.saml_service else {
+        return error_response(
+            StatusCode::NOT_FOUND,
+            "SAML SSO is not configured".to_string(),
+            cors_origin,
+        );
+    };
+
+    // Process SAML response
+    match saml_service.complete_auth(&form.saml_response, form.relay_state.as_deref()) {
+        Ok(result) => {
+            // Construct display name from available fields
+            let display_name = result
+                .user
+                .display_name
+                .clone()
+                .or_else(|| {
+                    match (&result.user.first_name, &result.user.last_name) {
+                        (Some(f), Some(l)) => Some(format!("{} {}", f, l)),
+                        (Some(f), None) => Some(f.clone()),
+                        (None, Some(l)) => Some(l.clone()),
+                        _ => None,
+                    }
+                })
+                .unwrap_or_else(|| result.user.email.clone());
+
+            // Record successful SAML login
+            record_audit_entry(
+                &state,
+                &headers,
+                ip_addr.as_ref(),
+                AuditAction::UserLogin,
+                AuditOutcome::Success,
+                Some("saml"),
+                Some(&result.user.email),
+                Some(&format!("SAML SSO login for {}", result.user.email)),
+            );
+
+            // Return tokens and user info
+            json_response(
+                StatusCode::OK,
+                json!({
+                    "user": {
+                        "email": result.user.email,
+                        "name": display_name,
+                        "role": result.user.role,
+                        "is_new_user": result.is_new_user,
+                    },
+                    "tokens": {
+                        "access_token": result.tokens.access_token,
+                        "refresh_token": result.tokens.refresh_token,
+                        "expires_in": result.tokens.expires_in,
+                    },
+                    "relay_state": result.relay_state,
+                }),
+                cors_origin,
+            )
+        }
+        Err(e) => {
+            // Record failed SAML login
+            record_audit_entry(
+                &state,
+                &headers,
+                ip_addr.as_ref(),
+                AuditAction::UserLogin,
+                AuditOutcome::Failure,
+                Some("saml"),
+                None,
+                Some(&format!("SAML SSO login failed: {}", e)),
+            );
+
+            error_response(
+                StatusCode::UNAUTHORIZED,
+                format!("SAML authentication failed: {}", e),
+                cors_origin,
+            )
+        }
+    }
+}
+
 /// Extract actor info (user_id, email, role) from JWT token in Authorization header.
 fn extract_actor_info(
     headers: &HeaderMap,
@@ -1858,6 +2048,52 @@ fn apply_cors(response: &mut Response, cors_origin: Option<String>) {
     );
 }
 
+/// Creates a SAML authentication service from environment variables if configured.
+///
+/// Required environment variables:
+/// - GRALPH_SAML_ENTITY_ID: Service Provider Entity ID
+/// - GRALPH_SAML_ACS_URL: Assertion Consumer Service URL
+/// - GRALPH_SAML_IDP_ENTITY_ID: Identity Provider Entity ID
+/// - GRALPH_SAML_IDP_SSO_URL: Identity Provider SSO URL
+///
+/// Optional environment variables:
+/// - GRALPH_SAML_IDP_CERTIFICATE: IdP certificate (PEM encoded)
+/// - GRALPH_SAML_SLO_URL: Single Logout URL
+/// - GRALPH_SAML_ALLOW_IDP_INITIATED: Allow IdP-initiated SSO (default: false)
+fn create_saml_service_from_env(
+    user_store: UserStore,
+    jwt_config: JwtConfig,
+) -> Option<Arc<SamlAuthService>> {
+    let entity_id = env::var("GRALPH_SAML_ENTITY_ID").ok()?;
+    let acs_url = env::var("GRALPH_SAML_ACS_URL").ok()?;
+    let idp_entity_id = env::var("GRALPH_SAML_IDP_ENTITY_ID").ok()?;
+    let idp_sso_url = env::var("GRALPH_SAML_IDP_SSO_URL").ok()?;
+
+    let mut config = SamlConfig::new(&entity_id, &acs_url, &idp_entity_id, &idp_sso_url);
+
+    if let Ok(cert) = env::var("GRALPH_SAML_IDP_CERTIFICATE") {
+        config = config.with_idp_certificate(&cert);
+    }
+
+    if let Ok(slo_url) = env::var("GRALPH_SAML_SLO_URL") {
+        config = config.with_slo_url(&slo_url);
+    }
+
+    if env::var("GRALPH_SAML_ALLOW_IDP_INITIATED")
+        .map(|v| v == "true")
+        .unwrap_or(false)
+    {
+        config = config.with_idp_initiated(true);
+    }
+
+    let sp = match SamlServiceProvider::new(config) {
+        Ok(sp) => sp,
+        Err(_) => return None,
+    };
+
+    Some(Arc::new(SamlAuthService::new(sp, user_store, jwt_config)))
+}
+
 fn is_localhost(host: &str) -> bool {
     matches!(host, "127.0.0.1" | "localhost" | "::1")
 }
@@ -1955,6 +2191,7 @@ mod tests {
             broadcaster: StateBroadcaster::new(100),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
+            saml_service: None,
         })
     }
 
@@ -2357,6 +2594,7 @@ mod tests {
             broadcaster: StateBroadcaster::new(10),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
+            saml_service: None,
         };
         let headers = HeaderMap::new();
 
@@ -2385,6 +2623,7 @@ mod tests {
             broadcaster: StateBroadcaster::new(10),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
+            saml_service: None,
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -2417,6 +2656,7 @@ mod tests {
             broadcaster: StateBroadcaster::new(10),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
+            saml_service: None,
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -2449,6 +2689,7 @@ mod tests {
             broadcaster: StateBroadcaster::new(10),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
+            saml_service: None,
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -2481,6 +2722,7 @@ mod tests {
             broadcaster: StateBroadcaster::new(10),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
+            saml_service: None,
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -2514,6 +2756,7 @@ mod tests {
             broadcaster: StateBroadcaster::new(10),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
+            saml_service: None,
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -2546,6 +2789,7 @@ mod tests {
             broadcaster: StateBroadcaster::new(10),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
+            saml_service: None,
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -4629,6 +4873,7 @@ mod tests {
             broadcaster: StateBroadcaster::new(100),
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
+            saml_service: None,
         });
         state2.store.init_state().unwrap();
         state2.audit_log.record(

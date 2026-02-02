@@ -8,6 +8,7 @@ pub mod core;
 mod entrypoint;
 pub mod notify;
 pub mod prd;
+pub mod saml;
 pub mod server;
 pub mod state;
 pub mod task;

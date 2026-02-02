@@ -467,7 +467,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Session creation after validation.
   * Integration tests with mock IdP.
 - **Dependencies** MC-21
-- [ ] MC-24 Implement SAML 2.0 SSO
+- [x] MC-24 Implement SAML 2.0 SSO
 ---
 
 ### Task MC-25

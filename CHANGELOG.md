@@ -14,6 +14,21 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-24 Add SAML 2.0 SSO module (`src/saml.rs`) for enterprise single sign-on integration.
+- MC-24 Add SamlConfig struct for Service Provider configuration with IdP settings.
+- MC-24 Add SamlAttributeMapping for flexible SAML attribute to user field mapping.
+- MC-24 Add SamlServiceProvider for SAML 2.0 Web Browser SSO Profile implementation.
+- MC-24 Add GET /saml/metadata endpoint returning SP metadata XML for IdP configuration.
+- MC-24 Add GET /saml/login endpoint to initiate SAML authentication with AuthnRequest redirect.
+- MC-24 Add POST /saml/acs Assertion Consumer Service endpoint for SAML response processing.
+- MC-24 Add SamlAuthService combining SP with user store for automatic user provisioning.
+- MC-24 Add user provisioning from SAML assertion claims with configurable role mapping.
+- MC-24 Add JWT session creation after SAML assertion validation.
+- MC-24 Add support for SP-initiated and IdP-initiated SSO flows (configurable).
+- MC-24 Add clock skew tolerance and request validity period configuration.
+- MC-24 Add SAML environment variables: GRALPH_SAML_ENTITY_ID, GRALPH_SAML_ACS_URL, GRALPH_SAML_IDP_*.
+- MC-24 Add base64 and urlencoding dependencies for SAML request/response encoding.
+- MC-24 Add 45 new tests for SAML module including mock IdP response generation.
 - MC-23 Add audit logging module (`src/audit.rs`) for tracking all authenticated actions.
 - MC-23 Add AuditAction enum with 22 action types covering auth, session, task, and admin operations.
 - MC-23 Add AuditOutcome enum with Success, Failure, and Denied variants.
