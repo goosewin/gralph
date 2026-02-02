@@ -135,7 +135,7 @@ Each task block must contain exactly one unchecked task line.
   * Log messages at debug level for error details.
   * No sensitive data logged.
 - **Dependencies** PRD-3
-- [ ] PRD-6 Add logging for retry attempts
+- [x] PRD-6 Add logging for retry attempts
 ---
 
 ### Task PRD-7

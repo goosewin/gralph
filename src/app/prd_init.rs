@@ -3,6 +3,7 @@ use crate::backend::{backend_from_name, Backend};
 use crate::cli::{InitArgs, PrdArgs, PrdCheckArgs, PrdCommand, PrdCreateArgs};
 use crate::config::Config;
 use crate::prd::{self, PrdValidationError};
+use log::{debug, info};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
@@ -280,11 +281,13 @@ pub fn prd_create_with_retry(
 
     loop {
         attempt += 1;
-        eprintln!(
+        let total_attempts = max_retries.saturating_add(1);
+        info!(
             "PRD generation attempt {}/{}",
             attempt,
-            max_retries.saturating_add(1)
+            total_attempts
         );
+        eprintln!("PRD generation attempt {}/{}", attempt, total_attempts);
 
         // Generate PRD
         let output_file = tmp_dir.join(format!(
@@ -313,6 +316,7 @@ pub fn prd_create_with_retry(
                     "PRD generation returned empty output after all retries.".to_string(),
                 ));
             }
+            info!("Empty PRD output on attempt {}, retrying", attempt);
             eprintln!("Empty PRD output on attempt {}, retrying", attempt);
             current_prompt = build_retry_prompt_for_empty(initial_prompt);
             continue;
@@ -340,6 +344,7 @@ pub fn prd_create_with_retry(
 
         match validation_result {
             Ok(()) => {
+                info!("PRD validation passed on attempt {}", attempt);
                 eprintln!("PRD validation passed on attempt {}", attempt);
                 return Ok(PrdGenerationResult {
                     content: sanitized_content,
@@ -347,8 +352,18 @@ pub fn prd_create_with_retry(
                 });
             }
             Err(errors) => {
+                let error_count = errors.messages.len();
+                info!(
+                    "PRD validation failed on attempt {} with {} error(s)",
+                    attempt, error_count
+                );
                 eprintln!(
                     "PRD validation failed on attempt {}: {}",
+                    attempt,
+                    errors.messages.join("; ")
+                );
+                debug!(
+                    "Validation errors on attempt {}: {}",
                     attempt,
                     errors.messages.join("; ")
                 );
@@ -363,6 +378,10 @@ pub fn prd_create_with_retry(
 
                 // Check if we've exhausted retries
                 if attempt > max_retries {
+                    info!(
+                        "Retry limit reached after {} attempts, returning best attempt",
+                        attempt
+                    );
                     eprintln!(
                         "Retry limit reached after {} attempts, returning best attempt",
                         attempt
@@ -375,9 +394,21 @@ pub fn prd_create_with_retry(
 
                 // Build corrective prompt for next attempt
                 current_prompt = build_retry_prompt(initial_prompt, &sanitized_content, &errors);
+                let prompt_len = current_prompt.len();
+                info!(
+                    "Retrying PRD generation (attempt {}/{}) with corrective prompt ({} bytes)",
+                    attempt + 1,
+                    max_retries.saturating_add(1),
+                    prompt_len
+                );
                 eprintln!(
                     "Retrying PRD generation with {} validation errors",
-                    errors.messages.len()
+                    error_count
+                );
+                debug!(
+                    "Corrective prompt length for retry {}: {} bytes",
+                    attempt + 1,
+                    prompt_len
                 );
             }
         }
