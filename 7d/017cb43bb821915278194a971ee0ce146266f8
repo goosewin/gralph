@@ -1,0 +1,45 @@
+frontend/src/App.tsx
+  d73a769a218bf6d7 2,13,123-134,142-147,188-189,199-204,237-242,260,398-408
+frontend/src/components/AgentOrchestrationDashboard.test.tsx
+  d73a769a218bf6d7 1-387
+PRD.ultimate.md
+  d73a769a218bf6d7 408
+src/server.rs
+  d73a769a218bf6d7 238-241,782-950
+frontend/src/components/Sidebar.tsx
+  d73a769a218bf6d7 4
+frontend/src/types/session.ts
+  d73a769a218bf6d7 83-126
+frontend/src/hooks/useOrchestration.test.ts
+  d73a769a218bf6d7 1-216
+CHANGELOG.md
+  d73a769a218bf6d7 17-33
+frontend/src/index.css
+  d73a769a218bf6d7 1950-2392
+frontend/src/components/AgentOrchestrationDashboard.tsx
+  d73a769a218bf6d7 1-701
+ARCHITECTURE.md
+  d73a769a218bf6d7 55,58-59
+frontend/src/hooks/useOrchestration.ts
+  d73a769a218bf6d7 1-102
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "7d017cb43bb821915278194a971ee0ce146266f8",
+  "prompts": {
+    "d73a769a218bf6d7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "75663466-298e-4b5a-b078-4c5844213f00",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 2256,
+      "total_deletions": 126,
+      "accepted_lines": 2136,
+      "overriden_lines": 0
+    }
+  }
+}
