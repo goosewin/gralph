@@ -14,6 +14,31 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-25 Add OpenID Connect (OIDC) module (`src/oidc.rs`) for enterprise identity provider integration.
+- MC-25 Add OidcConfig struct for client credentials, issuer, redirect URI, and endpoint configuration.
+- MC-25 Add OidcClaimMapping for mapping OIDC standard claims to user profile fields with group-to-role mapping.
+- MC-25 Add OidcDiscoveryDocument for OIDC provider metadata from .well-known/openid-configuration.
+- MC-25 Add OidcAuthRequest for tracking authorization requests with state, nonce, and PKCE support.
+- MC-25 Add IdTokenClaims for decoded JWT claims (iss, sub, aud, exp, iat, nonce, profile claims).
+- MC-25 Add IdTokenAudience enum supporting single string or array audience values.
+- MC-25 Add OidcTokenResponse for access_token, id_token, refresh_token, and scope from token endpoint.
+- MC-25 Add OidcUserInfo for userinfo endpoint response parsing.
+- MC-25 Add OidcUserProfile for extracted user data mapped to local account fields.
+- MC-25 Add OidcClient implementing authorization code flow with PKCE (S256 challenge method).
+- MC-25 Add OidcClient.create_authorization_url() for initiating OIDC authentication with state, nonce, and code challenge.
+- MC-25 Add OidcClient.validate_callback() for validating authorization callback state parameter.
+- MC-25 Add OidcClient.build_token_request() for constructing token exchange requests.
+- MC-25 Add OidcClient.validate_id_token() for ID token validation (issuer, audience, expiration, nonce).
+- MC-25 Add OidcClient.extract_user_profile() for extracting user profile from ID token claims.
+- MC-25 Add OidcClient.extract_user_profile_from_userinfo() for extracting profile from userinfo response.
+- MC-25 Add TokenRequestParams for building form-encoded token exchange request bodies.
+- MC-25 Add OidcAuthService combining OidcClient with UserStore for automatic user provisioning.
+- MC-25 Add OidcAuthService.start_auth() for initiating OIDC authentication flow.
+- MC-25 Add OidcAuthService.complete_auth() for completing authentication and creating local JWT session.
+- MC-25 Add OidcAuthService.complete_auth_with_userinfo() for authentication using userinfo endpoint data.
+- MC-25 Add OIDC environment variables: GRALPH_OIDC_CLIENT_ID, GRALPH_OIDC_CLIENT_SECRET, GRALPH_OIDC_ISSUER, GRALPH_OIDC_REDIRECT_URI.
+- MC-25 Add sha2 dependency for PKCE S256 code challenge generation.
+- MC-25 Add 55 new tests for OIDC module covering config validation, authorization flow, token validation, and profile extraction.
 - MC-24 Add SAML 2.0 SSO module (`src/saml.rs`) for enterprise single sign-on integration.
 - MC-24 Add SamlConfig struct for Service Provider configuration with IdP settings.
 - MC-24 Add SamlAttributeMapping for flexible SAML attribute to user field mapping.

@@ -482,7 +482,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * User info mapped to local account.
   * Integration tests with mock provider.
 - **Dependencies** MC-21
-- [ ] MC-25 Implement OIDC integration
+- [x] MC-25 Implement OIDC integration
 ---
 
 ### Task MC-26
