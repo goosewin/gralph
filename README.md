@@ -30,7 +30,7 @@ irm https://raw.githubusercontent.com/goosewin/gralph/main/install.ps1 | iex
   - `opencode` - `npm install -g opencode-ai`
   - `gemini` - `npm install -g @google/gemini-cli`
   - `codex` - `npm install -g @openai/codex`
-- `tmux` for background sessions (optional with `--no-tmux`)
+- `tmux` for background sessions (required)
 
 ## Basic Commands
 
@@ -45,6 +45,7 @@ gralph init .                     # Scaffold shared context files
 gralph status                     # Check all running loops
 gralph logs myapp --follow        # Watch logs
 gralph logs myapp --raw           # Show raw backend output
+gralph attach myapp               # Attach to the tmux session
 gralph doctor                     # Run local diagnostics
 gralph cleanup                    # Mark stale sessions (state cleanup)
 gralph stop myapp                 # Stop a loop
@@ -56,14 +57,14 @@ On session start, gralph performs a best-effort update check and prints a notice
 if a newer release is available (it never blocks startup). Disable it with
 `defaults.check_updates: false` or `GRALPH_NO_UPDATE_CHECK=1`.
 
-By default, `gralph start` creates a git worktree under `.worktrees/` for each PRD run
+By default, `gralph start` creates a git worktree under `.worktrees/<unique-worktree>` for each PRD run
 when the target directory is inside a git repo with at least one commit and the
 repo is clean. Subdirectory runs are preserved, so `gralph start path/to/subdir`
 continues the loop from the matching subdirectory inside the worktree.
 
 Auto worktree creation is skipped when the target directory is not inside a git
-repo, the repo has no commits, or the repo is dirty. In those cases the loop runs
-in the target directory. Disable auto worktrees with `--no-worktree` or set
+repo or the repo has no commits. If the repo is dirty, gralph commits all changes
+before creating the worktree. Disable auto worktrees with `--no-worktree` or set
 `defaults.auto_worktree: false`.
 
 When stacking with Graphite, run `gt` inside the worktree created for the task
@@ -74,8 +75,9 @@ so the stack is attached to the correct checkout and branch.
 Session logs are written to `.gralph/<session>.log` under the project directory.
 Raw backend output is saved to `.gralph/<session>.raw.log` and can be viewed with
 `gralph logs <name> --raw`.
-When running in the background (no `--no-tmux`), follow logs with
+When running in the background (tmux required), follow logs with
 `gralph logs <name> --follow` or `tail -f .gralph/<session>.log`.
+Attach to the tmux session with `gralph attach <name>`.
 
 ## Dry-run and Step
 

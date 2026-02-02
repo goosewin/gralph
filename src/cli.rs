@@ -18,7 +18,6 @@ const ROOT_AFTER_HELP: &str = r#"START OPTIONS:
   --prompt-template   Path to custom prompt template file
   --webhook           Notification webhook URL
   --no-worktree       Disable automatic worktree creation
-  --no-tmux           Run in foreground (blocks; logs in .gralph/<session>.log)
   --strict-prd        Validate PRD before starting the loop
   --dry-run           Print the next task block and resolved prompt
 
@@ -74,6 +73,7 @@ EXAMPLES:
   gralph step .
   gralph status
   gralph logs myapp --follow
+  gralph attach myapp
   gralph stop myapp
   gralph doctor --dir .
   gralph cleanup
@@ -115,6 +115,8 @@ pub enum Command {
     Doctor(DoctorArgs),
     #[command(about = "View logs for a loop")]
     Logs(LogsArgs),
+    #[command(about = "Attach to a loop tmux session")]
+    Attach(AttachArgs),
     #[command(about = "Resume crashed/stopped loops")]
     Resume(ResumeArgs),
     #[command(about = "Initialize shared context files")]
@@ -163,12 +165,6 @@ pub struct StartArgs {
     pub webhook: Option<String>,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Disable automatic worktree creation")]
     pub no_worktree: bool,
-    #[arg(
-        long,
-        action = clap::ArgAction::SetTrue,
-        help = "Run in foreground (blocks; logs in .gralph/<session>.log)"
-    )]
-    pub no_tmux: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Validate PRD before starting the loop")]
     pub strict_prd: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Print the next task block and resolved prompt")]
@@ -207,6 +203,8 @@ pub struct RunLoopArgs {
     pub dir: PathBuf,
     #[arg(long, help = "Session name")]
     pub name: String,
+    #[arg(long)]
+    pub tmux_session: Option<String>,
     #[arg(long)]
     pub max_iterations: Option<u32>,
     #[arg(long)]
@@ -253,6 +251,12 @@ pub struct LogsArgs {
     pub follow: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Show raw backend output")]
     pub raw: bool,
+}
+
+#[derive(Args, Debug)]
+pub struct AttachArgs {
+    #[arg(value_name = "NAME", help = "Session name")]
+    pub name: String,
 }
 
 #[derive(Args, Debug)]
@@ -482,6 +486,17 @@ mod tests {
     }
 
     #[test]
+    fn parse_attach_command() {
+        let cli = Cli::parse_from(["gralph", "attach", "myapp"]);
+        match cli.command {
+            Some(Command::Attach(args)) => {
+                assert_eq!(args.name, "myapp");
+            }
+            other => panic!("Expected attach command, got: {other:?}"),
+        }
+    }
+
+    #[test]
     fn parse_cleanup_defaults() {
         let cli = Cli::parse_from(["gralph", "cleanup"]);
         match cli.command {
@@ -559,7 +574,6 @@ mod tests {
                 assert!(args.prompt_template.is_none());
                 assert!(args.webhook.is_none());
                 assert!(!args.no_worktree);
-                assert!(!args.no_tmux);
                 assert!(!args.strict_prd);
                 assert!(!args.dry_run);
             }
@@ -592,7 +606,6 @@ mod tests {
             "--webhook",
             "https://example.com/hook",
             "--no-worktree",
-            "--no-tmux",
             "--strict-prd",
         ]);
         match cli.command {
@@ -608,7 +621,6 @@ mod tests {
                 assert_eq!(args.prompt_template, Some(PathBuf::from("prompt.txt")));
                 assert_eq!(args.webhook.as_deref(), Some("https://example.com/hook"));
                 assert!(args.no_worktree);
-                assert!(args.no_tmux);
                 assert!(args.strict_prd);
                 assert!(!args.dry_run);
             }

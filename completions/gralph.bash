@@ -16,6 +16,9 @@ _gralph() {
             ",$1")
                 cmd="gralph"
                 ;;
+            gralph,attach)
+                cmd="gralph__attach"
+                ;;
             gralph,backends)
                 cmd="gralph__backends"
                 ;;
@@ -96,6 +99,9 @@ _gralph() {
                 ;;
             gralph__config__help,set)
                 cmd="gralph__config__help__set"
+                ;;
+            gralph__help,attach)
+                cmd="gralph__help__attach"
                 ;;
             gralph__help,backends)
                 cmd="gralph__help__backends"
@@ -218,8 +224,22 @@ _gralph() {
 
     case "${cmd}" in
         gralph)
-            opts="-h -V --help --version start step stop status cleanup doctor logs resume init prd worktree backends config verifier server version update run-loop help"
+            opts="-h -V --help --version start step stop status cleanup doctor logs attach resume init prd worktree backends config verifier server version update run-loop help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__attach)
+            opts="-h --help <NAME>"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -404,8 +424,22 @@ _gralph() {
             return 0
             ;;
         gralph__help)
-            opts="start step stop status cleanup doctor logs resume init prd worktree backends config verifier server version update run-loop help"
+            opts="start step stop status cleanup doctor logs attach resume init prd worktree backends config verifier server version update run-loop help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__attach)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
@@ -974,13 +1008,17 @@ _gralph() {
             return 0
             ;;
         gralph__run__loop)
-            opts="-h --name --max-iterations --task-file --completion-marker --backend --model --variant --prompt-template --webhook --no-worktree --strict-prd --help <DIR>"
+            opts="-h --name --tmux-session --max-iterations --task-file --completion-marker --backend --model --variant --prompt-template --webhook --no-worktree --strict-prd --help <DIR>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
                 --name)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --tmux-session)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -1062,7 +1100,7 @@ _gralph() {
             return 0
             ;;
         gralph__start)
-            opts="-n -f -b -m -h --name --max-iterations --task-file --completion-marker --backend --model --variant --prompt-template --webhook --no-worktree --no-tmux --strict-prd --dry-run --help <DIR>"
+            opts="-n -f -b -m -h --name --max-iterations --task-file --completion-marker --backend --model --variant --prompt-template --webhook --no-worktree --strict-prd --dry-run --help <DIR>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

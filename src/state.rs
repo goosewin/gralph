@@ -1507,4 +1507,194 @@ mod tests {
         }
         assert!(validate_state_content("{\"sessions\":{}}").is_ok());
     }
+
+    #[test]
+    fn state_error_display_formats_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let err = StateError::Io {
+            path: PathBuf::from("/tmp/state.json"),
+            source: io_err,
+        };
+        let display = format!("{err}");
+        assert!(display.contains("state io error"));
+        assert!(display.contains("/tmp/state.json"));
+        assert!(display.contains("file not found"));
+    }
+
+    #[test]
+    fn state_error_display_formats_json_error() {
+        let json_err: serde_json::Error = serde_json::from_str::<Value>("invalid").unwrap_err();
+        let err = StateError::Json {
+            path: PathBuf::from("/tmp/state.json"),
+            source: json_err,
+        };
+        let display = format!("{err}");
+        assert!(display.contains("state json error"));
+        assert!(display.contains("/tmp/state.json"));
+    }
+
+    #[test]
+    fn state_error_display_formats_lock_timeout() {
+        let err = StateError::LockTimeout {
+            timeout: Duration::from_secs(5),
+        };
+        let display = format!("{err}");
+        assert!(display.contains("failed to acquire state lock"));
+        assert!(display.contains("5s"));
+    }
+
+    #[test]
+    fn state_error_display_formats_invalid_session_name() {
+        let err = StateError::InvalidSessionName;
+        let display = format!("{err}");
+        assert!(display.contains("session name is required"));
+    }
+
+    #[test]
+    fn state_error_display_formats_invalid_state() {
+        let err = StateError::InvalidState("custom error message".to_string());
+        let display = format!("{err}");
+        assert!(display.contains("invalid state"));
+        assert!(display.contains("custom error message"));
+    }
+
+    #[test]
+    fn state_error_source_returns_io_error() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "access denied");
+        let err = StateError::Io {
+            path: PathBuf::from("/tmp/state.json"),
+            source: io_err,
+        };
+        let source = err.source();
+        assert!(source.is_some());
+        let source_display = format!("{}", source.unwrap());
+        assert!(source_display.contains("access denied"));
+    }
+
+    #[test]
+    fn state_error_source_returns_json_error() {
+        let json_err: serde_json::Error = serde_json::from_str::<Value>("{bad}").unwrap_err();
+        let err = StateError::Json {
+            path: PathBuf::from("/tmp/state.json"),
+            source: json_err,
+        };
+        let source = err.source();
+        assert!(source.is_some());
+    }
+
+    #[test]
+    fn state_error_source_returns_none_for_lock_timeout() {
+        let err = StateError::LockTimeout {
+            timeout: Duration::from_secs(10),
+        };
+        assert!(err.source().is_none());
+    }
+
+    #[test]
+    fn state_error_source_returns_none_for_invalid_session_name() {
+        let err = StateError::InvalidSessionName;
+        assert!(err.source().is_none());
+    }
+
+    #[test]
+    fn state_error_source_returns_none_for_invalid_state() {
+        let err = StateError::InvalidState("test".to_string());
+        assert!(err.source().is_none());
+    }
+
+    #[test]
+    fn cleanup_stale_returns_empty_when_no_sessions() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        store.init_state().unwrap();
+
+        let cleaned = store.cleanup_stale(CleanupMode::Mark).unwrap();
+        assert!(cleaned.is_empty());
+
+        let cleaned = store.cleanup_stale(CleanupMode::Remove).unwrap();
+        assert!(cleaned.is_empty());
+    }
+
+    #[test]
+    fn cleanup_stale_does_not_write_state_when_no_changes() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        store.init_state().unwrap();
+
+        store
+            .set_session("complete", &[("status", "complete"), ("pid", "123")])
+            .unwrap();
+
+        let before_mtime = fs::metadata(&store.state_file).unwrap().modified().unwrap();
+        thread::sleep(Duration::from_millis(50));
+
+        let cleaned = store.cleanup_stale(CleanupMode::Mark).unwrap();
+        assert!(cleaned.is_empty());
+
+        let after_mtime = fs::metadata(&store.state_file).unwrap().modified().unwrap();
+        assert_eq!(before_mtime, after_mtime);
+    }
+
+    #[test]
+    fn purge_all_returns_empty_when_no_sessions() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        store.init_state().unwrap();
+
+        let purged = store.purge_all().unwrap();
+        assert!(purged.is_empty());
+    }
+
+    #[test]
+    fn purge_all_does_not_write_state_when_no_sessions() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path(), Duration::from_secs(1));
+        store.init_state().unwrap();
+
+        let before_mtime = fs::metadata(&store.state_file).unwrap().modified().unwrap();
+        thread::sleep(Duration::from_millis(50));
+
+        let purged = store.purge_all().unwrap();
+        assert!(purged.is_empty());
+
+        let after_mtime = fs::metadata(&store.state_file).unwrap().modified().unwrap();
+        assert_eq!(before_mtime, after_mtime);
+    }
+
+    #[test]
+    fn parse_value_handles_unicode_and_special_chars() {
+        assert_eq!(parse_value("héllo"), Value::String("héllo".to_string()));
+        assert_eq!(parse_value("日本語"), Value::String("日本語".to_string()));
+        assert_eq!(parse_value("🚀"), Value::String("🚀".to_string()));
+        assert_eq!(parse_value("a\nb"), Value::String("a\nb".to_string()));
+        assert_eq!(parse_value("a\tb"), Value::String("a\tb".to_string()));
+    }
+
+    #[test]
+    fn parse_value_handles_max_i64_boundary() {
+        let max_i64 = i64::MAX.to_string();
+        let parsed = parse_value(&max_i64);
+        assert_eq!(parsed.as_i64(), Some(i64::MAX));
+
+        let overflow = format!("{}0", i64::MAX);
+        assert_eq!(parse_value(&overflow), Value::String(overflow.clone()));
+    }
+
+    #[test]
+    fn parse_value_handles_single_digit_strings() {
+        assert_eq!(parse_value("0").as_i64(), Some(0));
+        assert_eq!(parse_value("1").as_i64(), Some(1));
+        assert_eq!(parse_value("9").as_i64(), Some(9));
+    }
+
+    #[test]
+    fn parse_value_handles_bool_substrings() {
+        assert_eq!(parse_value("trueish"), Value::String("trueish".to_string()));
+        assert_eq!(
+            parse_value("falsehood"),
+            Value::String("falsehood".to_string())
+        );
+        assert_eq!(parse_value("atrue"), Value::String("atrue".to_string()));
+        assert_eq!(parse_value("afalse"), Value::String("afalse".to_string()));
+    }
 }

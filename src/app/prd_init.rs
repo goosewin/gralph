@@ -1,4 +1,4 @@
-use super::{CliError, join_or_none, normalize_csv};
+use super::{join_or_none, normalize_csv, CliError};
 use crate::backend::backend_from_name;
 use crate::cli::{InitArgs, PrdArgs, PrdCheckArgs, PrdCommand, PrdCreateArgs};
 use crate::config::Config;
@@ -8,6 +8,8 @@ use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(super) fn cmd_prd(args: PrdArgs) -> Result<(), CliError> {
     match args.command {
@@ -90,14 +92,14 @@ pub(super) fn cmd_init(args: InitArgs) -> Result<(), CliError> {
     Ok(())
 }
 
-fn cmd_prd_check(args: PrdCheckArgs) -> Result<(), CliError> {
+pub(super) fn cmd_prd_check(args: PrdCheckArgs) -> Result<(), CliError> {
     prd::prd_validate_file(&args.file, args.allow_missing_context, None)
         .map_err(|err| CliError::Message(err.to_string()))?;
     println!("PRD validation passed: {}", args.file.display());
     Ok(())
 }
 
-fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
+pub(super) fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
     let target_dir = args
         .dir
         .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
@@ -511,16 +513,46 @@ pub(super) fn add_context_entry(
     output.push(display);
 }
 
+static ALLOWED_CONTEXT_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
 pub(super) fn write_allowed_context(entries: &[String]) -> Result<Option<PathBuf>, CliError> {
     if entries.is_empty() {
         return Ok(None);
     }
-    let path = env::temp_dir().join(format!("gralph-context-{}.txt", std::process::id()));
-    let mut file = fs::File::create(&path).map_err(CliError::Io)?;
-    for entry in entries {
-        writeln!(file, "{}", entry).map_err(CliError::Io)?;
+    let temp_dir = env::temp_dir();
+    let mut attempts = 0;
+    loop {
+        let counter = ALLOWED_CONTEXT_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let path = temp_dir.join(format!(
+            "gralph-context-{}-{}-{}.txt",
+            std::process::id(),
+            nanos,
+            counter
+        ));
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(mut file) => {
+                for entry in entries {
+                    writeln!(file, "{}", entry).map_err(CliError::Io)?;
+                }
+                return Ok(Some(path));
+            }
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                attempts += 1;
+                if attempts > 3 {
+                    return Err(CliError::Io(err));
+                }
+            }
+            Err(err) => return Err(CliError::Io(err)),
+        }
     }
-    Ok(Some(path))
 }
 
 pub(super) const DEFAULT_PRD_TEMPLATE: &str = "## Overview\n\nBriefly describe the project, goals, and intended users.\n\n## Problem Statement\n\n- What problem does this solve?\n- What pain points exist today?\n\n## Solution\n\nHigh-level solution summary.\n\n---\n\n## Functional Requirements\n\n### FR-1: Core Feature\n\nDescribe the primary user-facing behavior.\n\n### FR-2: Secondary Feature\n\nDescribe supporting behavior.\n\n---\n\n## Non-Functional Requirements\n\n### NFR-1: Performance\n\n- Example: Response times under 200ms for key operations.\n\n### NFR-2: Reliability\n\n- Example: Crash recovery or retries where appropriate.\n\n---\n\n## Implementation Tasks\n\nEach task must use a `### Task <ID>` block header and include the required fields.\nEach task block must contain exactly one unchecked task line.\n\n### Task EX-1\n\n- **ID** EX-1\n- **Context Bundle** `path/to/file`, `path/to/other`\n- **DoD** Define the done criteria for this task.\n- **Checklist**\n  * First verification item.\n  * Second verification item.\n- **Dependencies** None\n- [ ] EX-1 Short task summary\n\n---\n\n## Success Criteria\n\n- Define measurable outcomes that indicate completion.\n\n---\n\n## Sources\n\n- List authoritative URLs used as source of truth.\n\n---\n\n## Warnings\n\n- Only include this section if no reliable sources were found.\n- State what is missing and what must be verified.\n";

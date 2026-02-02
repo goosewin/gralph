@@ -3591,4 +3591,1270 @@ mod tests {
             .collect();
         assert_eq!(rel, vec!["notes.txt", "src/main.rs"]);
     }
+
+    // COV80-VER-1: Pipeline entry and stack detection tests
+
+    #[test]
+    fn verifier_stack_defaults_detects_rust_with_cargo_toml() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(
+            temp.path().join("Cargo.toml"),
+            "[package]\nname = \"demo\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        let defaults = VerifierStackDefaults::from_dir(temp.path());
+        assert!(defaults.uses_rust_defaults());
+        assert!(!defaults.requires_explicit_commands());
+    }
+
+    #[test]
+    fn verifier_stack_defaults_detects_non_rust_without_cargo() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("package.json"), "{}\n").unwrap();
+        let defaults = VerifierStackDefaults::from_dir(temp.path());
+        assert!(!defaults.uses_rust_defaults());
+        assert!(defaults.requires_explicit_commands());
+    }
+
+    #[test]
+    fn verifier_stack_defaults_detects_non_rust_empty_dir() {
+        let temp = tempfile::tempdir().unwrap();
+        let defaults = VerifierStackDefaults::from_dir(temp.path());
+        assert!(!defaults.uses_rust_defaults());
+        assert!(defaults.requires_explicit_commands());
+    }
+
+    #[test]
+    fn stack_root_for_detection_uses_git_root_when_present() {
+        let repo = init_git_repo("main");
+        let subdir = repo.path().join("nested");
+        fs::create_dir_all(&subdir).unwrap();
+        let root = stack_root_for_detection(&subdir);
+        // Canonicalize both paths to handle macOS /private/var vs /var symlinks
+        let expected = repo.path().canonicalize().unwrap();
+        let actual = root.canonicalize().unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn stack_root_for_detection_falls_back_to_dir_without_git() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = stack_root_for_detection(temp.path());
+        assert_eq!(root, temp.path());
+    }
+
+    #[test]
+    fn is_rust_stack_true_for_rust_id() {
+        let detection = prd::StackDetection {
+            root: None,
+            ids: vec!["Rust".to_string()],
+            languages: vec![],
+            frameworks: vec![],
+            tools: vec![],
+            runtimes: vec![],
+            package_managers: vec![],
+            evidence: vec![],
+            selected_ids: vec![],
+        };
+        assert!(is_rust_stack(&detection));
+    }
+
+    #[test]
+    fn is_rust_stack_true_for_cargo_tool() {
+        let detection = prd::StackDetection {
+            root: None,
+            ids: vec![],
+            languages: vec![],
+            frameworks: vec![],
+            tools: vec!["Cargo".to_string()],
+            runtimes: vec![],
+            package_managers: vec![],
+            evidence: vec![],
+            selected_ids: vec![],
+        };
+        assert!(is_rust_stack(&detection));
+    }
+
+    #[test]
+    fn is_rust_stack_false_for_non_rust() {
+        let detection = prd::StackDetection {
+            root: None,
+            ids: vec!["JavaScript".to_string()],
+            languages: vec![],
+            frameworks: vec![],
+            tools: vec!["npm".to_string()],
+            runtimes: vec![],
+            package_managers: vec![],
+            evidence: vec![],
+            selected_ids: vec![],
+        };
+        assert!(!is_rust_stack(&detection));
+    }
+
+    #[test]
+    fn is_rust_stack_false_for_empty_detection() {
+        let detection = prd::StackDetection {
+            root: None,
+            ids: vec![],
+            languages: vec![],
+            frameworks: vec![],
+            tools: vec![],
+            runtimes: vec![],
+            package_managers: vec![],
+            evidence: vec![],
+            selected_ids: vec![],
+        };
+        assert!(!is_rust_stack(&detection));
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_tarpaulin_full_output() {
+        let output = r#"
+Jun 15 10:23:45.123 INFO cargo_tarpaulin::statemachine: running test
+test tests::sample_test ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+Jun 15 10:23:46.456 INFO cargo_tarpaulin::report: Coverage Results: 73.42%
+"#;
+        assert_eq!(extract_coverage_percent(output), Some(73.42));
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_tarpaulin_workspace_output() {
+        let output = r#"
+Running tests
+test src/config.rs::tests::test_config_load ... ok
+test src/state.rs::tests::test_state ... ok
+
+|| Tested/Total Lines:
+|| src/config.rs: 45/50
+|| src/state.rs: 80/100
+||
+75.00% coverage, 125/150 lines covered
+Coverage Results: 75.00%
+"#;
+        assert_eq!(extract_coverage_percent(output), Some(75.0));
+    }
+
+    #[test]
+    fn extract_coverage_percent_prefers_results_over_coverage_line() {
+        let output = "Total coverage: 65.00%\nCoverage Results: 70.50%";
+        assert_eq!(extract_coverage_percent(output), Some(70.50));
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_decimal_precision() {
+        let output = "Coverage Results: 81.234567%";
+        let result = extract_coverage_percent(output).unwrap();
+        assert!((result - 81.234567).abs() < 1e-6);
+    }
+
+    #[test]
+    fn extract_coverage_percent_handles_integer_percent() {
+        let output = "Coverage Results: 90%";
+        assert_eq!(extract_coverage_percent(output), Some(90.0));
+    }
+
+    #[test]
+    fn resolve_verifier_command_uses_user_config_when_require_explicit() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(
+            temp.path().join(".gralph.yaml"),
+            "verifier:\n  test_command: \"npm test\"\n",
+        )
+        .unwrap();
+        let config = Config::load(Some(temp.path())).unwrap();
+        let command =
+            resolve_verifier_command(None, &config, "verifier.test_command", "", true).unwrap();
+        assert_eq!(command, "npm test");
+    }
+
+    #[test]
+    fn resolve_verifier_command_arg_overrides_config_for_non_rust() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(
+            temp.path().join(".gralph.yaml"),
+            "verifier:\n  test_command: \"npm test\"\n",
+        )
+        .unwrap();
+        let config = Config::load(Some(temp.path())).unwrap();
+        let command = resolve_verifier_command(
+            Some("yarn test".to_string()),
+            &config,
+            "verifier.test_command",
+            "",
+            true,
+        )
+        .unwrap();
+        assert_eq!(command, "yarn test");
+    }
+
+    #[test]
+    fn resolve_verifier_command_trims_whitespace() {
+        let config = Config::load(None).unwrap();
+        let command = resolve_verifier_command(
+            Some("  cargo test  ".to_string()),
+            &config,
+            "verifier.test_command",
+            DEFAULT_TEST_COMMAND,
+            false,
+        )
+        .unwrap();
+        assert_eq!(command, "cargo test");
+    }
+
+    #[test]
+    fn verifier_stack_defaults_equality() {
+        assert_eq!(VerifierStackDefaults::Rust, VerifierStackDefaults::Rust);
+        assert_eq!(
+            VerifierStackDefaults::NonRust,
+            VerifierStackDefaults::NonRust
+        );
+        assert_ne!(VerifierStackDefaults::Rust, VerifierStackDefaults::NonRust);
+    }
+
+    // COV80-VER-2: Static check pipeline tests
+
+    #[test]
+    fn run_verifier_static_checks_skips_when_disabled() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src")).unwrap();
+        fs::write(temp.path().join("src/lib.rs"), "// TODO: fix\n").unwrap();
+        let config = load_project_config("verifier:\n  static_checks:\n    enabled: false\n");
+
+        // Should succeed even with TODO markers when disabled
+        let result = run_verifier_static_checks(temp.path(), &config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_verifier_static_checks_passes_with_no_files() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config = load_project_config(
+            "verifier:\n  static_checks:\n    enabled: true\n    allow: \"src/*.rs\"\n",
+        );
+
+        // No src directory means no files to check
+        let result = run_verifier_static_checks(temp.path(), &config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_verifier_static_checks_passes_with_clean_files() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src")).unwrap();
+        fs::write(temp.path().join("src/lib.rs"), "fn main() {}\n").unwrap();
+        let config = load_project_config(
+            "verifier:\n  static_checks:\n    enabled: true\n    todo: true\n    comments: false\n    duplicate: false\n    allow: \"src/*.rs\"\n",
+        );
+
+        let result = run_verifier_static_checks(temp.path(), &config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_verifier_static_checks_reports_multiple_violations() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src")).unwrap();
+        fs::write(temp.path().join("src/a.rs"), "// TODO: fix\n").unwrap();
+        fs::write(temp.path().join("src/b.rs"), "// FIXME: later\n").unwrap();
+        let config = load_project_config(
+            "verifier:\n  static_checks:\n    enabled: true\n    todo: true\n    comments: false\n    duplicate: false\n    allow: \"src/*.rs\"\n    todo_markers: \"TODO,FIXME\"\n",
+        );
+
+        let err = run_verifier_static_checks(temp.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Static checks failed"));
+                assert!(message.contains("2"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn run_verifier_static_checks_with_verbose_comments() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src")).unwrap();
+        // Create a verbose comment block
+        let verbose_content = "// This is line one\n// This is line two\n// This is line three\n// This is line four\n// This is line five\n// This is line six\n// This is line seven\n// This is line eight\n// This is line nine\n// This is line ten\n// This is line eleven\n// This is line twelve\n// This is line thirteen\nfn main() {}\n";
+        fs::write(temp.path().join("src/lib.rs"), verbose_content).unwrap();
+        let config = load_project_config(
+            "verifier:\n  static_checks:\n    enabled: true\n    todo: false\n    comments: true\n    duplicate: false\n    allow: \"src/*.rs\"\n    max_comment_lines: 5\n    max_comment_chars: 100\n",
+        );
+
+        let err = run_verifier_static_checks(temp.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Static checks failed"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn run_verifier_static_checks_with_duplicate_blocks() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src")).unwrap();
+        // Create duplicate code blocks
+        let code = "fn helper() {\n    let x = 1;\n    let y = 2;\n    let z = 3;\n    let a = 4;\n    let b = 5;\n    let c = 6;\n    let d = 7;\n    let e = 8;\n}\n";
+        fs::write(temp.path().join("src/a.rs"), code).unwrap();
+        fs::write(temp.path().join("src/b.rs"), code).unwrap();
+        let config = load_project_config(
+            "verifier:\n  static_checks:\n    enabled: true\n    todo: false\n    comments: false\n    duplicate: true\n    allow: \"src/*.rs\"\n    duplicate_block_lines: 4\n    duplicate_min_alnum_lines: 2\n",
+        );
+
+        let err = run_verifier_static_checks(temp.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Static checks failed"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn violations_are_sorted_by_path_then_line() {
+        let mut violations = vec![
+            StaticViolation {
+                path: PathBuf::from("src/z.rs"),
+                line: 1,
+                message: "first".to_string(),
+            },
+            StaticViolation {
+                path: PathBuf::from("src/a.rs"),
+                line: 10,
+                message: "second".to_string(),
+            },
+            StaticViolation {
+                path: PathBuf::from("src/a.rs"),
+                line: 5,
+                message: "third".to_string(),
+            },
+        ];
+
+        violations.sort_by(|left, right| {
+            let left_path = left.path.to_string_lossy();
+            let right_path = right.path.to_string_lossy();
+            match left_path.cmp(&right_path) {
+                std::cmp::Ordering::Equal => left.line.cmp(&right.line),
+                ordering => ordering,
+            }
+        });
+
+        assert_eq!(violations[0].path, PathBuf::from("src/a.rs"));
+        assert_eq!(violations[0].line, 5);
+        assert_eq!(violations[1].path, PathBuf::from("src/a.rs"));
+        assert_eq!(violations[1].line, 10);
+        assert_eq!(violations[2].path, PathBuf::from("src/z.rs"));
+        assert_eq!(violations[2].line, 1);
+    }
+
+    #[test]
+    fn format_static_violation_path_uses_relative_path() {
+        let root = Path::new("/project");
+        let path = Path::new("/project/src/main.rs");
+        let formatted = format_static_violation_path(root, path, 42);
+        assert_eq!(formatted, "src/main.rs:42");
+    }
+
+    #[test]
+    fn format_static_violation_path_preserves_absolute_when_not_prefix() {
+        let root = Path::new("/project");
+        let path = Path::new("/other/src/main.rs");
+        let formatted = format_static_violation_path(root, path, 10);
+        assert_eq!(formatted, "/other/src/main.rs:10");
+    }
+
+    // COV80-VER-2: PR creation flow tests
+
+    #[test]
+    fn run_verifier_pr_create_fails_without_git_repo() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config = load_project_config("verifier:\n  pr:\n    base: main\n");
+
+        let err = run_verifier_pr_create(temp.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                // Should fail either on git rev-parse or indicate not a git repo
+                assert!(
+                    message.contains("git")
+                        || message.contains("repository")
+                        || message.contains("unable")
+                        || message.contains("fatal")
+                );
+            }
+            CliError::Io(_) => {
+                // Also acceptable - git command may fail with IO error
+            }
+        }
+    }
+
+    #[test]
+    fn run_verifier_pr_create_fails_on_detached_head() {
+        let _guard = env_guard();
+        let repo = init_git_repo("main");
+        // Create a detached HEAD state
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(repo.path())
+            .arg("rev-parse")
+            .arg("HEAD")
+            .output()
+            .unwrap();
+        let sha = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        run_git(repo.path(), &["checkout", &sha]);
+
+        let config = load_project_config("verifier:\n  pr:\n    base: main\n");
+
+        let err = run_verifier_pr_create(repo.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("detached HEAD") || message.contains("HEAD"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_verifier_pr_create_reports_gh_auth_failure() {
+        let _guard = env_guard();
+        let repo = init_git_repo("feature-branch");
+        let bin_dir = repo.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then echo 'not logged in' >&2; exit 1; fi\nexit 0\n",
+        );
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let config = load_project_config("verifier:\n  pr:\n    base: main\n");
+
+        let err = run_verifier_pr_create(repo.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("auth") || message.contains("login"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_verifier_pr_create_reports_empty_failure() {
+        let _guard = env_guard();
+        let repo = init_git_repo("feature-branch");
+        let bin_dir = repo.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        // Auth succeeds, but pr create fails with empty output
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then exit 0; fi\nexit 1\n",
+        );
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let config = load_project_config("verifier:\n  pr:\n    base: main\n");
+
+        let err = run_verifier_pr_create(repo.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("gh pr create failed"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_verifier_pr_create_succeeds_with_template() {
+        let _guard = env_guard();
+        let repo = init_git_repo("feature-branch");
+        fs::create_dir_all(repo.path().join(".github")).unwrap();
+        fs::write(
+            repo.path().join(".github/pull_request_template.md"),
+            "## Description\n\n",
+        )
+        .unwrap();
+        let bin_dir = repo.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        // Mock gh to succeed and output a URL
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then exit 0; fi\necho 'https://github.com/test/repo/pull/123'\nexit 0\n",
+        );
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let config = load_project_config("verifier:\n  pr:\n    base: main\n    title: test pr\n");
+
+        let result = run_verifier_pr_create(repo.path(), &config).unwrap();
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("github.com"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_verifier_pr_create_succeeds_without_template() {
+        let _guard = env_guard();
+        let repo = init_git_repo("feature-branch");
+        let bin_dir = repo.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then exit 0; fi\necho 'https://github.com/test/repo/pull/456'\nexit 0\n",
+        );
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let config = load_project_config("verifier:\n  pr:\n    base: main\n");
+
+        let result = run_verifier_pr_create(repo.path(), &config).unwrap();
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn extract_pr_url_finds_url_in_output() {
+        let output =
+            "Creating pull request for feature into main\nhttps://github.com/owner/repo/pull/123\n";
+        let url = extract_pr_url(output);
+        assert_eq!(
+            url,
+            Some("https://github.com/owner/repo/pull/123".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_pr_url_handles_http() {
+        let output = "PR: http://example.com/pr/1";
+        let url = extract_pr_url(output);
+        assert_eq!(url, Some("http://example.com/pr/1".to_string()));
+    }
+
+    #[test]
+    fn extract_pr_url_strips_trailing_punctuation() {
+        let output = "See https://github.com/test/pr/1);";
+        let url = extract_pr_url(output);
+        assert_eq!(url, Some("https://github.com/test/pr/1".to_string()));
+    }
+
+    #[test]
+    fn extract_pr_url_returns_none_without_url() {
+        let output = "No URL in this output";
+        let url = extract_pr_url(output);
+        assert!(url.is_none());
+    }
+
+    #[test]
+    fn resolve_verifier_pr_title_uses_config_value() {
+        let config = load_project_config("verifier:\n  pr:\n    title: custom title\n");
+        let title = resolve_verifier_pr_title(&config).unwrap();
+        assert_eq!(title, "custom title");
+    }
+
+    #[test]
+    fn resolve_verifier_pr_title_defaults_when_empty() {
+        let config = load_project_config("verifier:\n  pr:\n    title: \"\"\n");
+        let title = resolve_verifier_pr_title(&config).unwrap();
+        assert_eq!(title, DEFAULT_PR_TITLE);
+    }
+
+    #[test]
+    fn resolve_verifier_pr_title_trims_whitespace() {
+        let config = load_project_config("verifier:\n  pr:\n    title: \"  spaced title  \"\n");
+        let title = resolve_verifier_pr_title(&config).unwrap();
+        assert_eq!(title, "spaced title");
+    }
+
+    #[test]
+    fn resolve_pr_template_path_finds_github_lowercase() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join(".github")).unwrap();
+        fs::write(
+            temp.path().join(".github/pull_request_template.md"),
+            "template\n",
+        )
+        .unwrap();
+        let resolved = resolve_pr_template_path(temp.path());
+        assert!(resolved.is_some());
+        assert!(
+            resolved
+                .unwrap()
+                .to_string_lossy()
+                .contains("pull_request_template.md")
+        );
+    }
+
+    #[test]
+    fn resolve_pr_template_path_finds_github_uppercase() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join(".github")).unwrap();
+        fs::write(
+            temp.path().join(".github/PULL_REQUEST_TEMPLATE.md"),
+            "template\n",
+        )
+        .unwrap();
+        let resolved = resolve_pr_template_path(temp.path());
+        assert!(resolved.is_some());
+    }
+
+    #[test]
+    fn resolve_pr_template_path_finds_root_lowercase() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("pull_request_template.md"), "template\n").unwrap();
+        let resolved = resolve_pr_template_path(temp.path());
+        assert!(resolved.is_some());
+    }
+
+    #[test]
+    fn resolve_pr_template_path_finds_root_uppercase() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("PULL_REQUEST_TEMPLATE.md"), "template\n").unwrap();
+        let resolved = resolve_pr_template_path(temp.path());
+        assert!(resolved.is_some());
+    }
+
+    #[test]
+    fn resolve_verifier_pr_base_uses_config_value() {
+        let config = load_project_config("verifier:\n  pr:\n    base: develop\n");
+        let temp = tempfile::tempdir().unwrap();
+        let base = resolve_verifier_pr_base(&config, temp.path()).unwrap();
+        assert_eq!(base, "develop");
+    }
+
+    #[test]
+    fn map_gh_error_identifies_not_found() {
+        let err = map_gh_error(io::Error::new(io::ErrorKind::NotFound, "not found"));
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("gh CLI not found"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn map_gh_error_preserves_other_io_errors() {
+        let err = map_gh_error(io::Error::new(io::ErrorKind::PermissionDenied, "denied"));
+        assert!(matches!(err, CliError::Io(_)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_gh_authenticated_reports_detailed_failure() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\necho 'You are not logged in' >&2\nexit 1\n",
+        );
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let err = ensure_gh_authenticated(temp.path()).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("not logged in"));
+                assert!(message.contains("gh auth login"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_gh_authenticated_reports_empty_failure() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\nexit 1\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let err = ensure_gh_authenticated(temp.path()).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("gh auth status failed"));
+                assert!(message.contains("gh auth login"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_gh_authenticated_succeeds_when_logged_in() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\necho 'Logged in'\nexit 0\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let result = ensure_gh_authenticated(temp.path());
+        assert!(result.is_ok());
+    }
+
+    // COV80-VER-3: Review gate polling tests
+
+    #[test]
+    fn merge_method_as_flag_returns_correct_flags() {
+        assert_eq!(MergeMethod::Merge.as_flag(), "--merge");
+        assert_eq!(MergeMethod::Squash.as_flag(), "--squash");
+        assert_eq!(MergeMethod::Rebase.as_flag(), "--rebase");
+    }
+
+    #[test]
+    fn gate_decision_is_passed_returns_true_for_passed() {
+        let decision = GateDecision::Passed("ok".to_string());
+        assert!(decision.is_passed());
+        assert!(!decision.is_failed());
+    }
+
+    #[test]
+    fn gate_decision_is_failed_returns_true_for_failed() {
+        let decision = GateDecision::Failed("error".to_string());
+        assert!(decision.is_failed());
+        assert!(!decision.is_passed());
+    }
+
+    #[test]
+    fn gate_decision_pending_returns_false_for_both_checks() {
+        let decision = GateDecision::Pending("waiting".to_string());
+        assert!(!decision.is_passed());
+        assert!(!decision.is_failed());
+    }
+
+    #[test]
+    fn gate_decision_summary_returns_message() {
+        assert_eq!(
+            GateDecision::Passed("all good".to_string()).summary(),
+            "all good"
+        );
+        assert_eq!(
+            GateDecision::Failed("failed check".to_string()).summary(),
+            "failed check"
+        );
+        assert_eq!(
+            GateDecision::Pending("waiting for CI".to_string()).summary(),
+            "waiting for CI"
+        );
+    }
+
+    #[test]
+    fn evaluate_review_gate_skips_approval_when_not_required() {
+        let mut settings = base_review_settings();
+        settings.require_approval = false;
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "COMMENTED",
+                    "body": "Rating: 9/10",
+                    "submittedAt": "2024-01-02T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(_)));
+    }
+
+    #[test]
+    fn evaluate_review_gate_uses_latest_review_by_timestamp() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "APPROVED",
+                    "body": "Rating: 9/10",
+                    "submittedAt": "2024-01-01T00:00:00Z"
+                },
+                {
+                    "author": { "login": "greptile" },
+                    "state": "CHANGES_REQUESTED",
+                    "body": "Rating: 9/10",
+                    "submittedAt": "2024-01-02T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Failed(message) if message.contains("requested")));
+    }
+
+    #[test]
+    fn evaluate_review_gate_allows_issue_budget_when_configured() {
+        let mut settings = base_review_settings();
+        settings.max_issues = 3;
+        let pr_view = json!({
+            "reviews": [
+                {
+                    "author": { "login": "greptile" },
+                    "state": "APPROVED",
+                    "body": "Rating: 9/10\nIssues: 2",
+                    "submittedAt": "2024-01-02T00:00:00Z"
+                }
+            ]
+        });
+        let decision = evaluate_review_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(_)));
+    }
+
+    #[test]
+    fn evaluate_check_gate_reports_failed_on_timed_out() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "COMPLETED",
+                    "conclusion": "TIMED_OUT"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Failed(message) if message.contains("ci")));
+    }
+
+    #[test]
+    fn evaluate_check_gate_reports_failed_on_stale() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "COMPLETED",
+                    "conclusion": "STALE"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Failed(message) if message.contains("ci")));
+    }
+
+    #[test]
+    fn evaluate_check_gate_passes_with_neutral_conclusion() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "COMPLETED",
+                    "conclusion": "NEUTRAL"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(_)));
+    }
+
+    #[test]
+    fn evaluate_check_gate_passes_with_skipped_conclusion() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "ci",
+                    "status": "COMPLETED",
+                    "conclusion": "SKIPPED"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        assert!(matches!(decision, GateDecision::Passed(_)));
+    }
+
+    #[test]
+    fn evaluate_check_gate_reports_multiple_failed_checks() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "build",
+                    "status": "COMPLETED",
+                    "conclusion": "FAILURE"
+                },
+                {
+                    "name": "lint",
+                    "status": "COMPLETED",
+                    "conclusion": "FAILURE"
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        match decision {
+            GateDecision::Failed(message) => {
+                assert!(message.contains("build"));
+                assert!(message.contains("lint"));
+            }
+            _ => panic!("expected Failed decision"),
+        }
+    }
+
+    #[test]
+    fn evaluate_check_gate_reports_multiple_pending_checks() {
+        let settings = base_review_settings();
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "name": "build",
+                    "status": "IN_PROGRESS",
+                    "conclusion": ""
+                },
+                {
+                    "name": "lint",
+                    "status": "QUEUED",
+                    "conclusion": ""
+                }
+            ]
+        });
+        let decision = evaluate_check_gate(&pr_view, &settings).unwrap();
+        match decision {
+            GateDecision::Pending(message) => {
+                assert!(message.contains("build"));
+                assert!(message.contains("lint"));
+            }
+            _ => panic!("expected Pending decision"),
+        }
+    }
+
+    #[test]
+    fn resolve_review_gate_settings_defaults_poll_seconds() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  review:\n    poll_seconds: \"\"\n");
+        let settings = resolve_review_gate_settings(&config).unwrap();
+        assert_eq!(settings.poll_seconds, DEFAULT_REVIEW_POLL_SECONDS);
+    }
+
+    #[test]
+    fn resolve_review_gate_settings_rejects_short_poll_seconds() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  review:\n    poll_seconds: 2\n");
+        let err = resolve_review_gate_settings(&config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("poll_seconds"));
+                assert!(message.contains("minimum"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_review_gate_settings_accepts_edge_poll_seconds() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  review:\n    poll_seconds: 5\n");
+        let settings = resolve_review_gate_settings(&config).unwrap();
+        assert_eq!(settings.poll_seconds, 5);
+    }
+
+    #[test]
+    fn resolve_review_gate_settings_accepts_edge_timeout_seconds() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  review:\n    timeout_seconds: 30\n");
+        let settings = resolve_review_gate_settings(&config).unwrap();
+        assert_eq!(settings.timeout_seconds, 30);
+    }
+
+    #[test]
+    fn resolve_review_gate_merge_method_defaults_to_merge() {
+        let method = resolve_review_gate_merge_method(None).unwrap();
+        assert!(matches!(method, MergeMethod::Merge));
+    }
+
+    #[test]
+    fn resolve_review_gate_merge_method_handles_empty_string() {
+        let method = resolve_review_gate_merge_method(Some("".to_string())).unwrap();
+        assert!(matches!(method, MergeMethod::Merge));
+    }
+
+    #[test]
+    fn resolve_review_gate_merge_method_accepts_squash() {
+        let method = resolve_review_gate_merge_method(Some("squash".to_string())).unwrap();
+        assert!(matches!(method, MergeMethod::Squash));
+    }
+
+    #[test]
+    fn resolve_review_gate_merge_method_accepts_rebase() {
+        let method = resolve_review_gate_merge_method(Some("rebase".to_string())).unwrap();
+        assert!(matches!(method, MergeMethod::Rebase));
+    }
+
+    #[test]
+    fn resolve_review_gate_merge_method_is_case_insensitive() {
+        let method = resolve_review_gate_merge_method(Some("SQUASH".to_string())).unwrap();
+        assert!(matches!(method, MergeMethod::Squash));
+        let method = resolve_review_gate_merge_method(Some("REBASE".to_string())).unwrap();
+        assert!(matches!(method, MergeMethod::Rebase));
+        let method = resolve_review_gate_merge_method(Some("MERGE".to_string())).unwrap();
+        assert!(matches!(method, MergeMethod::Merge));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_gh_pr_merge_uses_merge_flag() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\nif echo \"$@\" | grep -q -- '--merge'; then echo merged; exit 0; fi; exit 1\n",
+        );
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let result = run_gh_pr_merge(temp.path(), MergeMethod::Merge);
+        assert!(result.is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_gh_pr_merge_uses_squash_flag() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\nif echo \"$@\" | grep -q -- '--squash'; then echo squashed; exit 0; fi; exit 1\n",
+        );
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let result = run_gh_pr_merge(temp.path(), MergeMethod::Squash);
+        assert!(result.is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_gh_pr_merge_uses_rebase_flag() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\nif echo \"$@\" | grep -q -- '--rebase'; then echo rebased; exit 0; fi; exit 1\n",
+        );
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let result = run_gh_pr_merge(temp.path(), MergeMethod::Rebase);
+        assert!(result.is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_gh_pr_merge_reports_failure_with_message() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\necho 'merge conflict' >&2\nexit 1\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let err = run_gh_pr_merge(temp.path(), MergeMethod::Merge).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("gh pr merge failed"));
+                assert!(message.contains("merge conflict"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_gh_pr_merge_reports_empty_failure() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\nexit 1\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let err = run_gh_pr_merge(temp.path(), MergeMethod::Merge).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert_eq!(message, "gh pr merge failed.");
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gh_pr_view_json_parses_valid_output() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\necho '{\"url\":\"https://github.com/test/pr/1\",\"number\":1}'\nexit 0\n",
+        );
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let result = gh_pr_view_json(temp.path()).unwrap();
+        assert_eq!(result.get("number").and_then(|v| v.as_i64()), Some(1));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gh_pr_view_json_reports_empty_failure() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\nexit 1\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let err = gh_pr_view_json(temp.path()).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert_eq!(message, "gh pr view failed.");
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gh_pr_view_json_reports_parse_error_for_invalid_json() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\necho 'not valid json'\nexit 0\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let err = gh_pr_view_json(temp.path()).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("Unable to parse gh pr view output"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn find_reviewer_review_returns_none_for_empty_reviews() {
+        let reviews: Vec<serde_json::Value> = vec![];
+        let result = find_reviewer_review(&reviews, "greptile");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn find_reviewer_review_matches_case_insensitive() {
+        let reviews = vec![json!({
+            "author": { "login": "GREPTILE" },
+            "state": "APPROVED",
+            "body": "Rating: 9/10",
+            "submittedAt": "2024-01-02T00:00:00Z"
+        })];
+        let result = find_reviewer_review(&reviews, "greptile");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().state, "APPROVED");
+    }
+
+    #[test]
+    fn find_reviewer_review_uses_created_at_fallback() {
+        let reviews = vec![json!({
+            "author": { "login": "greptile" },
+            "state": "APPROVED",
+            "body": "Rating: 9/10",
+            "createdAt": "2024-01-02T00:00:00Z"
+        })];
+        let result = find_reviewer_review(&reviews, "greptile");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().submitted_at, "2024-01-02T00:00:00Z");
+    }
+
+    #[test]
+    fn find_reviewer_review_defaults_state_to_commented() {
+        let reviews = vec![json!({
+            "author": { "login": "greptile" },
+            "body": "Rating: 9/10",
+            "submittedAt": "2024-01-02T00:00:00Z"
+        })];
+        let result = find_reviewer_review(&reviews, "greptile");
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().state, "COMMENTED");
+    }
+
+    #[test]
+    fn extract_check_rollup_returns_empty_for_missing_field() {
+        let pr_view = json!({});
+        let checks = extract_check_rollup(&pr_view);
+        assert!(checks.is_empty());
+    }
+
+    #[test]
+    fn extract_check_rollup_uses_context_fallback_for_name() {
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "context": "ci-check",
+                    "status": "COMPLETED",
+                    "conclusion": "SUCCESS"
+                }
+            ]
+        });
+        let checks = extract_check_rollup(&pr_view);
+        assert_eq!(checks.len(), 1);
+        assert_eq!(checks[0].name, "ci-check");
+    }
+
+    #[test]
+    fn extract_check_rollup_defaults_name_to_unknown() {
+        let pr_view = json!({
+            "statusCheckRollup": [
+                {
+                    "status": "COMPLETED",
+                    "conclusion": "SUCCESS"
+                }
+            ]
+        });
+        let checks = extract_check_rollup(&pr_view);
+        assert_eq!(checks.len(), 1);
+        assert_eq!(checks[0].name, "unknown");
+    }
+
+    #[test]
+    fn run_verifier_review_gate_skips_when_disabled() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  review:\n    enabled: false\n");
+        let temp = tempfile::tempdir().unwrap();
+
+        // Should succeed immediately without checking git or gh
+        let result = run_verifier_review_gate(temp.path(), &config, None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn run_verifier_review_gate_fails_without_git_repo() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  review:\n    enabled: true\n");
+        let temp = tempfile::tempdir().unwrap();
+
+        let err = run_verifier_review_gate(temp.path(), &config, None).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                // Should fail on git rev-parse or indicate not in a repo
+                assert!(
+                    message.contains("git")
+                        || message.contains("repository")
+                        || message.contains("fatal")
+                );
+            }
+            _ => {}
+        }
+    }
 }

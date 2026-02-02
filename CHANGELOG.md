@@ -14,7 +14,29 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- TMUX-3 Add attach command for tmux sessions.
+- COV80-WT-1 Add worktree git helper tests for git_output_in_dir, create_worktree_at, cmd_worktree_finish, and validate_task_id.
+
 ### Changed
+
+- TMUX-1 Remove --no-tmux flag from CLI and completions; document tmux as required.
+- TMUX-2 Require tmux sessions for start and persist tmux session names in state.
+- WT-1 Run auto worktree loops from `.worktrees/<unique-worktree>`.
+- WT-2 Auto-commit dirty repos before auto worktree creation.
+- COV-70-1 Add tmux availability and session collision tests.
+- COV-70-3 Add auto worktree skip and path mapping tests.
+- COV80-LS-3 Add loop_session failure path tests for notification flows and callbacks.
+- COV80-LS-4 Add loop_session dry-run and step execution tests.
+- COV80-VER-2 Add verifier static check pipeline and PR creation flow tests.
+- COV80-VER-3 Add verifier review gate polling tests for timeout, approval, and merge method.
+- COV80-APP-1 Add app CLI dispatch tests for error formatting and subcommand routing.
+- COV80-APP-3 Add app doctor and init tests for config errors, backend checks, and scaffolding paths.
+- COV80-PRD-2 Add PRD sanitize tests for context filtering and Open Questions removal.
+- COV80-PRD-3 Add PRD stack detection tests for framework and tool detection.
+- COV80-STATE-1 Add state store edge case tests for StateError Display/source and parse_value edge cases.
+- COV80-CONFIG-1 Add config loader edge case tests for ConfigError Display/source, get_user merge precedence, and env override handling.
+- COV80-UPDATE-1 Add update module tests for UpdateError Display variants, version parsing, install_release success path, and archive extraction errors.
+- COV80-FINAL-1 Verified 80% coverage threshold met (84.74% actual, 3715/4384 lines covered, 1319 tests passed).
 
 ### Fixed
 
