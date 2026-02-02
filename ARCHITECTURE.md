@@ -25,6 +25,7 @@ doctor diagnostics.
 `src/version.rs` defines the CLI version constants.
 
 `src/backend` defines the backend trait and CLI-backed implementations (`backend/mod.rs` plus `backend/claude.rs`, `backend/opencode.rs`, `backend/gemini.rs`, `backend/codex.rs`).
+`src/coordinator.rs` manages multi-agent orchestration for parallel task execution. The `Coordinator` struct maintains an agent pool with configurable capacity, a `WorkQueue` for dependency-aware task distribution, and lifecycle management (spawn, assign, complete, fail). `TaskNode` represents tasks with their dependencies, `topological_sort` orders tasks respecting dependencies with cycle detection, and `find_independent_tasks` identifies parallelizable work.
 `src/notify.rs` formats and sends webhook notifications via reqwest.
 
 ## Frontend

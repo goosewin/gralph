@@ -14,6 +14,17 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-11 Add multi-agent coordinator module (`src/coordinator.rs`) for parallel task orchestration.
+- MC-11 Add Coordinator struct managing agent pool with configurable max_agents limit.
+- MC-11 Add WorkQueue for task distribution with dependency-aware scheduling.
+- MC-11 Add Agent struct with status tracking (Idle/Working/Failed) and worktree path support.
+- MC-11 Add TaskNode struct with id, content, and dependencies for task graph representation.
+- MC-11 Add topological_sort for ordering tasks by dependencies with cycle detection.
+- MC-11 Add find_independent_tasks to identify parallelizable tasks with satisfied dependencies.
+- MC-11 Add tasks_from_prd parser to extract unchecked task blocks with their dependencies.
+- MC-11 Add parse_task_dependencies and parse_task_id helpers for PRD content parsing.
+- MC-11 Add CoordinatorError for no available agents, task not found, dependency cycles, worktree and agent failures.
+- MC-11 Add 31 unit tests for coordinator module covering agent management, task distribution, and dependency logic.
 - MC-10 Add SessionLogViewer component with syntax highlighting for log line types (error, warning, success, info).
 - MC-10 Add toggleable auto-scroll that follows new log content and disables when user scrolls up.
 - MC-10 Add search within logs with keyboard navigation (Enter/Shift+Enter) and highlighted matches.

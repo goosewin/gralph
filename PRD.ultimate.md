@@ -279,7 +279,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Agent isolation via separate worktrees.
   * Unit tests verify coordination logic.
 - **Dependencies** None
-- [ ] MC-11 Create multi-agent coordinator module
+- [x] MC-11 Create multi-agent coordinator module
 ---
 
 ### Task MC-12
