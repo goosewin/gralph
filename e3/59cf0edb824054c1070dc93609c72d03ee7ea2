@@ -1,0 +1,51 @@
+.github/workflows/ci.yml
+  a9ffe8d4a2693860 9-35,37,41-44,50,54-57
+frontend/src/main.tsx
+  a9ffe8d4a2693860 1-10
+frontend/vite.config.ts
+  a9ffe8d4a2693860 1-25
+frontend/src/vite-env.d.ts
+  a9ffe8d4a2693860 1
+frontend/.eslintrc.cjs
+  a9ffe8d4a2693860 1-18
+frontend/index.html
+  a9ffe8d4a2693860 1-12
+frontend/tsconfig.json
+  a9ffe8d4a2693860 1-21
+frontend/tsconfig.node.json
+  a9ffe8d4a2693860 1-11
+frontend/src/index.css
+  a9ffe8d4a2693860 1-51
+frontend/.gitignore
+  a9ffe8d4a2693860 1-17
+ARCHITECTURE.md
+  a9ffe8d4a2693860 30-37,75-78,80-81
+PRD.ultimate.md
+  a9ffe8d4a2693860 167
+CHANGELOG.md
+  a9ffe8d4a2693860 17-22
+frontend/src/App.tsx
+  a9ffe8d4a2693860 1-14
+frontend/package.json
+  a9ffe8d4a2693860 1-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "e359cf0edb824054c1070dc93609c72d03ee7ea2",
+  "prompts": {
+    "a9ffe8d4a2693860": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "807b4387-3e80-4ff2-b336-e44d8549c107",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 272,
+      "total_deletions": 10,
+      "accepted_lines": 267,
+      "overriden_lines": 0
+    }
+  }
+}
