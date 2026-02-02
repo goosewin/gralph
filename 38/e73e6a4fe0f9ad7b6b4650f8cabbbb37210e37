@@ -1,0 +1,27 @@
+src/app.rs
+  9833b7e9d3d18709 32,34,3367-3410
+src/app/prd_init.rs
+  9833b7e9d3d18709 172,174,182,284-304,583-584
+PRD.fix-prd-create.md
+  9833b7e9d3d18709 84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "38e73e6a4fe0f9ad7b6b4650f8cabbbb37210e37",
+  "prompts": {
+    "9833b7e9d3d18709": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a26e2c69-eac4-4e9a-b886-6a265aa15606",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 76,
+      "total_deletions": 6,
+      "accepted_lines": 74,
+      "overriden_lines": 0
+    }
+  }
+}
