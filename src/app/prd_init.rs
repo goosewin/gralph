@@ -19,10 +19,185 @@ pub(super) fn cmd_prd(args: PrdArgs) -> Result<(), CliError> {
     }
 }
 
-pub(super) fn cmd_prd_run(_args: PrdRunArgs) -> Result<(), CliError> {
-    Err(CliError::Message(
-        "prd run is not implemented yet".to_string(),
-    ))
+pub(super) fn cmd_prd_run(args: PrdRunArgs) -> Result<(), CliError> {
+    use crate::state::StateStore;
+
+    let store = StateStore::new_from_env();
+    store
+        .init_state()
+        .map_err(|err| CliError::Message(err.to_string()))?;
+
+    let target_dir = args.dir.clone();
+    if !target_dir.is_dir() {
+        update_session_state(&store, &args.name, "failed");
+        return Err(CliError::Message(format!(
+            "Directory does not exist: {}",
+            target_dir.display()
+        )));
+    }
+
+    let gralph_dir = target_dir.join(".gralph");
+    fs::create_dir_all(&gralph_dir).map_err(|err| {
+        update_session_state(&store, &args.name, "failed");
+        CliError::Io(err)
+    })?;
+    let log_file = gralph_dir.join(format!("{}.log", args.name));
+
+    let result = run_prd_generation(&args, &target_dir, &log_file);
+    match &result {
+        Ok(output_path) => {
+            log_to_file(&log_file, &format!("PRD created: {}", output_path.display()));
+            update_session_state(&store, &args.name, "complete");
+            println!("PRD created: {}", output_path.display());
+        }
+        Err(err) => {
+            log_to_file(&log_file, &format!("PRD generation failed: {}", err));
+            update_session_state(&store, &args.name, "failed");
+        }
+    }
+    result.map(|_| ())
+}
+
+fn run_prd_generation(
+    args: &PrdRunArgs,
+    target_dir: &Path,
+    log_file: &Path,
+) -> Result<PathBuf, CliError> {
+    let goal = args
+        .goal
+        .clone()
+        .ok_or_else(|| CliError::Message("Goal is required. Use --goal.".to_string()))?;
+
+    let constraints = args
+        .constraints
+        .clone()
+        .unwrap_or_else(|| "None.".to_string());
+
+    let output_path = resolve_prd_output(target_dir, args.output.clone(), args.force)?;
+    log_to_file(log_file, &format!("Output path: {}", output_path.display()));
+
+    let config =
+        Config::load(Some(target_dir)).map_err(|err| CliError::Message(err.to_string()))?;
+    let backend_name = args
+        .backend
+        .clone()
+        .or_else(|| config.get("defaults.backend"))
+        .unwrap_or_else(|| "claude".to_string());
+    let mut model = args.model.clone().or_else(|| config.get("defaults.model"));
+    if model.as_deref().unwrap_or("").is_empty() && backend_name == "opencode" {
+        model = config.get("opencode.default_model");
+    }
+
+    let backend = backend_from_name(&backend_name).map_err(CliError::Message)?;
+    if !backend.check_installed() {
+        return Err(CliError::Message(format!(
+            "Backend is not installed: {}",
+            backend_name
+        )));
+    }
+    log_to_file(log_file, &format!("Using backend: {}", backend_name));
+
+    let stack = prd::prd_detect_stack(target_dir);
+    let stack_summary = prd::prd_format_stack_summary(&stack, 2);
+
+    let context_files = build_context_file_list(
+        target_dir,
+        args.context.as_deref(),
+        config.get("defaults.context_files").as_deref(),
+    );
+    let context_section = if context_files.is_empty() {
+        "None.".to_string()
+    } else {
+        context_files.join("\n")
+    };
+
+    let sources_section = match args.sources.as_deref() {
+        Some(value) if !value.trim().is_empty() => normalize_csv(value).join("\n"),
+        _ => "None.".to_string(),
+    };
+
+    let warnings_section = if sources_section == "None." {
+        "No reliable external sources were provided. Verify requirements and stack assumptions before implementation."
+            .to_string()
+    } else {
+        "None.".to_string()
+    };
+
+    let template_text = read_prd_template(target_dir)?;
+    let prompt = format!(
+        "You are generating a gralph PRD in markdown. The output must be spec-compliant and grounded in the repository.\n\nProject directory: {dir}\n\nGoal:\n{goal}\n\nConstraints:\n{constraints}\n\nDetected stack summary (from repository files):\n{stack_summary}\n\nSources (authoritative URLs or references):\n{sources}\n\nWarnings (only include in the PRD if Sources is empty):\n{warnings}\n\nContext files (read these first if present):\n{context}\n\nRequirements:\n- Output only the PRD markdown with no commentary or code fences.\n- Use ASCII only.\n- Do not include an \"Open Questions\" section.\n- Do not use any checkboxes outside task blocks.\n- Context Bundle entries must be real files in the repo and must be selected from the Context files list above.\n- If a task creates new files, do not list the new files in Context Bundle; cite the closest existing files instead.\n- Use atomic, granular tasks grounded in the repo and context files.\n- Each task block must use a '### Task <ID>' header and include **ID**, **Context Bundle**, **DoD**, **Checklist**, **Dependencies**.\n- Each task block must contain exactly one unchecked task line like '- [ ] <ID> <summary>'.\n- If Sources is empty, include a 'Warnings' section with the warning text above and no checkboxes.\n- Do not invent stack, frameworks, or files not supported by the context files and stack summary.\n\nTemplate:\n{template}\n",
+        dir = target_dir.display(),
+        goal = goal,
+        constraints = constraints,
+        stack_summary = stack_summary,
+        sources = sources_section,
+        warnings = warnings_section,
+        context = context_section,
+        template = template_text
+    );
+
+    log_to_file(log_file, "Running backend iteration...");
+    let tmp_dir = env::temp_dir();
+    let output_file = tmp_dir.join(format!("gralph-prd-{}.tmp", std::process::id()));
+    backend
+        .run_iteration(
+            &prompt,
+            model.as_deref(),
+            args.variant.as_deref(),
+            &output_file,
+            target_dir,
+        )
+        .map_err(|err| CliError::Message(err.to_string()))?;
+    let result = backend
+        .parse_text(&output_file)
+        .map_err(|err| CliError::Message(err.to_string()))?;
+    if result.trim().is_empty() {
+        return Err(CliError::Message(
+            "PRD generation returned empty output.".to_string(),
+        ));
+    }
+    log_to_file(log_file, "Backend iteration complete.");
+
+    let temp_prd = tmp_dir.join(format!("gralph-prd-{}.md", std::process::id()));
+    fs::write(&temp_prd, result).map_err(CliError::Io)?;
+
+    let allowed_context_file = write_allowed_context(&context_files)?;
+    prd::prd_sanitize_generated_file(
+        &temp_prd,
+        Some(target_dir),
+        allowed_context_file.as_deref(),
+    )
+    .map_err(|err| CliError::Message(err.to_string()))?;
+
+    if let Err(err) =
+        prd::prd_validate_file(&temp_prd, args.allow_missing_context, Some(target_dir))
+    {
+        let invalid_path = invalid_prd_path(&output_path, args.force);
+        fs::rename(&temp_prd, &invalid_path).map_err(CliError::Io)?;
+        return Err(CliError::Message(format!(
+            "Generated PRD failed validation. Saved to {}. Details:\n{}",
+            invalid_path.display(),
+            err
+        )));
+    }
+
+    fs::rename(&temp_prd, &output_path).map_err(CliError::Io)?;
+    log_to_file(log_file, "PRD validation passed.");
+    Ok(output_path)
+}
+
+fn update_session_state(store: &crate::state::StateStore, name: &str, status: &str) {
+    let _ = store.set_session(name, &[("status", status)]);
+}
+
+fn log_to_file(path: &Path, message: &str) {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        let _ = writeln!(file, "[{}] {}", timestamp, message);
+    }
 }
 
 pub(super) fn cmd_init(args: InitArgs) -> Result<(), CliError> {

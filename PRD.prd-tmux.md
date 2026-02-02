@@ -101,7 +101,7 @@ Each task block must contain exactly one unchecked task line.
   * Error handling logs to the session log file.
 - **Dependencies** PRD-3
 
-- [ ] PRD-4 Implement cmd_prd_run for background PRD generation
+- [x] PRD-4 Implement cmd_prd_run for background PRD generation
 ### Task PRD-5
 
 - **ID** PRD-5
