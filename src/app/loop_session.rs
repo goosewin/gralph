@@ -529,7 +529,6 @@ pub(super) fn cmd_attach(args: AttachArgs, deps: &Deps) -> Result<(), CliError> 
 }
 
 pub(super) fn cmd_resume(args: ResumeArgs, deps: &Deps) -> Result<(), CliError> {
-    ensure_tmux_available()?;
     let store = deps.state_store();
     store
         .init_state()
@@ -594,6 +593,7 @@ pub(super) fn cmd_resume(args: ResumeArgs, deps: &Deps) -> Result<(), CliError> 
             .get("webhook")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
+        ensure_tmux_available()?;
         let tmux_session = unique_tmux_session_name(name)?;
 
         let run_args = RunLoopArgs {
