@@ -1138,3 +1138,158 @@ body {
     animation: none;
   }
 }
+
+/* ==============================================
+   PWA Components
+   ============================================== */
+
+/* Offline Indicator */
+.offline-indicator {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background-color: var(--color-stale-bg);
+  color: var(--color-stale);
+  font-size: 0.875rem;
+  font-weight: 500;
+  z-index: 1000;
+  border-bottom: 1px solid var(--color-stale);
+}
+
+.offline-indicator__icon {
+  font-size: 1rem;
+}
+
+.offline-indicator__text {
+  text-align: center;
+}
+
+/* Adjust app padding when offline indicator is visible */
+.app:has(.offline-indicator) {
+  padding-top: calc(0.75rem + 2.5rem);
+}
+
+@media (min-width: 640px) {
+  .app:has(.offline-indicator) {
+    padding-top: calc(1rem + 2.5rem);
+  }
+}
+
+@media (min-width: 768px) {
+  .app:has(.offline-indicator) {
+    padding-top: calc(1.5rem + 2.5rem);
+  }
+}
+
+@media (min-width: 1024px) {
+  .app:has(.offline-indicator) {
+    padding-top: calc(2rem + 2.5rem);
+  }
+}
+
+/* Install Prompt */
+.install-prompt {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  background-color: var(--color-bg);
+  border-top: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  z-index: 1000;
+}
+
+.install-prompt__content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.install-prompt__icon {
+  font-size: 1.5rem;
+}
+
+.install-prompt__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.install-prompt__text strong {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.install-prompt__text span {
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.install-prompt__actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.install-prompt__button {
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: background-color 0.15s ease;
+  min-height: 44px;
+}
+
+.install-prompt__button--dismiss {
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+}
+
+.install-prompt__button--dismiss:hover {
+  background-color: var(--color-bg-hover);
+  color: var(--color-text);
+}
+
+.install-prompt__button--install {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+.install-prompt__button--install:hover {
+  background-color: #2563eb;
+}
+
+/* On larger screens, position install prompt as a toast */
+@media (min-width: 640px) {
+  .install-prompt {
+    bottom: 1rem;
+    left: auto;
+    right: 1rem;
+    max-width: 360px;
+    border-radius: 0.5rem;
+    border: 1px solid var(--color-border);
+  }
+}
+
+/* Add padding at bottom of main content when install prompt is visible */
+.app:has(.install-prompt) .main {
+  padding-bottom: calc(1rem + 8rem);
+}
+
+@media (min-width: 640px) {
+  .app:has(.install-prompt) .main {
+    padding-bottom: 1rem;
+  }
+}

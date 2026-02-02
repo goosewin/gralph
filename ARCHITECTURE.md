@@ -44,9 +44,15 @@ doctor diagnostics.
 `frontend/src/hooks/useTheme.ts` manages theme state with localStorage persistence and system preference detection.
 `frontend/src/hooks/useMediaQuery.ts` detects media query matches and provides useBreakpoints for responsive logic.
 `frontend/src/hooks/useTouchSwipe.ts` detects touch swipe gestures for mobile task movement.
+`frontend/src/hooks/useServiceWorker.ts` manages service worker registration and update notifications.
 `frontend/src/components/ThemeToggle.tsx` provides light/dark/system theme selection buttons.
 `frontend/src/components/HamburgerMenu.tsx` provides mobile navigation toggle with animated icon.
+`frontend/src/components/OfflineIndicator.tsx` displays banner when user is offline.
+`frontend/src/components/InstallPrompt.tsx` shows install button on mobile when PWA installation is available.
 `frontend/src/types/session.ts` defines TypeScript types matching backend API responses, including Task types.
+`frontend/public/manifest.json` defines PWA metadata including name, icons, and display mode.
+`frontend/public/sw.js` is the service worker that caches static assets for offline access.
+`frontend/public/icons/` contains SVG icons for PWA installation (192x192, 512x512, maskable).
 `frontend/vite.config.ts` configures Vite to build production assets to `assets/`.
 The Axum server serves these static files via rust-embed at compile time.
 

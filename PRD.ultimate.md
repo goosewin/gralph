@@ -235,7 +235,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Offline indicator displayed.
   * Install prompt shown on mobile.
 - **Dependencies** MC-3
-- [ ] MC-8 Add PWA support for offline access
+- [x] MC-8 Add PWA support for offline access
 ---
 
 ### Task MC-9

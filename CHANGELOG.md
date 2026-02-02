@@ -14,6 +14,14 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-8 Add PWA manifest.json with app icons and metadata for home screen installation.
+- MC-8 Add service worker (sw.js) for caching static assets with cache-first strategy.
+- MC-8 Add OfflineIndicator component displaying banner when user is offline.
+- MC-8 Add InstallPrompt component with install button shown on mobile when eligible.
+- MC-8 Add useServiceWorker hook for service worker registration and update handling.
+- MC-8 Add PWA meta tags in index.html for theme color, mobile web app support, and manifest link.
+- MC-8 Add SVG icons (192x192, 512x512, maskable) for PWA installation.
+- MC-8 Add 33 new tests for OfflineIndicator, InstallPrompt, and useServiceWorker.
 - MC-7 Add responsive mobile-first layout with breakpoints at 640px, 768px, and 1024px.
 - MC-7 Add HamburgerMenu component for mobile navigation with animated toggle.
 - MC-7 Add useTouchSwipe hook for touch gesture detection on mobile devices.

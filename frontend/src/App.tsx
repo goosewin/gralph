@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { HamburgerMenu } from './components/HamburgerMenu';
+import { InstallPrompt } from './components/InstallPrompt';
 import { KanbanBoard } from './components/KanbanBoard';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { SessionDashboard } from './components/SessionDashboard';
 import { ThemeToggle } from './components/ThemeToggle';
 import { useBreakpoints } from './hooks/useMediaQuery';
+import { useServiceWorker } from './hooks/useServiceWorker';
 import { useSessions } from './hooks/useSessions';
 import { useTasks } from './hooks/useTasks';
 import { useTheme } from './hooks/useTheme';
@@ -37,6 +40,9 @@ function App() {
 
   const { theme, setTheme } = useTheme();
   const { isMobile } = useBreakpoints();
+
+  // Register service worker for PWA support
+  useServiceWorker();
 
   // Close mobile menu when switching to desktop view
   useEffect(() => {
@@ -118,6 +124,9 @@ function App() {
 
   return (
     <div className="app">
+      {/* PWA Components */}
+      <OfflineIndicator />
+      <InstallPrompt />
       {/* Mobile nav overlay */}
       {mobileMenuOpen && (
         <div
