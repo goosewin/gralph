@@ -1,0 +1,55 @@
+frontend/index.html
+  9560c040868a8fca 7-18
+PRD.ultimate.md
+  9560c040868a8fca 238
+frontend/public/icons/icon-maskable.svg
+  9560c040868a8fca 1-11
+frontend/src/index.css
+  9560c040868a8fca 1141-1295
+frontend/src/components/InstallPrompt.tsx
+  9560c040868a8fca 1-134
+frontend/src/components/OfflineIndicator.test.tsx
+  9560c040868a8fca 1-143
+frontend/src/App.tsx
+  9560c040868a8fca 3,5,9,44-46,127-129
+CHANGELOG.md
+  9560c040868a8fca 17-24
+frontend/src/components/OfflineIndicator.tsx
+  9560c040868a8fca 1-46
+frontend/src/hooks/useServiceWorker.test.ts
+  9560c040868a8fca 1-296
+ARCHITECTURE.md
+  9560c040868a8fca 47,50-51,53-55
+frontend/public/sw.js
+  9560c040868a8fca 1-106
+frontend/public/icons/icon-512.svg
+  9560c040868a8fca 1-10
+frontend/src/components/InstallPrompt.test.tsx
+  9560c040868a8fca 1-232
+frontend/src/hooks/useServiceWorker.ts
+  9560c040868a8fca 1-99
+frontend/public/icons/icon-192.svg
+  9560c040868a8fca 1-10
+frontend/public/manifest.json
+  9560c040868a8fca 1-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "b3f82486d8527d43e98053fd64726dce4b480114",
+  "prompts": {
+    "9560c040868a8fca": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0188637a-bee3-4fc2-9310-1264eb9cf3ff",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 1331,
+      "total_deletions": 22,
+      "accepted_lines": 1310,
+      "overriden_lines": 0
+    }
+  }
+}
