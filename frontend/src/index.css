@@ -1947,3 +1947,446 @@ body {
     transition: none;
   }
 }
+
+/* ==============================================
+   Agent Orchestration Dashboard
+   ============================================== */
+
+.orchestration-dashboard {
+  padding: 1rem;
+}
+
+.orchestration-dashboard__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.orchestration-dashboard__title {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.orchestration-dashboard__connection {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.orchestration-dashboard__error {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--color-error-bg);
+  border: 1px solid var(--color-error);
+  border-radius: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.orchestration-dashboard__error-message {
+  color: var(--color-error-text);
+  font-size: 0.875rem;
+}
+
+.orchestration-dashboard__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background-color: var(--color-bg-secondary);
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+}
+
+.stat-group {
+  flex: 1;
+  min-width: 200px;
+}
+
+.stat-group__title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+.stat-group__items {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.stat-item--idle .stat-value {
+  color: var(--color-stopped);
+}
+
+.stat-item--working .stat-value,
+.stat-item--in-progress .stat-value {
+  color: var(--color-running);
+}
+
+.stat-item--pending .stat-value {
+  color: var(--color-stale);
+}
+
+.orchestration-dashboard__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.orchestration-dashboard__refresh {
+  padding: 0.5rem 1rem;
+  background-color: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.15s ease;
+}
+
+.orchestration-dashboard__refresh:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+.orchestration-dashboard__refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.orchestration-dashboard__visualization {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 500px;
+}
+
+.orchestration-dashboard__empty {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--color-text-secondary);
+}
+
+.orchestration-dashboard__empty-hint {
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  color: var(--color-text-muted);
+}
+
+.orchestration-svg {
+  display: block;
+  min-width: 100%;
+}
+
+/* Agent nodes */
+.agent-node__bg {
+  fill: var(--color-bg);
+  stroke: var(--color-border);
+  stroke-width: 1.5;
+  transition: all 0.2s ease;
+}
+
+.agent-node:hover .agent-node__bg {
+  stroke: var(--color-border-hover);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.agent-node__icon {
+  dominant-baseline: middle;
+}
+
+.agent-node__id {
+  fill: var(--color-text);
+  font-weight: 600;
+}
+
+.agent-node__spec {
+  fill: var(--color-text-secondary);
+}
+
+.agent-node__status {
+  fill: var(--color-text-muted);
+  text-transform: capitalize;
+}
+
+.agent-node__indicator {
+  fill: var(--color-unknown);
+  transition: fill 0.2s ease;
+}
+
+.agent-node--idle .agent-node__indicator {
+  fill: var(--color-stopped);
+}
+
+.agent-node--working .agent-node__indicator {
+  fill: var(--color-running);
+  animation: pulse 2s infinite;
+}
+
+.agent-node--failed .agent-node__indicator {
+  fill: var(--color-failed);
+}
+
+.agent-node--idle .agent-node__bg {
+  stroke: var(--color-stopped);
+}
+
+.agent-node--working .agent-node__bg {
+  stroke: var(--color-running);
+}
+
+.agent-node--failed .agent-node__bg {
+  stroke: var(--color-failed);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Task nodes */
+.task-node__bg {
+  fill: var(--color-bg);
+  stroke: var(--color-border);
+  stroke-width: 1.5;
+  transition: all 0.2s ease;
+}
+
+.task-node:hover .task-node__bg {
+  stroke: var(--color-border-hover);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+}
+
+.task-node__id {
+  fill: var(--color-text);
+}
+
+.task-node__status {
+  fill: var(--color-text-secondary);
+  text-transform: capitalize;
+}
+
+.task-node__agent {
+  fill: var(--color-text-muted);
+}
+
+.task-node__progress {
+  fill: var(--color-running);
+  animation: progressPulse 1.5s infinite ease-in-out;
+}
+
+@keyframes progressPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.task-node--pending .task-node__bg {
+  stroke: var(--color-stale);
+  fill: var(--color-stale-bg);
+}
+
+.task-node--in-progress .task-node__bg {
+  stroke: var(--color-running);
+  fill: var(--color-running-bg);
+}
+
+.task-node--completed .task-node__bg {
+  stroke: var(--color-completed);
+  fill: var(--color-completed-bg);
+}
+
+.task-node--failed .task-node__bg {
+  stroke: var(--color-failed);
+  fill: var(--color-failed-bg);
+}
+
+.task-node--animating {
+  animation: taskStatusChange 0.5s ease;
+}
+
+@keyframes taskStatusChange {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Dependency edges */
+.dependency-edge__line {
+  stroke: var(--color-border);
+  transition: stroke 0.2s ease;
+}
+
+.dependency-edge--active .dependency-edge__line {
+  stroke: var(--color-running);
+  stroke-width: 2.5;
+  animation: flowAnimation 1s linear infinite;
+}
+
+.dependency-edge--completed .dependency-edge__line {
+  stroke: var(--color-completed);
+}
+
+@keyframes flowAnimation {
+  0% {
+    stroke-dasharray: 10, 5;
+    stroke-dashoffset: 15;
+  }
+  100% {
+    stroke-dasharray: 10, 5;
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Assignment edges (agent to task) */
+.assignment-edge__line {
+  stroke: var(--color-text-muted);
+  opacity: 0.5;
+  transition: all 0.2s ease;
+}
+
+.assignment-edge--active .assignment-edge__line {
+  stroke: var(--color-running);
+  opacity: 1;
+  stroke-width: 2;
+  animation: flowAnimation 1s linear infinite;
+}
+
+/* Arrow marker */
+.arrowhead-fill {
+  fill: var(--color-border);
+}
+
+.dependency-edge--active .arrowhead-fill {
+  fill: var(--color-running);
+}
+
+.dependency-edge--completed .arrowhead-fill {
+  fill: var(--color-completed);
+}
+
+/* Legend */
+.orchestration-dashboard__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  padding: 1rem;
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+}
+
+.legend-section {
+  min-width: 150px;
+}
+
+.legend-section__title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.legend-items {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid var(--color-border);
+}
+
+.legend-color--idle {
+  background-color: var(--color-stopped);
+}
+
+.legend-color--working {
+  background-color: var(--color-running);
+}
+
+.legend-color--failed {
+  background-color: var(--color-failed);
+}
+
+.legend-color--pending {
+  background-color: var(--color-stale);
+}
+
+.legend-color--in-progress {
+  background-color: var(--color-running);
+}
+
+.legend-color--completed {
+  background-color: var(--color-completed);
+}
+
+.legend-label {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+/* Mobile responsive for orchestration dashboard */
+@media (max-width: 640px) {
+  .orchestration-dashboard__header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .orchestration-dashboard__stats {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .stat-group__items {
+    justify-content: space-between;
+  }
+
+  .orchestration-dashboard__legend {
+    flex-direction: column;
+    gap: 1rem;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .agent-node--working .agent-node__indicator,
+  .task-node__progress,
+  .dependency-edge--active .dependency-edge__line,
+  .assignment-edge--active .assignment-edge__line,
+  .task-node--animating {
+    animation: none;
+  }
+}

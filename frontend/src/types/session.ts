@@ -80,3 +80,47 @@ export interface LogsResponse {
   lines: string[];
   log_file: string;
 }
+
+/** Agent status values for orchestration dashboard */
+export type AgentStatus = 'idle' | 'working' | 'failed';
+
+/** Agent specialization types */
+export type AgentSpecialization = 'general' | 'code-gen' | 'testing' | 'review' | 'documentation';
+
+/** Agent data for orchestration visualization */
+export interface Agent {
+  id: number;
+  status: AgentStatus;
+  specialization: AgentSpecialization;
+  current_task?: string;
+  worktree_path?: string;
+}
+
+/** Task node in the orchestration graph */
+export interface TaskNode {
+  id: string;
+  content: string;
+  dependencies: string[];
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  assigned_agent?: number;
+}
+
+/** Work queue statistics */
+export interface WorkQueueStats {
+  pending_count: number;
+  in_progress_count: number;
+  completed_count: number;
+}
+
+/** Orchestration state from the API */
+export interface OrchestrationState {
+  agents: Agent[];
+  tasks: TaskNode[];
+  queue_stats: WorkQueueStats;
+  max_agents: number;
+}
+
+/** API response for orchestration endpoint */
+export interface OrchestrationResponse {
+  state: OrchestrationState;
+}

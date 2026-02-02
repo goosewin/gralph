@@ -52,9 +52,11 @@ doctor diagnostics.
 `frontend/src/components/InstallPrompt.tsx` shows install button on mobile when PWA installation is available.
 `frontend/src/components/Sidebar.tsx` provides navigation sidebar with collapsible sections and route highlighting.
 `frontend/src/components/SessionLogViewer.tsx` displays full session log output with syntax highlighting, virtualized scrolling, search, and auto-scroll toggle.
+`frontend/src/components/AgentOrchestrationDashboard.tsx` displays real-time agent orchestration visualization with task flow diagram, agent nodes, dependency edges, and animated status transitions. The dashboard shows agent status (idle/working/failed), specialization (general/code-gen/testing/review/documentation), current task assignments, and task dependencies. Layout uses SVG with topological sort for task positioning and supports up to 20 agents with performant rendering.
 `frontend/src/hooks/useLocalStorage.ts` syncs React state with localStorage for persistence across sessions.
 `frontend/src/hooks/useLogs.ts` provides REST API hooks for fetching session logs with pagination support.
-`frontend/src/types/session.ts` defines TypeScript types matching backend API responses, including Task and LogsResponse types.
+`frontend/src/hooks/useOrchestration.ts` provides REST API hooks for fetching agent orchestration state with polling support and auto-fetch options.
+`frontend/src/types/session.ts` defines TypeScript types matching backend API responses, including Task, LogsResponse, Agent, TaskNode, OrchestrationState, and OrchestrationResponse types.
 `frontend/public/manifest.json` defines PWA metadata including name, icons, and display mode.
 `frontend/public/sw.js` is the service worker that caches static assets for offline access.
 `frontend/public/icons/` contains SVG icons for PWA installation (192x192, 512x512, maskable).

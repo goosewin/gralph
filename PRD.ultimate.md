@@ -405,7 +405,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Dependency edges shown.
   * Performance scales to 20 agents.
 - **Dependencies** MC-4, MC-11
-- [ ] MC-20 Build agent orchestration dashboard
+- [x] MC-20 Build agent orchestration dashboard
 ---
 
 ### Phase 3: Authentication and RBAC

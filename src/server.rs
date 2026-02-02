@@ -235,6 +235,10 @@ fn build_router(state: Arc<AppState>) -> Router {
             "/logs/:session",
             get(logs_handler).options(options_handler),
         )
+        .route(
+            "/orchestration",
+            get(orchestration_handler).options(options_handler),
+        )
         .route("/ws", get(ws_handler))
         .route("/assets/*path", get(static_handler))
         .fallback(fallback_handler)
@@ -770,6 +774,175 @@ async fn logs_handler(
             "limit": limit,
             "lines": selected_lines,
             "log_file": path.to_string_lossy(),
+        }),
+        cors_origin,
+    )
+}
+
+/// Handler for agent orchestration visualization data.
+///
+/// Returns the current state of the multi-agent orchestration system,
+/// including agent status, task assignments, and work queue statistics.
+/// This endpoint provides data for the real-time orchestration dashboard.
+async fn orchestration_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+    if let Some(response) = check_auth(&headers, &state, cors_origin.as_deref()) {
+        return response;
+    }
+
+    // Build orchestration state from session data.
+    // In a full implementation, this would query the coordinator module.
+    // For now, we derive agent-like information from running sessions
+    // and parse task dependencies from PRD files.
+
+    let sessions = match state.store.list_sessions() {
+        Ok(list) => list,
+        Err(error) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("{}", error),
+                cors_origin,
+            );
+        }
+    };
+
+    // Build agent nodes from running sessions (each running session is treated as an agent)
+    let mut agents: Vec<Value> = Vec::new();
+    let mut all_tasks: Vec<Value> = Vec::new();
+    let mut pending_count = 0;
+    let mut in_progress_count = 0;
+    let mut completed_count = 0;
+
+    for (idx, session) in sessions.iter().enumerate() {
+        let map = match session.as_object() {
+            Some(m) => m,
+            None => continue,
+        };
+
+        let name = map
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let status = map
+            .get("status")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let _pid = map.get("pid").and_then(|v| v.as_i64());
+        let current_task_id = map
+            .get("last_task_id")
+            .and_then(|v| v.as_str());
+        let worktree = map
+            .get("dir")
+            .and_then(|v| v.as_str());
+
+        // Determine agent status based on session status
+        let agent_status = match status {
+            "running" => "working",
+            "completed" | "stopped" => "idle",
+            "failed" => "failed",
+            _ => "idle",
+        };
+
+        // Infer specialization from session name or default to general
+        let specialization = if name.contains("test") {
+            "testing"
+        } else if name.contains("doc") {
+            "documentation"
+        } else if name.contains("review") {
+            "review"
+        } else if name.contains("code") {
+            "code-gen"
+        } else {
+            "general"
+        };
+
+        agents.push(json!({
+            "id": idx,
+            "status": agent_status,
+            "specialization": specialization,
+            "current_task": current_task_id,
+            "worktree_path": worktree,
+        }));
+
+        // Try to load tasks from the session's PRD file
+        let dir = map.get("dir").and_then(|v| v.as_str()).unwrap_or("");
+        let task_file = map
+            .get("task_file")
+            .and_then(|v| v.as_str())
+            .unwrap_or("PRD.md");
+
+        if !dir.is_empty() {
+            let task_path = PathBuf::from(dir).join(task_file);
+            if let Ok(tasks) = prd::prd_list_tasks(&task_path) {
+                for task in tasks {
+                    let task_status = match task.status {
+                        prd::TaskStatus::Pending => {
+                            pending_count += 1;
+                            "pending"
+                        }
+                        prd::TaskStatus::InProgress => {
+                            in_progress_count += 1;
+                            "in_progress"
+                        }
+                        prd::TaskStatus::Completed => {
+                            completed_count += 1;
+                            "completed"
+                        }
+                    };
+
+                    // Check if this task is assigned to the current agent
+                    let assigned_agent = if Some(task.id.as_str()) == current_task_id {
+                        Some(idx)
+                    } else {
+                        None
+                    };
+
+                    all_tasks.push(json!({
+                        "id": task.id,
+                        "content": task.title,
+                        "dependencies": task.dependencies,
+                        "status": task_status,
+                        "assigned_agent": assigned_agent,
+                    }));
+                }
+            }
+        }
+    }
+
+    // Deduplicate tasks by ID (same PRD might be loaded from multiple sessions)
+    let mut seen_task_ids = std::collections::HashSet::new();
+    all_tasks.retain(|t| {
+        let id = t.get("id").and_then(|v| v.as_str()).unwrap_or("");
+        seen_task_ids.insert(id.to_string())
+    });
+
+    // If no agents exist, provide a placeholder state
+    if agents.is_empty() {
+        agents.push(json!({
+            "id": 0,
+            "status": "idle",
+            "specialization": "general",
+            "current_task": null,
+            "worktree_path": null,
+        }));
+    }
+
+    json_response(
+        StatusCode::OK,
+        json!({
+            "state": {
+                "agents": agents,
+                "tasks": all_tasks,
+                "queue_stats": {
+                    "pending_count": pending_count,
+                    "in_progress_count": in_progress_count,
+                    "completed_count": completed_count,
+                },
+                "max_agents": 20, // Default max agents configuration
+            }
         }),
         cors_origin,
     )

@@ -14,6 +14,23 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-20 Add AgentOrchestrationDashboard component for real-time agent orchestration visualization.
+- MC-20 Add agent nodes display showing id, status, specialization, and current task.
+- MC-20 Add task flow visualization with animated transitions for status changes.
+- MC-20 Add dependency edge visualization using SVG curves with directional arrows.
+- MC-20 Add assignment edges showing agent-to-task connections with active state highlighting.
+- MC-20 Add useOrchestration hook for fetching orchestration data with polling support.
+- MC-20 Add GET /orchestration API endpoint returning agents, tasks, and queue statistics.
+- MC-20 Add Agent and TaskNode TypeScript types for orchestration state.
+- MC-20 Add OrchestrationState and OrchestrationResponse types for API responses.
+- MC-20 Add 'orchestration' route to sidebar navigation with agent count badge.
+- MC-20 Add orchestration dashboard stats showing agent counts (idle/working/failed) and task counts.
+- MC-20 Add legend component for agent status and task status color coding.
+- MC-20 Add CSS styling for orchestration visualization with dark mode support.
+- MC-20 Add reduced motion support for orchestration animations.
+- MC-20 Add performance optimization with memoized position calculations scaling to 20 agents.
+- MC-20 Add 22 new tests for AgentOrchestrationDashboard component.
+- MC-20 Add 12 new tests for useOrchestration hook.
 - MC-19 Add WorktreeVerificationResult for individual worktree test and coverage results.
 - MC-19 Add AggregatedVerificationResult for combined multi-worktree verification results with is_success(), worktree_count(), and summary() methods.
 - MC-19 Add MultiAgentVerifierConfig for configuring multi-agent verifier pipeline with test/coverage commands, thresholds, and PR settings.

@@ -1,7 +1,7 @@
 import { useCallback, useId, useMemo } from 'react';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
-export type Route = 'sessions' | 'tasks' | 'logs' | 'settings';
+export type Route = 'sessions' | 'tasks' | 'logs' | 'orchestration' | 'settings';
 
 export interface SidebarSection {
   id: string;

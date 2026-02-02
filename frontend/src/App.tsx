@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AgentOrchestrationDashboard } from './components/AgentOrchestrationDashboard';
 import { HamburgerMenu } from './components/HamburgerMenu';
 import { InstallPrompt } from './components/InstallPrompt';
 import { KanbanBoard } from './components/KanbanBoard';
@@ -9,6 +10,7 @@ import { Sidebar, type Route, type SidebarSection } from './components/Sidebar';
 import { ThemeToggle } from './components/ThemeToggle';
 import { useBreakpoints } from './hooks/useMediaQuery';
 import { useLogs } from './hooks/useLogs';
+import { useOrchestration } from './hooks/useOrchestration';
 import { useServiceWorker } from './hooks/useServiceWorker';
 import { useSessions } from './hooks/useSessions';
 import { useTasks } from './hooks/useTasks';
@@ -118,12 +120,31 @@ function App() {
     pollInterval: 0, // Disable polling, use manual refresh
   });
 
+  const {
+    state: orchestrationState,
+    loading: orchestrationLoading,
+    error: orchestrationError,
+    fetchOrchestration,
+  } = useOrchestration({
+    baseUrl,
+    token,
+    autoFetch: activeRoute === 'orchestration',
+    pollInterval: activeRoute === 'orchestration' ? 2000 : 0,
+  });
+
   // Fetch logs when switching to logs route or when session changes
   useEffect(() => {
     if (activeRoute === 'logs' && effectiveSelectedSession) {
       fetchLogs();
     }
   }, [activeRoute, effectiveSelectedSession, fetchLogs]);
+
+  // Fetch orchestration when switching to orchestration route
+  useEffect(() => {
+    if (activeRoute === 'orchestration') {
+      fetchOrchestration();
+    }
+  }, [activeRoute, fetchOrchestration]);
 
   const handleStopSession = useCallback(async (name: string) => {
     await stopSession(name);
@@ -164,8 +185,8 @@ function App() {
     }
   }, [showRawLogs]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const error = wsError || fetchError || tasksError;
-  const loading = sessionsLoading || tasksLoading;
+  const error = wsError || fetchError || tasksError || orchestrationError;
+  const loading = sessionsLoading || tasksLoading || orchestrationLoading;
 
   // Count sessions by status for badges
   const runningCount = useMemo(
@@ -174,6 +195,12 @@ function App() {
   );
 
   const taskCount = useMemo(() => tasks.length, [tasks]);
+
+  // Count agents for orchestration badge
+  const agentCount = useMemo(
+    () => orchestrationState?.agents.length ?? 0,
+    [orchestrationState]
+  );
 
   // Build sidebar sections
   const sidebarSections: SidebarSection[] = useMemo(
@@ -207,6 +234,13 @@ function App() {
             route: 'logs' as Route,
             icon: '📜',
           },
+          {
+            id: 'orchestration',
+            label: 'Orchestration',
+            route: 'orchestration' as Route,
+            icon: '🔄',
+            badge: agentCount > 0 ? agentCount : undefined,
+          },
         ],
       },
       {
@@ -223,7 +257,7 @@ function App() {
         ],
       },
     ],
-    [runningCount, taskCount, effectiveSelectedSession]
+    [runningCount, taskCount, agentCount, effectiveSelectedSession]
   );
 
   // Determine if we should show the sidebar (tablet and larger)
@@ -358,6 +392,17 @@ function App() {
                 onRefresh={fetchLogs}
                 onToggleRaw={handleToggleRawLogs}
                 isRaw={showRawLogs}
+              />
+            </div>
+          )}
+          {activeRoute === 'orchestration' && (
+            <div id="panel-orchestration" role="tabpanel" aria-labelledby="tab-orchestration">
+              <AgentOrchestrationDashboard
+                orchestrationState={orchestrationState}
+                connectionState={connectionState}
+                error={orchestrationError}
+                loading={orchestrationLoading}
+                onRefresh={fetchOrchestration}
               />
             </div>
           )}
