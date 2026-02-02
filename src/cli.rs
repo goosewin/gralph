@@ -373,8 +373,6 @@ pub struct PrdRunArgs {
     pub allow_missing_context: bool,
     #[arg(long, action = clap::ArgAction::SetTrue)]
     pub force: bool,
-    #[arg(long)]
-    pub tmux_session: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -979,8 +977,6 @@ mod tests {
             "mini",
             "--allow-missing-context",
             "--force",
-            "--tmux-session",
-            "gralph-prd-123",
         ]);
         match cli.command {
             Some(Command::Prd(args)) => match args.command {
@@ -997,7 +993,6 @@ mod tests {
                     assert_eq!(args.variant.as_deref(), Some("mini"));
                     assert!(args.allow_missing_context);
                     assert!(args.force);
-                    assert_eq!(args.tmux_session.as_deref(), Some("gralph-prd-123"));
                 }
                 other => panic!("Expected prd run command, got: {other:?}"),
             },

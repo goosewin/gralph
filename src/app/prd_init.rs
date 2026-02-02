@@ -344,7 +344,13 @@ pub(super) fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
     fs::create_dir_all(&gralph_dir).map_err(CliError::Io)?;
     let log_file = gralph_dir.join(format!("{}.log", session_name));
 
-    let child = spawn_prd_run(&args, &target_dir, &session_name, &tmux_session)?;
+    let _child = spawn_prd_run(&args, &target_dir, &session_name, &tmux_session)?;
+
+    // Wait briefly for tmux session to be created
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    // Get the actual PID of the process running inside tmux
+    let pane_pid = get_tmux_pane_pid(&tmux_session).unwrap_or_default();
 
     let store = StateStore::new_from_env();
     store
@@ -357,7 +363,7 @@ pub(super) fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
             &session_name,
             &[
                 ("dir", &target_dir.to_string_lossy()),
-                ("pid", &child.id().to_string()),
+                ("pid", &pane_pid),
                 ("tmux_session", &tmux_session),
                 ("started_at", &now),
                 ("status", "running"),
@@ -368,10 +374,12 @@ pub(super) fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
         )
         .map_err(|err| CliError::Message(err.to_string()))?;
 
-    println!(
-        "PRD generation started in background (PID: {}).",
-        child.id()
-    );
+    let pid_msg = if pane_pid.is_empty() {
+        "unknown".to_string()
+    } else {
+        pane_pid.clone()
+    };
+    println!("PRD generation started in background (PID: {}).", pid_msg);
     println!("Session: {}", session_name);
     println!("Tmux session: {}", tmux_session);
     println!("Output: {}", output_path.display());
@@ -398,6 +406,21 @@ fn ensure_tmux_available() -> Result<(), CliError> {
             "failed to check tmux availability: {}",
             err
         ))),
+    }
+}
+
+/// Get the PID of the process running in a tmux session's pane.
+fn get_tmux_pane_pid(tmux_session: &str) -> Option<String> {
+    let output = ProcCommand::new("tmux")
+        .args(["list-panes", "-t", tmux_session, "-F", "#{pane_pid}"])
+        .output()
+        .ok()?;
+
+    if output.status.success() {
+        let pid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if pid.is_empty() { None } else { Some(pid) }
+    } else {
+        None
     }
 }
 
@@ -478,9 +501,7 @@ fn spawn_prd_run(
         .arg("run")
         .arg(target_dir.to_string_lossy().as_ref())
         .arg("--name")
-        .arg(session_name)
-        .arg("--tmux-session")
-        .arg(tmux_session);
+        .arg(session_name);
 
     if let Some(output) = &args.output {
         cmd.arg("--output").arg(output);

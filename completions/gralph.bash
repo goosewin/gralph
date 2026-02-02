@@ -1035,7 +1035,7 @@ _gralph() {
             return 0
             ;;
         gralph__prd__run)
-            opts="-h --name --output --goal --constraints --context --sources --backend --model --variant --max-retries --allow-missing-context --force --tmux-session --help <DIR>"
+            opts="-h --name --output --goal --constraints --context --sources --backend --model --variant --max-retries --allow-missing-context --force --help <DIR>"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1078,10 +1078,6 @@ _gralph() {
                     return 0
                     ;;
                 --max-retries)
-                    COMPREPLY=($(compgen -f "${cur}"))
-                    return 0
-                    ;;
-                --tmux-session)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
