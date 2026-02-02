@@ -45,6 +45,7 @@ impl FakeCli {
         Ok(Self { temp_dir, bin_name })
     }
 
+    /// Returns the command name (for use with PATH-based lookup).
     pub fn command(&self) -> String {
         script_name(&self.bin_name)
     }
@@ -53,6 +54,12 @@ impl FakeCli {
     /// Use this with TestEnv::prepend_path() or Command::env("PATH", ...) to make the fake CLI available.
     pub fn bin_dir(&self) -> &Path {
         self.temp_dir.path()
+    }
+
+    /// Returns the full path to the fake CLI binary.
+    /// Use this when you want to run the CLI directly without modifying PATH.
+    pub fn bin_path(&self) -> std::path::PathBuf {
+        self.temp_dir.path().join(script_name(&self.bin_name))
     }
 }
 
