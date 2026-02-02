@@ -2,7 +2,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use futures_util::{SinkExt, StreamExt};
 use rust_embed::Embed;
@@ -223,6 +223,14 @@ fn build_router(state: Arc<AppState>) -> Router {
             get(status_name_handler).options(options_handler),
         )
         .route("/stop/:name", post(stop_handler).options(options_handler))
+        .route(
+            "/tasks/:session",
+            get(tasks_handler).options(options_handler),
+        )
+        .route(
+            "/tasks/:session/:task_id/status",
+            put(update_task_status_handler).options(options_handler),
+        )
         .route("/ws", get(ws_handler))
         .route("/assets/*path", get(static_handler))
         .fallback(fallback_handler)
@@ -464,6 +472,179 @@ async fn stop_handler(
         json!({"success": true, "message": "Session stopped"}),
         cors_origin,
     )
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct UpdateTaskStatusBody {
+    status: prd::TaskStatus,
+}
+
+async fn tasks_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(session_name): Path<String>,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+    if let Some(response) = check_auth(&headers, &state, cors_origin.as_deref()) {
+        return response;
+    }
+
+    // Get session to find the task file path
+    let session = match state.store.get_session(&session_name) {
+        Ok(Some(session)) => session,
+        Ok(None) => {
+            return error_response(
+                StatusCode::NOT_FOUND,
+                format!("Session not found: {}", session_name),
+                cors_origin,
+            );
+        }
+        Err(error) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("{}", error),
+                cors_origin,
+            );
+        }
+    };
+
+    let dir = session
+        .get("dir")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let task_file = session
+        .get("task_file")
+        .and_then(|v| v.as_str())
+        .unwrap_or("PRD.md");
+
+    if dir.is_empty() {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "Session has no directory".to_string(),
+            cors_origin,
+        );
+    }
+
+    let task_path = PathBuf::from(dir).join(task_file);
+    match prd::prd_list_tasks(&task_path) {
+        Ok(tasks) => {
+            let tasks_json: Vec<Value> = tasks
+                .into_iter()
+                .map(|t| {
+                    json!({
+                        "id": t.id,
+                        "title": t.title,
+                        "status": t.status,
+                        "context_bundle": t.context_bundle,
+                        "definition_of_done": t.definition_of_done,
+                        "checklist": t.checklist,
+                        "dependencies": t.dependencies,
+                    })
+                })
+                .collect();
+            json_response(
+                StatusCode::OK,
+                json!({
+                    "tasks": tasks_json,
+                    "task_file": task_file,
+                }),
+                cors_origin,
+            )
+        }
+        Err(error) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to read tasks: {}", error),
+            cors_origin,
+        ),
+    }
+}
+
+async fn update_task_status_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path((session_name, task_id)): Path<(String, String)>,
+    body: Option<Json<UpdateTaskStatusBody>>,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+    if let Some(response) = check_auth(&headers, &state, cors_origin.as_deref()) {
+        return response;
+    }
+
+    let body = match body {
+        Some(Json(b)) => b,
+        None => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "Missing request body with status".to_string(),
+                cors_origin,
+            );
+        }
+    };
+
+    // Get session to find the task file path
+    let session = match state.store.get_session(&session_name) {
+        Ok(Some(session)) => session,
+        Ok(None) => {
+            return error_response(
+                StatusCode::NOT_FOUND,
+                format!("Session not found: {}", session_name),
+                cors_origin,
+            );
+        }
+        Err(error) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("{}", error),
+                cors_origin,
+            );
+        }
+    };
+
+    let dir = session
+        .get("dir")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let task_file = session
+        .get("task_file")
+        .and_then(|v| v.as_str())
+        .unwrap_or("PRD.md");
+
+    if dir.is_empty() {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "Session has no directory".to_string(),
+            cors_origin,
+        );
+    }
+
+    let task_path = PathBuf::from(dir).join(task_file);
+    match prd::prd_update_task_status(&task_path, &task_id, body.status) {
+        Ok(()) => {
+            // Broadcast the update
+            state.broadcaster.broadcast(StateChangeEvent {
+                event_type: "task_status_update".to_string(),
+                session_name: Some(session_name.clone()),
+                data: json!({
+                    "task_id": task_id,
+                    "status": body.status,
+                }),
+            });
+            json_response(
+                StatusCode::OK,
+                json!({
+                    "success": true,
+                    "task_id": task_id,
+                    "status": body.status,
+                }),
+                cors_origin,
+            )
+        }
+        Err(error) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to update task: {}", error),
+            cors_origin,
+        ),
+    }
 }
 
 async fn fallback_handler(

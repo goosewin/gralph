@@ -193,7 +193,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Keyboard navigation works.
   * Screen reader announces card movements.
 - **Dependencies** MC-4
-- [ ] MC-5 Implement Kanban board for PRD tasks
+- [x] MC-5 Implement Kanban board for PRD tasks
 ---
 
 ### Task MC-6

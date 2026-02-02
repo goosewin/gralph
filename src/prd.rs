@@ -1252,6 +1252,316 @@ fn is_heading(line: &str) -> bool {
     rest.starts_with(' ')
 }
 
+/// Task status for Kanban board
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskStatus {
+    Pending,
+    InProgress,
+    Completed,
+}
+
+impl std::fmt::Display for TaskStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TaskStatus::Pending => write!(f, "pending"),
+            TaskStatus::InProgress => write!(f, "in_progress"),
+            TaskStatus::Completed => write!(f, "completed"),
+        }
+    }
+}
+
+/// Parsed task from PRD file
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PrdTask {
+    pub id: String,
+    pub title: String,
+    pub status: TaskStatus,
+    pub context_bundle: Vec<String>,
+    pub definition_of_done: Option<String>,
+    pub checklist: Vec<String>,
+    pub dependencies: Vec<String>,
+}
+
+/// List all tasks from a PRD file
+pub fn prd_list_tasks(task_file: &Path) -> Result<Vec<PrdTask>, PrdError> {
+    if task_file.as_os_str().is_empty() {
+        return Ok(Vec::new());
+    }
+    if !task_file.is_file() {
+        return Err(PrdError::Io {
+            path: task_file.to_path_buf(),
+            source: io::Error::new(io::ErrorKind::NotFound, "task file not found"),
+        });
+    }
+    let contents = fs::read_to_string(task_file).map_err(|source| PrdError::Io {
+        path: task_file.to_path_buf(),
+        source,
+    })?;
+    Ok(prd_parse_tasks(&contents))
+}
+
+/// Parse tasks from PRD contents
+pub fn prd_parse_tasks(contents: &str) -> Vec<PrdTask> {
+    let mut tasks = Vec::new();
+    for block in task_blocks_from_contents(contents) {
+        if let Some(task) = parse_task_from_block(&block) {
+            tasks.push(task);
+        }
+    }
+    tasks
+}
+
+fn parse_task_from_block(block: &str) -> Option<PrdTask> {
+    let id = prd_task_id_from_block(block)?;
+    let title = extract_task_title(block).unwrap_or_else(|| id.clone());
+    let status = determine_task_status(block);
+    let context_bundle = extract_context_entries(block);
+    let definition_of_done = extract_field_value(block, "DoD");
+    let checklist = extract_checklist_items(block);
+    let dependencies = extract_dependencies(block);
+
+    Some(PrdTask {
+        id,
+        title,
+        status,
+        context_bundle,
+        definition_of_done,
+        checklist,
+        dependencies,
+    })
+}
+
+fn extract_task_title(block: &str) -> Option<String> {
+    for line in block.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("### Task ") {
+            let rest = trimmed.trim_start_matches("### Task ").trim();
+            return Some(rest.to_string());
+        }
+    }
+    None
+}
+
+fn determine_task_status(block: &str) -> TaskStatus {
+    let has_unchecked = block.lines().any(is_unchecked_line);
+    let has_checked = block.lines().any(|line| {
+        let trimmed = line.trim_start();
+        trimmed.starts_with("- [x]") || trimmed.starts_with("- [X]")
+    });
+
+    if has_checked && !has_unchecked {
+        TaskStatus::Completed
+    } else if has_checked && has_unchecked {
+        TaskStatus::InProgress
+    } else {
+        TaskStatus::Pending
+    }
+}
+
+fn extract_field_value(block: &str, field: &str) -> Option<String> {
+    strip_field_value(
+        block.lines().find(|line| line_has_named_field(line, field))?,
+        field,
+    )
+}
+
+fn extract_checklist_items(block: &str) -> Vec<String> {
+    let mut items = Vec::new();
+    let mut in_checklist = false;
+
+    for line in block.lines() {
+        if line_has_named_field(line, "Checklist") {
+            in_checklist = true;
+            continue;
+        }
+        if in_checklist {
+            if line_has_field(line) && !is_checklist_item(line) {
+                break;
+            }
+            if is_checklist_item(line) {
+                let trimmed = line.trim_start();
+                let content = trimmed
+                    .trim_start_matches('*')
+                    .trim_start()
+                    .to_string();
+                if !content.is_empty() {
+                    items.push(content);
+                }
+            }
+        }
+    }
+    items
+}
+
+fn is_checklist_item(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed.starts_with('*') && !trimmed.starts_with("**")
+}
+
+fn extract_dependencies(block: &str) -> Vec<String> {
+    let mut deps = Vec::new();
+    for line in block.lines() {
+        if let Some(value) = strip_field_value(line, "Dependencies") {
+            if value.to_lowercase() == "none" {
+                continue;
+            }
+            for part in value.split(',') {
+                let dep = part.trim();
+                if !dep.is_empty() {
+                    deps.push(dep.to_string());
+                }
+            }
+        }
+    }
+    deps
+}
+
+/// Update task status in a PRD file
+pub fn prd_update_task_status(
+    task_file: &Path,
+    task_id: &str,
+    new_status: TaskStatus,
+) -> Result<(), PrdError> {
+    if task_file.as_os_str().is_empty() || !task_file.is_file() {
+        return Err(PrdError::Io {
+            path: task_file.to_path_buf(),
+            source: io::Error::new(io::ErrorKind::NotFound, "task file not found"),
+        });
+    }
+
+    let contents = fs::read_to_string(task_file).map_err(|source| PrdError::Io {
+        path: task_file.to_path_buf(),
+        source,
+    })?;
+
+    let updated = update_task_checkbox_in_contents(&contents, task_id, new_status);
+
+    fs::write(task_file, updated).map_err(|source| PrdError::Io {
+        path: task_file.to_path_buf(),
+        source,
+    })?;
+
+    Ok(())
+}
+
+fn update_task_checkbox_in_contents(contents: &str, task_id: &str, new_status: TaskStatus) -> String {
+    let mut output = String::new();
+    let mut in_target_block = false;
+    let mut block_lines: Vec<&str> = Vec::new();
+
+    for line in contents.lines() {
+        if is_task_header(line) {
+            // Flush previous block if it was the target
+            if in_target_block {
+                output.push_str(&update_block_checkbox(&block_lines, new_status));
+                block_lines.clear();
+            } else {
+                for bl in &block_lines {
+                    output.push_str(bl);
+                    output.push('\n');
+                }
+                block_lines.clear();
+            }
+
+            // Check if this is our target block
+            let header_id = line.trim_start()
+                .strip_prefix("### Task ")
+                .map(|s| s.trim())
+                .unwrap_or("");
+            in_target_block = header_id == task_id;
+            block_lines.push(line);
+            continue;
+        }
+
+        if in_target_block && is_task_block_end(line) {
+            output.push_str(&update_block_checkbox(&block_lines, new_status));
+            block_lines.clear();
+            in_target_block = false;
+            output.push_str(line);
+            output.push('\n');
+            continue;
+        }
+
+        if in_target_block {
+            block_lines.push(line);
+        } else {
+            if !block_lines.is_empty() {
+                for bl in &block_lines {
+                    output.push_str(bl);
+                    output.push('\n');
+                }
+                block_lines.clear();
+            }
+            output.push_str(line);
+            output.push('\n');
+        }
+    }
+
+    // Handle remaining lines
+    if in_target_block {
+        output.push_str(&update_block_checkbox(&block_lines, new_status));
+    } else {
+        for bl in &block_lines {
+            output.push_str(bl);
+            output.push('\n');
+        }
+    }
+
+    // Remove trailing newline if original didn't have one
+    if !contents.ends_with('\n') && output.ends_with('\n') {
+        output.pop();
+    }
+
+    output
+}
+
+fn update_block_checkbox(lines: &[&str], new_status: TaskStatus) -> String {
+    let mut output = String::new();
+    for line in lines {
+        let updated_line = update_checkbox_line(line, new_status);
+        output.push_str(&updated_line);
+        output.push('\n');
+    }
+    output
+}
+
+fn update_checkbox_line(line: &str, new_status: TaskStatus) -> String {
+    let trimmed = line.trim_start();
+
+    // Check if this is the main task checkbox (starts with "- [ ]" or "- [x]")
+    let is_unchecked = trimmed.starts_with("- [ ]");
+    let is_checked = trimmed.starts_with("- [x]") || trimmed.starts_with("- [X]");
+
+    if !is_unchecked && !is_checked {
+        return line.to_string();
+    }
+
+    // Only update the main task checkbox at the end of the block
+    // Look for lines that contain the task ID pattern
+    let has_task_marker = trimmed.contains("MC-") ||
+                          trimmed.contains("Task ") ||
+                          trimmed.chars().filter(|c| c.is_alphabetic()).count() < 10;
+
+    if !has_task_marker {
+        return line.to_string();
+    }
+
+    let leading_ws = &line[..line.len() - trimmed.len()];
+    let rest_content = if is_unchecked {
+        &trimmed[5..]
+    } else {
+        &trimmed[5..]
+    };
+
+    match new_status {
+        TaskStatus::Completed => format!("{}- [x]{}", leading_ws, rest_content),
+        TaskStatus::Pending | TaskStatus::InProgress => {
+            format!("{}- [ ]{}", leading_ws, rest_content)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

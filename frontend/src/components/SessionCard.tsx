@@ -4,6 +4,7 @@ import { StatusBadge } from './StatusBadge';
 export interface SessionCardProps {
   session: Session;
   onStop?: (name: string) => void;
+  onSelect?: (name: string) => void;
 }
 
 function formatRelativeTime(dateString?: string): string {
@@ -27,7 +28,7 @@ function formatRelativeTime(dateString?: string): string {
   }
 }
 
-export function SessionCard({ session, onStop }: SessionCardProps) {
+export function SessionCard({ session, onStop, onSelect }: SessionCardProps) {
   const canStop = session.status === 'running' && session.is_alive;
   const progress =
     session.max_iterations && session.iteration
@@ -122,6 +123,15 @@ export function SessionCard({ session, onStop }: SessionCardProps) {
       </div>
 
       <footer className="session-card__footer">
+        {onSelect && (
+          <button
+            className="session-card__button session-card__button--tasks"
+            onClick={() => onSelect(session.name)}
+            aria-label={`View tasks for session ${session.name}`}
+          >
+            View Tasks
+          </button>
+        )}
         {canStop && (
           <button
             className="session-card__button session-card__button--stop"

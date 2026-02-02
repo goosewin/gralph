@@ -14,6 +14,16 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-5 Add KanbanBoard component for PRD task visualization with drag-and-drop status transitions.
+- MC-5 Add TaskCard component displaying task ID, title, status, and definition of done.
+- MC-5 Add KanbanColumn component for grouping tasks by pending/in_progress/completed status.
+- MC-5 Add useTasks hook for fetching tasks and updating task status via API.
+- MC-5 Add Task TypeScript types and TaskStatus enum for Kanban board.
+- MC-5 Add GET /tasks/:session and PUT /tasks/:session/:task_id/status API endpoints.
+- MC-5 Add prd_list_tasks and prd_update_task_status functions for PRD task parsing and status updates.
+- MC-5 Add keyboard navigation (arrow keys) for moving tasks between columns.
+- MC-5 Add screen reader announcements for task movements with aria-live region.
+- MC-5 Add 48 new component tests for TaskCard, KanbanColumn, and KanbanBoard.
 - MC-4 Add SessionDashboard component displaying all sessions with real-time updates via WebSocket.
 - MC-4 Add StatusBadge component with running/stopped/failed/completed/stale status indicators.
 - MC-4 Add SessionCard component with session details, progress bar, and stop functionality.

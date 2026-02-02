@@ -44,3 +44,28 @@ export interface StatusResponse {
 
 /** Connection state for WebSocket */
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error';
+
+/** Task status values for Kanban board */
+export type TaskStatus = 'pending' | 'in_progress' | 'completed';
+
+/** Task data from PRD file */
+export interface Task {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  context_bundle?: string[];
+  definition_of_done?: string;
+  checklist?: string[];
+  dependencies?: string[];
+}
+
+/** API response for tasks endpoint */
+export interface TasksResponse {
+  tasks: Task[];
+  task_file: string;
+}
+
+/** Request body for updating task status */
+export interface UpdateTaskStatusRequest {
+  status: TaskStatus;
+}

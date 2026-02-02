@@ -31,13 +31,17 @@ doctor diagnostics.
 
 `frontend/` contains the TypeScript/React Mission Control web UI.
 `frontend/src/main.tsx` is the React entry point that renders the App component.
-`frontend/src/App.tsx` is the root React component integrating SessionDashboard with WebSocket.
+`frontend/src/App.tsx` is the root React component integrating SessionDashboard and KanbanBoard with tabs.
 `frontend/src/components/SessionDashboard.tsx` displays all sessions with real-time updates.
 `frontend/src/components/SessionCard.tsx` renders individual session details with status and progress.
 `frontend/src/components/StatusBadge.tsx` shows status indicators (running/stopped/failed/completed/stale).
+`frontend/src/components/KanbanBoard.tsx` displays PRD tasks as a Kanban board with drag-and-drop.
+`frontend/src/components/KanbanColumn.tsx` renders a column of tasks grouped by status.
+`frontend/src/components/TaskCard.tsx` displays task ID, title, status, and definition of done.
 `frontend/src/hooks/useWebSocket.ts` manages WebSocket connection with reconnection handling.
 `frontend/src/hooks/useSessions.ts` provides REST API hooks for fetching and stopping sessions.
-`frontend/src/types/session.ts` defines TypeScript types matching backend API responses.
+`frontend/src/hooks/useTasks.ts` provides REST API hooks for fetching tasks and updating task status.
+`frontend/src/types/session.ts` defines TypeScript types matching backend API responses, including Task types.
 `frontend/vite.config.ts` configures Vite to build production assets to `assets/`.
 The Axum server serves these static files via rust-embed at compile time.
 
