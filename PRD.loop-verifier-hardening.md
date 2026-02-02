@@ -139,7 +139,7 @@ All failure conditions must emit clear, actionable error messages that describe 
   * Log warning but do not fail if comment posting fails.
   * Add test for comment posting flow.
 - **Dependencies** PRURL-1
-- [ ] PRCOMMENT-1 Post PRD content as PR comment for review context
+- [x] PRCOMMENT-1 Post PRD content as PR comment for review context
 ### Task CONFIG-1
 
 - **ID** CONFIG-1

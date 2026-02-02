@@ -1,7 +1,7 @@
 use crate::backend::{backend_from_name, command_in_path};
 use crate::cli::{
-    self, Cli, Command, ConfigArgs, ConfigCommand, DoctorArgs, ServerArgs, VerifierArgs,
-    ASCII_BANNER,
+    self, ASCII_BANNER, Cli, Command, ConfigArgs, ConfigCommand, DoctorArgs, ServerArgs,
+    VerifierArgs,
 };
 use crate::config::Config;
 use crate::core;
@@ -27,12 +27,11 @@ use prd_init::{cmd_init, cmd_prd};
 
 #[cfg(test)]
 use prd_init::{
-    add_context_entry, build_context_file_list, default_context_files, format_display_path,
-    generic_markdown_template, init_template_for_path, invalid_prd_path, is_markdown_path,
-    read_prd_template_with_manifest, read_readme_context_files, resolve_init_context_files,
-    resolve_prd_output, write_allowed_context, write_atomic, ARCHITECTURE_TEMPLATE,
-    CHANGELOG_TEMPLATE, DECISIONS_TEMPLATE, DEFAULT_PRD_TEMPLATE, PROCESS_TEMPLATE,
-    RISK_REGISTER_TEMPLATE,
+    ARCHITECTURE_TEMPLATE, CHANGELOG_TEMPLATE, DECISIONS_TEMPLATE, DEFAULT_PRD_TEMPLATE,
+    PROCESS_TEMPLATE, RISK_REGISTER_TEMPLATE, add_context_entry, build_context_file_list,
+    default_context_files, format_display_path, generic_markdown_template, init_template_for_path,
+    invalid_prd_path, is_markdown_path, read_prd_template_with_manifest, read_readme_context_files,
+    resolve_init_context_files, resolve_prd_output, write_allowed_context, write_atomic,
 };
 
 pub(crate) trait FileSystem: Send + Sync {

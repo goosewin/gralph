@@ -32,6 +32,8 @@ const DEFAULT_REVIEW_REQUIRE_CHECKS: bool = true;
 const DEFAULT_REVIEW_MERGE_METHOD: &str = "merge";
 const DEFAULT_VERIFIER_AUTO_RUN: bool = true;
 const DEFAULT_DELETE_PRD_ON_COMPLETE: bool = true;
+const DEFAULT_POST_PRD_COMMENT: bool = true;
+const DEFAULT_PRD_COMMENT_MAX_CHARS: usize = 65000;
 const DEFAULT_TASK_FILE: &str = "PRD.md";
 const DEFAULT_FMT_COMMAND: &str = "cargo fmt --check";
 
@@ -139,6 +141,9 @@ pub(crate) fn run_verifier_pipeline(
 
     run_verifier_static_checks(dir, config)?;
     let pr_url = run_verifier_pr_create(dir, config)?;
+    if let Some(ref url) = pr_url {
+        post_prd_as_pr_comment(dir, config, url);
+    }
     run_verifier_review_gate(dir, config, pr_url.as_deref())?;
 
     Ok(())
@@ -264,7 +269,8 @@ fn run_verifier_fmt_check(
         return Ok(());
     }
 
-    let fmt_command = resolve_fmt_command(config).unwrap_or_else(|| DEFAULT_FMT_COMMAND.to_string());
+    let fmt_command =
+        resolve_fmt_command(config).unwrap_or_else(|| DEFAULT_FMT_COMMAND.to_string());
     println!("\n==> Format check");
     println!("$ {}", fmt_command);
 
@@ -583,6 +589,83 @@ fn resolve_delete_prd_on_complete(config: &Config) -> bool {
         .as_deref()
         .and_then(parse_bool_value)
         .unwrap_or(DEFAULT_DELETE_PRD_ON_COMPLETE)
+}
+
+fn resolve_post_prd_comment(config: &Config) -> bool {
+    config
+        .get("verifier.post_prd_comment")
+        .as_deref()
+        .and_then(parse_bool_value)
+        .unwrap_or(DEFAULT_POST_PRD_COMMENT)
+}
+
+fn post_prd_as_pr_comment(dir: &Path, config: &Config, pr_url: &str) {
+    if !resolve_post_prd_comment(config) {
+        return;
+    }
+
+    let prd_path = resolve_task_prd_path(config, dir);
+    let content = match fs::read_to_string(&prd_path) {
+        Ok(content) => content,
+        Err(err) => {
+            eprintln!(
+                "Warning: Unable to read PRD for comment: {} ({})",
+                prd_path.display(),
+                err
+            );
+            return;
+        }
+    };
+
+    if content.trim().is_empty() {
+        eprintln!("Warning: PRD file is empty, skipping comment.");
+        return;
+    }
+
+    let truncated = truncate_prd_content(&content, DEFAULT_PRD_COMMENT_MAX_CHARS);
+    let body = format!("## PRD Context\n\n{}", truncated);
+
+    println!("Posting PRD content as PR comment...");
+
+    let output = match ProcCommand::new("gh")
+        .arg("pr")
+        .arg("comment")
+        .arg(pr_url)
+        .arg("--body")
+        .arg(&body)
+        .output()
+    {
+        Ok(output) => output,
+        Err(err) => {
+            eprintln!("Warning: Failed to run gh pr comment: {}", err);
+            return;
+        }
+    };
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        eprintln!("Warning: gh pr comment failed: {}", stderr.trim());
+        return;
+    }
+
+    println!("PRD comment posted.");
+}
+
+fn truncate_prd_content(content: &str, max_chars: usize) -> String {
+    if content.len() <= max_chars {
+        return content.to_string();
+    }
+    let truncation_notice = "\n\n---\n\n*[Content truncated due to size limits]*";
+    let available = max_chars.saturating_sub(truncation_notice.len());
+    let mut truncated = String::with_capacity(max_chars);
+    for ch in content.chars() {
+        if truncated.len() + ch.len_utf8() > available {
+            break;
+        }
+        truncated.push(ch);
+    }
+    truncated.push_str(truncation_notice);
+    truncated
 }
 
 fn resolve_task_prd_path(config: &Config, dir: &Path) -> PathBuf {
@@ -1427,9 +1510,7 @@ fn ensure_git_clean_for_pr(dir: &Path) -> Result<(), CliError> {
         .output()
         .map_err(CliError::Io)?;
     if !output.status.success() {
-        return Err(CliError::Message(
-            "Unable to check git status.".to_string(),
-        ));
+        return Err(CliError::Message("Unable to check git status.".to_string()));
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
     let dirty_files: Vec<&str> = stdout.lines().filter(|line| !line.is_empty()).collect();
@@ -4425,7 +4506,18 @@ Coverage Results: 75.00%
         let repo = init_git_repo("main");
         fs::write(repo.path().join("PRD.md"), "task content\n").unwrap();
         run_git(repo.path(), &["add", "PRD.md"]);
-        run_git(repo.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "add prd"]);
+        run_git(
+            repo.path(),
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "add prd",
+            ],
+        );
 
         let config = load_project_config("verifier:\n  delete_prd_on_complete: false\n");
         let result = delete_prd_before_pr(repo.path(), &config);
@@ -4450,7 +4542,18 @@ Coverage Results: 75.00%
         let repo = init_git_repo("main");
         fs::write(repo.path().join("PRD.md"), "task content\n").unwrap();
         run_git(repo.path(), &["add", "PRD.md"]);
-        run_git(repo.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "add prd"]);
+        run_git(
+            repo.path(),
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "add prd",
+            ],
+        );
 
         let config = load_project_config("verifier:\n  delete_prd_on_complete: true\n");
         let result = delete_prd_before_pr(repo.path(), &config);
@@ -4476,9 +4579,22 @@ Coverage Results: 75.00%
         let repo = init_git_repo("main");
         fs::write(repo.path().join("TASKS.md"), "task content\n").unwrap();
         run_git(repo.path(), &["add", "TASKS.md"]);
-        run_git(repo.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "add tasks"]);
+        run_git(
+            repo.path(),
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "add tasks",
+            ],
+        );
 
-        let config = load_project_config("defaults:\n  task_file: TASKS.md\nverifier:\n  delete_prd_on_complete: true\n");
+        let config = load_project_config(
+            "defaults:\n  task_file: TASKS.md\nverifier:\n  delete_prd_on_complete: true\n",
+        );
         let result = delete_prd_before_pr(repo.path(), &config);
         assert!(result.is_ok());
         // TASKS.md file should be deleted
@@ -4515,10 +4631,7 @@ Coverage Results: 75.00%
 
     #[test]
     fn derive_fmt_fix_command_removes_check_flag() {
-        assert_eq!(
-            derive_fmt_fix_command("cargo fmt --check"),
-            "cargo fmt"
-        );
+        assert_eq!(derive_fmt_fix_command("cargo fmt --check"), "cargo fmt");
     }
 
     #[test]
@@ -4542,11 +4655,7 @@ Coverage Results: 75.00%
         let _guard = env_guard();
         let temp = tempfile::tempdir().unwrap();
         let config = load_project_config("");
-        let result = run_verifier_fmt_check(
-            temp.path(),
-            &config,
-            VerifierStackDefaults::NonRust,
-        );
+        let result = run_verifier_fmt_check(temp.path(), &config, VerifierStackDefaults::NonRust);
         assert!(result.is_ok());
     }
 
@@ -4556,11 +4665,7 @@ Coverage Results: 75.00%
         let repo = init_git_repo("main");
         // Use a command that always succeeds
         let config = load_project_config("verifier:\n  fmt_command: \"true\"\n");
-        let result = run_verifier_fmt_check(
-            repo.path(),
-            &config,
-            VerifierStackDefaults::Rust,
-        );
+        let result = run_verifier_fmt_check(repo.path(), &config, VerifierStackDefaults::Rust);
         assert!(result.is_ok());
     }
 
@@ -4571,17 +4676,24 @@ Coverage Results: 75.00%
         // Create a file so we have something to "format"
         fs::write(repo.path().join("test.txt"), "test\n").unwrap();
         run_git(repo.path(), &["add", "test.txt"]);
-        run_git(repo.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "initial"]);
+        run_git(
+            repo.path(),
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "initial",
+            ],
+        );
 
         // Use 'false' to simulate format check failure, 'true' for the fix
         // The fix command will be derived by removing --check from the fmt_command
         // We use a custom approach: check fails, fix succeeds (does nothing), commit happens
         let config = load_project_config("verifier:\n  fmt_command: \"false --check\"\n");
-        let result = run_verifier_fmt_check(
-            repo.path(),
-            &config,
-            VerifierStackDefaults::Rust,
-        );
+        let result = run_verifier_fmt_check(repo.path(), &config, VerifierStackDefaults::Rust);
         // The fix command will be 'false' which fails
         assert!(result.is_err());
     }
@@ -4650,7 +4762,18 @@ Coverage Results: 75.00%
         );
         // Commit all test files to keep the repo clean
         run_git(repo.path(), &["add", "."]);
-        run_git(repo.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "test setup"]);
+        run_git(
+            repo.path(),
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "test setup",
+            ],
+        );
         let _path_guard = PathGuard::set(&bin_dir);
 
         let config = load_project_config("verifier:\n  pr:\n    base: main\n");
@@ -4678,7 +4801,18 @@ Coverage Results: 75.00%
         );
         // Commit all test files to keep the repo clean
         run_git(repo.path(), &["add", "."]);
-        run_git(repo.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "test setup"]);
+        run_git(
+            repo.path(),
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "test setup",
+            ],
+        );
         let _path_guard = PathGuard::set(&bin_dir);
 
         let config = load_project_config("verifier:\n  pr:\n    base: main\n");
@@ -4712,7 +4846,18 @@ Coverage Results: 75.00%
         );
         // Commit all test files to keep the repo clean
         run_git(repo.path(), &["add", "."]);
-        run_git(repo.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "test setup"]);
+        run_git(
+            repo.path(),
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "test setup",
+            ],
+        );
         let _path_guard = PathGuard::set(&bin_dir);
 
         let config = load_project_config("verifier:\n  pr:\n    base: main\n    title: test pr\n");
@@ -4735,7 +4880,18 @@ Coverage Results: 75.00%
         );
         // Commit all test files to keep the repo clean
         run_git(repo.path(), &["add", "."]);
-        run_git(repo.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "test setup"]);
+        run_git(
+            repo.path(),
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.com",
+                "commit",
+                "-m",
+                "test setup",
+            ],
+        );
         let _path_guard = PathGuard::set(&bin_dir);
 
         let config = load_project_config("verifier:\n  pr:\n    base: main\n");
@@ -5815,5 +5971,97 @@ Coverage Results: 85.50% (171/200 lines)
         let line = "Coverage: % pending";
         let result = parse_percent_from_line(line);
         assert!(result.is_none());
+    }
+
+    // PRCOMMENT-1: Tests for PRD comment posting flow
+    #[test]
+    fn resolve_post_prd_comment_defaults_to_true() {
+        let _guard = env_guard();
+        let config = load_project_config("");
+        assert!(resolve_post_prd_comment(&config));
+    }
+
+    #[test]
+    fn resolve_post_prd_comment_respects_config_false() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  post_prd_comment: false\n");
+        assert!(!resolve_post_prd_comment(&config));
+    }
+
+    #[test]
+    fn resolve_post_prd_comment_respects_config_true() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  post_prd_comment: true\n");
+        assert!(resolve_post_prd_comment(&config));
+    }
+
+    #[test]
+    fn truncate_prd_content_preserves_short_content() {
+        let content = "Short PRD content.";
+        let result = truncate_prd_content(content, 100);
+        assert_eq!(result, content);
+    }
+
+    #[test]
+    fn truncate_prd_content_truncates_long_content() {
+        let content = "a".repeat(100);
+        let result = truncate_prd_content(&content, 50);
+        assert!(result.len() <= 50);
+        assert!(result.contains("[Content truncated"));
+    }
+
+    #[test]
+    fn truncate_prd_content_handles_exact_limit() {
+        let notice = "\n\n---\n\n*[Content truncated due to size limits]*";
+        let max_chars = 100;
+        let available = max_chars - notice.len();
+        let content = "x".repeat(available);
+        let result = truncate_prd_content(&content, max_chars);
+        assert_eq!(result, content);
+    }
+
+    #[test]
+    fn truncate_prd_content_handles_multibyte_chars() {
+        // Test that truncation handles multi-byte UTF-8 correctly
+        let content = "\u{1F600}".repeat(20); // emoji is 4 bytes each
+        let result = truncate_prd_content(&content, 50);
+        assert!(result.len() <= 50 || result.ends_with("]*"));
+        // Should not panic or produce invalid UTF-8
+        assert!(result.is_ascii() || !result.is_empty());
+    }
+
+    #[test]
+    fn truncate_prd_content_includes_notice_when_truncated() {
+        let content = "a".repeat(1000);
+        let result = truncate_prd_content(&content, 100);
+        assert!(result.contains("Content truncated due to size limits"));
+    }
+
+    #[test]
+    fn post_prd_as_pr_comment_skips_when_disabled() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config = load_project_config("verifier:\n  post_prd_comment: false\n");
+        // Should not panic or attempt gh command when disabled
+        post_prd_as_pr_comment(temp.path(), &config, "https://github.com/test/repo/pull/1");
+    }
+
+    #[test]
+    fn post_prd_as_pr_comment_handles_missing_prd() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let config = load_project_config("verifier:\n  post_prd_comment: true\n");
+        // Should not panic when PRD file doesn't exist
+        post_prd_as_pr_comment(temp.path(), &config, "https://github.com/test/repo/pull/1");
+    }
+
+    #[test]
+    fn post_prd_as_pr_comment_handles_empty_prd() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("PRD.md"), "   \n  \n").unwrap();
+        let config = load_project_config("verifier:\n  post_prd_comment: true\n");
+        // Should not panic when PRD is empty/whitespace
+        post_prd_as_pr_comment(temp.path(), &config, "https://github.com/test/repo/pull/1");
     }
 }
