@@ -14,6 +14,8 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- PRD-7 Add retry loop for PRD generation with configurable max retries (`prd_create_max_retries`).
+- PRD-7 Add PRD specification document (`docs/PRD_SPEC.md`) defining validation rules for LLM prompt injection.
 - CLEAN-1 Add pre-PR git clean status check with actionable error listing dirty file paths.
 - PRD-DEL-1 Add task PRD deletion from final commit before PR creation with configurable delete_prd_on_complete option.
 - FMT-1 Add cargo fmt enforcement with auto-commit for Rust stacks via verifier.fmt_command config.
@@ -27,6 +29,8 @@ CI=<status/link>; PR=<link if final PRD task>
 ### Fixed
 
 ### Verification
+
+- Verification: Tests=cargo test --workspace; Coverage=not-run (>= 70%); CI=not-run; PR=not-opened
 
 ## [0.2.5]
 

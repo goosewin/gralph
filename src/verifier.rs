@@ -140,9 +140,16 @@ pub(crate) fn run_verifier_pipeline(
     }
 
     run_verifier_static_checks(dir, config)?;
+    // Read PRD content BEFORE PR creation since delete_prd_before_pr removes it
+    let prd_content = if resolve_post_prd_comment(config) {
+        let prd_path = resolve_task_prd_path(config, dir);
+        fs::read_to_string(&prd_path).ok()
+    } else {
+        None
+    };
     let pr_url = run_verifier_pr_create(dir, config)?;
     if let Some(ref url) = pr_url {
-        post_prd_as_pr_comment(dir, config, url);
+        post_prd_as_pr_comment(config, url, prd_content.as_deref());
     }
     run_verifier_review_gate(dir, config, pr_url.as_deref())?;
 
@@ -317,7 +324,7 @@ fn run_verifier_fmt_check(
     }
 
     let add_output = ProcCommand::new("git")
-        .args(["-C", &dir.display().to_string(), "add", "-A"])
+        .args(["-C", &dir.display().to_string(), "add", "-u"])
         .output()
         .map_err(CliError::Io)?;
 
@@ -599,28 +606,22 @@ fn resolve_post_prd_comment(config: &Config) -> bool {
         .unwrap_or(DEFAULT_POST_PRD_COMMENT)
 }
 
-fn post_prd_as_pr_comment(dir: &Path, config: &Config, pr_url: &str) {
+fn post_prd_as_pr_comment(config: &Config, pr_url: &str, prd_content: Option<&str>) {
     if !resolve_post_prd_comment(config) {
         return;
     }
 
-    let prd_path = resolve_task_prd_path(config, dir);
-    let content = match fs::read_to_string(&prd_path) {
-        Ok(content) => content,
-        Err(err) => {
-            eprintln!(
-                "Warning: Unable to read PRD for comment: {} ({})",
-                prd_path.display(),
-                err
-            );
+    let content = match prd_content {
+        Some(content) if !content.trim().is_empty() => content,
+        Some(_) => {
+            eprintln!("Warning: PRD content is empty, skipping comment.");
+            return;
+        }
+        None => {
+            eprintln!("Warning: PRD content not available, skipping comment.");
             return;
         }
     };
-
-    if content.trim().is_empty() {
-        eprintln!("Warning: PRD file is empty, skipping comment.");
-        return;
-    }
 
     let truncated = truncate_prd_content(&content, DEFAULT_PRD_COMMENT_MAX_CHARS);
     let body = format!("## PRD Context\n\n{}", truncated);
@@ -6040,29 +6041,25 @@ Coverage Results: 85.50% (171/200 lines)
     #[test]
     fn post_prd_as_pr_comment_skips_when_disabled() {
         let _guard = env_guard();
-        let temp = tempfile::tempdir().unwrap();
         let config = load_project_config("verifier:\n  post_prd_comment: false\n");
         // Should not panic or attempt gh command when disabled
-        post_prd_as_pr_comment(temp.path(), &config, "https://github.com/test/repo/pull/1");
+        post_prd_as_pr_comment(&config, "https://github.com/test/repo/pull/1", Some("# PRD"));
     }
 
     #[test]
     fn post_prd_as_pr_comment_handles_missing_prd() {
         let _guard = env_guard();
-        let temp = tempfile::tempdir().unwrap();
         let config = load_project_config("verifier:\n  post_prd_comment: true\n");
-        // Should not panic when PRD file doesn't exist
-        post_prd_as_pr_comment(temp.path(), &config, "https://github.com/test/repo/pull/1");
+        // Should not panic when PRD content is None
+        post_prd_as_pr_comment(&config, "https://github.com/test/repo/pull/1", None);
     }
 
     #[test]
     fn post_prd_as_pr_comment_handles_empty_prd() {
         let _guard = env_guard();
-        let temp = tempfile::tempdir().unwrap();
-        fs::write(temp.path().join("PRD.md"), "   \n  \n").unwrap();
         let config = load_project_config("verifier:\n  post_prd_comment: true\n");
         // Should not panic when PRD is empty/whitespace
-        post_prd_as_pr_comment(temp.path(), &config, "https://github.com/test/repo/pull/1");
+        post_prd_as_pr_comment(&config, "https://github.com/test/repo/pull/1", Some("   \n  \n"));
     }
 
     // TEST-1: Additional unit tests for verifier helpers
@@ -6078,10 +6075,9 @@ Coverage Results: 85.50% (171/200 lines)
         write_mock_gh(&bin_dir, "#!/bin/sh\nexit 0\n");
         let _path_guard = PathGuard::set(&bin_dir);
 
-        fs::write(temp.path().join("PRD.md"), "# Test PRD\n\nSome content.\n").unwrap();
         let config = load_project_config("verifier:\n  post_prd_comment: true\n");
         // Should not panic and should complete successfully
-        post_prd_as_pr_comment(temp.path(), &config, "https://github.com/test/repo/pull/1");
+        post_prd_as_pr_comment(&config, "https://github.com/test/repo/pull/1", Some("# Test PRD\n\nSome content.\n"));
     }
 
     #[cfg(unix)]
@@ -6097,10 +6093,9 @@ Coverage Results: 85.50% (171/200 lines)
 
         // Create a very long PRD content that exceeds the limit
         let long_content = "x".repeat(70000);
-        fs::write(temp.path().join("PRD.md"), &long_content).unwrap();
         let config = load_project_config("verifier:\n  post_prd_comment: true\n");
         // Should not panic and should complete (truncation happens internally)
-        post_prd_as_pr_comment(temp.path(), &config, "https://github.com/test/repo/pull/1");
+        post_prd_as_pr_comment(&config, "https://github.com/test/repo/pull/1", Some(&long_content));
     }
 
     #[cfg(unix)]
@@ -6114,22 +6109,18 @@ Coverage Results: 85.50% (171/200 lines)
         write_mock_gh(&bin_dir, "#!/bin/sh\necho 'comment failed' >&2\nexit 1\n");
         let _path_guard = PathGuard::set(&bin_dir);
 
-        fs::write(temp.path().join("PRD.md"), "# Test PRD\n").unwrap();
         let config = load_project_config("verifier:\n  post_prd_comment: true\n");
         // Should not panic - warnings are printed but function completes
-        post_prd_as_pr_comment(temp.path(), &config, "https://github.com/test/repo/pull/1");
+        post_prd_as_pr_comment(&config, "https://github.com/test/repo/pull/1", Some("# Test PRD\n"));
     }
 
     #[test]
     fn post_prd_as_pr_comment_uses_config_task_file() {
         let _guard = env_guard();
-        let temp = tempfile::tempdir().unwrap();
-        // Create custom task file
-        fs::write(temp.path().join("TASKS.md"), "# Custom Tasks\n").unwrap();
         let config =
             load_project_config("verifier:\n  post_prd_comment: true\ndefaults:\n  task_file: TASKS.md\n");
-        // Should not panic when using custom task file path
-        post_prd_as_pr_comment(temp.path(), &config, "https://github.com/test/repo/pull/1");
+        // Should not panic when passing content directly (task_file no longer used for reading)
+        post_prd_as_pr_comment(&config, "https://github.com/test/repo/pull/1", Some("# Custom Tasks\n"));
     }
 
     #[test]

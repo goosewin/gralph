@@ -43,6 +43,7 @@ PRD OPTIONS:
   --backend, -b        Backend for PRD generation (default: config/default)
   --model, -m          Model override for PRD generation
   --variant           Model variant override (backend-specific)
+  --max-retries       Max retry attempts for validation failures (default: 3)
   --allow-missing-context Allow missing Context Bundle paths
   --multiline         Enable multiline prompts (interactive)
   --no-interactive    Disable interactive prompts
@@ -337,6 +338,8 @@ pub struct PrdCreateArgs {
     pub model: Option<String>,
     #[arg(long, help = "Model variant override (backend-specific)")]
     pub variant: Option<String>,
+    #[arg(long, help = "Max retry attempts for validation failures (default: 3)")]
+    pub max_retries: Option<u32>,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Allow missing Context Bundle paths")]
     pub allow_missing_context: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Enable multiline prompts (interactive)")]
@@ -813,6 +816,40 @@ mod tests {
         ])
         .unwrap_err();
         assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn parse_prd_create_max_retries() {
+        let cli = Cli::parse_from([
+            "gralph",
+            "prd",
+            "create",
+            "--goal",
+            "Test",
+            "--max-retries",
+            "5",
+        ]);
+        match cli.command {
+            Some(Command::Prd(args)) => match args.command {
+                PrdCommand::Create(args) => {
+                    assert_eq!(args.max_retries, Some(5));
+                }
+                other => panic!("Expected prd create command, got: {other:?}"),
+            },
+            other => panic!("Expected prd command, got: {other:?}"),
+        }
+
+        // Test default (None when not specified)
+        let cli_default = Cli::parse_from(["gralph", "prd", "create", "--goal", "Test"]);
+        match cli_default.command {
+            Some(Command::Prd(args)) => match args.command {
+                PrdCommand::Create(args) => {
+                    assert!(args.max_retries.is_none());
+                }
+                other => panic!("Expected prd create command, got: {other:?}"),
+            },
+            other => panic!("Expected prd command, got: {other:?}"),
+        }
     }
 
     #[test]

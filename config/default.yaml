@@ -8,6 +8,8 @@ defaults:
   context_files: ARCHITECTURE.md, DECISIONS.md, CHANGELOG.md, RISK_REGISTER.md, PROCESS.md
   # Backend: claude, opencode, gemini, or codex
   backend: claude
+  # Maximum retry attempts for PRD generation when validation fails
+  prd_create_max_retries: 3
   # Model depends on backend:
   #   claude: claude-opus-4-5
   #   opencode: opencode/example-code-model, anthropic/claude-opus-4-5, google/gemini-1.5-pro
