@@ -186,10 +186,14 @@ pub(super) fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
         template = template_text
     );
 
-    // Get max retries from config or use default
-    let max_retries = config
-        .get("prd_create_max_retries")
-        .and_then(|v| v.parse::<u32>().ok())
+    // Get max retries from CLI, config, or use default
+    let max_retries = args
+        .max_retries
+        .or_else(|| {
+            config
+                .get("defaults.prd_create_max_retries")
+                .and_then(|v| v.parse::<u32>().ok())
+        })
         .unwrap_or(DEFAULT_PRD_CREATE_MAX_RETRIES);
 
     let allowed_context_file = write_allowed_context(&context_files)?;

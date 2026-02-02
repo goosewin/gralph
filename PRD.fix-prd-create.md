@@ -109,7 +109,7 @@ Each task block must contain exactly one unchecked task line.
   * CLI flag `--max-retries` added to `PrdCreateArgs`.
   * Environment variable `GRALPH_PRD_CREATE_MAX_RETRIES` recognized.
 - **Dependencies** None
-- [ ] PRD-4 Add retry configuration option
+- [x] PRD-4 Add retry configuration option
 ---
 
 ### Task PRD-5
