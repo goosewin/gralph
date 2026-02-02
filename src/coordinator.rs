@@ -6,8 +6,9 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command as ProcCommand;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct AgentId(pub usize);
@@ -1103,6 +1104,512 @@ pub struct DependencyGraphStats {
     pub critical_path_length: usize,
     /// Total number of dependency edges in the graph.
     pub total_dependency_edges: usize,
+}
+
+// ============================================================================
+// Load Balancer Implementation (MC-14)
+// ============================================================================
+
+/// Strategy for distributing tasks across agents.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LoadBalanceStrategy {
+    /// Round-robin distribution: each agent gets tasks in turn.
+    #[default]
+    RoundRobin,
+    /// Weighted distribution: agents with higher weights get more tasks.
+    Weighted,
+    /// Least-loaded distribution: prefer agents with fewer active tasks.
+    LeastLoaded,
+}
+
+/// Health status of an agent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HealthStatus {
+    /// Agent is healthy and available for work.
+    Healthy,
+    /// Agent is unhealthy and should not receive new tasks.
+    Unhealthy,
+    /// Agent health is unknown (no recent checks).
+    Unknown,
+}
+
+/// Agent metadata for load balancing decisions.
+#[derive(Debug, Clone)]
+pub struct AgentMetadata {
+    /// Agent identifier.
+    pub agent_id: AgentId,
+    /// Weight for weighted distribution (higher = more tasks). Default is 1.
+    pub weight: u32,
+    /// Current health status.
+    pub health_status: HealthStatus,
+    /// Last successful health check timestamp.
+    pub last_health_check: Option<Instant>,
+    /// Number of consecutive health check failures.
+    pub consecutive_failures: u32,
+    /// Total tasks completed by this agent.
+    pub tasks_completed: u64,
+    /// Total tasks failed by this agent.
+    pub tasks_failed: u64,
+    /// Current active task count.
+    pub active_tasks: u32,
+}
+
+impl AgentMetadata {
+    /// Creates new agent metadata with default values.
+    pub fn new(agent_id: AgentId) -> Self {
+        Self {
+            agent_id,
+            weight: 1,
+            health_status: HealthStatus::Unknown,
+            last_health_check: None,
+            consecutive_failures: 0,
+            tasks_completed: 0,
+            tasks_failed: 0,
+            active_tasks: 0,
+        }
+    }
+
+    /// Creates agent metadata with a specific weight.
+    pub fn with_weight(mut self, weight: u32) -> Self {
+        self.weight = weight.max(1); // Ensure minimum weight of 1
+        self
+    }
+
+    /// Marks the agent as healthy after a successful health check.
+    pub fn mark_healthy(&mut self) {
+        self.health_status = HealthStatus::Healthy;
+        self.last_health_check = Some(Instant::now());
+        self.consecutive_failures = 0;
+    }
+
+    /// Marks the agent as unhealthy after a failed health check.
+    pub fn mark_unhealthy(&mut self) {
+        self.consecutive_failures += 1;
+        self.last_health_check = Some(Instant::now());
+        self.health_status = HealthStatus::Unhealthy;
+    }
+
+    /// Increments the completed task count.
+    pub fn record_task_completed(&mut self) {
+        self.tasks_completed += 1;
+        self.active_tasks = self.active_tasks.saturating_sub(1);
+    }
+
+    /// Increments the failed task count.
+    pub fn record_task_failed(&mut self) {
+        self.tasks_failed += 1;
+        self.active_tasks = self.active_tasks.saturating_sub(1);
+    }
+
+    /// Increments the active task count.
+    pub fn record_task_assigned(&mut self) {
+        self.active_tasks += 1;
+    }
+
+    /// Returns true if the agent is available for new tasks.
+    pub fn is_available(&self) -> bool {
+        self.health_status != HealthStatus::Unhealthy
+    }
+
+    /// Returns the effective weight considering health status.
+    /// Unhealthy agents have zero effective weight.
+    pub fn effective_weight(&self) -> u32 {
+        if self.health_status == HealthStatus::Unhealthy {
+            0
+        } else {
+            self.weight
+        }
+    }
+}
+
+/// Configuration for the load balancer.
+#[derive(Debug, Clone)]
+pub struct LoadBalancerConfig {
+    /// Load balancing strategy to use.
+    pub strategy: LoadBalanceStrategy,
+    /// Maximum consecutive health check failures before removing agent.
+    pub max_consecutive_failures: u32,
+    /// Health check interval duration.
+    pub health_check_interval: Duration,
+    /// Whether to automatically remove unhealthy agents.
+    pub auto_remove_unhealthy: bool,
+}
+
+impl Default for LoadBalancerConfig {
+    fn default() -> Self {
+        Self {
+            strategy: LoadBalanceStrategy::RoundRobin,
+            max_consecutive_failures: 3,
+            health_check_interval: Duration::from_secs(30),
+            auto_remove_unhealthy: true,
+        }
+    }
+}
+
+impl LoadBalancerConfig {
+    /// Creates a new config with the specified strategy.
+    pub fn with_strategy(mut self, strategy: LoadBalanceStrategy) -> Self {
+        self.strategy = strategy;
+        self
+    }
+
+    /// Sets the maximum consecutive failures before removal.
+    pub fn with_max_failures(mut self, max_failures: u32) -> Self {
+        self.max_consecutive_failures = max_failures.max(1);
+        self
+    }
+
+    /// Sets the health check interval.
+    pub fn with_health_check_interval(mut self, interval: Duration) -> Self {
+        self.health_check_interval = interval;
+        self
+    }
+
+    /// Sets whether to auto-remove unhealthy agents.
+    pub fn with_auto_remove(mut self, auto_remove: bool) -> Self {
+        self.auto_remove_unhealthy = auto_remove;
+        self
+    }
+}
+
+/// Load balancer for distributing tasks across agents.
+///
+/// The `LoadBalancer` provides multiple strategies for task distribution:
+/// - Round-robin: Tasks are distributed evenly in circular order.
+/// - Weighted: Agents with higher weights receive proportionally more tasks.
+/// - Least-loaded: Prefers agents with fewer active tasks.
+///
+/// The load balancer also tracks agent health and automatically removes
+/// unhealthy agents from the pool.
+#[derive(Debug)]
+pub struct LoadBalancer {
+    /// Configuration for the load balancer.
+    config: LoadBalancerConfig,
+    /// Agent metadata indexed by agent ID.
+    agents: RwLock<HashMap<AgentId, AgentMetadata>>,
+    /// Round-robin counter for task distribution.
+    round_robin_counter: AtomicUsize,
+    /// Weighted distribution accumulator.
+    weighted_accumulator: AtomicU64,
+    /// Total weight of all healthy agents.
+    total_weight: AtomicU32,
+    /// List of agents that have been removed due to health failures.
+    removed_agents: Mutex<Vec<AgentId>>,
+}
+
+impl LoadBalancer {
+    /// Creates a new load balancer with the given configuration.
+    pub fn new(config: LoadBalancerConfig) -> Self {
+        Self {
+            config,
+            agents: RwLock::new(HashMap::new()),
+            round_robin_counter: AtomicUsize::new(0),
+            weighted_accumulator: AtomicU64::new(0),
+            total_weight: AtomicU32::new(0),
+            removed_agents: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Creates a new load balancer with default configuration.
+    pub fn with_defaults() -> Self {
+        Self::new(LoadBalancerConfig::default())
+    }
+
+    /// Registers an agent with the load balancer.
+    pub fn register_agent(&self, agent_id: AgentId) {
+        self.register_agent_with_weight(agent_id, 1);
+    }
+
+    /// Registers an agent with a specific weight.
+    pub fn register_agent_with_weight(&self, agent_id: AgentId, weight: u32) {
+        let metadata = AgentMetadata::new(agent_id).with_weight(weight);
+        let effective_weight = metadata.effective_weight();
+
+        let mut agents = self.agents.write().unwrap();
+        if agents.insert(agent_id, metadata).is_none() {
+            // Only add weight if this is a new agent
+            self.total_weight.fetch_add(effective_weight, Ordering::SeqCst);
+        }
+    }
+
+    /// Unregisters an agent from the load balancer.
+    pub fn unregister_agent(&self, agent_id: AgentId) {
+        let mut agents = self.agents.write().unwrap();
+        if let Some(metadata) = agents.remove(&agent_id) {
+            let weight = metadata.effective_weight();
+            self.total_weight.fetch_sub(weight.min(self.total_weight.load(Ordering::SeqCst)), Ordering::SeqCst);
+        }
+    }
+
+    /// Returns the number of registered agents.
+    pub fn agent_count(&self) -> usize {
+        self.agents.read().unwrap().len()
+    }
+
+    /// Returns the number of healthy agents available for work.
+    pub fn healthy_agent_count(&self) -> usize {
+        self.agents
+            .read()
+            .unwrap()
+            .values()
+            .filter(|m| m.is_available())
+            .count()
+    }
+
+    /// Selects the next agent to receive a task based on the configured strategy.
+    ///
+    /// Returns `None` if no healthy agents are available.
+    pub fn select_agent(&self) -> Option<AgentId> {
+        let agents = self.agents.read().unwrap();
+        let available: Vec<_> = agents.values().filter(|m| m.is_available()).collect();
+
+        if available.is_empty() {
+            return None;
+        }
+
+        match self.config.strategy {
+            LoadBalanceStrategy::RoundRobin => self.select_round_robin(&available),
+            LoadBalanceStrategy::Weighted => self.select_weighted(&available),
+            LoadBalanceStrategy::LeastLoaded => self.select_least_loaded(&available),
+        }
+    }
+
+    /// Selects an agent using round-robin strategy.
+    fn select_round_robin(&self, available: &[&AgentMetadata]) -> Option<AgentId> {
+        if available.is_empty() {
+            return None;
+        }
+
+        let index = self.round_robin_counter.fetch_add(1, Ordering::SeqCst) % available.len();
+        Some(available[index].agent_id)
+    }
+
+    /// Selects an agent using weighted strategy.
+    fn select_weighted(&self, available: &[&AgentMetadata]) -> Option<AgentId> {
+        if available.is_empty() {
+            return None;
+        }
+
+        let total_weight: u64 = available.iter().map(|m| u64::from(m.effective_weight())).sum();
+        if total_weight == 0 {
+            // Fall back to round-robin if all weights are zero
+            return self.select_round_robin(available);
+        }
+
+        // Use accumulator for smooth weighted distribution
+        let target = self.weighted_accumulator.fetch_add(1, Ordering::SeqCst) % total_weight;
+
+        let mut cumulative = 0u64;
+        for metadata in available {
+            cumulative += u64::from(metadata.effective_weight());
+            if target < cumulative {
+                return Some(metadata.agent_id);
+            }
+        }
+
+        // Fallback to first available
+        Some(available[0].agent_id)
+    }
+
+    /// Selects an agent using least-loaded strategy.
+    fn select_least_loaded(&self, available: &[&AgentMetadata]) -> Option<AgentId> {
+        available
+            .iter()
+            .min_by_key(|m| m.active_tasks)
+            .map(|m| m.agent_id)
+    }
+
+    /// Records that a task was assigned to an agent.
+    pub fn record_task_assigned(&self, agent_id: AgentId) {
+        let mut agents = self.agents.write().unwrap();
+        if let Some(metadata) = agents.get_mut(&agent_id) {
+            metadata.record_task_assigned();
+        }
+    }
+
+    /// Records that an agent completed a task successfully.
+    pub fn record_task_completed(&self, agent_id: AgentId) {
+        let mut agents = self.agents.write().unwrap();
+        if let Some(metadata) = agents.get_mut(&agent_id) {
+            metadata.record_task_completed();
+        }
+    }
+
+    /// Records that an agent failed a task.
+    pub fn record_task_failed(&self, agent_id: AgentId) {
+        let mut agents = self.agents.write().unwrap();
+        if let Some(metadata) = agents.get_mut(&agent_id) {
+            metadata.record_task_failed();
+        }
+    }
+
+    /// Performs a health check for an agent.
+    ///
+    /// The `healthy` parameter indicates whether the health check passed.
+    /// If the agent exceeds the maximum consecutive failures and auto-remove
+    /// is enabled, the agent will be removed from the pool.
+    ///
+    /// Returns `true` if the agent was removed due to health failures.
+    pub fn health_check(&self, agent_id: AgentId, healthy: bool) -> bool {
+        let should_remove = {
+            let mut agents = self.agents.write().unwrap();
+            if let Some(metadata) = agents.get_mut(&agent_id) {
+                if healthy {
+                    let was_unhealthy = metadata.health_status == HealthStatus::Unhealthy;
+                    metadata.mark_healthy();
+                    if was_unhealthy {
+                        // Re-add weight when agent becomes healthy
+                        self.total_weight.fetch_add(metadata.weight, Ordering::SeqCst);
+                    }
+                    false
+                } else {
+                    let was_healthy = metadata.health_status != HealthStatus::Unhealthy;
+                    metadata.mark_unhealthy();
+                    if was_healthy {
+                        // Remove weight when agent becomes unhealthy
+                        let weight = metadata.weight;
+                        self.total_weight.fetch_sub(weight.min(self.total_weight.load(Ordering::SeqCst)), Ordering::SeqCst);
+                    }
+                    self.config.auto_remove_unhealthy
+                        && metadata.consecutive_failures >= self.config.max_consecutive_failures
+                }
+            } else {
+                false
+            }
+        };
+
+        if should_remove {
+            self.remove_unhealthy_agent(agent_id);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Removes an unhealthy agent from the pool.
+    fn remove_unhealthy_agent(&self, agent_id: AgentId) {
+        let mut agents = self.agents.write().unwrap();
+        if agents.remove(&agent_id).is_some() {
+            let mut removed = self.removed_agents.lock().unwrap();
+            removed.push(agent_id);
+        }
+    }
+
+    /// Returns a list of agents that have been removed due to health failures.
+    pub fn get_removed_agents(&self) -> Vec<AgentId> {
+        self.removed_agents.lock().unwrap().clone()
+    }
+
+    /// Clears the list of removed agents.
+    pub fn clear_removed_agents(&self) {
+        self.removed_agents.lock().unwrap().clear();
+    }
+
+    /// Returns the health status of an agent.
+    pub fn get_agent_health(&self, agent_id: AgentId) -> Option<HealthStatus> {
+        self.agents
+            .read()
+            .unwrap()
+            .get(&agent_id)
+            .map(|m| m.health_status)
+    }
+
+    /// Returns metadata for an agent.
+    pub fn get_agent_metadata(&self, agent_id: AgentId) -> Option<AgentMetadata> {
+        self.agents.read().unwrap().get(&agent_id).cloned()
+    }
+
+    /// Returns metadata for all registered agents.
+    pub fn get_all_agents(&self) -> Vec<AgentMetadata> {
+        self.agents.read().unwrap().values().cloned().collect()
+    }
+
+    /// Returns the current load balancing strategy.
+    pub fn strategy(&self) -> LoadBalanceStrategy {
+        self.config.strategy
+    }
+
+    /// Returns the configuration.
+    pub fn config(&self) -> &LoadBalancerConfig {
+        &self.config
+    }
+
+    /// Checks if any agents need health checks based on the configured interval.
+    ///
+    /// Returns a list of agent IDs that should be checked.
+    pub fn agents_needing_health_check(&self) -> Vec<AgentId> {
+        let now = Instant::now();
+        let interval = self.config.health_check_interval;
+
+        self.agents
+            .read()
+            .unwrap()
+            .values()
+            .filter(|m| {
+                m.last_health_check
+                    .map(|t| now.duration_since(t) >= interval)
+                    .unwrap_or(true) // Check if never checked
+            })
+            .map(|m| m.agent_id)
+            .collect()
+    }
+
+    /// Returns statistics about the load balancer.
+    pub fn stats(&self) -> LoadBalancerStats {
+        let agents = self.agents.read().unwrap();
+        let total_agents = agents.len();
+        let healthy_agents = agents.values().filter(|m| m.health_status == HealthStatus::Healthy).count();
+        let unhealthy_agents = agents.values().filter(|m| m.health_status == HealthStatus::Unhealthy).count();
+        let unknown_agents = agents.values().filter(|m| m.health_status == HealthStatus::Unknown).count();
+        let total_tasks_completed: u64 = agents.values().map(|m| m.tasks_completed).sum();
+        let total_tasks_failed: u64 = agents.values().map(|m| m.tasks_failed).sum();
+        let total_active_tasks: u32 = agents.values().map(|m| m.active_tasks).sum();
+        let removed_count = self.removed_agents.lock().unwrap().len();
+
+        LoadBalancerStats {
+            total_agents,
+            healthy_agents,
+            unhealthy_agents,
+            unknown_agents,
+            removed_agents: removed_count,
+            total_tasks_completed,
+            total_tasks_failed,
+            total_active_tasks,
+            total_weight: self.total_weight.load(Ordering::SeqCst),
+            strategy: self.config.strategy,
+        }
+    }
+}
+
+impl Default for LoadBalancer {
+    fn default() -> Self {
+        Self::with_defaults()
+    }
+}
+
+/// Statistics about the load balancer state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoadBalancerStats {
+    /// Total number of registered agents.
+    pub total_agents: usize,
+    /// Number of healthy agents.
+    pub healthy_agents: usize,
+    /// Number of unhealthy agents.
+    pub unhealthy_agents: usize,
+    /// Number of agents with unknown health status.
+    pub unknown_agents: usize,
+    /// Number of agents removed due to health failures.
+    pub removed_agents: usize,
+    /// Total tasks completed across all agents.
+    pub total_tasks_completed: u64,
+    /// Total tasks failed across all agents.
+    pub total_tasks_failed: u64,
+    /// Total active tasks across all agents.
+    pub total_active_tasks: u32,
+    /// Total effective weight of all agents.
+    pub total_weight: u32,
+    /// Current load balancing strategy.
+    pub strategy: LoadBalanceStrategy,
 }
 
 #[cfg(test)]
@@ -2458,5 +2965,446 @@ mod tests {
         let ready = graph.get_ready_tasks(&completed);
         assert_eq!(ready.len(), 1);
         assert_eq!(ready[0].id, "T-3");
+    }
+
+    // ========================================================================
+    // Load Balancer Tests (MC-14)
+    // ========================================================================
+
+    #[test]
+    fn load_balancer_round_robin_distributes_evenly() {
+        let lb = LoadBalancer::new(
+            LoadBalancerConfig::default().with_strategy(LoadBalanceStrategy::RoundRobin),
+        );
+
+        lb.register_agent(AgentId(0));
+        lb.register_agent(AgentId(1));
+        lb.register_agent(AgentId(2));
+
+        // Mark all agents as healthy
+        lb.health_check(AgentId(0), true);
+        lb.health_check(AgentId(1), true);
+        lb.health_check(AgentId(2), true);
+
+        let mut counts = HashMap::new();
+        for _ in 0..30 {
+            if let Some(id) = lb.select_agent() {
+                *counts.entry(id.0).or_insert(0) += 1;
+            }
+        }
+
+        // Each agent should get roughly equal tasks (10 each for 30 tasks)
+        assert_eq!(counts.get(&0), Some(&10));
+        assert_eq!(counts.get(&1), Some(&10));
+        assert_eq!(counts.get(&2), Some(&10));
+    }
+
+    #[test]
+    fn load_balancer_weighted_respects_weights() {
+        let lb = LoadBalancer::new(
+            LoadBalancerConfig::default().with_strategy(LoadBalanceStrategy::Weighted),
+        );
+
+        lb.register_agent_with_weight(AgentId(0), 1);
+        lb.register_agent_with_weight(AgentId(1), 2);
+        lb.register_agent_with_weight(AgentId(2), 3);
+
+        // Mark all agents as healthy
+        lb.health_check(AgentId(0), true);
+        lb.health_check(AgentId(1), true);
+        lb.health_check(AgentId(2), true);
+
+        let mut counts = HashMap::new();
+        for _ in 0..60 {
+            if let Some(id) = lb.select_agent() {
+                *counts.entry(id.0).or_insert(0) += 1;
+            }
+        }
+
+        // Agent 0 (weight 1): ~10 tasks
+        // Agent 1 (weight 2): ~20 tasks
+        // Agent 2 (weight 3): ~30 tasks
+        assert_eq!(counts.get(&0), Some(&10));
+        assert_eq!(counts.get(&1), Some(&20));
+        assert_eq!(counts.get(&2), Some(&30));
+    }
+
+    #[test]
+    fn load_balancer_least_loaded_prefers_idle_agents() {
+        let lb = LoadBalancer::new(
+            LoadBalancerConfig::default().with_strategy(LoadBalanceStrategy::LeastLoaded),
+        );
+
+        lb.register_agent(AgentId(0));
+        lb.register_agent(AgentId(1));
+        lb.register_agent(AgentId(2));
+
+        // Mark all agents as healthy
+        lb.health_check(AgentId(0), true);
+        lb.health_check(AgentId(1), true);
+        lb.health_check(AgentId(2), true);
+
+        // Assign tasks to agents 0 and 1
+        lb.record_task_assigned(AgentId(0));
+        lb.record_task_assigned(AgentId(0));
+        lb.record_task_assigned(AgentId(1));
+
+        // Agent 2 should be selected (least loaded - 0 active tasks)
+        let selected = lb.select_agent();
+        assert_eq!(selected, Some(AgentId(2)));
+    }
+
+    #[test]
+    fn load_balancer_health_check_marks_agent_healthy() {
+        let lb = LoadBalancer::with_defaults();
+        lb.register_agent(AgentId(0));
+
+        assert_eq!(lb.get_agent_health(AgentId(0)), Some(HealthStatus::Unknown));
+
+        lb.health_check(AgentId(0), true);
+        assert_eq!(lb.get_agent_health(AgentId(0)), Some(HealthStatus::Healthy));
+    }
+
+    #[test]
+    fn load_balancer_health_check_marks_agent_unhealthy() {
+        let lb = LoadBalancer::with_defaults();
+        lb.register_agent(AgentId(0));
+
+        lb.health_check(AgentId(0), false);
+        assert_eq!(lb.get_agent_health(AgentId(0)), Some(HealthStatus::Unhealthy));
+    }
+
+    #[test]
+    fn load_balancer_removes_unhealthy_agent_after_max_failures() {
+        let config = LoadBalancerConfig::default()
+            .with_max_failures(3)
+            .with_auto_remove(true);
+        let lb = LoadBalancer::new(config);
+
+        lb.register_agent(AgentId(0));
+        lb.register_agent(AgentId(1));
+
+        // Fail agent 0 three times
+        assert!(!lb.health_check(AgentId(0), false)); // 1st failure
+        assert!(!lb.health_check(AgentId(0), false)); // 2nd failure
+        assert!(lb.health_check(AgentId(0), false));  // 3rd failure - removed
+
+        // Agent 0 should be removed
+        assert_eq!(lb.agent_count(), 1);
+        assert_eq!(lb.get_removed_agents(), vec![AgentId(0)]);
+
+        // Only agent 1 should be selectable
+        lb.health_check(AgentId(1), true);
+        assert_eq!(lb.select_agent(), Some(AgentId(1)));
+    }
+
+    #[test]
+    fn load_balancer_unhealthy_agents_not_selected() {
+        let config = LoadBalancerConfig::default().with_auto_remove(false);
+        let lb = LoadBalancer::new(config);
+
+        lb.register_agent(AgentId(0));
+        lb.register_agent(AgentId(1));
+
+        lb.health_check(AgentId(0), true);
+        lb.health_check(AgentId(1), false); // Mark agent 1 as unhealthy
+
+        // Only agent 0 should be selected
+        for _ in 0..10 {
+            assert_eq!(lb.select_agent(), Some(AgentId(0)));
+        }
+    }
+
+    #[test]
+    fn load_balancer_no_agents_returns_none() {
+        let lb = LoadBalancer::with_defaults();
+        assert!(lb.select_agent().is_none());
+    }
+
+    #[test]
+    fn load_balancer_all_unhealthy_returns_none() {
+        let config = LoadBalancerConfig::default().with_auto_remove(false);
+        let lb = LoadBalancer::new(config);
+
+        lb.register_agent(AgentId(0));
+        lb.register_agent(AgentId(1));
+
+        lb.health_check(AgentId(0), false);
+        lb.health_check(AgentId(1), false);
+
+        assert!(lb.select_agent().is_none());
+    }
+
+    #[test]
+    fn load_balancer_tracks_task_metrics() {
+        let lb = LoadBalancer::with_defaults();
+        lb.register_agent(AgentId(0));
+        lb.health_check(AgentId(0), true);
+
+        lb.record_task_assigned(AgentId(0));
+        lb.record_task_assigned(AgentId(0));
+        lb.record_task_completed(AgentId(0));
+        lb.record_task_failed(AgentId(0));
+
+        let metadata = lb.get_agent_metadata(AgentId(0)).unwrap();
+        assert_eq!(metadata.tasks_completed, 1);
+        assert_eq!(metadata.tasks_failed, 1);
+        assert_eq!(metadata.active_tasks, 0);
+    }
+
+    #[test]
+    fn load_balancer_stats_reflect_state() {
+        let lb = LoadBalancer::new(
+            LoadBalancerConfig::default().with_strategy(LoadBalanceStrategy::Weighted),
+        );
+
+        lb.register_agent_with_weight(AgentId(0), 2);
+        lb.register_agent_with_weight(AgentId(1), 3);
+
+        lb.health_check(AgentId(0), true);
+        lb.health_check(AgentId(1), false);
+
+        let stats = lb.stats();
+        assert_eq!(stats.total_agents, 2);
+        assert_eq!(stats.healthy_agents, 1);
+        assert_eq!(stats.unhealthy_agents, 1);
+        assert_eq!(stats.strategy, LoadBalanceStrategy::Weighted);
+    }
+
+    #[test]
+    fn load_balancer_unregister_agent_removes_weight() {
+        let lb = LoadBalancer::new(
+            LoadBalancerConfig::default().with_strategy(LoadBalanceStrategy::Weighted),
+        );
+
+        lb.register_agent_with_weight(AgentId(0), 5);
+        lb.register_agent_with_weight(AgentId(1), 3);
+        lb.health_check(AgentId(0), true);
+        lb.health_check(AgentId(1), true);
+
+        assert_eq!(lb.agent_count(), 2);
+
+        lb.unregister_agent(AgentId(0));
+        assert_eq!(lb.agent_count(), 1);
+        assert_eq!(lb.select_agent(), Some(AgentId(1)));
+    }
+
+    #[test]
+    fn load_balancer_recovery_from_unhealthy() {
+        let config = LoadBalancerConfig::default().with_auto_remove(false);
+        let lb = LoadBalancer::new(config);
+
+        lb.register_agent(AgentId(0));
+        lb.health_check(AgentId(0), false);
+        assert_eq!(lb.get_agent_health(AgentId(0)), Some(HealthStatus::Unhealthy));
+        assert!(lb.select_agent().is_none());
+
+        // Agent recovers
+        lb.health_check(AgentId(0), true);
+        assert_eq!(lb.get_agent_health(AgentId(0)), Some(HealthStatus::Healthy));
+        assert_eq!(lb.select_agent(), Some(AgentId(0)));
+    }
+
+    #[test]
+    fn load_balancer_config_builder() {
+        let config = LoadBalancerConfig::default()
+            .with_strategy(LoadBalanceStrategy::LeastLoaded)
+            .with_max_failures(5)
+            .with_health_check_interval(Duration::from_secs(60))
+            .with_auto_remove(false);
+
+        assert_eq!(config.strategy, LoadBalanceStrategy::LeastLoaded);
+        assert_eq!(config.max_consecutive_failures, 5);
+        assert_eq!(config.health_check_interval, Duration::from_secs(60));
+        assert!(!config.auto_remove_unhealthy);
+    }
+
+    #[test]
+    fn agent_metadata_effective_weight_zero_when_unhealthy() {
+        let mut metadata = AgentMetadata::new(AgentId(0)).with_weight(10);
+        assert_eq!(metadata.effective_weight(), 10);
+
+        metadata.mark_unhealthy();
+        assert_eq!(metadata.effective_weight(), 0);
+
+        metadata.mark_healthy();
+        assert_eq!(metadata.effective_weight(), 10);
+    }
+
+    #[test]
+    fn agent_metadata_tracks_consecutive_failures() {
+        let mut metadata = AgentMetadata::new(AgentId(0));
+
+        metadata.mark_unhealthy();
+        assert_eq!(metadata.consecutive_failures, 1);
+
+        metadata.mark_unhealthy();
+        assert_eq!(metadata.consecutive_failures, 2);
+
+        metadata.mark_healthy();
+        assert_eq!(metadata.consecutive_failures, 0);
+    }
+
+    #[test]
+    fn load_balancer_agents_needing_health_check() {
+        let config = LoadBalancerConfig::default()
+            .with_health_check_interval(Duration::from_millis(10));
+        let lb = LoadBalancer::new(config);
+
+        lb.register_agent(AgentId(0));
+        lb.register_agent(AgentId(1));
+
+        // Initially, all agents need health check (never checked)
+        let needing_check = lb.agents_needing_health_check();
+        assert_eq!(needing_check.len(), 2);
+
+        // After checking agent 0, only agent 1 needs check
+        lb.health_check(AgentId(0), true);
+        std::thread::sleep(Duration::from_millis(15));
+
+        // Now agent 0 should need a check again
+        let needing_check = lb.agents_needing_health_check();
+        assert!(needing_check.contains(&AgentId(0)));
+    }
+
+    #[test]
+    fn load_balancer_clear_removed_agents() {
+        let config = LoadBalancerConfig::default()
+            .with_max_failures(1)
+            .with_auto_remove(true);
+        let lb = LoadBalancer::new(config);
+
+        lb.register_agent(AgentId(0));
+        lb.health_check(AgentId(0), false);
+
+        assert_eq!(lb.get_removed_agents().len(), 1);
+
+        lb.clear_removed_agents();
+        assert!(lb.get_removed_agents().is_empty());
+    }
+
+    #[test]
+    fn load_balancer_get_all_agents() {
+        let lb = LoadBalancer::with_defaults();
+
+        lb.register_agent(AgentId(0));
+        lb.register_agent_with_weight(AgentId(1), 5);
+
+        let agents = lb.get_all_agents();
+        assert_eq!(agents.len(), 2);
+
+        let agent0 = agents.iter().find(|m| m.agent_id == AgentId(0)).unwrap();
+        let agent1 = agents.iter().find(|m| m.agent_id == AgentId(1)).unwrap();
+
+        assert_eq!(agent0.weight, 1);
+        assert_eq!(agent1.weight, 5);
+    }
+
+    #[test]
+    fn load_balancer_default_creates_with_defaults() {
+        let lb = LoadBalancer::default();
+        assert_eq!(lb.strategy(), LoadBalanceStrategy::RoundRobin);
+        assert_eq!(lb.agent_count(), 0);
+    }
+
+    #[test]
+    fn load_balance_strategy_default() {
+        let strategy = LoadBalanceStrategy::default();
+        assert_eq!(strategy, LoadBalanceStrategy::RoundRobin);
+    }
+
+    #[test]
+    fn load_balancer_healthy_agent_count() {
+        let config = LoadBalancerConfig::default().with_auto_remove(false);
+        let lb = LoadBalancer::new(config);
+
+        lb.register_agent(AgentId(0));
+        lb.register_agent(AgentId(1));
+        lb.register_agent(AgentId(2));
+
+        // All unknown = all available (conservative approach)
+        assert_eq!(lb.healthy_agent_count(), 3);
+
+        lb.health_check(AgentId(0), true);
+        lb.health_check(AgentId(1), false);
+        // Agent 2 still unknown
+
+        // Healthy + Unknown = available
+        assert_eq!(lb.healthy_agent_count(), 2);
+    }
+
+    #[test]
+    fn load_balancer_integration_round_robin_with_health_checks() {
+        let config = LoadBalancerConfig::default()
+            .with_strategy(LoadBalanceStrategy::RoundRobin)
+            .with_max_failures(2)
+            .with_auto_remove(true);
+        let lb = LoadBalancer::new(config);
+
+        // Register 3 agents
+        lb.register_agent(AgentId(0));
+        lb.register_agent(AgentId(1));
+        lb.register_agent(AgentId(2));
+
+        // Mark all healthy
+        lb.health_check(AgentId(0), true);
+        lb.health_check(AgentId(1), true);
+        lb.health_check(AgentId(2), true);
+
+        // Simulate task distribution
+        for _ in 0..6 {
+            if let Some(agent_id) = lb.select_agent() {
+                lb.record_task_assigned(agent_id);
+            }
+        }
+
+        // Agent 1 starts failing health checks
+        lb.health_check(AgentId(1), false);
+        lb.health_check(AgentId(1), false); // Removed after 2 failures
+
+        // Verify agent 1 was removed
+        assert_eq!(lb.agent_count(), 2);
+        assert!(lb.get_removed_agents().contains(&AgentId(1)));
+
+        // Remaining agents should still be selectable
+        let mut selected_ids = HashSet::new();
+        for _ in 0..4 {
+            if let Some(id) = lb.select_agent() {
+                selected_ids.insert(id);
+            }
+        }
+        assert!(selected_ids.contains(&AgentId(0)));
+        assert!(selected_ids.contains(&AgentId(2)));
+        assert!(!selected_ids.contains(&AgentId(1)));
+    }
+
+    #[test]
+    fn load_balancer_integration_weighted_distribution() {
+        let config = LoadBalancerConfig::default()
+            .with_strategy(LoadBalanceStrategy::Weighted);
+        let lb = LoadBalancer::new(config);
+
+        // Agent 0: weight 1, Agent 1: weight 4 (4x more likely)
+        lb.register_agent_with_weight(AgentId(0), 1);
+        lb.register_agent_with_weight(AgentId(1), 4);
+
+        lb.health_check(AgentId(0), true);
+        lb.health_check(AgentId(1), true);
+
+        let mut count_0 = 0;
+        let mut count_1 = 0;
+
+        for _ in 0..50 {
+            match lb.select_agent() {
+                Some(AgentId(0)) => count_0 += 1,
+                Some(AgentId(1)) => count_1 += 1,
+                _ => {}
+            }
+        }
+
+        // Agent 1 should get ~4x more tasks than agent 0
+        // With weights 1:4 and 50 tasks, expect ~10 for agent 0 and ~40 for agent 1
+        assert_eq!(count_0, 10);
+        assert_eq!(count_1, 40);
     }
 }

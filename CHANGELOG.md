@@ -14,6 +14,17 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-14 Add LoadBalancer struct for distributing tasks based on agent capacity and backend availability.
+- MC-14 Add LoadBalanceStrategy enum with RoundRobin, Weighted, and LeastLoaded distribution strategies.
+- MC-14 Add HealthStatus enum (Healthy, Unhealthy, Unknown) for agent health tracking.
+- MC-14 Add AgentMetadata struct tracking weight, health status, consecutive failures, and task metrics.
+- MC-14 Add LoadBalancerConfig for configurable strategy, max failures, health check interval, and auto-remove.
+- MC-14 Add LoadBalancer.register_agent() and register_agent_with_weight() for weighted agent registration.
+- MC-14 Add LoadBalancer.select_agent() implementing strategy-based task distribution.
+- MC-14 Add LoadBalancer.health_check() for recording health check results and removing unhealthy agents.
+- MC-14 Add LoadBalancer.agents_needing_health_check() for identifying agents due for health checks.
+- MC-14 Add LoadBalancerStats for load balancer state metrics.
+- MC-14 Add 28 new tests for LoadBalancer covering round-robin, weighted, least-loaded, health checks, and integration scenarios.
 - MC-13 Add DependencyGraph struct for task dependency analysis with graph representation.
 - MC-13 Add DependencyGraph.from_prd() for extracting task relationships from PRD content.
 - MC-13 Add DependencyGraph.get_execution_levels() for identifying parallel task groups using topological sort.

@@ -321,7 +321,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Unhealthy agents removed from pool.
   * Integration tests verify balancing.
 - **Dependencies** MC-11
-- [ ] MC-14 Implement agent load balancing
+- [x] MC-14 Implement agent load balancing
 ---
 
 ### Task MC-15
