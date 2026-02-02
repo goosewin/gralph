@@ -511,7 +511,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * 429 responses with retry-after header.
   * Unit tests verify rate limiting.
 - **Dependencies** MC-21
-- [ ] MC-27 Add rate limiting middleware
+- [x] MC-27 Add rate limiting middleware
 ---
 
 ### Task MC-28

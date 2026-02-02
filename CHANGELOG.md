@@ -14,6 +14,24 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-27 Add rate limiting middleware module (`src/rate_limit.rs`) for protecting authentication and API endpoints.
+- MC-27 Add TokenBucketConfig for configurable capacity and refill rate per endpoint group.
+- MC-27 Add TokenBucket struct implementing token bucket algorithm with thread-safe token management.
+- MC-27 Add EndpointGroup enum (Auth, Api, WebSocket, Status) for categorizing endpoints by rate limit policy.
+- MC-27 Add endpoint_group_for_path() for routing requests to appropriate rate limit buckets.
+- MC-27 Add RateLimitMiddlewareConfig for global rate limiting settings with per-group TokenBucketConfig.
+- MC-27 Add RateLimitMiddleware for request rate limiting with client IP tracking.
+- MC-27 Add RateLimitMiddleware.check_rate_limit() returning RateLimitResult with remaining tokens and retry timing.
+- MC-27 Add RateLimitMiddleware.with_defaults() for standard rate limit configuration.
+- MC-27 Add RateLimitMiddleware.from_env() for environment variable configuration.
+- MC-27 Add RateLimitResult struct with allowed flag, remaining tokens, reset time, and retry_after for 429 responses.
+- MC-27 Add RateLimitError enum for configuration and internal rate limiting errors.
+- MC-27 Add 429 Too Many Requests responses with Retry-After header on rate limit exceeded.
+- MC-27 Add X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset headers to rate-limited responses.
+- MC-27 Add rate limiting to auth endpoints (register, login, refresh) with stricter Auth group limits.
+- MC-27 Add rate limiting to status endpoint with Api group limits.
+- MC-27 Add environment variables: GRALPH_RATE_LIMIT_ENABLED, GRALPH_RATE_LIMIT_AUTH_CAPACITY, GRALPH_RATE_LIMIT_AUTH_REFILL_RATE, GRALPH_RATE_LIMIT_API_CAPACITY, GRALPH_RATE_LIMIT_API_REFILL_RATE, GRALPH_RATE_LIMIT_TRUST_PROXY.
+- MC-27 Add 46 new tests for rate limiting module covering token bucket, middleware, endpoint grouping, and server integration.
 - MC-26 Add OAuth2 social login module (`src/oauth2.rs`) for GitHub, Google, and GitLab authentication.
 - MC-26 Add OAuth2Provider enum with GitHub, Google, GitLab variants and Display/FromStr implementations.
 - MC-26 Add OAuth2ProviderConfig for provider-specific OAuth2 settings (endpoints, scopes, credentials).

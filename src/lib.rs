@@ -10,6 +10,7 @@ pub mod notify;
 pub mod oauth2;
 pub mod oidc;
 pub mod prd;
+pub mod rate_limit;
 pub mod saml;
 pub mod server;
 pub mod state;

@@ -18,6 +18,7 @@ use crate::audit::{AuditAction, AuditEntry, AuditLog, AuditLogConfig, AuditOutco
 use crate::auth::{AuthError, AuthService, JwtConfig, Permission, RateLimitConfig, UserStore};
 use crate::core::{count_remaining_tasks, last_error_line, last_log_line, raw_log_path};
 use crate::prd;
+use crate::rate_limit::{endpoint_group_for_path, RateLimitMiddleware, RateLimitResult};
 use crate::saml::{SamlAuthService, SamlConfig, SamlServiceProvider};
 use crate::state::{StateError, StateStore};
 
@@ -202,6 +203,7 @@ struct AppState {
     auth_service: AuthService,
     audit_log: AuditLog,
     saml_service: Option<Arc<SamlAuthService>>,
+    rate_limiter: RateLimitMiddleware,
 }
 
 pub async fn run_server(config: ServerConfig) -> Result<(), ServerError> {
@@ -246,6 +248,9 @@ pub async fn run_server(config: ServerConfig) -> Result<(), ServerError> {
         jwt_config_for_saml,
     );
 
+    // Initialize rate limiting middleware from environment
+    let rate_limiter = RateLimitMiddleware::from_env();
+
     let app_state = Arc::new(AppState {
         config,
         store,
@@ -253,6 +258,7 @@ pub async fn run_server(config: ServerConfig) -> Result<(), ServerError> {
         auth_service,
         audit_log,
         saml_service,
+        rate_limiter,
     });
     let app = build_router(app_state.clone());
     let addr = app_state.config.addr()?;
@@ -498,8 +504,24 @@ fn mime_type_for_path(path: &str) -> &'static str {
     }
 }
 
-async fn status_handler(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+async fn status_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+) -> Response {
     let cors_origin = resolve_cors_origin(&headers, &state.config);
+
+    // Check rate limit for API endpoints
+    if let Some(response) = check_rate_limit(
+        &state,
+        &headers,
+        connect_info.as_ref().map(|c| &c.0),
+        "/status",
+        cors_origin.clone(),
+    ) {
+        return response;
+    }
+
     if let Some(response) = check_auth(&headers, &state, cors_origin.as_deref()) {
         return response;
     }
@@ -1124,6 +1146,17 @@ async fn auth_register_handler(
 ) -> Response {
     let cors_origin = resolve_cors_origin(&headers, &state.config);
 
+    // Check rate limit for auth endpoints
+    if let Some(response) = check_rate_limit(
+        &state,
+        &headers,
+        connect_info.as_ref().map(|c| &c.0),
+        "/auth/register",
+        cors_origin.clone(),
+    ) {
+        return response;
+    }
+
     let body = match body {
         Some(Json(b)) => b,
         None => {
@@ -1161,6 +1194,17 @@ async fn auth_login_handler(
 ) -> Response {
     let cors_origin = resolve_cors_origin(&headers, &state.config);
 
+    // Check rate limit for auth endpoints
+    if let Some(response) = check_rate_limit(
+        &state,
+        &headers,
+        connect_info.as_ref().map(|c| &c.0),
+        "/auth/login",
+        cors_origin.clone(),
+    ) {
+        return response;
+    }
+
     let body = match body {
         Some(Json(b)) => b,
         None => {
@@ -1197,6 +1241,17 @@ async fn auth_refresh_handler(
     body: Option<Json<RefreshRequest>>,
 ) -> Response {
     let cors_origin = resolve_cors_origin(&headers, &state.config);
+
+    // Check rate limit for auth endpoints
+    if let Some(response) = check_rate_limit(
+        &state,
+        &headers,
+        connect_info.as_ref().map(|c| &c.0),
+        "/auth/refresh",
+        cors_origin.clone(),
+    ) {
+        return response;
+    }
 
     let body = match body {
         Some(Json(b)) => b,
@@ -1994,6 +2049,82 @@ fn unauthorized_response(cors_origin: Option<&str>) -> Response {
     )
 }
 
+/// Create a 429 Too Many Requests response with rate limit headers.
+fn rate_limit_response(result: &RateLimitResult, cors_origin: Option<String>) -> Response {
+    let retry_after = result.retry_after.unwrap_or(1);
+    let mut response = json_response(
+        StatusCode::TOO_MANY_REQUESTS,
+        json!({
+            "error": "Too many requests",
+            "retry_after": retry_after,
+            "endpoint_group": result.endpoint_group.to_string(),
+        }),
+        cors_origin,
+    );
+
+    // Add rate limit headers
+    let headers = response.headers_mut();
+    if let Ok(limit) = HeaderValue::from_str(&result.limit.to_string()) {
+        headers.insert("X-RateLimit-Limit", limit);
+    }
+    if let Ok(remaining) = HeaderValue::from_str(&result.remaining.to_string()) {
+        headers.insert("X-RateLimit-Remaining", remaining);
+    }
+    if let Ok(reset) = HeaderValue::from_str(&result.reset_after.to_string()) {
+        headers.insert("X-RateLimit-Reset", reset);
+    }
+    if let Ok(retry) = HeaderValue::from_str(&retry_after.to_string()) {
+        headers.insert("Retry-After", retry);
+    }
+
+    response
+}
+
+/// Check rate limit for a request and return error response if rate limited.
+fn check_rate_limit(
+    state: &AppState,
+    headers: &HeaderMap,
+    connect_info: Option<&SocketAddr>,
+    path: &str,
+    cors_origin: Option<String>,
+) -> Option<Response> {
+    // Determine endpoint group from path
+    let endpoint_group = endpoint_group_for_path(path);
+
+    // Get client identifier
+    let client_ip = get_client_ip(headers, connect_info);
+    let forwarded_for = headers
+        .get("X-Forwarded-For")
+        .and_then(|v| v.to_str().ok());
+    let client_id = state
+        .rate_limiter
+        .get_client_id(&client_ip, forwarded_for);
+
+    // Check rate limit
+    let result = state.rate_limiter.check(&client_id, endpoint_group);
+    if !result.allowed {
+        return Some(rate_limit_response(&result, cors_origin));
+    }
+
+    None
+}
+
+/// Add rate limit headers to a successful response.
+/// Available for future use when rate limit headers should be added to all responses.
+#[allow(dead_code)]
+fn add_rate_limit_headers(response: &mut Response, result: &RateLimitResult) {
+    let headers = response.headers_mut();
+    if let Ok(limit) = HeaderValue::from_str(&result.limit.to_string()) {
+        headers.insert("X-RateLimit-Limit", limit);
+    }
+    if let Ok(remaining) = HeaderValue::from_str(&result.remaining.to_string()) {
+        headers.insert("X-RateLimit-Remaining", remaining);
+    }
+    if let Ok(reset) = HeaderValue::from_str(&result.reset_after.to_string()) {
+        headers.insert("X-RateLimit-Reset", reset);
+    }
+}
+
 fn resolve_cors_origin(headers: &HeaderMap, config: &ServerConfig) -> Option<String> {
     let origin = headers.get(axum::http::header::ORIGIN)?;
     let origin = origin.to_str().ok()?;
@@ -2192,6 +2323,7 @@ mod tests {
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
             saml_service: None,
+            rate_limiter: RateLimitMiddleware::with_defaults(),
         })
     }
 
@@ -2595,6 +2727,7 @@ mod tests {
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
             saml_service: None,
+            rate_limiter: RateLimitMiddleware::with_defaults(),
         };
         let headers = HeaderMap::new();
 
@@ -2624,6 +2757,7 @@ mod tests {
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
             saml_service: None,
+            rate_limiter: RateLimitMiddleware::with_defaults(),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -2657,6 +2791,7 @@ mod tests {
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
             saml_service: None,
+            rate_limiter: RateLimitMiddleware::with_defaults(),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -2690,6 +2825,7 @@ mod tests {
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
             saml_service: None,
+            rate_limiter: RateLimitMiddleware::with_defaults(),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -2723,6 +2859,7 @@ mod tests {
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
             saml_service: None,
+            rate_limiter: RateLimitMiddleware::with_defaults(),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -2757,6 +2894,7 @@ mod tests {
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
             saml_service: None,
+            rate_limiter: RateLimitMiddleware::with_defaults(),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -2790,6 +2928,7 @@ mod tests {
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
             saml_service: None,
+            rate_limiter: RateLimitMiddleware::with_defaults(),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -4874,6 +5013,7 @@ mod tests {
             auth_service: AuthService::new(JwtConfig::new("test-secret")),
             audit_log: AuditLog::new(AuditLogConfig::default()),
             saml_service: None,
+            rate_limiter: RateLimitMiddleware::with_defaults(),
         });
         state2.store.init_state().unwrap();
         state2.audit_log.record(
@@ -4912,5 +5052,294 @@ mod tests {
         let body2 = to_bytes(response2.into_body(), usize::MAX).await.unwrap();
         let body2: Value = serde_json::from_slice(&body2).unwrap();
         assert_eq!(body2["total_count"], 1);
+    }
+
+    // Rate limiting tests
+
+    #[tokio::test]
+    async fn rate_limit_response_has_retry_after_header() {
+        use crate::rate_limit::{EndpointGroup, RateLimitResult};
+
+        let result = RateLimitResult {
+            allowed: false,
+            remaining: 0,
+            limit: 10,
+            reset_after: 60,
+            retry_after: Some(5),
+            endpoint_group: EndpointGroup::Auth,
+        };
+
+        let response = rate_limit_response(&result, None);
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let headers = response.headers();
+        assert_eq!(headers.get("Retry-After").unwrap().to_str().unwrap(), "5");
+        assert_eq!(headers.get("X-RateLimit-Limit").unwrap().to_str().unwrap(), "10");
+        assert_eq!(headers.get("X-RateLimit-Remaining").unwrap().to_str().unwrap(), "0");
+        assert_eq!(headers.get("X-RateLimit-Reset").unwrap().to_str().unwrap(), "60");
+
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["error"], "Too many requests");
+        assert_eq!(body["retry_after"], 5);
+        assert_eq!(body["endpoint_group"], "auth");
+    }
+
+    #[tokio::test]
+    async fn rate_limit_blocks_excessive_auth_requests() {
+        use crate::rate_limit::{RateLimitMiddlewareConfig, TokenBucketConfig};
+
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        // Create a rate limiter with a very low limit for testing
+        let rate_limit_config = RateLimitMiddlewareConfig::new()
+            .with_group(
+                crate::rate_limit::EndpointGroup::Auth,
+                TokenBucketConfig::new(2, 0.01), // Only 2 requests, very slow refill
+            );
+        let rate_limiter = RateLimitMiddleware::new(rate_limit_config);
+
+        let state = Arc::new(AppState {
+            config: ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 0,
+                token: None,
+                open: false,
+                max_body_bytes: 4096,
+            },
+            store,
+            broadcaster: StateBroadcaster::new(100),
+            auth_service: AuthService::new(JwtConfig::new("test-secret")),
+            audit_log: AuditLog::new(AuditLogConfig::default()),
+            saml_service: None,
+            rate_limiter,
+        });
+        let app = build_router(state);
+
+        // First request should succeed
+        let response1 = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/auth/login")
+                    .method("POST")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(r#"{"email":"test@example.com","password":"password123"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        // Should fail with 401 (invalid credentials) not 429 (rate limited)
+        assert_eq!(response1.status(), StatusCode::UNAUTHORIZED);
+
+        // Second request should still succeed
+        let response2 = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/auth/login")
+                    .method("POST")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(r#"{"email":"test@example.com","password":"password123"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response2.status(), StatusCode::UNAUTHORIZED);
+
+        // Third request should be rate limited
+        let response3 = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/auth/login")
+                    .method("POST")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(r#"{"email":"test@example.com","password":"password123"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response3.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let headers = response3.headers();
+        assert!(headers.get("Retry-After").is_some());
+        assert!(headers.get("X-RateLimit-Limit").is_some());
+        assert!(headers.get("X-RateLimit-Remaining").is_some());
+    }
+
+    #[tokio::test]
+    async fn rate_limit_tracks_different_endpoints_separately() {
+        use crate::rate_limit::{RateLimitMiddlewareConfig, TokenBucketConfig};
+
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        // Create rate limiter with low limits for both auth and API
+        let rate_limit_config = RateLimitMiddlewareConfig::new()
+            .with_group(
+                crate::rate_limit::EndpointGroup::Auth,
+                TokenBucketConfig::new(1, 0.01),
+            )
+            .with_group(
+                crate::rate_limit::EndpointGroup::Api,
+                TokenBucketConfig::new(1, 0.01),
+            );
+        let rate_limiter = RateLimitMiddleware::new(rate_limit_config);
+
+        let state = Arc::new(AppState {
+            config: ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 0,
+                token: None,
+                open: false,
+                max_body_bytes: 4096,
+            },
+            store,
+            broadcaster: StateBroadcaster::new(100),
+            auth_service: AuthService::new(JwtConfig::new("test-secret")),
+            audit_log: AuditLog::new(AuditLogConfig::default()),
+            saml_service: None,
+            rate_limiter,
+        });
+        let app = build_router(state);
+
+        // Use up auth limit
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/auth/login")
+                    .method("POST")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(r#"{"email":"test@example.com","password":"password123"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // Auth should now be rate limited
+        let auth_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/auth/login")
+                    .method("POST")
+                    .header("Content-Type", "application/json")
+                    .body(Body::from(r#"{"email":"test@example.com","password":"password123"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(auth_response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        // But API endpoint should still work (first request)
+        let status_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/status")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(status_response.status(), StatusCode::OK);
+
+        // Second API request should be rate limited
+        let status_response2 = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/status")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(status_response2.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[tokio::test]
+    async fn health_endpoint_not_rate_limited() {
+        use crate::rate_limit::{RateLimitMiddlewareConfig, TokenBucketConfig};
+
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        // Create rate limiter with very restrictive limits
+        let rate_limit_config = RateLimitMiddlewareConfig::new()
+            .with_group(
+                crate::rate_limit::EndpointGroup::Api,
+                TokenBucketConfig::new(1, 0.01),
+            );
+        let rate_limiter = RateLimitMiddleware::new(rate_limit_config);
+
+        let state = Arc::new(AppState {
+            config: ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 0,
+                token: None,
+                open: false,
+                max_body_bytes: 4096,
+            },
+            store,
+            broadcaster: StateBroadcaster::new(100),
+            auth_service: AuthService::new(JwtConfig::new("test-secret")),
+            audit_log: AuditLog::new(AuditLogConfig::default()),
+            saml_service: None,
+            rate_limiter,
+        });
+        let app = build_router(state);
+
+        // Health endpoint should not be rate limited even after many requests
+        for _ in 0..10 {
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri("/health")
+                        .method("GET")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+    }
+
+    #[test]
+    fn check_rate_limit_returns_none_for_status_endpoints() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let state = AppState {
+            config: ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 0,
+                token: None,
+                open: false,
+                max_body_bytes: 4096,
+            },
+            store,
+            broadcaster: StateBroadcaster::new(100),
+            auth_service: AuthService::new(JwtConfig::new("test-secret")),
+            audit_log: AuditLog::new(AuditLogConfig::default()),
+            saml_service: None,
+            rate_limiter: RateLimitMiddleware::with_defaults(),
+        };
+
+        let headers = HeaderMap::new();
+        // Health endpoint is a status endpoint - should never be rate limited
+        let result = check_rate_limit(&state, &headers, None, "/health", None);
+        assert!(result.is_none());
     }
 }
