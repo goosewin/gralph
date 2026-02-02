@@ -116,7 +116,7 @@ Each task block must contain exactly one unchecked task line.
   * The command returns immediately after spawning.
 - **Dependencies** PRD-4
 
-- [ ] PRD-5 Refactor cmd_prd_create to spawn background tmux session
+- [x] PRD-5 Refactor cmd_prd_create to spawn background tmux session
 ### Task PRD-6
 
 - **ID** PRD-6

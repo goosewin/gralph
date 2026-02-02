@@ -151,7 +151,7 @@ fn cli_prd_check_reports_missing_file() {
 }
 
 #[test]
-fn cli_prd_create_writes_generated_file() {
+fn cli_prd_create_spawns_background_session() {
     let temp = tempfile::tempdir().unwrap();
     let _guard = prepare_env(temp.path());
     let project = temp_path(temp.path(), "project");
@@ -178,10 +178,16 @@ fn cli_prd_create_writes_generated_file() {
     ])
     .arg(&prd_output);
 
+    // prd create now spawns a background tmux session and returns immediately
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("PRD created:"));
+        .stdout(predicate::str::contains("PRD generation started in background"))
+        .stdout(predicate::str::contains("Session:"))
+        .stdout(predicate::str::contains("Tmux session:"))
+        .stdout(predicate::str::contains("Output:"))
+        .stdout(predicate::str::contains("Logs:"))
+        .stdout(predicate::str::contains("Check status: gralph status"));
 
-    let generated = fs::read_to_string(&prd_output).unwrap();
-    assert!(generated.contains("### Task TST-1"));
+    // The .gralph directory should be created for logs
+    assert!(project.join(".gralph").is_dir());
 }
