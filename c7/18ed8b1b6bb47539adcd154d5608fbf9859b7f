@@ -1,0 +1,45 @@
+CHANGELOG.md
+  a4ec197c55f1f552 17-33
+ARCHITECTURE.md
+  a4ec197c55f1f552 62,64
+frontend/src/components/AdminUserManagement.test.tsx
+  a4ec197c55f1f552 1-553
+PRD.ultimate.md
+  a4ec197c55f1f552 557
+frontend/src/hooks/useAdminUsers.ts
+  a4ec197c55f1f552 1-218
+frontend/src/hooks/useAdminUsers.test.ts
+  a4ec197c55f1f552 1-524
+src/audit.rs
+  a4ec197c55f1f552 40,72
+src/server.rs
+  a4ec197c55f1f552 330-346,1430,1604-2055
+frontend/src/components/Sidebar.tsx
+  a4ec197c55f1f552 4
+src/auth.rs
+  a4ec197c55f1f552 711-780
+frontend/src/App.tsx
+  a4ec197c55f1f552 2,249-260,430-433
+frontend/src/components/AdminUserManagement.tsx
+  a4ec197c55f1f552 1-441
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "c718ed8b1b6bb47539adcd154d5608fbf9859b7f",
+  "prompts": {
+    "a4ec197c55f1f552": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4b694af9-d943-4f1a-8766-a41c233578ec",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 2326,
+      "total_deletions": 10,
+      "accepted_lines": 2318,
+      "overriden_lines": 0
+    }
+  }
+}
