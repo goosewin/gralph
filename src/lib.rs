@@ -15,6 +15,7 @@ pub mod saml;
 pub mod server;
 pub mod state;
 pub mod task;
+pub mod totp;
 pub mod update;
 mod verifier;
 pub mod version;

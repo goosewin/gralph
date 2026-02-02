@@ -14,6 +14,28 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-28 Add two-factor authentication module (`src/totp.rs`) with TOTP and backup codes.
+- MC-28 Add TwoFactorStatus enum (Disabled, Pending, Enabled) for tracking 2FA state.
+- MC-28 Add TwoFactorData struct for per-user 2FA configuration storage.
+- MC-28 Add TwoFactorSetupResult with base32 secret, otpauth:// QR code URL, and backup codes.
+- MC-28 Add TwoFactorStore for thread-safe in-memory 2FA data storage.
+- MC-28 Add TwoFactorRateLimiter with configurable max attempts (5), window (5 min), and lockout (15 min).
+- MC-28 Add TwoFactorService.setup() for TOTP secret and backup code generation.
+- MC-28 Add TwoFactorService.confirm_setup() for first-time code verification to enable 2FA.
+- MC-28 Add TwoFactorService.verify_code() for TOTP validation with ±1 period clock skew tolerance.
+- MC-28 Add TwoFactorService.verify_backup_code() for backup code validation and consumption.
+- MC-28 Add TwoFactorService.regenerate_backup_codes() for generating new backup codes (requires valid TOTP).
+- MC-28 Add TwoFactorService.initiate_recovery() for email-based recovery token generation.
+- MC-28 Add TwoFactorService.complete_recovery() for disabling 2FA via recovery token.
+- MC-28 Add TwoFactorService.disable() for turning off 2FA (requires valid code).
+- MC-28 Add TwoFactorService.update_recovery_email() for changing recovery address.
+- MC-28 Add RecoveryToken struct with token, user_id, expiration (15 min), and used flag.
+- MC-28 Add base32 encoding/decoding for TOTP secrets (RFC 4648).
+- MC-28 Add otpauth:// URL generation for authenticator app QR codes.
+- MC-28 Add HMAC-SHA256-based TOTP calculation (6 digits, 30 second periods).
+- MC-28 Add backup code generation (8 alphanumeric chars, excluding ambiguous I/O/0/1).
+- MC-28 Add TwoFactorError enum for comprehensive error handling.
+- MC-28 Add 51 new tests for TOTP module covering setup, verification, backup codes, recovery, and rate limiting.
 - MC-27 Add rate limiting middleware module (`src/rate_limit.rs`) for protecting authentication and API endpoints.
 - MC-27 Add TokenBucketConfig for configurable capacity and refill rate per endpoint group.
 - MC-27 Add TokenBucket struct implementing token bucket algorithm with thread-safe token management.

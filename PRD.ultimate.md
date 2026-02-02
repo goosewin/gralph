@@ -525,7 +525,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Recovery via email.
   * Rate limiting on 2FA attempts.
 - **Dependencies** MC-21
-- [ ] MC-28 Implement two-factor authentication
+- [x] MC-28 Implement two-factor authentication
 ---
 
 ### Task MC-29
