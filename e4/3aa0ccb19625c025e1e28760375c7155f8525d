@@ -1,0 +1,35 @@
+src/lib.rs
+  c44d93d5a67ca419 1
+CHANGELOG.md
+  c44d93d5a67ca419 17-35
+PRD.ultimate.md
+  c44d93d5a67ca419 425
+ARCHITECTURE.md
+  c44d93d5a67ca419 12
+Cargo.toml
+  c44d93d5a67ca419 28-31
+src/auth.rs
+  c44d93d5a67ca419 1-1300
+src/server.rs
+  c44d93d5a67ca419 2,17,200,208-222,227,230-231,234,266-286,996-1299,1666,2067,2094,2125,2156,2187,2219,2250
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "e43aa0ccb19625c025e1e28760375c7155f8525d",
+  "prompts": {
+    "c44d93d5a67ca419": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "58287697-be0a-476c-9804-6bc8ed475b08",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 1695,
+      "total_deletions": 13,
+      "accepted_lines": 1681,
+      "overriden_lines": 0
+    }
+  }
+}
