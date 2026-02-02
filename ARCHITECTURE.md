@@ -9,6 +9,7 @@ This document captures the high-level structure of gralph. It is a living summar
 `src/lib.rs` exposes `run`, `Deps`, and the entrypoint helper for external callers.
 `src/app.rs` owns the `run` entrypoint, dependency seams, command dispatch, and
 doctor diagnostics.
+`src/auth.rs` implements user authentication with email/password and JWT tokens. `User` stores user data with argon2-hashed passwords and role (Admin, Developer, Viewer). `UserStore` provides in-memory user storage with email uniqueness. `JwtConfig` configures token expiry times. `AccessTokenClaims` and `RefreshTokenClaims` define JWT payloads. `RefreshTokenStore` tracks token families for rotation, detecting token reuse attacks. `RateLimiter` protects auth endpoints with configurable request limits and lockout periods. `AuthService` combines all auth functionality: registration, login, token refresh with rotation, logout, and token validation.
 `src/app/loop_session.rs` implements start/run-loop/stop/status/logs/resume handlers with `Deps`.
 `src/app/prd_init.rs` implements `gralph prd` and `gralph init` plus PRD/template helpers.
 `src/app/worktree.rs` implements worktree commands and auto-worktree flow.

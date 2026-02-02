@@ -1,5 +1,5 @@
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, Query, State};
+use axum::extract::{ConnectInfo, Path, Query, State};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
@@ -14,6 +14,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
+use crate::auth::{AuthError, AuthService, JwtConfig, RateLimitConfig};
 use crate::core::{count_remaining_tasks, last_error_line, last_log_line, raw_log_path};
 use crate::prd;
 use crate::state::{StateError, StateStore};
@@ -196,6 +197,7 @@ struct AppState {
     config: ServerConfig,
     store: StateStore,
     broadcaster: StateBroadcaster,
+    auth_service: AuthService,
 }
 
 pub async fn run_server(config: ServerConfig) -> Result<(), ServerError> {
@@ -203,14 +205,36 @@ pub async fn run_server(config: ServerConfig) -> Result<(), ServerError> {
     let store = StateStore::new_from_env();
     store.init_state()?;
     let broadcaster = StateBroadcaster::new(100);
+
+    // Initialize auth service with JWT config from environment
+    let jwt_secret = env::var("GRALPH_JWT_SECRET")
+        .unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
+    let jwt_config = JwtConfig::new(&jwt_secret);
+    let rate_limit_config = RateLimitConfig {
+        max_requests: env::var("GRALPH_AUTH_RATE_LIMIT")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(5),
+        window_secs: 60,
+        lockout_secs: 300,
+    };
+    let auth_service = AuthService::new(jwt_config).with_rate_limit(rate_limit_config);
+
     let app_state = Arc::new(AppState {
         config,
         store,
         broadcaster,
+        auth_service,
     });
     let app = build_router(app_state.clone());
-    let listener = TcpListener::bind(app_state.config.addr()?).await?;
-    axum::serve(listener, app).await.map_err(ServerError::Io)
+    let addr = app_state.config.addr()?;
+    let listener = TcpListener::bind(addr).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .map_err(ServerError::Io)
 }
 
 fn build_router(state: Arc<AppState>) -> Router {
@@ -238,6 +262,27 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route(
             "/orchestration",
             get(orchestration_handler).options(options_handler),
+        )
+        // Authentication endpoints
+        .route(
+            "/auth/register",
+            post(auth_register_handler).options(options_handler),
+        )
+        .route(
+            "/auth/login",
+            post(auth_login_handler).options(options_handler),
+        )
+        .route(
+            "/auth/refresh",
+            post(auth_refresh_handler).options(options_handler),
+        )
+        .route(
+            "/auth/logout",
+            post(auth_logout_handler).options(options_handler),
+        )
+        .route(
+            "/auth/me",
+            get(auth_me_handler).options(options_handler),
         )
         .route("/ws", get(ws_handler))
         .route("/assets/*path", get(static_handler))
@@ -948,6 +993,310 @@ async fn orchestration_handler(
     )
 }
 
+// Authentication request/response types
+
+#[derive(Debug, serde::Deserialize)]
+struct RegisterRequest {
+    email: String,
+    password: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct LoginRequest {
+    email: String,
+    password: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct RefreshRequest {
+    refresh_token: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct LogoutRequest {
+    refresh_token: String,
+}
+
+fn get_client_ip(headers: &HeaderMap, connect_info: Option<&SocketAddr>) -> String {
+    // Try X-Forwarded-For first (for proxied requests)
+    if let Some(forwarded) = headers.get("x-forwarded-for") {
+        if let Ok(value) = forwarded.to_str() {
+            if let Some(ip) = value.split(',').next() {
+                return ip.trim().to_string();
+            }
+        }
+    }
+    // Try X-Real-IP
+    if let Some(real_ip) = headers.get("x-real-ip") {
+        if let Ok(value) = real_ip.to_str() {
+            return value.trim().to_string();
+        }
+    }
+    // Fall back to connection info
+    connect_info
+        .map(|info| info.ip().to_string())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn auth_error_response(error: AuthError, cors_origin: Option<String>) -> Response {
+    let (status, message) = match &error {
+        AuthError::InvalidCredentials => (StatusCode::UNAUTHORIZED, error.to_string()),
+        AuthError::EmailAlreadyExists => (StatusCode::CONFLICT, error.to_string()),
+        AuthError::UserNotFound => (StatusCode::NOT_FOUND, error.to_string()),
+        AuthError::TokenExpired => (StatusCode::UNAUTHORIZED, error.to_string()),
+        AuthError::TokenRevoked => (StatusCode::UNAUTHORIZED, error.to_string()),
+        AuthError::RateLimited(duration) => {
+            let mut response = json_response(
+                StatusCode::TOO_MANY_REQUESTS,
+                json!({"error": error.to_string()}),
+                cors_origin,
+            );
+            response.headers_mut().insert(
+                "Retry-After",
+                HeaderValue::from_str(&duration.as_secs().to_string()).unwrap(),
+            );
+            return response;
+        }
+        AuthError::InvalidEmail | AuthError::WeakPassword(_) => {
+            (StatusCode::BAD_REQUEST, error.to_string())
+        }
+        _ => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
+    };
+    error_response(status, message, cors_origin)
+}
+
+/// Handler for user registration.
+async fn auth_register_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    body: Option<Json<RegisterRequest>>,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+
+    let body = match body {
+        Some(Json(b)) => b,
+        None => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "Missing request body with email and password".to_string(),
+                cors_origin,
+            );
+        }
+    };
+
+    let client_ip = get_client_ip(&headers, connect_info.as_ref().map(|c| &c.0));
+
+    match state.auth_service.register(&body.email, &body.password, &client_ip) {
+        Ok(user) => json_response(
+            StatusCode::CREATED,
+            json!({
+                "id": user.id,
+                "email": user.email,
+                "role": user.role,
+                "created_at": user.created_at,
+            }),
+            cors_origin,
+        ),
+        Err(error) => auth_error_response(error, cors_origin),
+    }
+}
+
+/// Handler for user login.
+async fn auth_login_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    body: Option<Json<LoginRequest>>,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+
+    let body = match body {
+        Some(Json(b)) => b,
+        None => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "Missing request body with email and password".to_string(),
+                cors_origin,
+            );
+        }
+    };
+
+    let client_ip = get_client_ip(&headers, connect_info.as_ref().map(|c| &c.0));
+
+    match state.auth_service.login(&body.email, &body.password, &client_ip) {
+        Ok(tokens) => json_response(
+            StatusCode::OK,
+            json!({
+                "access_token": tokens.access_token,
+                "refresh_token": tokens.refresh_token,
+                "token_type": tokens.token_type,
+                "expires_in": tokens.expires_in,
+            }),
+            cors_origin,
+        ),
+        Err(error) => auth_error_response(error, cors_origin),
+    }
+}
+
+/// Handler for token refresh.
+async fn auth_refresh_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    body: Option<Json<RefreshRequest>>,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+
+    let body = match body {
+        Some(Json(b)) => b,
+        None => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "Missing request body with refresh_token".to_string(),
+                cors_origin,
+            );
+        }
+    };
+
+    let client_ip = get_client_ip(&headers, connect_info.as_ref().map(|c| &c.0));
+
+    match state.auth_service.refresh(&body.refresh_token, &client_ip) {
+        Ok(tokens) => json_response(
+            StatusCode::OK,
+            json!({
+                "access_token": tokens.access_token,
+                "refresh_token": tokens.refresh_token,
+                "token_type": tokens.token_type,
+                "expires_in": tokens.expires_in,
+            }),
+            cors_origin,
+        ),
+        Err(error) => auth_error_response(error, cors_origin),
+    }
+}
+
+/// Handler for logout (revokes refresh token family).
+async fn auth_logout_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    body: Option<Json<LogoutRequest>>,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+
+    let body = match body {
+        Some(Json(b)) => b,
+        None => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "Missing request body with refresh_token".to_string(),
+                cors_origin,
+            );
+        }
+    };
+
+    match state.auth_service.logout(&body.refresh_token) {
+        Ok(()) => json_response(
+            StatusCode::OK,
+            json!({"success": true, "message": "Logged out successfully"}),
+            cors_origin,
+        ),
+        Err(error) => auth_error_response(error, cors_origin),
+    }
+}
+
+/// Handler for getting current user info (requires valid access token).
+async fn auth_me_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+
+    // Extract Bearer token from Authorization header
+    let token = match headers.get(header::AUTHORIZATION) {
+        Some(value) => match value.to_str() {
+            Ok(header) => match header.strip_prefix("Bearer ") {
+                Some(token) => token,
+                None => {
+                    return error_response(
+                        StatusCode::UNAUTHORIZED,
+                        "Invalid authorization header format".to_string(),
+                        cors_origin,
+                    );
+                }
+            },
+            Err(_) => {
+                return error_response(
+                    StatusCode::UNAUTHORIZED,
+                    "Invalid authorization header".to_string(),
+                    cors_origin,
+                );
+            }
+        },
+        None => {
+            return error_response(
+                StatusCode::UNAUTHORIZED,
+                "Missing authorization header".to_string(),
+                cors_origin,
+            );
+        }
+    };
+
+    // Validate the access token
+    match state.auth_service.validate_access_token(token) {
+        Ok(claims) => {
+            // Optionally fetch full user data
+            match state.auth_service.user_store.find_by_id(&claims.sub) {
+                Some(user) => json_response(
+                    StatusCode::OK,
+                    json!({
+                        "id": user.id,
+                        "email": user.email,
+                        "role": user.role,
+                        "created_at": user.created_at,
+                        "updated_at": user.updated_at,
+                    }),
+                    cors_origin,
+                ),
+                None => error_response(
+                    StatusCode::NOT_FOUND,
+                    "User not found".to_string(),
+                    cors_origin,
+                ),
+            }
+        }
+        Err(error) => auth_error_response(error, cors_origin),
+    }
+}
+
+/// Check JWT authentication for protected routes.
+/// Returns Some(Response) if authentication failed, None if successful.
+/// On success, the claims can be accessed via check_jwt_auth_with_claims.
+#[allow(dead_code)]
+fn check_jwt_auth(
+    headers: &HeaderMap,
+    state: &AppState,
+    cors_origin: Option<&str>,
+) -> Option<Response> {
+    // Extract Bearer token from Authorization header
+    let token = match headers.get(header::AUTHORIZATION) {
+        Some(value) => match value.to_str() {
+            Ok(header) => match header.strip_prefix("Bearer ") {
+                Some(token) => token,
+                None => return Some(unauthorized_response(cors_origin)),
+            },
+            Err(_) => return Some(unauthorized_response(cors_origin)),
+        },
+        None => return Some(unauthorized_response(cors_origin)),
+    };
+
+    // Validate the access token
+    match state.auth_service.validate_access_token(token) {
+        Ok(_claims) => None, // Authentication successful
+        Err(_) => Some(unauthorized_response(cors_origin)),
+    }
+}
+
 async fn fallback_handler(
     State(state): State<Arc<AppState>>,
     method: Method,
@@ -1314,6 +1663,7 @@ mod tests {
             config,
             store,
             broadcaster: StateBroadcaster::new(100),
+            auth_service: AuthService::new(JwtConfig::new("test-secret")),
         })
     }
 
@@ -1714,6 +2064,7 @@ mod tests {
             },
             store,
             broadcaster: StateBroadcaster::new(10),
+            auth_service: AuthService::new(JwtConfig::new("test-secret")),
         };
         let headers = HeaderMap::new();
 
@@ -1740,6 +2091,7 @@ mod tests {
             },
             store,
             broadcaster: StateBroadcaster::new(10),
+            auth_service: AuthService::new(JwtConfig::new("test-secret")),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -1770,6 +2122,7 @@ mod tests {
             },
             store,
             broadcaster: StateBroadcaster::new(10),
+            auth_service: AuthService::new(JwtConfig::new("test-secret")),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -1800,6 +2153,7 @@ mod tests {
             },
             store,
             broadcaster: StateBroadcaster::new(10),
+            auth_service: AuthService::new(JwtConfig::new("test-secret")),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -1830,6 +2184,7 @@ mod tests {
             },
             store,
             broadcaster: StateBroadcaster::new(10),
+            auth_service: AuthService::new(JwtConfig::new("test-secret")),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -1861,6 +2216,7 @@ mod tests {
             },
             store,
             broadcaster: StateBroadcaster::new(10),
+            auth_service: AuthService::new(JwtConfig::new("test-secret")),
         };
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -1891,6 +2247,7 @@ mod tests {
             },
             store,
             broadcaster: StateBroadcaster::new(10),
+            auth_service: AuthService::new(JwtConfig::new("test-secret")),
         };
         let mut headers = HeaderMap::new();
         headers.insert(

@@ -14,6 +14,25 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-21 Add user authentication module (`src/auth.rs`) with email/password registration and JWT tokens.
+- MC-21 Add User struct with argon2 password hashing and role-based access (Admin, Developer, Viewer).
+- MC-21 Add JwtConfig for configurable access token (15 min default) and refresh token (7 days default) expiry.
+- MC-21 Add AccessTokenClaims and RefreshTokenClaims for JWT token payloads.
+- MC-21 Add TokenPair struct for combined access and refresh token responses.
+- MC-21 Add UserStore for in-memory user storage with email uniqueness validation.
+- MC-21 Add RefreshTokenStore for refresh token family tracking and rotation support.
+- MC-21 Add RateLimiter with configurable max requests, window duration, and lockout period.
+- MC-21 Add AuthService combining user store, refresh store, rate limiter, and JWT operations.
+- MC-21 Add registration endpoint POST /auth/register with password strength validation.
+- MC-21 Add login endpoint POST /auth/login returning JWT access and refresh tokens.
+- MC-21 Add refresh endpoint POST /auth/refresh with token rotation (old tokens invalidated).
+- MC-21 Add logout endpoint POST /auth/logout revoking entire token family.
+- MC-21 Add me endpoint GET /auth/me returning current user info (requires valid access token).
+- MC-21 Add check_jwt_auth helper for JWT-based route protection.
+- MC-21 Add auth error handling with appropriate HTTP status codes (401, 409, 429).
+- MC-21 Add rate limiting on all auth endpoints with Retry-After header on 429 responses.
+- MC-21 Add argon2, jsonwebtoken, uuid, and rand dependencies for auth functionality.
+- MC-21 Add 48 new tests for authentication module covering password hashing, JWT tokens, rate limiting, and auth flows.
 - MC-20 Add AgentOrchestrationDashboard component for real-time agent orchestration visualization.
 - MC-20 Add agent nodes display showing id, status, specialization, and current task.
 - MC-20 Add task flow visualization with animated transitions for status changes.

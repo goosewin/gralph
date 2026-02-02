@@ -422,7 +422,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Refresh token rotation works.
   * Rate limiting on auth endpoints.
 - **Dependencies** MC-1
-- [ ] MC-21 Implement user authentication system
+- [x] MC-21 Implement user authentication system
 ---
 
 ### Task MC-22
