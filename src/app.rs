@@ -3234,9 +3234,6 @@ mod tests {
             model: None,
             variant: None,
             allow_missing_context: false,
-            multiline: false,
-            no_interactive: false,
-            interactive: false,
             force: false,
         };
         let err = prd_init::cmd_prd_create(args).unwrap_err();
@@ -3263,9 +3260,6 @@ mod tests {
             model: None,
             variant: None,
             allow_missing_context: false,
-            multiline: false,
-            no_interactive: false,
-            interactive: false,
             force: false,
         };
         let err = prd_init::cmd_prd_create(args).unwrap_err();
@@ -3295,9 +3289,6 @@ mod tests {
             model: None,
             variant: None,
             allow_missing_context: false,
-            multiline: false,
-            no_interactive: false,
-            interactive: false,
             force: false,
         };
         let err = prd_init::cmd_prd_create(args).unwrap_err();
@@ -3325,9 +3316,6 @@ mod tests {
             model: None,
             variant: None,
             allow_missing_context: false,
-            multiline: false,
-            no_interactive: false,
-            interactive: false,
             force: false,
         };
         let err = prd_init::cmd_prd_create(args).unwrap_err();

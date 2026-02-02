@@ -44,9 +44,6 @@ PRD OPTIONS:
   --model, -m          Model override for PRD generation
   --variant           Model variant override (backend-specific)
   --allow-missing-context Allow missing Context Bundle paths
-  --multiline         Enable multiline prompts (interactive)
-  --no-interactive    Disable interactive prompts
-  --interactive       Force interactive prompts
   --force             Overwrite existing output file
 
 INIT OPTIONS:
@@ -339,12 +336,6 @@ pub struct PrdCreateArgs {
     pub variant: Option<String>,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Allow missing Context Bundle paths")]
     pub allow_missing_context: bool,
-    #[arg(long, action = clap::ArgAction::SetTrue, help = "Enable multiline prompts (interactive)")]
-    pub multiline: bool,
-    #[arg(long, action = clap::ArgAction::SetTrue, conflicts_with = "interactive", help = "Disable interactive prompts")]
-    pub no_interactive: bool,
-    #[arg(long, action = clap::ArgAction::SetTrue, conflicts_with = "no_interactive", help = "Force interactive prompts")]
-    pub interactive: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Overwrite existing output file")]
     pub force: bool,
 }
@@ -774,8 +765,6 @@ mod tests {
             "--variant",
             "mini",
             "--allow-missing-context",
-            "--multiline",
-            "--no-interactive",
             "--force",
         ]);
         match cli.command {
@@ -791,28 +780,12 @@ mod tests {
                     assert_eq!(args.model.as_deref(), Some("sonnet"));
                     assert_eq!(args.variant.as_deref(), Some("mini"));
                     assert!(args.allow_missing_context);
-                    assert!(args.multiline);
-                    assert!(args.no_interactive);
-                    assert!(!args.interactive);
                     assert!(args.force);
                 }
                 other => panic!("Expected prd create command, got: {other:?}"),
             },
             other => panic!("Expected prd command, got: {other:?}"),
         }
-    }
-
-    #[test]
-    fn parse_prd_create_interactive_conflict() {
-        let err = Cli::try_parse_from([
-            "gralph",
-            "prd",
-            "create",
-            "--interactive",
-            "--no-interactive",
-        ])
-        .unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
     }
 
     #[test]

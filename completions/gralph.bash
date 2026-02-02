@@ -876,7 +876,7 @@ _gralph() {
             return 0
             ;;
         gralph__prd__create)
-            opts="-o -b -m -h --dir --output --goal --constraints --context --sources --backend --model --variant --allow-missing-context --multiline --no-interactive --interactive --force --help"
+            opts="-o -b -m -h --dir --output --goal --constraints --context --sources --backend --model --variant --allow-missing-context --force --help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

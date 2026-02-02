@@ -172,9 +172,6 @@ _arguments "${_arguments_options[@]}" : \
 '--model=[Model override for PRD generation]:MODEL:_default' \
 '--variant=[Model variant override (backend-specific)]:VARIANT:_default' \
 '--allow-missing-context[Allow missing Context Bundle paths]' \
-'--multiline[Enable multiline prompts (interactive)]' \
-'(--interactive)--no-interactive[Disable interactive prompts]' \
-'(--no-interactive)--interactive[Force interactive prompts]' \
 '--force[Overwrite existing output file]' \
 '-h[Print help]' \
 '--help[Print help]' \

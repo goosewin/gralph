@@ -63,7 +63,7 @@ Each task block must contain exactly one unchecked task line.
   * Unit tests that reference these flags are updated or removed.
   * `cargo build` succeeds with no warnings related to these fields.
 - **Dependencies** None
-- [ ] PRD-1 Remove multiline and interactive flags from PrdCreateArgs in cli.rs
+- [x] PRD-1 Remove multiline and interactive flags from PrdCreateArgs in cli.rs
 ### Task PRD-2
 
 - **ID** PRD-2
