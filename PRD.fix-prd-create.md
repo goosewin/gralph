@@ -122,7 +122,7 @@ Each task block must contain exactly one unchecked task line.
   * Test retry limit exhaustion returns best attempt.
   * Test valid first attempt returns immediately without retry.
 - **Dependencies** PRD-3, PRD-4
-- [ ] PRD-5 Add integration tests for retry loop
+- [x] PRD-5 Add integration tests for retry loop
 ---
 
 ### Task PRD-6
