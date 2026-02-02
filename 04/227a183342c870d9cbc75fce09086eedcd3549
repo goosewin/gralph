@@ -1,0 +1,25 @@
+tests/prd_retry_integration.rs
+  bdd6cc76565d38d0 1-447
+PRD.fix-prd-create.md
+  bdd6cc76565d38d0 125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "04227a183342c870d9cbc75fce09086eedcd3549",
+  "prompts": {
+    "bdd6cc76565d38d0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "216093d1-2df5-4fb7-ab41-ee16d354afe7",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 456,
+      "total_deletions": 9,
+      "accepted_lines": 448,
+      "overriden_lines": 0
+    }
+  }
+}
