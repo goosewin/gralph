@@ -150,7 +150,7 @@ All failure conditions must emit clear, actionable error messages that describe 
   * Update README verifier pipeline section with new config options.
   * Verify config loading works with new keys.
 - **Dependencies** PRCOMMENT-1
-- [ ] CONFIG-1 Document new verifier config options in default.yaml and README
+- [x] CONFIG-1 Document new verifier config options in default.yaml and README
 ### Task TEST-1
 
 - **ID** TEST-1

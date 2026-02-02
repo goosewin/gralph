@@ -19,6 +19,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - FMT-1 Add cargo fmt enforcement with auto-commit for Rust stacks via verifier.fmt_command config.
 - PRURL-1 Improve PR creation to reliably return URL or actionable error with gh stderr included.
 - PRCOMMENT-1 Add PRD content as PR comment with configurable verifier.post_prd_comment option and 65000 char truncation.
+- CONFIG-1 Document new verifier config options (delete_prd_on_complete, post_prd_comment, fmt_command) in default.yaml and README.
 
 ### Changed
 
