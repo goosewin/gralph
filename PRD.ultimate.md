@@ -136,7 +136,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Health check endpoint responds correctly.
   * Unit tests cover static file routes.
 - **Dependencies** None
-- [ ] MC-1 Add static file serving to Axum server
+- [x] MC-1 Add static file serving to Axum server
 ---
 
 ### Task MC-2

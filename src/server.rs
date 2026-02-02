@@ -1,8 +1,9 @@
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri};
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use rust_embed::Embed;
 use serde_json::{Map, Value, json};
 use std::env;
 use std::net::SocketAddr;
@@ -13,6 +14,10 @@ use tokio::net::TcpListener;
 use crate::core::{count_remaining_tasks, last_error_line, last_log_line, raw_log_path};
 use crate::prd;
 use crate::state::{StateError, StateStore};
+
+#[derive(Embed)]
+#[folder = "assets/"]
+struct Assets;
 
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
@@ -125,12 +130,14 @@ pub async fn run_server(config: ServerConfig) -> Result<(), ServerError> {
 fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/", get(root_handler).options(options_handler))
+        .route("/health", get(health_handler).options(options_handler))
         .route("/status", get(status_handler).options(options_handler))
         .route(
             "/status/:name",
             get(status_name_handler).options(options_handler),
         )
         .route("/stop/:name", post(stop_handler).options(options_handler))
+        .route("/assets/*path", get(static_handler))
         .fallback(fallback_handler)
         .with_state(state)
 }
@@ -152,6 +159,49 @@ async fn root_handler(State(state): State<Arc<AppState>>, headers: HeaderMap) ->
         json!({"status": "ok", "service": "gralph-server"}),
         cors_origin,
     )
+}
+
+async fn health_handler(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+    json_response(StatusCode::OK, json!({"status": "healthy"}), cors_origin)
+}
+
+async fn static_handler(Path(path): Path<String>) -> Response {
+    serve_static_file(&path)
+}
+
+fn serve_static_file(path: &str) -> Response {
+    match Assets::get(path) {
+        Some(content) => {
+            let mime = mime_type_for_path(path);
+            let mut response = content.data.into_response();
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_str(mime).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+            );
+            response
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+fn mime_type_for_path(path: &str) -> &'static str {
+    match path.rsplit('.').next() {
+        Some("html") => "text/html; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js") => "application/javascript; charset=utf-8",
+        Some("json") => "application/json; charset=utf-8",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("svg") => "image/svg+xml",
+        Some("ico") => "image/x-icon",
+        Some("woff") => "font/woff",
+        Some("woff2") => "font/woff2",
+        Some("ttf") => "font/ttf",
+        Some("eot") => "application/vnd.ms-fontobject",
+        _ => "application/octet-stream",
+    }
 }
 
 async fn status_handler(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
@@ -2322,5 +2372,208 @@ mod tests {
             enriched.get("status").and_then(|v| v.as_str()),
             Some("unknown")
         );
+    }
+
+    // Static file serving and health check tests
+
+    #[tokio::test]
+    async fn health_endpoint_returns_healthy() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["status"], "healthy");
+    }
+
+    #[tokio::test]
+    async fn health_endpoint_does_not_require_auth() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: Some("secret".to_string()),
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["status"], "healthy");
+    }
+
+    #[tokio::test]
+    async fn health_endpoint_includes_cors_headers() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .method("GET")
+                    .header(axum::http::header::ORIGIN, "http://localhost")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_cors_headers(response.headers(), "http://localhost");
+    }
+
+    #[tokio::test]
+    async fn static_handler_returns_existing_asset() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/assets/index.html")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get(axum::http::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+            Some("text/html; charset=utf-8")
+        );
+    }
+
+    #[tokio::test]
+    async fn static_handler_returns_not_found_for_missing_asset() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = store_for_test(temp.path());
+        store.init_state().unwrap();
+
+        let config = ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 0,
+            token: None,
+            open: false,
+            max_body_bytes: 4096,
+        };
+        let state = Arc::new(AppState { config, store });
+        let app = build_router(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/assets/nonexistent.js")
+                    .method("GET")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn mime_type_for_path_returns_correct_types() {
+        assert_eq!(mime_type_for_path("index.html"), "text/html; charset=utf-8");
+        assert_eq!(mime_type_for_path("style.css"), "text/css; charset=utf-8");
+        assert_eq!(
+            mime_type_for_path("app.js"),
+            "application/javascript; charset=utf-8"
+        );
+        assert_eq!(
+            mime_type_for_path("data.json"),
+            "application/json; charset=utf-8"
+        );
+        assert_eq!(mime_type_for_path("logo.png"), "image/png");
+        assert_eq!(mime_type_for_path("photo.jpg"), "image/jpeg");
+        assert_eq!(mime_type_for_path("photo.jpeg"), "image/jpeg");
+        assert_eq!(mime_type_for_path("icon.gif"), "image/gif");
+        assert_eq!(mime_type_for_path("icon.svg"), "image/svg+xml");
+        assert_eq!(mime_type_for_path("favicon.ico"), "image/x-icon");
+        assert_eq!(mime_type_for_path("font.woff"), "font/woff");
+        assert_eq!(mime_type_for_path("font.woff2"), "font/woff2");
+        assert_eq!(mime_type_for_path("font.ttf"), "font/ttf");
+        assert_eq!(
+            mime_type_for_path("font.eot"),
+            "application/vnd.ms-fontobject"
+        );
+        assert_eq!(mime_type_for_path("unknown"), "application/octet-stream");
+        assert_eq!(mime_type_for_path("file.xyz"), "application/octet-stream");
+    }
+
+    #[test]
+    fn serve_static_file_returns_embedded_asset() {
+        let response = serve_static_file("index.html");
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn serve_static_file_returns_not_found_for_missing() {
+        let response = serve_static_file("nonexistent.html");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }

@@ -14,6 +14,9 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-1 Add static file serving to Axum server from embedded assets directory.
+- MC-1 Add health check endpoint (`/health`) that returns 200 OK with healthy status.
+- MC-1 Add rust-embed dependency for bundling static assets at compile time.
 - PRD-7 Add retry loop for PRD generation with configurable max retries (`prd_create_max_retries`).
 - PRD-7 Add PRD specification document (`docs/PRD_SPEC.md`) defining validation rules for LLM prompt injection.
 
