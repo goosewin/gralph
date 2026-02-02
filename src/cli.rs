@@ -45,9 +45,6 @@ PRD OPTIONS:
   --variant           Model variant override (backend-specific)
   --max-retries       Max retry attempts for validation failures (default: 3)
   --allow-missing-context Allow missing Context Bundle paths
-  --multiline         Enable multiline prompts (interactive)
-  --no-interactive    Disable interactive prompts
-  --interactive       Force interactive prompts
   --force             Overwrite existing output file
 
 INIT OPTIONS:
@@ -300,6 +297,8 @@ pub enum PrdCommand {
     Check(PrdCheckArgs),
     #[command(about = "Generate a spec-compliant PRD")]
     Create(PrdCreateArgs),
+    #[command(hide = true)]
+    Run(PrdRunArgs),
 }
 
 #[derive(Args, Debug)]
@@ -342,13 +341,37 @@ pub struct PrdCreateArgs {
     pub max_retries: Option<u32>,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Allow missing Context Bundle paths")]
     pub allow_missing_context: bool,
-    #[arg(long, action = clap::ArgAction::SetTrue, help = "Enable multiline prompts (interactive)")]
-    pub multiline: bool,
-    #[arg(long, action = clap::ArgAction::SetTrue, conflicts_with = "interactive", help = "Disable interactive prompts")]
-    pub no_interactive: bool,
-    #[arg(long, action = clap::ArgAction::SetTrue, conflicts_with = "no_interactive", help = "Force interactive prompts")]
-    pub interactive: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Overwrite existing output file")]
+    pub force: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct PrdRunArgs {
+    #[arg(value_name = "DIR")]
+    pub dir: PathBuf,
+    #[arg(long, help = "Session name")]
+    pub name: String,
+    #[arg(long)]
+    pub output: Option<PathBuf>,
+    #[arg(long)]
+    pub goal: Option<String>,
+    #[arg(long)]
+    pub constraints: Option<String>,
+    #[arg(long)]
+    pub context: Option<String>,
+    #[arg(long)]
+    pub sources: Option<String>,
+    #[arg(long)]
+    pub backend: Option<String>,
+    #[arg(long)]
+    pub model: Option<String>,
+    #[arg(long)]
+    pub variant: Option<String>,
+    #[arg(long, help = "Maximum retry attempts for PRD validation (default: 3)")]
+    pub max_retries: Option<u32>,
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub allow_missing_context: bool,
+    #[arg(long, action = clap::ArgAction::SetTrue)]
     pub force: bool,
 }
 
@@ -777,8 +800,6 @@ mod tests {
             "--variant",
             "mini",
             "--allow-missing-context",
-            "--multiline",
-            "--no-interactive",
             "--force",
         ]);
         match cli.command {
@@ -794,28 +815,12 @@ mod tests {
                     assert_eq!(args.model.as_deref(), Some("sonnet"));
                     assert_eq!(args.variant.as_deref(), Some("mini"));
                     assert!(args.allow_missing_context);
-                    assert!(args.multiline);
-                    assert!(args.no_interactive);
-                    assert!(!args.interactive);
                     assert!(args.force);
                 }
                 other => panic!("Expected prd create command, got: {other:?}"),
             },
             other => panic!("Expected prd command, got: {other:?}"),
         }
-    }
-
-    #[test]
-    fn parse_prd_create_interactive_conflict() {
-        let err = Cli::try_parse_from([
-            "gralph",
-            "prd",
-            "create",
-            "--interactive",
-            "--no-interactive",
-        ])
-        .unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::ArgumentConflict);
     }
 
     #[test]
@@ -942,6 +947,56 @@ mod tests {
                 other => panic!("Expected config list command, got: {other:?}"),
             },
             other => panic!("Expected config command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_prd_run_options() {
+        let cli = Cli::parse_from([
+            "gralph",
+            "prd",
+            "run",
+            ".",
+            "--name",
+            "prd-session",
+            "--output",
+            "PRD.generated.md",
+            "--goal",
+            "Build feature",
+            "--constraints",
+            "Must be fast",
+            "--context",
+            "ARCHITECTURE.md",
+            "--sources",
+            "https://example.com",
+            "--backend",
+            "claude",
+            "--model",
+            "sonnet",
+            "--variant",
+            "mini",
+            "--allow-missing-context",
+            "--force",
+        ]);
+        match cli.command {
+            Some(Command::Prd(args)) => match args.command {
+                PrdCommand::Run(args) => {
+                    assert_eq!(args.dir, PathBuf::from("."));
+                    assert_eq!(args.name, "prd-session");
+                    assert_eq!(args.output, Some(PathBuf::from("PRD.generated.md")));
+                    assert_eq!(args.goal.as_deref(), Some("Build feature"));
+                    assert_eq!(args.constraints.as_deref(), Some("Must be fast"));
+                    assert_eq!(args.context.as_deref(), Some("ARCHITECTURE.md"));
+                    assert_eq!(args.sources.as_deref(), Some("https://example.com"));
+                    assert_eq!(args.backend.as_deref(), Some("claude"));
+                    assert_eq!(args.model.as_deref(), Some("sonnet"));
+                    assert_eq!(args.variant.as_deref(), Some("mini"));
+                    assert!(args.allow_missing_context);
+                    assert!(args.force);
+                }
+                other => panic!("Expected prd run command, got: {other:?}"),
+            },
+            other => panic!("Expected prd command, got: {other:?}"),
         }
     }
 

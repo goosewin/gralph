@@ -120,7 +120,7 @@ impl ProcessRunner for RealProcessRunner {
                 return true;
             }
             let err = io::Error::last_os_error();
-            return err.kind() == io::ErrorKind::PermissionDenied;
+            err.kind() == io::ErrorKind::PermissionDenied
         }
         #[cfg(not(unix))]
         {
@@ -147,7 +147,7 @@ impl Default for Deps {
 impl Deps {
     pub fn real() -> Self {
         Self {
-            worktree: worktree::Worktree::default(),
+            worktree: worktree::Worktree,
             fs: Box::new(RealFileSystem),
             process: Box::new(RealProcessRunner),
             clock: Box::new(core::SystemClock),
@@ -3235,9 +3235,6 @@ mod tests {
             variant: None,
             max_retries: None,
             allow_missing_context: false,
-            multiline: false,
-            no_interactive: false,
-            interactive: false,
             force: false,
         };
         let err = prd_init::cmd_prd_create(args).unwrap_err();
@@ -3265,9 +3262,6 @@ mod tests {
             variant: None,
             max_retries: None,
             allow_missing_context: false,
-            multiline: false,
-            no_interactive: false,
-            interactive: false,
             force: false,
         };
         let err = prd_init::cmd_prd_create(args).unwrap_err();
@@ -3298,9 +3292,6 @@ mod tests {
             variant: None,
             max_retries: None,
             allow_missing_context: false,
-            multiline: false,
-            no_interactive: false,
-            interactive: false,
             force: false,
         };
         let err = prd_init::cmd_prd_create(args).unwrap_err();
@@ -3329,9 +3320,6 @@ mod tests {
             variant: None,
             max_retries: None,
             allow_missing_context: false,
-            multiline: false,
-            no_interactive: false,
-            interactive: false,
             force: false,
         };
         let err = prd_init::cmd_prd_create(args).unwrap_err();
