@@ -3,15 +3,38 @@ mod support;
 use gralph_rs::backend::claude::ClaudeBackend;
 use gralph_rs::backend::{Backend, BackendError};
 use serde_json::Value;
+use std::env;
 use std::fs;
+use std::path::PathBuf;
+use std::process::Command;
 
 #[test]
 fn claude_run_iteration_writes_json_output_and_args() {
+    let status = Command::new(env::var("CARGO").unwrap_or_else(|_| "cargo".to_string()))
+        .args([
+            "test",
+            "--test",
+            "backend_claude",
+            "claude_run_iteration_writes_json_output_and_args_impl",
+            "--",
+            "--ignored",
+            "--exact",
+            "--nocapture",
+        ])
+        .status()
+        .expect("Failed to run subprocess test");
+    assert!(status.success(), "Subprocess test failed");
+}
+
+#[test]
+#[ignore] // Run only via subprocess from the main test
+fn claude_run_iteration_writes_json_output_and_args_impl() {
     let temp = tempfile::tempdir().unwrap();
     let output_path = temp.path().join("claude.out");
     let script = render_claude_script();
     let fake = support::FakeCli::new_script("claude", &script).unwrap();
-    let _guard = fake.prepend_to_path().unwrap();
+
+    prepend_path(fake.bin_dir());
 
     let backend = ClaudeBackend::with_command(fake.command());
     backend
@@ -34,11 +57,31 @@ fn claude_run_iteration_writes_json_output_and_args() {
 
 #[test]
 fn claude_run_iteration_orders_args_and_places_model_flag() {
+    let status = Command::new(env::var("CARGO").unwrap_or_else(|_| "cargo".to_string()))
+        .args([
+            "test",
+            "--test",
+            "backend_claude",
+            "claude_run_iteration_orders_args_and_places_model_flag_impl",
+            "--",
+            "--ignored",
+            "--exact",
+            "--nocapture",
+        ])
+        .status()
+        .expect("Failed to run subprocess test");
+    assert!(status.success(), "Subprocess test failed");
+}
+
+#[test]
+#[ignore] // Run only via subprocess from the main test
+fn claude_run_iteration_orders_args_and_places_model_flag_impl() {
     let temp = tempfile::tempdir().unwrap();
     let output_path = temp.path().join("claude.args");
     let script = render_claude_script();
     let fake = support::FakeCli::new_script("claude", &script).unwrap();
-    let _guard = fake.prepend_to_path().unwrap();
+
+    prepend_path(fake.bin_dir());
 
     let backend = ClaudeBackend::with_command(fake.command());
     backend
@@ -73,10 +116,30 @@ fn claude_parse_text_falls_back_to_raw_when_no_result_entries() {
 
 #[test]
 fn claude_run_iteration_reports_failure_exit() {
+    let status = Command::new(env::var("CARGO").unwrap_or_else(|_| "cargo".to_string()))
+        .args([
+            "test",
+            "--test",
+            "backend_claude",
+            "claude_run_iteration_reports_failure_exit_impl",
+            "--",
+            "--ignored",
+            "--exact",
+            "--nocapture",
+        ])
+        .status()
+        .expect("Failed to run subprocess test");
+    assert!(status.success(), "Subprocess test failed");
+}
+
+#[test]
+#[ignore] // Run only via subprocess from the main test
+fn claude_run_iteration_reports_failure_exit_impl() {
     let temp = tempfile::tempdir().unwrap();
     let output_path = temp.path().join("claude.err");
     let fake = support::FakeCli::new("claude", "", "", 2).unwrap();
-    let _guard = fake.prepend_to_path().unwrap();
+
+    prepend_path(fake.bin_dir());
 
     let backend = ClaudeBackend::with_command(fake.command());
     let result = backend.run_iteration("prompt", None, None, &output_path, temp.path());
@@ -113,4 +176,15 @@ fn extract_args_from_output(output: &str) -> Option<String> {
         return Some(args.to_string());
     }
     None
+}
+
+fn prepend_path(dir: &std::path::Path) {
+    let mut paths: Vec<PathBuf> = vec![dir.to_path_buf()];
+    if let Some(existing) = env::var_os("PATH") {
+        paths.extend(env::split_paths(&existing));
+    }
+    if let Ok(joined) = env::join_paths(&paths) {
+        // Safe in subprocess - this process is isolated
+        unsafe { env::set_var("PATH", joined) };
+    }
 }

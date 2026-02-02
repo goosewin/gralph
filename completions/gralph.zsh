@@ -171,6 +171,7 @@ _arguments "${_arguments_options[@]}" : \
 '-m+[Model override for PRD generation]:MODEL:_default' \
 '--model=[Model override for PRD generation]:MODEL:_default' \
 '--variant=[Model variant override (backend-specific)]:VARIANT:_default' \
+'--max-retries=[Max retry attempts for validation failures (default\: 3)]:MAX_RETRIES:_default' \
 '--allow-missing-context[Allow missing Context Bundle paths]' \
 '--force[Overwrite existing output file]' \
 '-h[Print help]' \

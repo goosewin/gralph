@@ -29,10 +29,10 @@ use prd_init::{cmd_init, cmd_prd};
 use prd_init::{
     add_context_entry, build_context_file_list, default_context_files, format_display_path,
     generic_markdown_template, init_template_for_path, invalid_prd_path, is_markdown_path,
-    read_prd_template_with_manifest, read_readme_context_files, resolve_init_context_files,
-    resolve_prd_output, write_allowed_context, write_atomic, ARCHITECTURE_TEMPLATE,
-    CHANGELOG_TEMPLATE, DECISIONS_TEMPLATE, DEFAULT_PRD_TEMPLATE, PROCESS_TEMPLATE,
-    RISK_REGISTER_TEMPLATE,
+    read_prd_spec_with_manifest, read_prd_template_with_manifest, read_readme_context_files,
+    resolve_init_context_files, resolve_prd_output, write_allowed_context, write_atomic,
+    ARCHITECTURE_TEMPLATE, CHANGELOG_TEMPLATE, DECISIONS_TEMPLATE, DEFAULT_PRD_SPEC,
+    DEFAULT_PRD_TEMPLATE, PROCESS_TEMPLATE, RISK_REGISTER_TEMPLATE,
 };
 
 pub(crate) trait FileSystem: Send + Sync {
@@ -3233,6 +3233,7 @@ mod tests {
             backend: None,
             model: None,
             variant: None,
+            max_retries: None,
             allow_missing_context: false,
             force: false,
         };
@@ -3259,6 +3260,7 @@ mod tests {
             backend: None,
             model: None,
             variant: None,
+            max_retries: None,
             allow_missing_context: false,
             force: false,
         };
@@ -3288,6 +3290,7 @@ mod tests {
             backend: Some("claude".to_string()),
             model: None,
             variant: None,
+            max_retries: None,
             allow_missing_context: false,
             force: false,
         };
@@ -3315,6 +3318,7 @@ mod tests {
             backend: Some("nonexistent-backend".to_string()),
             model: None,
             variant: None,
+            max_retries: None,
             allow_missing_context: false,
             force: false,
         };
@@ -3349,6 +3353,51 @@ mod tests {
         assert!(DEFAULT_PRD_TEMPLATE.contains("## Success Criteria"));
         assert!(DEFAULT_PRD_TEMPLATE.contains("### Task EX-1"));
         assert!(DEFAULT_PRD_TEMPLATE.contains("- [ ] EX-1"));
+    }
+
+    #[test]
+    fn read_prd_spec_prefers_project_spec() {
+        let project = tempfile::tempdir().unwrap();
+        let manifest = tempfile::tempdir().unwrap();
+        fs::create_dir_all(project.path().join("docs")).unwrap();
+        fs::create_dir_all(manifest.path().join("docs")).unwrap();
+        fs::write(project.path().join("docs/PRD_SPEC.md"), "project spec").unwrap();
+        fs::write(manifest.path().join("docs/PRD_SPEC.md"), "fallback spec").unwrap();
+
+        let spec = read_prd_spec_with_manifest(project.path(), manifest.path()).unwrap();
+
+        assert_eq!(spec, "project spec");
+    }
+
+    #[test]
+    fn read_prd_spec_uses_manifest_fallback() {
+        let project = tempfile::tempdir().unwrap();
+        let manifest = tempfile::tempdir().unwrap();
+        fs::create_dir_all(manifest.path().join("docs")).unwrap();
+        fs::write(manifest.path().join("docs/PRD_SPEC.md"), "manifest spec").unwrap();
+
+        let spec = read_prd_spec_with_manifest(project.path(), manifest.path()).unwrap();
+
+        assert_eq!(spec, "manifest spec");
+    }
+
+    #[test]
+    fn read_prd_spec_falls_back_to_default_content() {
+        let project = tempfile::tempdir().unwrap();
+        let manifest = tempfile::tempdir().unwrap();
+
+        let spec = read_prd_spec_with_manifest(project.path(), manifest.path()).unwrap();
+
+        assert_eq!(spec, DEFAULT_PRD_SPEC);
+    }
+
+    #[test]
+    fn default_prd_spec_contains_validation_rules() {
+        assert!(DEFAULT_PRD_SPEC.contains("PRD Specification"));
+        assert!(DEFAULT_PRD_SPEC.contains("Document-Level Rules"));
+        assert!(DEFAULT_PRD_SPEC.contains("Task Block Rules"));
+        assert!(DEFAULT_PRD_SPEC.contains("Required Fields"));
+        assert!(DEFAULT_PRD_SPEC.contains("Unchecked Task Line"));
     }
 
     #[test]
@@ -3558,5 +3607,349 @@ mod tests {
 
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0], external.to_string_lossy().to_string());
+    }
+
+    // Tests for prd_create_with_retry
+
+    use std::cell::RefCell;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct RetryTestBackend {
+        responses: RefCell<Vec<String>>,
+        call_count: AtomicUsize,
+    }
+
+    impl RetryTestBackend {
+        fn new(responses: Vec<String>) -> Self {
+            Self {
+                responses: RefCell::new(responses),
+                call_count: AtomicUsize::new(0),
+            }
+        }
+
+        fn calls(&self) -> usize {
+            self.call_count.load(Ordering::Relaxed)
+        }
+    }
+
+    impl crate::backend::Backend for RetryTestBackend {
+        fn check_installed(&self) -> bool {
+            true
+        }
+
+        fn run_iteration(
+            &self,
+            _prompt: &str,
+            _model: Option<&str>,
+            _variant: Option<&str>,
+            output_file: &Path,
+            _working_dir: &Path,
+        ) -> Result<(), crate::backend::BackendError> {
+            let count = self.call_count.fetch_add(1, Ordering::Relaxed);
+            let responses = self.responses.borrow();
+            let response = responses.get(count).cloned().unwrap_or_default();
+            fs::write(output_file, response).map_err(|source| crate::backend::BackendError::Io {
+                path: output_file.to_path_buf(),
+                source,
+            })
+        }
+
+        fn parse_text(
+            &self,
+            response_file: &Path,
+        ) -> Result<String, crate::backend::BackendError> {
+            fs::read_to_string(response_file).map_err(|source| crate::backend::BackendError::Io {
+                path: response_file.to_path_buf(),
+                source,
+            })
+        }
+
+        fn get_models(&self) -> Vec<String> {
+            Vec::new()
+        }
+    }
+
+    fn valid_prd_content(context_file: &str) -> String {
+        format!(
+            r#"# Test PRD
+
+## Overview
+
+Test project.
+
+## Problem Statement
+
+- Test problem.
+
+## Solution
+
+Test solution.
+
+---
+
+## Implementation Tasks
+
+### Task TEST-1
+
+- **ID** TEST-1
+- **Context Bundle** `{}`
+- **DoD** Test done.
+- **Checklist**
+  * Item one.
+- **Dependencies** None
+- [ ] TEST-1 Test task
+---
+
+## Success Criteria
+
+- Test passes.
+"#,
+            context_file
+        )
+    }
+
+    fn invalid_prd_missing_field() -> String {
+        r#"# Test PRD
+
+## Overview
+
+Test project.
+
+---
+
+## Implementation Tasks
+
+### Task TEST-1
+
+- **ID** TEST-1
+- **DoD** Test done.
+- **Checklist**
+  * Item one.
+- **Dependencies** None
+- [ ] TEST-1 Test task
+---
+"#
+        .to_string()
+    }
+
+    #[test]
+    fn prd_create_with_retry_succeeds_on_first_attempt() {
+        let temp = tempfile::tempdir().unwrap();
+        let context_file = temp.path().join("README.md");
+        write_file(&context_file, "readme");
+
+        let backend = RetryTestBackend::new(vec![valid_prd_content("README.md")]);
+
+        let result = prd_init::prd_create_with_retry(
+            &backend,
+            "test prompt",
+            None,
+            None,
+            temp.path(),
+            temp.path(),
+            None,
+            false,
+            3,
+        )
+        .unwrap();
+
+        assert!(result.validation_errors.is_none());
+        assert_eq!(backend.calls(), 1);
+        assert!(result.content.contains("TEST-1"));
+    }
+
+    #[test]
+    fn prd_create_with_retry_retries_on_validation_failure() {
+        let temp = tempfile::tempdir().unwrap();
+        let context_file = temp.path().join("README.md");
+        write_file(&context_file, "readme");
+
+        let backend = RetryTestBackend::new(vec![
+            invalid_prd_missing_field(),
+            valid_prd_content("README.md"),
+        ]);
+
+        let result = prd_init::prd_create_with_retry(
+            &backend,
+            "test prompt",
+            None,
+            None,
+            temp.path(),
+            temp.path(),
+            None,
+            false,
+            3,
+        )
+        .unwrap();
+
+        assert!(result.validation_errors.is_none());
+        assert_eq!(backend.calls(), 2);
+    }
+
+    #[test]
+    fn prd_create_with_retry_respects_max_retries() {
+        let temp = tempfile::tempdir().unwrap();
+
+        // All responses are invalid
+        let backend = RetryTestBackend::new(vec![
+            invalid_prd_missing_field(),
+            invalid_prd_missing_field(),
+            invalid_prd_missing_field(),
+            invalid_prd_missing_field(),
+            invalid_prd_missing_field(),
+        ]);
+
+        let result = prd_init::prd_create_with_retry(
+            &backend,
+            "test prompt",
+            None,
+            None,
+            temp.path(),
+            temp.path(),
+            None,
+            true, // allow missing context
+            2,    // max 2 retries (3 attempts total)
+        )
+        .unwrap();
+
+        // Should have validation errors after retries exhausted
+        assert!(result.validation_errors.is_some());
+        // Should have made exactly 3 attempts (1 initial + 2 retries)
+        assert_eq!(backend.calls(), 3);
+    }
+
+    #[test]
+    fn prd_create_with_retry_returns_best_attempt_when_exhausted() {
+        let temp = tempfile::tempdir().unwrap();
+
+        let backend = RetryTestBackend::new(vec![
+            invalid_prd_missing_field(),
+            invalid_prd_missing_field(),
+        ]);
+
+        let result = prd_init::prd_create_with_retry(
+            &backend,
+            "test prompt",
+            None,
+            None,
+            temp.path(),
+            temp.path(),
+            None,
+            true,
+            1, // max 1 retry
+        )
+        .unwrap();
+
+        // Should have validation errors
+        assert!(result.validation_errors.is_some());
+        // Should return content (best attempt)
+        assert!(result.content.contains("TEST-1"));
+    }
+
+    #[test]
+    fn prd_create_with_retry_handles_empty_output() {
+        let temp = tempfile::tempdir().unwrap();
+        let context_file = temp.path().join("README.md");
+        write_file(&context_file, "readme");
+
+        let backend = RetryTestBackend::new(vec![
+            "".to_string(), // empty
+            valid_prd_content("README.md"),
+        ]);
+
+        let result = prd_init::prd_create_with_retry(
+            &backend,
+            "test prompt",
+            None,
+            None,
+            temp.path(),
+            temp.path(),
+            None,
+            false,
+            3,
+        )
+        .unwrap();
+
+        assert!(result.validation_errors.is_none());
+        assert_eq!(backend.calls(), 2);
+    }
+
+    #[test]
+    fn prd_create_with_retry_no_retries_returns_immediately() {
+        let temp = tempfile::tempdir().unwrap();
+
+        let backend = RetryTestBackend::new(vec![invalid_prd_missing_field()]);
+
+        let result = prd_init::prd_create_with_retry(
+            &backend,
+            "test prompt",
+            None,
+            None,
+            temp.path(),
+            temp.path(),
+            None,
+            true,
+            0, // no retries
+        )
+        .unwrap();
+
+        // Should have validation errors
+        assert!(result.validation_errors.is_some());
+        // Should have made only 1 attempt
+        assert_eq!(backend.calls(), 1);
+    }
+
+    #[test]
+    fn prd_create_with_retry_empty_output_exhausts_retries() {
+        let temp = tempfile::tempdir().unwrap();
+
+        let backend = RetryTestBackend::new(vec![
+            "".to_string(),
+            "".to_string(),
+            "".to_string(),
+        ]);
+
+        let result = prd_init::prd_create_with_retry(
+            &backend,
+            "test prompt",
+            None,
+            None,
+            temp.path(),
+            temp.path(),
+            None,
+            false,
+            2, // 2 retries
+        );
+
+        assert!(result.is_err());
+        match result {
+            Err(CliError::Message(msg)) => {
+                assert!(msg.contains("empty output"));
+            }
+            other => panic!("unexpected result: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn build_retry_prompt_includes_errors_and_previous_prd() {
+        let errors = crate::prd::PrdValidationError {
+            messages: vec!["Missing field: Context Bundle".to_string()],
+        };
+
+        let prompt =
+            prd_init::build_retry_prompt("original prompt", "previous prd content", &errors);
+
+        assert!(prompt.contains("original prompt"));
+        assert!(prompt.contains("previous prd content"));
+        assert!(prompt.contains("Missing field: Context Bundle"));
+        assert!(prompt.contains("FAILED VALIDATION"));
+    }
+
+    #[test]
+    fn build_retry_prompt_for_empty_includes_original() {
+        let prompt = prd_init::build_retry_prompt_for_empty("original prompt");
+
+        assert!(prompt.contains("original prompt"));
+        assert!(prompt.contains("empty output"));
     }
 }

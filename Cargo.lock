@@ -530,6 +530,7 @@ dependencies = [
  "dirs",
  "fs2",
  "libc",
+ "log",
  "predicates",
  "proptest",
  "reqwest",

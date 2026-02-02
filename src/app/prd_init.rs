@@ -1,9 +1,10 @@
 use super::{join_or_none, normalize_csv, CliError};
-use crate::backend::backend_from_name;
+use crate::backend::{backend_from_name, Backend};
 use crate::cli::{InitArgs, PrdArgs, PrdCheckArgs, PrdCommand, PrdCreateArgs, PrdRunArgs};
 use crate::config::Config;
-use crate::prd;
+use crate::prd::{self, PrdValidationError};
 use crate::state::StateStore;
+use log::{debug, info};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
@@ -12,6 +13,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command as ProcCommand, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Default maximum number of retry attempts for PRD generation.
+pub const DEFAULT_PRD_CREATE_MAX_RETRIES: u32 = 3;
 
 pub(super) fn cmd_prd(args: PrdArgs) -> Result<(), CliError> {
     match args.command {
@@ -48,7 +52,10 @@ pub(super) fn cmd_prd_run(args: PrdRunArgs) -> Result<(), CliError> {
     let result = run_prd_generation(&args, &target_dir, &log_file);
     match &result {
         Ok(output_path) => {
-            log_to_file(&log_file, &format!("PRD created: {}", output_path.display()));
+            log_to_file(
+                &log_file,
+                &format!("PRD created: {}", output_path.display()),
+            );
             update_session_state(&store, &args.name, "complete");
             println!("PRD created: {}", output_path.display());
         }
@@ -164,12 +171,8 @@ fn run_prd_generation(
     fs::write(&temp_prd, result).map_err(CliError::Io)?;
 
     let allowed_context_file = write_allowed_context(&context_files)?;
-    prd::prd_sanitize_generated_file(
-        &temp_prd,
-        Some(target_dir),
-        allowed_context_file.as_deref(),
-    )
-    .map_err(|err| CliError::Message(err.to_string()))?;
+    prd::prd_sanitize_generated_file(&temp_prd, Some(target_dir), allowed_context_file.as_deref())
+        .map_err(|err| CliError::Message(err.to_string()))?;
 
     if let Err(err) =
         prd::prd_validate_file(&temp_prd, args.allow_missing_context, Some(target_dir))
@@ -400,7 +403,13 @@ fn prd_session_name(target_dir: &Path) -> Result<String, CliError> {
         .unwrap_or("prd");
     let sanitized = dir_name
         .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' { c } else { '-' })
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect::<String>();
     let base = if sanitized.is_empty() || sanitized == "-" {
         "prd".to_string()
@@ -507,6 +516,213 @@ fn spawn_prd_run(
         .map_err(|err| CliError::Message(format!("Failed to start PRD generation: {}", err)))
 }
 
+/// Result of a single PRD generation attempt.
+#[derive(Debug)]
+pub struct PrdGenerationResult {
+    /// The generated PRD content.
+    pub content: String,
+    /// Validation errors if any.
+    pub validation_errors: Option<PrdValidationError>,
+}
+
+/// Generates a PRD with automatic retry on validation failure.
+///
+/// This function wraps the PRD generation logic and retries when validation
+/// fails, sending the previous PRD and error messages back to the LLM for
+/// correction.
+///
+/// # Arguments
+///
+/// * `backend` - The backend to use for generation.
+/// * `initial_prompt` - The initial prompt for PRD generation.
+/// * `model` - Optional model override.
+/// * `variant` - Optional variant override.
+/// * `working_dir` - The project directory.
+/// * `base_dir` - Base directory for context path resolution.
+/// * `allowed_context_file` - Optional file listing allowed context paths.
+/// * `allow_missing_context` - Whether to allow missing context files.
+/// * `max_retries` - Maximum number of retry attempts (0 means no retries).
+///
+/// # Returns
+///
+/// Returns the best PRD content and any remaining validation errors.
+pub fn prd_create_with_retry(
+    backend: &dyn Backend,
+    initial_prompt: &str,
+    model: Option<&str>,
+    variant: Option<&str>,
+    working_dir: &Path,
+    base_dir: &Path,
+    allowed_context_file: Option<&Path>,
+    allow_missing_context: bool,
+    max_retries: u32,
+) -> Result<PrdGenerationResult, CliError> {
+    let tmp_dir = env::temp_dir();
+    let mut current_prompt = initial_prompt.to_string();
+    let mut best_result: Option<PrdGenerationResult> = None;
+    let mut attempt = 0;
+    // Use a unique session ID to avoid conflicts between parallel test runs
+    let session_id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+
+    loop {
+        attempt += 1;
+        let total_attempts = max_retries.saturating_add(1);
+        info!("PRD generation attempt {}/{}", attempt, total_attempts);
+        eprintln!("PRD generation attempt {}/{}", attempt, total_attempts);
+
+        // Generate PRD
+        let output_file = tmp_dir.join(format!(
+            "gralph-prd-{}-{}-{}.tmp",
+            std::process::id(),
+            session_id,
+            attempt
+        ));
+        backend
+            .run_iteration(&current_prompt, model, variant, &output_file, working_dir)
+            .map_err(|err| CliError::Message(err.to_string()))?;
+
+        let result = backend
+            .parse_text(&output_file)
+            .map_err(|err| CliError::Message(err.to_string()))?;
+
+        if result.trim().is_empty() {
+            if attempt > max_retries {
+                return Err(CliError::Message(
+                    "PRD generation returned empty output after all retries.".to_string(),
+                ));
+            }
+            info!("Empty PRD output on attempt {}, retrying", attempt);
+            eprintln!("Empty PRD output on attempt {}, retrying", attempt);
+            current_prompt = build_retry_prompt_for_empty(initial_prompt);
+            continue;
+        }
+
+        // Write to temp file for validation
+        let temp_prd = tmp_dir.join(format!(
+            "gralph-prd-{}-{}-{}.md",
+            std::process::id(),
+            session_id,
+            attempt
+        ));
+        fs::write(&temp_prd, &result).map_err(CliError::Io)?;
+
+        // Sanitize the generated PRD
+        prd::prd_sanitize_generated_file(&temp_prd, Some(base_dir), allowed_context_file)
+            .map_err(|err| CliError::Message(err.to_string()))?;
+
+        // Read back the sanitized content
+        let sanitized_content = fs::read_to_string(&temp_prd).map_err(CliError::Io)?;
+
+        // Validate the PRD
+        let validation_result =
+            prd::prd_validate_file(&temp_prd, allow_missing_context, Some(base_dir));
+
+        match validation_result {
+            Ok(()) => {
+                info!("PRD validation passed on attempt {}", attempt);
+                eprintln!("PRD validation passed on attempt {}", attempt);
+                return Ok(PrdGenerationResult {
+                    content: sanitized_content,
+                    validation_errors: None,
+                });
+            }
+            Err(errors) => {
+                let error_count = errors.messages.len();
+                info!(
+                    "PRD validation failed on attempt {} with {} error(s)",
+                    attempt, error_count
+                );
+                eprintln!(
+                    "PRD validation failed on attempt {}: {}",
+                    attempt,
+                    errors.messages.join("; ")
+                );
+                debug!(
+                    "Validation errors on attempt {}: {}",
+                    attempt,
+                    errors.messages.join("; ")
+                );
+
+                // Store as best result if we don't have one yet
+                if best_result.is_none() {
+                    best_result = Some(PrdGenerationResult {
+                        content: sanitized_content.clone(),
+                        validation_errors: Some(errors.clone()),
+                    });
+                }
+
+                // Check if we've exhausted retries
+                if attempt > max_retries {
+                    info!(
+                        "Retry limit reached after {} attempts, returning best attempt",
+                        attempt
+                    );
+                    eprintln!(
+                        "Retry limit reached after {} attempts, returning best attempt",
+                        attempt
+                    );
+                    return Ok(best_result.unwrap_or(PrdGenerationResult {
+                        content: sanitized_content,
+                        validation_errors: Some(errors),
+                    }));
+                }
+
+                // Build corrective prompt for next attempt
+                current_prompt = build_retry_prompt(initial_prompt, &sanitized_content, &errors);
+                let prompt_len = current_prompt.len();
+                info!(
+                    "Retrying PRD generation (attempt {}/{}) with corrective prompt ({} bytes)",
+                    attempt + 1,
+                    max_retries.saturating_add(1),
+                    prompt_len
+                );
+                eprintln!(
+                    "Retrying PRD generation with {} validation errors",
+                    error_count
+                );
+                debug!(
+                    "Corrective prompt length for retry {}: {} bytes",
+                    attempt + 1,
+                    prompt_len
+                );
+            }
+        }
+    }
+}
+
+/// Builds a retry prompt that includes the previous PRD and validation errors.
+pub(super) fn build_retry_prompt(
+    original_prompt: &str,
+    previous_prd: &str,
+    errors: &PrdValidationError,
+) -> String {
+    let error_list = errors
+        .messages
+        .iter()
+        .enumerate()
+        .map(|(i, msg)| format!("{}. {}", i + 1, msg))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!(
+        "{original}\n\n---\n\n## Previous Attempt (FAILED VALIDATION)\n\nThe following PRD was generated but failed validation. Please fix all errors and regenerate.\n\n### Validation Errors\n\n{errors}\n\n### Previous PRD Content\n\n```markdown\n{prd}\n```\n\n## Instructions for Fixing\n\n1. Carefully review each validation error above.\n2. Fix ALL errors in the PRD.\n3. Ensure task blocks have exactly one unchecked task line each.\n4. Ensure all required fields (ID, Context Bundle, DoD, Checklist, Dependencies) are present.\n5. Do not include an Open Questions section.\n6. Output only the corrected PRD markdown with no commentary or code fences.\n",
+        original = original_prompt,
+        errors = error_list,
+        prd = previous_prd
+    )
+}
+
+/// Builds a retry prompt for when the previous attempt returned empty output.
+pub(super) fn build_retry_prompt_for_empty(original_prompt: &str) -> String {
+    format!(
+        "{original}\n\n---\n\n## Previous Attempt Failed\n\nThe previous generation attempt returned empty output. Please generate a complete, valid PRD following all the requirements above.\n\nOutput only the PRD markdown with no commentary or code fences.\n",
+        original = original_prompt
+    )
+}
+
 pub(super) fn resolve_prd_output(
     dir: &Path,
     output: Option<PathBuf>,
@@ -555,6 +771,27 @@ pub(super) fn read_prd_template_with_manifest(
     }
 
     Ok(DEFAULT_PRD_TEMPLATE.to_string())
+}
+
+fn read_prd_spec(dir: &Path) -> Result<String, CliError> {
+    read_prd_spec_with_manifest(dir, Path::new(env!("CARGO_MANIFEST_DIR")))
+}
+
+pub(super) fn read_prd_spec_with_manifest(
+    dir: &Path,
+    manifest_dir: &Path,
+) -> Result<String, CliError> {
+    let candidates = [
+        dir.join("docs/PRD_SPEC.md"),
+        manifest_dir.join("docs/PRD_SPEC.md"),
+    ];
+    for path in candidates {
+        if path.is_file() {
+            return fs::read_to_string(&path).map_err(CliError::Io);
+        }
+    }
+
+    Ok(DEFAULT_PRD_SPEC.to_string())
 }
 
 pub(super) fn resolve_init_context_files(
@@ -834,6 +1071,8 @@ pub(super) fn write_allowed_context(entries: &[String]) -> Result<Option<PathBuf
 }
 
 pub(super) const DEFAULT_PRD_TEMPLATE: &str = "## Overview\n\nBriefly describe the project, goals, and intended users.\n\n## Problem Statement\n\n- What problem does this solve?\n- What pain points exist today?\n\n## Solution\n\nHigh-level solution summary.\n\n---\n\n## Functional Requirements\n\n### FR-1: Core Feature\n\nDescribe the primary user-facing behavior.\n\n### FR-2: Secondary Feature\n\nDescribe supporting behavior.\n\n---\n\n## Non-Functional Requirements\n\n### NFR-1: Performance\n\n- Example: Response times under 200ms for key operations.\n\n### NFR-2: Reliability\n\n- Example: Crash recovery or retries where appropriate.\n\n---\n\n## Implementation Tasks\n\nEach task must use a `### Task <ID>` block header and include the required fields.\nEach task block must contain exactly one unchecked task line.\n\n### Task EX-1\n\n- **ID** EX-1\n- **Context Bundle** `path/to/file`, `path/to/other`\n- **DoD** Define the done criteria for this task.\n- **Checklist**\n  * First verification item.\n  * Second verification item.\n- **Dependencies** None\n- [ ] EX-1 Short task summary\n\n---\n\n## Success Criteria\n\n- Define measurable outcomes that indicate completion.\n\n---\n\n## Sources\n\n- List authoritative URLs used as source of truth.\n\n---\n\n## Warnings\n\n- Only include this section if no reliable sources were found.\n- State what is missing and what must be verified.\n";
+
+pub(super) const DEFAULT_PRD_SPEC: &str = "# PRD Specification\n\n## Document-Level Rules\n\n1. Non-Empty Content: The PRD file must not be empty.\n2. Forbidden Sections: Do not include an 'Open Questions' section.\n3. Stray Checkboxes: Unchecked task lines ('- [ ]') outside task blocks are invalid.\n\n## Task Block Rules\n\nEach task must be defined in a block starting with '### Task <ID>'.\n\n### Required Fields\n\n- **ID** <task-id>\n- **Context Bundle** `<path>`, `<path>`, ...\n- **DoD** <description>\n- **Checklist** with * items\n- **Dependencies** <list or \"None\">\n\n### Unchecked Task Line\n\nEach task block must contain exactly one line: '- [ ] <ID> <description>'\n\n### Block Termination\n\nEnd each task block with '---' or an H2 heading.\n";
 
 pub(super) const ARCHITECTURE_TEMPLATE: &str = "# Architecture\n\n## Overview\n\nDescribe the system at a high level.\n\n## Modules\n\nList key modules and what they own.\n\n## Runtime Flow\n\nDescribe the primary runtime path.\n\n## Storage\n\nRecord where state or data is stored.\n";
 

@@ -1,12 +1,7 @@
-use std::env;
-use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::path::Path;
-use std::sync::Mutex;
 use tempfile::TempDir;
-
-static PATH_LOCK: Mutex<()> = Mutex::new(());
 
 pub struct FakeCli {
     temp_dir: TempDir,
@@ -50,48 +45,22 @@ impl FakeCli {
         Ok(Self { temp_dir, bin_name })
     }
 
+    /// Returns the command name (for use with PATH-based lookup).
     pub fn command(&self) -> String {
         script_name(&self.bin_name)
     }
 
-    pub fn prepend_to_path(&self) -> io::Result<PathGuard> {
-        prepend_to_path(self.temp_dir.path())
+    /// Returns the directory containing the fake CLI binary.
+    /// Use this with TestEnv::prepend_path() or Command::env("PATH", ...) to make the fake CLI available.
+    pub fn bin_dir(&self) -> &Path {
+        self.temp_dir.path()
     }
-}
 
-pub struct PathGuard {
-    original: Option<OsString>,
-    _lock: std::sync::MutexGuard<'static, ()>,
-}
-
-impl Drop for PathGuard {
-    fn drop(&mut self) {
-        match &self.original {
-            Some(value) => unsafe { env::set_var("PATH", value) },
-            None => unsafe { env::remove_var("PATH") },
-        }
+    /// Returns the full path to the fake CLI binary.
+    /// Use this when you want to run the CLI directly without modifying PATH.
+    pub fn bin_path(&self) -> std::path::PathBuf {
+        self.temp_dir.path().join(script_name(&self.bin_name))
     }
-}
-
-fn prepend_to_path(dir: &Path) -> io::Result<PathGuard> {
-    let lock = PATH_LOCK
-        .lock()
-        .unwrap_or_else(|poison| poison.into_inner());
-    let original = env::var_os("PATH");
-    let mut paths = Vec::new();
-    paths.push(dir.to_path_buf());
-    if let Some(existing) = &original {
-        paths.extend(env::split_paths(existing));
-    }
-    let joined =
-        env::join_paths(paths).map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err))?;
-    unsafe {
-        env::set_var("PATH", joined);
-    }
-    Ok(PathGuard {
-        original,
-        _lock: lock,
-    })
 }
 
 fn script_name(name: &str) -> String {
