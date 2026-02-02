@@ -497,7 +497,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Account linking UI.
   * Integration tests for each provider.
 - **Dependencies** MC-21
-- [ ] MC-26 Add OAuth2 social login providers
+- [x] MC-26 Add OAuth2 social login providers
 ---
 
 ### Task MC-27

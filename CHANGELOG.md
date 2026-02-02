@@ -14,6 +14,42 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-26 Add OAuth2 social login module (`src/oauth2.rs`) for GitHub, Google, and GitLab authentication.
+- MC-26 Add OAuth2Provider enum with GitHub, Google, GitLab variants and Display/FromStr implementations.
+- MC-26 Add OAuth2ProviderConfig for provider-specific OAuth2 settings (endpoints, scopes, credentials).
+- MC-26 Add OAuth2ProviderConfig.github() factory for GitHub OAuth2 configuration with user:email scope.
+- MC-26 Add OAuth2ProviderConfig.google() factory for Google OAuth2 with OpenID Connect scopes.
+- MC-26 Add OAuth2ProviderConfig.gitlab() and gitlab_with_host() for GitLab and self-hosted GitLab.
+- MC-26 Add OAuth2Config for multi-provider configuration with with_provider() builder pattern.
+- MC-26 Add OAuth2Config.from_env() for loading provider configs from environment variables.
+- MC-26 Add OAuth2AuthRequest for tracking authorization requests with state, provider, and linking info.
+- MC-26 Add OAuth2AuthRequest.for_linking() for account linking flows with existing user ID.
+- MC-26 Add GitHubUserProfile, GoogleUserProfile, GitLabUserProfile for provider-specific responses.
+- MC-26 Add GitHubEmail for fetching primary verified email from GitHub.
+- MC-26 Add OAuth2UserProfile for unified profile with from_github(), from_google(), from_gitlab().
+- MC-26 Add LinkedAccount struct storing provider, provider_user_id, email, username, linked_at.
+- MC-26 Add LinkedAccountStore for managing account linking with bidirectional indices.
+- MC-26 Add LinkedAccountStore.link_account() for linking provider accounts to users.
+- MC-26 Add LinkedAccountStore.unlink_account() for removing linked accounts.
+- MC-26 Add LinkedAccountStore.find_user_by_provider() for reverse lookup.
+- MC-26 Add LinkedAccountStore.is_linked() for checking if provider account is linked.
+- MC-26 Add OAuth2TokenResponse for token exchange response parsing.
+- MC-26 Add OAuth2TokenRequestParams for building form-encoded token exchange requests.
+- MC-26 Add OAuth2Client implementing authorization code flow with state validation.
+- MC-26 Add OAuth2Client.create_authorization_url() for initiating OAuth2 authentication.
+- MC-26 Add OAuth2Client.create_linking_url() for account linking authorization.
+- MC-26 Add OAuth2Client.validate_callback() for validating authorization callbacks.
+- MC-26 Add OAuth2Client.build_token_request() for constructing token exchange requests.
+- MC-26 Add OAuth2AuthService combining OAuth2Client with user and linked account stores.
+- MC-26 Add OAuth2AuthService.start_auth() for initiating OAuth2 login flow.
+- MC-26 Add OAuth2AuthService.start_linking() for initiating account linking flow.
+- MC-26 Add OAuth2AuthService.complete_auth() for completing auth with auto-provisioning and linking.
+- MC-26 Add OAuth2AuthService.unlink_account() for removing linked provider accounts.
+- MC-26 Add OAuth2AuthService.get_linked_accounts() for listing user's linked accounts.
+- MC-26 Add OAuth2AuthResult with tokens, profile, redirect_url, is_new_user, is_linked flags.
+- MC-26 Add OAuth2Error enum for provider-specific error handling.
+- MC-26 Add environment variables: GRALPH_OAUTH2_GITHUB_*, GRALPH_OAUTH2_GOOGLE_*, GRALPH_OAUTH2_GITLAB_*.
+- MC-26 Add 52 new tests for OAuth2 module covering all providers, account linking, and auth flows.
 - MC-25 Add OpenID Connect (OIDC) module (`src/oidc.rs`) for enterprise identity provider integration.
 - MC-25 Add OidcConfig struct for client credentials, issuer, redirect URI, and endpoint configuration.
 - MC-25 Add OidcClaimMapping for mapping OIDC standard claims to user profile fields with group-to-role mapping.
