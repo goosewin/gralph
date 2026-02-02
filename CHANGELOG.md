@@ -14,11 +14,16 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- PRD-7 Add retry loop for PRD generation with configurable max retries (`prd_create_max_retries`).
+- PRD-7 Add PRD specification document (`docs/PRD_SPEC.md`) defining validation rules for LLM prompt injection.
+
 ### Changed
 
 ### Fixed
 
 ### Verification
+
+- Verification: Tests=cargo test --workspace; Coverage=not-run (>= 70%); CI=not-run; PR=not-opened
 
 ## [0.2.5]
 
