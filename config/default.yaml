@@ -23,6 +23,12 @@ verifier:
   coverage_min: 90
   coverage_warn: 80
   auto_run: true
+  # Format check command for Rust stacks (skipped for non-Rust)
+  fmt_command: cargo fmt --check
+  # Delete task PRD file from final commit before PR creation (default: true)
+  delete_prd_on_complete: true
+  # Post PRD content as PR comment for review context (default: true)
+  post_prd_comment: true
   pr:
     base: main
     title: "chore: verifier run"
