@@ -1,0 +1,31 @@
+Cargo.toml
+  9262f752ae814c09 25
+PRD.ultimate.md
+  9262f752ae814c09 139
+CHANGELOG.md
+  9262f752ae814c09 17-19
+src/server.rs
+  9262f752ae814c09 2,6,18-20,133,140,164-206,2376-2578
+assets/index.html
+  9262f752ae814c09 1-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "5608e832491794a098c954b91f6bf50a19a063f0",
+  "prompts": {
+    "9262f752ae814c09": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "59f09180-b283-42be-b4c8-cc84867f3d5c",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 270,
+      "total_deletions": 2,
+      "accepted_lines": 270,
+      "overriden_lines": 0
+    }
+  }
+}
