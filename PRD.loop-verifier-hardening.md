@@ -100,7 +100,7 @@ All failure conditions must emit clear, actionable error messages that describe 
   * Skip silently if file does not exist or config is false.
   * Add test for PRD deletion flow.
 - **Dependencies** CLEAN-1
-- [ ] PRD-DEL-1 Delete task PRD from final commit before PR creation
+- [x] PRD-DEL-1 Delete task PRD from final commit before PR creation
 ### Task FMT-1
 
 - **ID** FMT-1

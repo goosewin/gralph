@@ -31,6 +31,8 @@ const DEFAULT_REVIEW_REQUIRE_APPROVAL: bool = true;
 const DEFAULT_REVIEW_REQUIRE_CHECKS: bool = true;
 const DEFAULT_REVIEW_MERGE_METHOD: &str = "merge";
 const DEFAULT_VERIFIER_AUTO_RUN: bool = true;
+const DEFAULT_DELETE_PRD_ON_COMPLETE: bool = true;
+const DEFAULT_TASK_FILE: &str = "PRD.md";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum VerifierStackDefaults {
@@ -464,6 +466,72 @@ fn run_verifier_static_checks(dir: &Path, config: &Config) -> Result<(), CliErro
     )))
 }
 
+fn resolve_delete_prd_on_complete(config: &Config) -> bool {
+    config
+        .get("verifier.delete_prd_on_complete")
+        .as_deref()
+        .and_then(parse_bool_value)
+        .unwrap_or(DEFAULT_DELETE_PRD_ON_COMPLETE)
+}
+
+fn resolve_task_prd_path(config: &Config, dir: &Path) -> PathBuf {
+    let task_file = config
+        .get("defaults.task_file")
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_TASK_FILE.to_string());
+    dir.join(task_file.trim())
+}
+
+fn delete_prd_before_pr(dir: &Path, config: &Config) -> Result<(), CliError> {
+    if !resolve_delete_prd_on_complete(config) {
+        return Ok(());
+    }
+
+    let prd_path = resolve_task_prd_path(config, dir);
+    if !prd_path.exists() {
+        return Ok(());
+    }
+
+    println!("Deleting task PRD: {}", prd_path.display());
+
+    let output = ProcCommand::new("git")
+        .arg("-C")
+        .arg(dir)
+        .arg("rm")
+        .arg("-f")
+        .arg(&prd_path)
+        .output()
+        .map_err(CliError::Io)?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(CliError::Message(format!(
+            "Failed to delete PRD file: {}",
+            stderr.trim()
+        )));
+    }
+
+    let commit_output = ProcCommand::new("git")
+        .arg("-C")
+        .arg(dir)
+        .arg("commit")
+        .arg("-m")
+        .arg("chore: remove task PRD before PR")
+        .output()
+        .map_err(CliError::Io)?;
+
+    if !commit_output.status.success() {
+        let stderr = String::from_utf8_lossy(&commit_output.stderr);
+        return Err(CliError::Message(format!(
+            "Failed to commit PRD deletion: {}",
+            stderr.trim()
+        )));
+    }
+
+    println!("Task PRD deleted and committed.");
+    Ok(())
+}
+
 fn run_verifier_pr_create(dir: &Path, config: &Config) -> Result<Option<String>, CliError> {
     println!("\n==> PR creation");
 
@@ -475,6 +543,7 @@ fn run_verifier_pr_create(dir: &Path, config: &Config) -> Result<Option<String>,
         ));
     }
 
+    delete_prd_before_pr(&repo_root, config)?;
     ensure_git_clean_for_pr(&repo_root)?;
 
     let branch_output = git_output_in_dir(dir, ["rev-parse", "--abbrev-ref", "HEAD"])?;
@@ -4127,6 +4196,121 @@ Coverage Results: 75.00%
         }
     }
 
+    // PRD-DEL-1: Task PRD deletion tests
+
+    #[test]
+    fn resolve_delete_prd_on_complete_defaults_to_true() {
+        let _guard = env_guard();
+        let config = load_project_config("");
+        assert!(resolve_delete_prd_on_complete(&config));
+    }
+
+    #[test]
+    fn resolve_delete_prd_on_complete_respects_config_false() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  delete_prd_on_complete: false\n");
+        assert!(!resolve_delete_prd_on_complete(&config));
+    }
+
+    #[test]
+    fn resolve_delete_prd_on_complete_respects_config_true() {
+        let _guard = env_guard();
+        let config = load_project_config("verifier:\n  delete_prd_on_complete: true\n");
+        assert!(resolve_delete_prd_on_complete(&config));
+    }
+
+    #[test]
+    fn resolve_task_prd_path_uses_default_prd_md() {
+        let _guard = env_guard();
+        let config = load_project_config("");
+        let path = resolve_task_prd_path(&config, Path::new("/project"));
+        assert_eq!(path, PathBuf::from("/project/PRD.md"));
+    }
+
+    #[test]
+    fn resolve_task_prd_path_uses_config_task_file() {
+        let _guard = env_guard();
+        let config = load_project_config("defaults:\n  task_file: TASKS.md\n");
+        let path = resolve_task_prd_path(&config, Path::new("/project"));
+        assert_eq!(path, PathBuf::from("/project/TASKS.md"));
+    }
+
+    #[test]
+    fn resolve_task_prd_path_trims_whitespace() {
+        let _guard = env_guard();
+        let config = load_project_config("defaults:\n  task_file: \"  CUSTOM.md  \"\n");
+        let path = resolve_task_prd_path(&config, Path::new("/project"));
+        assert_eq!(path, PathBuf::from("/project/CUSTOM.md"));
+    }
+
+    #[test]
+    fn delete_prd_before_pr_skips_when_disabled() {
+        let _guard = env_guard();
+        let repo = init_git_repo("main");
+        fs::write(repo.path().join("PRD.md"), "task content\n").unwrap();
+        run_git(repo.path(), &["add", "PRD.md"]);
+        run_git(repo.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "add prd"]);
+
+        let config = load_project_config("verifier:\n  delete_prd_on_complete: false\n");
+        let result = delete_prd_before_pr(repo.path(), &config);
+        assert!(result.is_ok());
+        // PRD file should still exist
+        assert!(repo.path().join("PRD.md").exists());
+    }
+
+    #[test]
+    fn delete_prd_before_pr_skips_when_file_does_not_exist() {
+        let _guard = env_guard();
+        let repo = init_git_repo("main");
+
+        let config = load_project_config("verifier:\n  delete_prd_on_complete: true\n");
+        let result = delete_prd_before_pr(repo.path(), &config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn delete_prd_before_pr_deletes_and_commits_prd_file() {
+        let _guard = env_guard();
+        let repo = init_git_repo("main");
+        fs::write(repo.path().join("PRD.md"), "task content\n").unwrap();
+        run_git(repo.path(), &["add", "PRD.md"]);
+        run_git(repo.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "add prd"]);
+
+        let config = load_project_config("verifier:\n  delete_prd_on_complete: true\n");
+        let result = delete_prd_before_pr(repo.path(), &config);
+        assert!(result.is_ok());
+        // PRD file should be deleted
+        assert!(!repo.path().join("PRD.md").exists());
+        // Verify a commit was made
+        let log_output = Command::new("git")
+            .arg("-C")
+            .arg(repo.path())
+            .arg("log")
+            .arg("--oneline")
+            .arg("-1")
+            .output()
+            .unwrap();
+        let log_message = String::from_utf8_lossy(&log_output.stdout);
+        assert!(log_message.contains("remove task PRD"));
+    }
+
+    #[test]
+    fn delete_prd_before_pr_uses_custom_task_file() {
+        let _guard = env_guard();
+        let repo = init_git_repo("main");
+        fs::write(repo.path().join("TASKS.md"), "task content\n").unwrap();
+        run_git(repo.path(), &["add", "TASKS.md"]);
+        run_git(repo.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "add tasks"]);
+
+        let config = load_project_config("defaults:\n  task_file: TASKS.md\nverifier:\n  delete_prd_on_complete: true\n");
+        let result = delete_prd_before_pr(repo.path(), &config);
+        assert!(result.is_ok());
+        // TASKS.md file should be deleted
+        assert!(!repo.path().join("TASKS.md").exists());
+        // PRD.md should not exist (was never created)
+        assert!(!repo.path().join("PRD.md").exists());
+    }
+
     // COV80-VER-2: PR creation flow tests
 
     #[test]
@@ -4189,6 +4373,9 @@ Coverage Results: 75.00%
             &bin_dir,
             "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then echo 'not logged in' >&2; exit 1; fi\nexit 0\n",
         );
+        // Commit all test files to keep the repo clean
+        run_git(repo.path(), &["add", "."]);
+        run_git(repo.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "test setup"]);
         let _path_guard = PathGuard::set(&bin_dir);
 
         let config = load_project_config("verifier:\n  pr:\n    base: main\n");
@@ -4214,6 +4401,9 @@ Coverage Results: 75.00%
             &bin_dir,
             "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then exit 0; fi\nexit 1\n",
         );
+        // Commit all test files to keep the repo clean
+        run_git(repo.path(), &["add", "."]);
+        run_git(repo.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "test setup"]);
         let _path_guard = PathGuard::set(&bin_dir);
 
         let config = load_project_config("verifier:\n  pr:\n    base: main\n");
@@ -4245,6 +4435,9 @@ Coverage Results: 75.00%
             &bin_dir,
             "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then exit 0; fi\necho 'https://github.com/test/repo/pull/123'\nexit 0\n",
         );
+        // Commit all test files to keep the repo clean
+        run_git(repo.path(), &["add", "."]);
+        run_git(repo.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "test setup"]);
         let _path_guard = PathGuard::set(&bin_dir);
 
         let config = load_project_config("verifier:\n  pr:\n    base: main\n    title: test pr\n");
@@ -4265,6 +4458,9 @@ Coverage Results: 75.00%
             &bin_dir,
             "#!/bin/sh\nif [ \"$2\" = \"status\" ]; then exit 0; fi\necho 'https://github.com/test/repo/pull/456'\nexit 0\n",
         );
+        // Commit all test files to keep the repo clean
+        run_git(repo.path(), &["add", "."]);
+        run_git(repo.path(), &["-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "test setup"]);
         let _path_guard = PathGuard::set(&bin_dir);
 
         let config = load_project_config("verifier:\n  pr:\n    base: main\n");
