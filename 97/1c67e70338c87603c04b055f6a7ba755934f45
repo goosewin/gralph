@@ -1,0 +1,23 @@
+PRD.prd-tmux.md
+  a81adc8bcc8b13b6 66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "971c67e70338c87603c04b055f6a7ba755934f45",
+  "prompts": {
+    "a81adc8bcc8b13b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "881137a2-42fa-4e4c-a146-eb7b23050b08",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 40,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
