@@ -175,6 +175,9 @@ _gralph() {
             gralph__help__prd,create)
                 cmd="gralph__help__prd__create"
                 ;;
+            gralph__help__prd,run)
+                cmd="gralph__help__prd__run"
+                ;;
             gralph__help__worktree,create)
                 cmd="gralph__help__worktree__create"
                 ;;
@@ -190,6 +193,9 @@ _gralph() {
             gralph__prd,help)
                 cmd="gralph__prd__help"
                 ;;
+            gralph__prd,run)
+                cmd="gralph__prd__run"
+                ;;
             gralph__prd__help,check)
                 cmd="gralph__prd__help__check"
                 ;;
@@ -198,6 +204,9 @@ _gralph() {
                 ;;
             gralph__prd__help,help)
                 cmd="gralph__prd__help__help"
+                ;;
+            gralph__prd__help,run)
+                cmd="gralph__prd__help__run"
                 ;;
             gralph__worktree,create)
                 cmd="gralph__worktree__create"
@@ -592,7 +601,7 @@ _gralph() {
             return 0
             ;;
         gralph__help__prd)
-            opts="check create"
+            opts="check create run"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -620,6 +629,20 @@ _gralph() {
             return 0
             ;;
         gralph__help__prd__create)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__help__prd__run)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
@@ -848,7 +871,7 @@ _gralph() {
             return 0
             ;;
         gralph__prd)
-            opts="-h --help check create help"
+            opts="-h --help check create run help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -938,7 +961,7 @@ _gralph() {
             return 0
             ;;
         gralph__prd__help)
-            opts="check create help"
+            opts="check create run help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -986,6 +1009,74 @@ _gralph() {
                 return 0
             fi
             case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__prd__help__run)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        gralph__prd__run)
+            opts="-h --name --output --goal --constraints --context --sources --backend --model --variant --allow-missing-context --force --tmux-session --help <DIR>"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --name)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --output)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --goal)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --constraints)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --context)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --sources)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --backend)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --model)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --variant)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --tmux-session)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 *)
                     COMPREPLY=()
                     ;;

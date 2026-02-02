@@ -88,7 +88,7 @@ Each task block must contain exactly one unchecked task line.
   * `cargo test` for CLI parsing passes.
 - **Dependencies** PRD-2
 
-- [ ] PRD-3 Add PrdRunArgs struct and hidden prd run subcommand
+- [x] PRD-3 Add PrdRunArgs struct and hidden prd run subcommand
 ### Task PRD-4
 
 - **ID** PRD-4

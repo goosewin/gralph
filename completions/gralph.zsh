@@ -177,6 +177,25 @@ _arguments "${_arguments_options[@]}" : \
 '--help[Print help]' \
 && ret=0
 ;;
+(run)
+_arguments "${_arguments_options[@]}" : \
+'--name=[Session name]:NAME:_default' \
+'--output=[]:OUTPUT:_files' \
+'--goal=[]:GOAL:_default' \
+'--constraints=[]:CONSTRAINTS:_default' \
+'--context=[]:CONTEXT:_default' \
+'--sources=[]:SOURCES:_default' \
+'--backend=[]:BACKEND:_default' \
+'--model=[]:MODEL:_default' \
+'--variant=[]:VARIANT:_default' \
+'--tmux-session=[]:TMUX_SESSION:_default' \
+'--allow-missing-context[]' \
+'--force[]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':dir:_files' \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 ":: :_gralph__prd__help_commands" \
@@ -194,6 +213,10 @@ _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
 (create)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(run)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -469,6 +492,10 @@ _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
 (create)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(run)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -756,6 +783,7 @@ _gralph__help__prd_commands() {
     local commands; commands=(
 'check:Validate PRD task blocks' \
 'create:Generate a spec-compliant PRD' \
+'run:' \
     )
     _describe -t commands 'gralph help prd commands' commands "$@"
 }
@@ -768,6 +796,11 @@ _gralph__help__prd__check_commands() {
 _gralph__help__prd__create_commands() {
     local commands; commands=()
     _describe -t commands 'gralph help prd create commands' commands "$@"
+}
+(( $+functions[_gralph__help__prd__run_commands] )) ||
+_gralph__help__prd__run_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph help prd run commands' commands "$@"
 }
 (( $+functions[_gralph__help__resume_commands] )) ||
 _gralph__help__resume_commands() {
@@ -852,6 +885,7 @@ _gralph__prd_commands() {
     local commands; commands=(
 'check:Validate PRD task blocks' \
 'create:Generate a spec-compliant PRD' \
+'run:' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'gralph prd commands' commands "$@"
@@ -871,6 +905,7 @@ _gralph__prd__help_commands() {
     local commands; commands=(
 'check:Validate PRD task blocks' \
 'create:Generate a spec-compliant PRD' \
+'run:' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'gralph prd help commands' commands "$@"
@@ -889,6 +924,16 @@ _gralph__prd__help__create_commands() {
 _gralph__prd__help__help_commands() {
     local commands; commands=()
     _describe -t commands 'gralph prd help help commands' commands "$@"
+}
+(( $+functions[_gralph__prd__help__run_commands] )) ||
+_gralph__prd__help__run_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph prd help run commands' commands "$@"
+}
+(( $+functions[_gralph__prd__run_commands] )) ||
+_gralph__prd__run_commands() {
+    local commands; commands=()
+    _describe -t commands 'gralph prd run commands' commands "$@"
 }
 (( $+functions[_gralph__resume_commands] )) ||
 _gralph__resume_commands() {

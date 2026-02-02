@@ -1,6 +1,6 @@
 use super::{join_or_none, normalize_csv, CliError};
 use crate::backend::backend_from_name;
-use crate::cli::{InitArgs, PrdArgs, PrdCheckArgs, PrdCommand, PrdCreateArgs};
+use crate::cli::{InitArgs, PrdArgs, PrdCheckArgs, PrdCommand, PrdCreateArgs, PrdRunArgs};
 use crate::config::Config;
 use crate::prd;
 use std::collections::BTreeMap;
@@ -15,7 +15,14 @@ pub(super) fn cmd_prd(args: PrdArgs) -> Result<(), CliError> {
     match args.command {
         PrdCommand::Check(args) => cmd_prd_check(args),
         PrdCommand::Create(args) => cmd_prd_create(args),
+        PrdCommand::Run(args) => cmd_prd_run(args),
     }
+}
+
+pub(super) fn cmd_prd_run(_args: PrdRunArgs) -> Result<(), CliError> {
+    Err(CliError::Message(
+        "prd run is not implemented yet".to_string(),
+    ))
 }
 
 pub(super) fn cmd_init(args: InitArgs) -> Result<(), CliError> {

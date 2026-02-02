@@ -296,6 +296,8 @@ pub enum PrdCommand {
     Check(PrdCheckArgs),
     #[command(about = "Generate a spec-compliant PRD")]
     Create(PrdCreateArgs),
+    #[command(hide = true)]
+    Run(PrdRunArgs),
 }
 
 #[derive(Args, Debug)]
@@ -338,6 +340,36 @@ pub struct PrdCreateArgs {
     pub allow_missing_context: bool,
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Overwrite existing output file")]
     pub force: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct PrdRunArgs {
+    #[arg(value_name = "DIR")]
+    pub dir: PathBuf,
+    #[arg(long, help = "Session name")]
+    pub name: String,
+    #[arg(long)]
+    pub output: Option<PathBuf>,
+    #[arg(long)]
+    pub goal: Option<String>,
+    #[arg(long)]
+    pub constraints: Option<String>,
+    #[arg(long)]
+    pub context: Option<String>,
+    #[arg(long)]
+    pub sources: Option<String>,
+    #[arg(long)]
+    pub backend: Option<String>,
+    #[arg(long)]
+    pub model: Option<String>,
+    #[arg(long)]
+    pub variant: Option<String>,
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub allow_missing_context: bool,
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    pub force: bool,
+    #[arg(long)]
+    pub tmux_session: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -878,6 +910,59 @@ mod tests {
                 other => panic!("Expected config list command, got: {other:?}"),
             },
             other => panic!("Expected config command, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_prd_run_options() {
+        let cli = Cli::parse_from([
+            "gralph",
+            "prd",
+            "run",
+            ".",
+            "--name",
+            "prd-session",
+            "--output",
+            "PRD.generated.md",
+            "--goal",
+            "Build feature",
+            "--constraints",
+            "Must be fast",
+            "--context",
+            "ARCHITECTURE.md",
+            "--sources",
+            "https://example.com",
+            "--backend",
+            "claude",
+            "--model",
+            "sonnet",
+            "--variant",
+            "mini",
+            "--allow-missing-context",
+            "--force",
+            "--tmux-session",
+            "gralph-prd-123",
+        ]);
+        match cli.command {
+            Some(Command::Prd(args)) => match args.command {
+                PrdCommand::Run(args) => {
+                    assert_eq!(args.dir, PathBuf::from("."));
+                    assert_eq!(args.name, "prd-session");
+                    assert_eq!(args.output, Some(PathBuf::from("PRD.generated.md")));
+                    assert_eq!(args.goal.as_deref(), Some("Build feature"));
+                    assert_eq!(args.constraints.as_deref(), Some("Must be fast"));
+                    assert_eq!(args.context.as_deref(), Some("ARCHITECTURE.md"));
+                    assert_eq!(args.sources.as_deref(), Some("https://example.com"));
+                    assert_eq!(args.backend.as_deref(), Some("claude"));
+                    assert_eq!(args.model.as_deref(), Some("sonnet"));
+                    assert_eq!(args.variant.as_deref(), Some("mini"));
+                    assert!(args.allow_missing_context);
+                    assert!(args.force);
+                    assert_eq!(args.tmux_session.as_deref(), Some("gralph-prd-123"));
+                }
+                other => panic!("Expected prd run command, got: {other:?}"),
+            },
+            other => panic!("Expected prd command, got: {other:?}"),
         }
     }
 
