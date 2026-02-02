@@ -1,0 +1,33 @@
+src/saml.rs
+  7ef0fcf9ccbf8826 1-1982
+PRD.ultimate.md
+  7ef0fcf9ccbf8826 470
+CHANGELOG.md
+  7ef0fcf9ccbf8826 17-31
+Cargo.toml
+  7ef0fcf9ccbf8826 32-33
+src/lib.rs
+  7ef0fcf9ccbf8826 11
+src/server.rs
+  7ef0fcf9ccbf8826 18,21,204,225,243-248,255,324-336,1531-1697,2051-2096,2194,2597,2626,2659,2692,2725,2759,2792,4876
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "f22ac5d7fc59cefb4c2fef6f9ca33f0729d176a0",
+  "prompts": {
+    "7ef0fcf9ccbf8826": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d5c70568-b6c3-4be6-a381-8b83152008c0",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 2277,
+      "total_deletions": 32,
+      "accepted_lines": 2247,
+      "overriden_lines": 0
+    }
+  }
+}
