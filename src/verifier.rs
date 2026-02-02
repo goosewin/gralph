@@ -336,10 +336,15 @@ fn run_verifier_fmt_check(
         )));
     }
 
+    // Use -c flags to set identity for the commit in case global git config is missing.
     let commit_output = ProcCommand::new("git")
         .args([
             "-C",
             &dir.display().to_string(),
+            "-c",
+            "user.name=gralph-verifier",
+            "-c",
+            "user.email=verifier@gralph.local",
             "commit",
             "-m",
             "style: format code",
