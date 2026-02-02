@@ -1,0 +1,25 @@
+src/app/prd_init.rs
+  4c9f522b2fc2f313 347,349-353,366,377-382,412-426
+completions/gralph.bash
+  4c9f522b2fc2f313 1038
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "7a448579fcedb6e07c2c0b5875cc01cd0260bdf7",
+  "prompts": {
+    "4c9f522b2fc2f313": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "592667ac-a4d6-4d0a-8fa8-b393c862e9cd",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 35,
+      "total_deletions": 20,
+      "accepted_lines": 30,
+      "overriden_lines": 0
+    }
+  }
+}
