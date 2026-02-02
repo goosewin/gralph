@@ -679,17 +679,10 @@ fn run_verifier_pr_create(dir: &Path, config: &Config) -> Result<Option<String>,
     if template_path.is_none() {
         println!("No PR template found; using empty body.");
     }
-    let output = run_gh_pr_create(&repo_root, template_path.as_deref(), branch, &base, &title)?;
-    let pr_url = extract_pr_url(&output);
-    if let Some(url) = pr_url.as_deref() {
-        println!("PR created: {}", url);
-    } else if !output.trim().is_empty() {
-        println!("{}", output.trim());
-    } else {
-        println!("PR created.");
-    }
+    let pr_url = run_gh_pr_create(&repo_root, template_path.as_deref(), branch, &base, &title)?;
+    println!("PR created: {}", pr_url);
 
-    Ok(pr_url)
+    Ok(Some(pr_url))
 }
 
 #[derive(Debug, Clone)]
@@ -1540,7 +1533,14 @@ fn run_gh_pr_create(
         };
         return Err(CliError::Message(message));
     }
-    Ok(format!("{}{}", stdout, stderr))
+    let combined = format!("{}{}", stdout, stderr);
+    match extract_pr_url(&combined) {
+        Some(url) => Ok(url),
+        None => Err(CliError::Message(
+            "gh pr create succeeded but PR URL not found in output. Check gh CLI output format."
+                .to_string(),
+        )),
+    }
 }
 
 fn map_gh_error(err: io::Error) -> CliError {
@@ -2731,6 +2731,71 @@ mod tests {
         match err {
             CliError::Message(message) => {
                 assert!(message.contains("gh pr create failed."));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_gh_pr_create_returns_url_on_success() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\necho 'https://github.com/owner/repo/pull/42'\n",
+        );
+        let _path_guard = PathGuard::set(&bin_dir);
+        let template = temp.path().join("PULL_REQUEST_TEMPLATE.md");
+        fs::write(&template, "template\n").unwrap();
+
+        let url =
+            run_gh_pr_create(temp.path(), Some(&template), "feature", "main", "title").unwrap();
+        assert_eq!(url, "https://github.com/owner/repo/pull/42");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_gh_pr_create_fails_when_url_missing_on_success() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(&bin_dir, "#!/bin/sh\necho 'PR created successfully'\n");
+        let _path_guard = PathGuard::set(&bin_dir);
+        let template = temp.path().join("PULL_REQUEST_TEMPLATE.md");
+        fs::write(&template, "template\n").unwrap();
+
+        let err =
+            run_gh_pr_create(temp.path(), Some(&template), "feature", "main", "title").unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("PR URL not found in output"));
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_gh_pr_create_includes_stderr_in_failure() {
+        let _guard = env_guard();
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("bin");
+        fs::create_dir(&bin_dir).unwrap();
+        write_mock_gh(
+            &bin_dir,
+            "#!/bin/sh\necho 'warning on stdout'\necho 'error: auth required' 1>&2\nexit 1\n",
+        );
+        let _path_guard = PathGuard::set(&bin_dir);
+
+        let err = run_gh_pr_create(temp.path(), None, "feature", "main", "title").unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(message.contains("auth required"));
+                assert!(message.contains("warning on stdout"));
             }
             other => panic!("expected message error, got {other:?}"),
         }

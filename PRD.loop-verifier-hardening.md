@@ -126,7 +126,7 @@ All failure conditions must emit clear, actionable error messages that describe 
   * If URL missing but exit code zero, return error stating URL not found.
   * Add test for various gh output scenarios.
 - **Dependencies** FMT-1
-- [ ] PRURL-1 Improve PR creation to reliably return URL or actionable error
+- [x] PRURL-1 Improve PR creation to reliably return URL or actionable error
 ### Task PRCOMMENT-1
 
 - **ID** PRCOMMENT-1
