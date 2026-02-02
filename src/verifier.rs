@@ -2438,27 +2438,13 @@ mod tests {
     fn init_git_repo(branch: &str) -> tempfile::TempDir {
         let temp = tempfile::tempdir().unwrap();
         run_git(temp.path(), &["init"]);
+        // Set local git config for user name/email so commits work on CI without global config
+        run_git(temp.path(), &["config", "user.name", "Test"]);
+        run_git(temp.path(), &["config", "user.email", "test@example.com"]);
         run_git(temp.path(), &["checkout", "-b", branch]);
         fs::write(temp.path().join("README.md"), "init\n").unwrap();
         run_git(temp.path(), &["add", "."]);
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(temp.path())
-            .arg("-c")
-            .arg("user.name=Test")
-            .arg("-c")
-            .arg("user.email=test@example.com")
-            .arg("commit")
-            .arg("-m")
-            .arg("init")
-            .output()
-            .unwrap();
-        assert!(
-            output.status.success(),
-            "git commit failed: {}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
+        run_git(temp.path(), &["commit", "-m", "init"]);
         temp
     }
 
