@@ -3,9 +3,19 @@ use std::env;
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 mod support;
 use support::FakeCli;
+
+/// Check if tmux is available on the system.
+fn tmux_available() -> bool {
+    Command::new("tmux")
+        .arg("-V")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
 
 /// Environment configuration to apply to child commands.
 /// Instead of modifying the parent process environment (which is unsafe in multi-threaded contexts),
@@ -143,6 +153,12 @@ fn cli_prd_check_reports_missing_file() {
 
 #[test]
 fn cli_prd_create_spawns_background_session() {
+    // This test requires tmux to be available on the system
+    if !tmux_available() {
+        eprintln!("Skipping test: tmux not available");
+        return;
+    }
+
     let temp = tempfile::tempdir().unwrap();
     let mut test_env = prepare_env(temp.path());
     let project = temp_path(temp.path(), "project");
@@ -172,7 +188,9 @@ fn cli_prd_create_spawns_background_session() {
     // prd create now spawns a background tmux session and returns immediately
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("PRD generation started in background"))
+        .stdout(predicate::str::contains(
+            "PRD generation started in background",
+        ))
         .stdout(predicate::str::contains("Session:"))
         .stdout(predicate::str::contains("Tmux session:"))
         .stdout(predicate::str::contains("Output:"))
