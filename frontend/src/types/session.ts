@@ -69,3 +69,14 @@ export interface TasksResponse {
 export interface UpdateTaskStatusRequest {
   status: TaskStatus;
 }
+
+/** API response for logs endpoint */
+export interface LogsResponse {
+  session: string;
+  raw: boolean;
+  total_lines: number;
+  offset: number;
+  limit: number;
+  lines: string[];
+  log_file: string;
+}

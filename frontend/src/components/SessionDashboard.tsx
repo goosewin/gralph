@@ -11,6 +11,7 @@ export interface SessionDashboardProps {
   onReconnect?: () => void;
   onRefresh?: () => void;
   onSessionSelect?: (name: string) => void;
+  onViewLogs?: (name: string) => void;
 }
 
 export function SessionDashboard({
@@ -22,6 +23,7 @@ export function SessionDashboard({
   onReconnect,
   onRefresh,
   onSessionSelect,
+  onViewLogs,
 }: SessionDashboardProps) {
   const sortedSessions = useMemo(() => {
     return [...sessions].sort((a, b) => {
@@ -123,6 +125,7 @@ export function SessionDashboard({
                 session={session}
                 onStop={onStopSession}
                 onSelect={onSessionSelect}
+                onViewLogs={onViewLogs}
               />
             ))}
           </div>

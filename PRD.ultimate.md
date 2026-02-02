@@ -263,7 +263,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Search within logs works.
   * Performance handles 100k+ lines.
 - **Dependencies** MC-4
-- [ ] MC-10 Create session log viewer component
+- [x] MC-10 Create session log viewer component
 ---
 
 ### Phase 2: Multi-Agent Orchestration

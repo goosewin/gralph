@@ -231,6 +231,10 @@ fn build_router(state: Arc<AppState>) -> Router {
             "/tasks/:session/:task_id/status",
             put(update_task_status_handler).options(options_handler),
         )
+        .route(
+            "/logs/:session",
+            get(logs_handler).options(options_handler),
+        )
         .route("/ws", get(ws_handler))
         .route("/assets/*path", get(static_handler))
         .fallback(fallback_handler)
@@ -645,6 +649,130 @@ async fn update_task_status_handler(
             cors_origin,
         ),
     }
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct LogsQueryParams {
+    /// Whether to fetch raw log (default: false for processed log)
+    raw: Option<bool>,
+    /// Maximum number of lines to return (default: all)
+    limit: Option<usize>,
+    /// Skip first N lines (default: 0)
+    offset: Option<usize>,
+}
+
+async fn logs_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(session_name): Path<String>,
+    Query(params): Query<LogsQueryParams>,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+    if let Some(response) = check_auth(&headers, &state, cors_origin.as_deref()) {
+        return response;
+    }
+
+    // Get session to find the log file path
+    let session = match state.store.get_session(&session_name) {
+        Ok(Some(session)) => session,
+        Ok(None) => {
+            return error_response(
+                StatusCode::NOT_FOUND,
+                format!("Session not found: {}", session_name),
+                cors_origin,
+            );
+        }
+        Err(error) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("{}", error),
+                cors_origin,
+            );
+        }
+    };
+
+    let map = match session.as_object() {
+        Some(m) => m.clone(),
+        None => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Invalid session format".to_string(),
+                cors_origin,
+            );
+        }
+    };
+
+    let name = map
+        .get("name")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+    let dir = map
+        .get("dir")
+        .and_then(|value| value.as_str())
+        .unwrap_or("");
+
+    let log_file = resolve_log_file_for_session(&map, name, dir);
+    let use_raw = params.raw.unwrap_or(false);
+
+    let log_path = if use_raw {
+        resolve_raw_log_file_for_session(&map, log_file.as_ref())
+    } else {
+        log_file
+    };
+
+    let Some(path) = log_path else {
+        return error_response(
+            StatusCode::NOT_FOUND,
+            "No log file found for session".to_string(),
+            cors_origin,
+        );
+    };
+
+    if !path.exists() {
+        return error_response(
+            StatusCode::NOT_FOUND,
+            format!("Log file does not exist: {}", path.display()),
+            cors_origin,
+        );
+    }
+
+    // Read the log file
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(error) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to read log file: {}", error),
+                cors_origin,
+            );
+        }
+    };
+
+    // Split into lines and apply offset/limit
+    let lines: Vec<&str> = content.lines().collect();
+    let total_lines = lines.len();
+    let offset = params.offset.unwrap_or(0);
+    let limit = params.limit.unwrap_or(lines.len());
+
+    let selected_lines: Vec<&str> = lines
+        .into_iter()
+        .skip(offset)
+        .take(limit)
+        .collect();
+
+    json_response(
+        StatusCode::OK,
+        json!({
+            "session": session_name,
+            "raw": use_raw,
+            "total_lines": total_lines,
+            "offset": offset,
+            "limit": limit,
+            "lines": selected_lines,
+            "log_file": path.to_string_lossy(),
+        }),
+        cors_origin,
+    )
 }
 
 async fn fallback_handler(

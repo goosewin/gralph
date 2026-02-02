@@ -14,6 +14,15 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-10 Add SessionLogViewer component with syntax highlighting for log line types (error, warning, success, info).
+- MC-10 Add toggleable auto-scroll that follows new log content and disables when user scrolls up.
+- MC-10 Add search within logs with keyboard navigation (Enter/Shift+Enter) and highlighted matches.
+- MC-10 Add virtualization for performance with 100k+ lines using calculated visible range and overscan.
+- MC-10 Add useLogs hook for fetching logs via REST API with pagination support (offset/limit).
+- MC-10 Add GET /logs/:session endpoint returning log lines with raw/processed toggle.
+- MC-10 Add 'logs' route to sidebar navigation and mobile tab nav for viewing session logs.
+- MC-10 Add View Logs button to SessionCard for quick navigation to log viewer.
+- MC-10 Add 41 new tests for SessionLogViewer component and useLogs hook.
 - MC-9 Add Sidebar component with collapsible sections showing all main navigation items.
 - MC-9 Add useLocalStorage hook for persisting collapse state across browser sessions.
 - MC-9 Add active route highlighting with visual indicator on sidebar items.

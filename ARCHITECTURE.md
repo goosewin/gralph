@@ -50,8 +50,10 @@ doctor diagnostics.
 `frontend/src/components/OfflineIndicator.tsx` displays banner when user is offline.
 `frontend/src/components/InstallPrompt.tsx` shows install button on mobile when PWA installation is available.
 `frontend/src/components/Sidebar.tsx` provides navigation sidebar with collapsible sections and route highlighting.
+`frontend/src/components/SessionLogViewer.tsx` displays full session log output with syntax highlighting, virtualized scrolling, search, and auto-scroll toggle.
 `frontend/src/hooks/useLocalStorage.ts` syncs React state with localStorage for persistence across sessions.
-`frontend/src/types/session.ts` defines TypeScript types matching backend API responses, including Task types.
+`frontend/src/hooks/useLogs.ts` provides REST API hooks for fetching session logs with pagination support.
+`frontend/src/types/session.ts` defines TypeScript types matching backend API responses, including Task and LogsResponse types.
 `frontend/public/manifest.json` defines PWA metadata including name, icons, and display mode.
 `frontend/public/sw.js` is the service worker that caches static assets for offline access.
 `frontend/public/icons/` contains SVG icons for PWA installation (192x192, 512x512, maskable).

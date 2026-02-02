@@ -4,9 +4,11 @@ import { InstallPrompt } from './components/InstallPrompt';
 import { KanbanBoard } from './components/KanbanBoard';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { SessionDashboard } from './components/SessionDashboard';
+import { SessionLogViewer } from './components/SessionLogViewer';
 import { Sidebar, type Route, type SidebarSection } from './components/Sidebar';
 import { ThemeToggle } from './components/ThemeToggle';
 import { useBreakpoints } from './hooks/useMediaQuery';
+import { useLogs } from './hooks/useLogs';
 import { useServiceWorker } from './hooks/useServiceWorker';
 import { useSessions } from './hooks/useSessions';
 import { useTasks } from './hooks/useTasks';
@@ -36,6 +38,7 @@ function App() {
   const [activeRoute, setActiveRoute] = useState<Route>('sessions');
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showRawLogs, setShowRawLogs] = useState(false);
 
   const { theme, setTheme } = useTheme();
   const { isMobile } = useBreakpoints();
@@ -79,6 +82,13 @@ function App() {
     token,
   });
 
+  // Auto-select first running session if none selected
+  const effectiveSelectedSession = useMemo(() => {
+    return selectedSession ??
+      sessions.find(s => s.status === 'running')?.name ??
+      sessions[0]?.name;
+  }, [selectedSession, sessions]);
+
   const {
     tasks,
     loading: tasksLoading,
@@ -92,6 +102,29 @@ function App() {
     autoFetch: false,
   });
 
+  const {
+    logs,
+    totalLines,
+    logFile,
+    loading: logsLoading,
+    error: logsError,
+    fetchLogs,
+  } = useLogs({
+    baseUrl,
+    token,
+    sessionName: effectiveSelectedSession ?? undefined,
+    raw: showRawLogs,
+    autoFetch: false,
+    pollInterval: 0, // Disable polling, use manual refresh
+  });
+
+  // Fetch logs when switching to logs route or when session changes
+  useEffect(() => {
+    if (activeRoute === 'logs' && effectiveSelectedSession) {
+      fetchLogs();
+    }
+  }, [activeRoute, effectiveSelectedSession, fetchLogs]);
+
   const handleStopSession = useCallback(async (name: string) => {
     await stopSession(name);
   }, [stopSession]);
@@ -99,6 +132,11 @@ function App() {
   const handleSessionSelect = useCallback((sessionName: string) => {
     setSelectedSession(sessionName);
     setActiveRoute('tasks');
+  }, []);
+
+  const handleViewLogs = useCallback((sessionName: string) => {
+    setSelectedSession(sessionName);
+    setActiveRoute('logs');
   }, []);
 
   const handleUpdateTaskStatus = useCallback(async (taskId: string, newStatus: 'pending' | 'in_progress' | 'completed') => {
@@ -110,15 +148,24 @@ function App() {
     if (route === 'tasks' && selectedSession) {
       fetchTasks();
     }
-  }, [selectedSession, fetchTasks]);
+    if (route === 'logs' && effectiveSelectedSession) {
+      fetchLogs();
+    }
+  }, [selectedSession, effectiveSelectedSession, fetchTasks, fetchLogs]);
+
+  const handleToggleRawLogs = useCallback((raw: boolean) => {
+    setShowRawLogs(raw);
+  }, []);
+
+  // Refetch logs when raw toggle changes
+  useEffect(() => {
+    if (activeRoute === 'logs' && effectiveSelectedSession) {
+      fetchLogs();
+    }
+  }, [showRawLogs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const error = wsError || fetchError || tasksError;
   const loading = sessionsLoading || tasksLoading;
-
-  // Auto-select first running session if none selected
-  const effectiveSelectedSession = selectedSession ??
-    sessions.find(s => s.status === 'running')?.name ??
-    sessions[0]?.name;
 
   // Count sessions by status for badges
   const runningCount = useMemo(
@@ -151,6 +198,14 @@ function App() {
             route: 'tasks' as Route,
             icon: '📋',
             badge: taskCount > 0 ? taskCount : undefined,
+          },
+          {
+            id: 'logs',
+            label: effectiveSelectedSession
+              ? `Logs (${effectiveSelectedSession})`
+              : 'Logs',
+            route: 'logs' as Route,
+            icon: '📜',
           },
         ],
       },
@@ -248,6 +303,16 @@ function App() {
                 >
                   Tasks
                 </button>
+                <button
+                  role="tab"
+                  aria-selected={activeRoute === 'logs'}
+                  aria-controls="panel-logs"
+                  className={`header__tab ${activeRoute === 'logs' ? 'header__tab--active' : ''}`}
+                  onClick={() => handleRouteChange('logs')}
+                  disabled={!effectiveSelectedSession}
+                >
+                  Logs
+                </button>
               </nav>
             )}
             <ThemeToggle theme={theme} onThemeChange={setTheme} />
@@ -265,6 +330,7 @@ function App() {
                 onReconnect={reconnect}
                 onRefresh={fetchSessions}
                 onSessionSelect={handleSessionSelect}
+                onViewLogs={handleViewLogs}
               />
             </div>
           )}
@@ -277,6 +343,21 @@ function App() {
                 loading={loading}
                 onUpdateTaskStatus={handleUpdateTaskStatus}
                 onRefresh={fetchTasks}
+              />
+            </div>
+          )}
+          {activeRoute === 'logs' && (
+            <div id="panel-logs" role="tabpanel" aria-labelledby="tab-logs">
+              <SessionLogViewer
+                logs={logs}
+                totalLines={totalLines}
+                sessionName={effectiveSelectedSession}
+                logFile={logFile}
+                loading={logsLoading}
+                error={logsError}
+                onRefresh={fetchLogs}
+                onToggleRaw={handleToggleRawLogs}
+                isRaw={showRawLogs}
               />
             </div>
           )}
