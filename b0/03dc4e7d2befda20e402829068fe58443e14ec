@@ -1,0 +1,37 @@
+PRD.ultimate.md
+  7df6486db07e8b42 542
+frontend/src/hooks/useUserSettings.ts
+  7df6486db07e8b42 1-224
+frontend/src/hooks/useUserSettings.test.ts
+  7df6486db07e8b42 1-531
+frontend/src/index.css
+  7df6486db07e8b42 2393-2717
+frontend/src/components/UserSettings.tsx
+  7df6486db07e8b42 1-575
+frontend/src/components/Sidebar.tsx
+  7df6486db07e8b42 4
+frontend/src/App.tsx
+  7df6486db07e8b42 11,253-257,416-420
+frontend/src/components/UserSettings.test.tsx
+  7df6486db07e8b42 1-878
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "b003dc4e7d2befda20e402829068fe58443e14ec",
+  "prompts": {
+    "7df6486db07e8b42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d33c620c-9dfd-45e9-9224-c73abe828b3a",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 2622,
+      "total_deletions": 77,
+      "accepted_lines": 2547,
+      "overriden_lines": 0
+    }
+  }
+}
