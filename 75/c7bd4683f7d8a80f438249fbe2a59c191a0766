@@ -1,0 +1,33 @@
+src/oidc.rs
+  0bae232d13555375 1-1866
+PRD.ultimate.md
+  0bae232d13555375 485
+Cargo.toml
+  0bae232d13555375 34
+ARCHITECTURE.md
+  0bae232d13555375 14
+CHANGELOG.md
+  0bae232d13555375 17-41
+src/lib.rs
+  0bae232d13555375 10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "75c7bd4683f7d8a80f438249fbe2a59c191a0766",
+  "prompts": {
+    "0bae232d13555375": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "405b2e37-7352-4031-a57f-53ae008c465b",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 1898,
+      "total_deletions": 4,
+      "accepted_lines": 1895,
+      "overriden_lines": 0
+    }
+  }
+}
