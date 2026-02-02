@@ -1,0 +1,27 @@
+src/cli.rs
+  77e4c149ace3e44a 299-300,345-374,917-967
+src/app/prd_init.rs
+  77e4c149ace3e44a 3,18,22-25
+PRD.prd-tmux.md
+  77e4c149ace3e44a 91
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "301b7ee00cf0a26c9073f32d8381e315d58afafa",
+  "prompts": {
+    "77e4c149ace3e44a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "0745d46c-e9d9-460e-ac55-8e445b6af613",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 94,
+      "total_deletions": 2,
+      "accepted_lines": 94,
+      "overriden_lines": 0
+    }
+  }
+}
