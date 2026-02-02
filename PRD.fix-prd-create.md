@@ -95,7 +95,7 @@ Each task block must contain exactly one unchecked task line.
   * Loop exits on successful validation.
   * Loop exits when retry limit reached, returning best attempt.
 - **Dependencies** PRD-2
-- [ ] PRD-3 Implement retry loop for PRD generation
+- [x] PRD-3 Implement retry loop for PRD generation
 ---
 
 ### Task PRD-4

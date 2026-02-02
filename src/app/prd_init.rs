@@ -1,8 +1,8 @@
 use super::{join_or_none, normalize_csv, CliError};
-use crate::backend::backend_from_name;
+use crate::backend::{backend_from_name, Backend};
 use crate::cli::{InitArgs, PrdArgs, PrdCheckArgs, PrdCommand, PrdCreateArgs};
 use crate::config::Config;
-use crate::prd;
+use crate::prd::{self, PrdValidationError};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
@@ -10,6 +10,9 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Default maximum number of retry attempts for PRD generation.
+pub const DEFAULT_PRD_CREATE_MAX_RETRIES: u32 = 3;
 
 pub(super) fn cmd_prd(args: PrdArgs) -> Result<(), CliError> {
     match args.command {
@@ -183,52 +186,228 @@ pub(super) fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
         template = template_text
     );
 
-    let tmp_dir = env::temp_dir();
-    let output_file = tmp_dir.join(format!("gralph-prd-{}.tmp", std::process::id()));
-    backend
-        .run_iteration(
-            &prompt,
-            model.as_deref(),
-            args.variant.as_deref(),
-            &output_file,
-            &target_dir,
-        )
-        .map_err(|err| CliError::Message(err.to_string()))?;
-    let result = backend
-        .parse_text(&output_file)
-        .map_err(|err| CliError::Message(err.to_string()))?;
-    if result.trim().is_empty() {
-        return Err(CliError::Message(
-            "PRD generation returned empty output.".to_string(),
-        ));
-    }
-
-    let temp_prd = tmp_dir.join(format!("gralph-prd-{}.md", std::process::id()));
-    fs::write(&temp_prd, result).map_err(CliError::Io)?;
+    // Get max retries from config or use default
+    let max_retries = config
+        .get("prd_create_max_retries")
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(DEFAULT_PRD_CREATE_MAX_RETRIES);
 
     let allowed_context_file = write_allowed_context(&context_files)?;
-    prd::prd_sanitize_generated_file(
-        &temp_prd,
-        Some(&target_dir),
-        allowed_context_file.as_deref(),
-    )
-    .map_err(|err| CliError::Message(err.to_string()))?;
 
-    if let Err(err) =
-        prd::prd_validate_file(&temp_prd, args.allow_missing_context, Some(&target_dir))
-    {
+    let result = prd_create_with_retry(
+        backend.as_ref(),
+        &prompt,
+        model.as_deref(),
+        args.variant.as_deref(),
+        &target_dir,
+        &target_dir,
+        allowed_context_file.as_deref(),
+        args.allow_missing_context,
+        max_retries,
+    )?;
+
+    // Handle result based on validation status
+    if let Some(errors) = result.validation_errors {
         let invalid_path = invalid_prd_path(&output_path, args.force);
-        fs::rename(&temp_prd, &invalid_path).map_err(CliError::Io)?;
+        fs::write(&invalid_path, &result.content).map_err(CliError::Io)?;
         return Err(CliError::Message(format!(
-            "Generated PRD failed validation. Saved to {}. Details:\n{}",
+            "Generated PRD failed validation after {} retries. Saved to {}. Details:\n{}",
+            max_retries,
             invalid_path.display(),
-            err
+            errors
         )));
     }
 
-    fs::rename(&temp_prd, &output_path).map_err(CliError::Io)?;
+    fs::write(&output_path, &result.content).map_err(CliError::Io)?;
     println!("PRD created: {}", output_path.display());
     Ok(())
+}
+
+/// Result of a single PRD generation attempt.
+#[derive(Debug)]
+pub struct PrdGenerationResult {
+    /// The generated PRD content.
+    pub content: String,
+    /// Validation errors if any.
+    pub validation_errors: Option<PrdValidationError>,
+}
+
+/// Generates a PRD with automatic retry on validation failure.
+///
+/// This function wraps the PRD generation logic and retries when validation
+/// fails, sending the previous PRD and error messages back to the LLM for
+/// correction.
+///
+/// # Arguments
+///
+/// * `backend` - The backend to use for generation.
+/// * `initial_prompt` - The initial prompt for PRD generation.
+/// * `model` - Optional model override.
+/// * `variant` - Optional variant override.
+/// * `working_dir` - The project directory.
+/// * `base_dir` - Base directory for context path resolution.
+/// * `allowed_context_file` - Optional file listing allowed context paths.
+/// * `allow_missing_context` - Whether to allow missing context files.
+/// * `max_retries` - Maximum number of retry attempts (0 means no retries).
+///
+/// # Returns
+///
+/// Returns the best PRD content and any remaining validation errors.
+pub fn prd_create_with_retry(
+    backend: &dyn Backend,
+    initial_prompt: &str,
+    model: Option<&str>,
+    variant: Option<&str>,
+    working_dir: &Path,
+    base_dir: &Path,
+    allowed_context_file: Option<&Path>,
+    allow_missing_context: bool,
+    max_retries: u32,
+) -> Result<PrdGenerationResult, CliError> {
+    let tmp_dir = env::temp_dir();
+    let mut current_prompt = initial_prompt.to_string();
+    let mut best_result: Option<PrdGenerationResult> = None;
+    let mut attempt = 0;
+    // Use a unique session ID to avoid conflicts between parallel test runs
+    let session_id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+
+    loop {
+        attempt += 1;
+        eprintln!(
+            "PRD generation attempt {}/{}",
+            attempt,
+            max_retries.saturating_add(1)
+        );
+
+        // Generate PRD
+        let output_file = tmp_dir.join(format!(
+            "gralph-prd-{}-{}-{}.tmp",
+            std::process::id(),
+            session_id,
+            attempt
+        ));
+        backend
+            .run_iteration(
+                &current_prompt,
+                model,
+                variant,
+                &output_file,
+                working_dir,
+            )
+            .map_err(|err| CliError::Message(err.to_string()))?;
+
+        let result = backend
+            .parse_text(&output_file)
+            .map_err(|err| CliError::Message(err.to_string()))?;
+
+        if result.trim().is_empty() {
+            if attempt > max_retries {
+                return Err(CliError::Message(
+                    "PRD generation returned empty output after all retries.".to_string(),
+                ));
+            }
+            eprintln!("Empty PRD output on attempt {}, retrying", attempt);
+            current_prompt = build_retry_prompt_for_empty(initial_prompt);
+            continue;
+        }
+
+        // Write to temp file for validation
+        let temp_prd = tmp_dir.join(format!(
+            "gralph-prd-{}-{}-{}.md",
+            std::process::id(),
+            session_id,
+            attempt
+        ));
+        fs::write(&temp_prd, &result).map_err(CliError::Io)?;
+
+        // Sanitize the generated PRD
+        prd::prd_sanitize_generated_file(&temp_prd, Some(base_dir), allowed_context_file)
+            .map_err(|err| CliError::Message(err.to_string()))?;
+
+        // Read back the sanitized content
+        let sanitized_content = fs::read_to_string(&temp_prd).map_err(CliError::Io)?;
+
+        // Validate the PRD
+        let validation_result =
+            prd::prd_validate_file(&temp_prd, allow_missing_context, Some(base_dir));
+
+        match validation_result {
+            Ok(()) => {
+                eprintln!("PRD validation passed on attempt {}", attempt);
+                return Ok(PrdGenerationResult {
+                    content: sanitized_content,
+                    validation_errors: None,
+                });
+            }
+            Err(errors) => {
+                eprintln!(
+                    "PRD validation failed on attempt {}: {}",
+                    attempt,
+                    errors.messages.join("; ")
+                );
+
+                // Store as best result if we don't have one yet
+                if best_result.is_none() {
+                    best_result = Some(PrdGenerationResult {
+                        content: sanitized_content.clone(),
+                        validation_errors: Some(errors.clone()),
+                    });
+                }
+
+                // Check if we've exhausted retries
+                if attempt > max_retries {
+                    eprintln!(
+                        "Retry limit reached after {} attempts, returning best attempt",
+                        attempt
+                    );
+                    return Ok(best_result.unwrap_or(PrdGenerationResult {
+                        content: sanitized_content,
+                        validation_errors: Some(errors),
+                    }));
+                }
+
+                // Build corrective prompt for next attempt
+                current_prompt = build_retry_prompt(initial_prompt, &sanitized_content, &errors);
+                eprintln!(
+                    "Retrying PRD generation with {} validation errors",
+                    errors.messages.len()
+                );
+            }
+        }
+    }
+}
+
+/// Builds a retry prompt that includes the previous PRD and validation errors.
+pub(super) fn build_retry_prompt(
+    original_prompt: &str,
+    previous_prd: &str,
+    errors: &PrdValidationError,
+) -> String {
+    let error_list = errors
+        .messages
+        .iter()
+        .enumerate()
+        .map(|(i, msg)| format!("{}. {}", i + 1, msg))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!(
+        "{original}\n\n---\n\n## Previous Attempt (FAILED VALIDATION)\n\nThe following PRD was generated but failed validation. Please fix all errors and regenerate.\n\n### Validation Errors\n\n{errors}\n\n### Previous PRD Content\n\n```markdown\n{prd}\n```\n\n## Instructions for Fixing\n\n1. Carefully review each validation error above.\n2. Fix ALL errors in the PRD.\n3. Ensure task blocks have exactly one unchecked task line each.\n4. Ensure all required fields (ID, Context Bundle, DoD, Checklist, Dependencies) are present.\n5. Do not include an Open Questions section.\n6. Output only the corrected PRD markdown with no commentary or code fences.\n",
+        original = original_prompt,
+        errors = error_list,
+        prd = previous_prd
+    )
+}
+
+/// Builds a retry prompt for when the previous attempt returned empty output.
+pub(super) fn build_retry_prompt_for_empty(original_prompt: &str) -> String {
+    format!(
+        "{original}\n\n---\n\n## Previous Attempt Failed\n\nThe previous generation attempt returned empty output. Please generate a complete, valid PRD following all the requirements above.\n\nOutput only the PRD markdown with no commentary or code fences.\n",
+        original = original_prompt
+    )
 }
 
 pub(super) fn resolve_prd_output(
