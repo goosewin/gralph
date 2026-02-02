@@ -8,6 +8,7 @@ import { SessionDashboard } from './components/SessionDashboard';
 import { SessionLogViewer } from './components/SessionLogViewer';
 import { Sidebar, type Route, type SidebarSection } from './components/Sidebar';
 import { ThemeToggle } from './components/ThemeToggle';
+import { UserSettings } from './components/UserSettings';
 import { useBreakpoints } from './hooks/useMediaQuery';
 import { useLogs } from './hooks/useLogs';
 import { useOrchestration } from './hooks/useOrchestration';
@@ -249,6 +250,12 @@ function App() {
         icon: '⚙️',
         items: [
           {
+            id: 'user-settings',
+            label: 'User Settings',
+            route: 'user-settings' as Route,
+            icon: '👤',
+          },
+          {
             id: 'settings',
             label: 'Settings',
             route: 'settings' as Route,
@@ -404,6 +411,11 @@ function App() {
                 loading={orchestrationLoading}
                 onRefresh={fetchOrchestration}
               />
+            </div>
+          )}
+          {activeRoute === 'user-settings' && (
+            <div id="panel-user-settings" role="tabpanel" aria-labelledby="tab-user-settings">
+              <UserSettings baseUrl={baseUrl} token={token} />
             </div>
           )}
           {activeRoute === 'settings' && (

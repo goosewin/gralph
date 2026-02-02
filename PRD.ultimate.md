@@ -539,7 +539,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Linked accounts list with unlink option.
   * Component tests pass.
 - **Dependencies** MC-21, MC-3
-- [ ] MC-29 Build user settings page
+- [x] MC-29 Build user settings page
 ---
 
 ### Task MC-30
