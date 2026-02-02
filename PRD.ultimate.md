@@ -249,7 +249,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Active route highlighted.
   * Transition animations under 300ms.
 - **Dependencies** MC-3
-- [ ] MC-9 Build navigation sidebar component
+- [x] MC-9 Build navigation sidebar component
 ---
 
 ### Task MC-10

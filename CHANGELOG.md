@@ -14,6 +14,12 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-9 Add Sidebar component with collapsible sections showing all main navigation items.
+- MC-9 Add useLocalStorage hook for persisting collapse state across browser sessions.
+- MC-9 Add active route highlighting with visual indicator on sidebar items.
+- MC-9 Add smooth transition animations (under 300ms) for collapse/expand and route transitions.
+- MC-9 Add Settings page accessible via sidebar navigation.
+- MC-9 Add 42 new tests for Sidebar component and useLocalStorage hook.
 - MC-8 Add PWA manifest.json with app icons and metadata for home screen installation.
 - MC-8 Add service worker (sw.js) for caching static assets with cache-first strategy.
 - MC-8 Add OfflineIndicator component displaying banner when user is offline.

@@ -49,6 +49,8 @@ doctor diagnostics.
 `frontend/src/components/HamburgerMenu.tsx` provides mobile navigation toggle with animated icon.
 `frontend/src/components/OfflineIndicator.tsx` displays banner when user is offline.
 `frontend/src/components/InstallPrompt.tsx` shows install button on mobile when PWA installation is available.
+`frontend/src/components/Sidebar.tsx` provides navigation sidebar with collapsible sections and route highlighting.
+`frontend/src/hooks/useLocalStorage.ts` syncs React state with localStorage for persistence across sessions.
 `frontend/src/types/session.ts` defines TypeScript types matching backend API responses, including Task types.
 `frontend/public/manifest.json` defines PWA metadata including name, icons, and display mode.
 `frontend/public/sw.js` is the service worker that caches static assets for offline access.
