@@ -346,11 +346,8 @@ pub(super) fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
 
     let _child = spawn_prd_run(&args, &target_dir, &session_name, &tmux_session)?;
 
-    // Wait briefly for tmux session to be created
-    std::thread::sleep(std::time::Duration::from_millis(100));
-
-    // Get the actual PID of the process running inside tmux
-    let pane_pid = get_tmux_pane_pid(&tmux_session).unwrap_or_default();
+    // Get the actual PID of the process running inside tmux with exponential backoff
+    let pane_pid = get_tmux_pane_pid_with_retry(&tmux_session);
 
     let store = StateStore::new_from_env();
     store
@@ -422,6 +419,19 @@ fn get_tmux_pane_pid(tmux_session: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Get the PID of the process running in a tmux session's pane with exponential backoff.
+/// Retries up to 3 times with delays of 100ms, 200ms, and 400ms.
+fn get_tmux_pane_pid_with_retry(tmux_session: &str) -> String {
+    let delays = [100, 200, 400];
+    for delay_ms in delays {
+        std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+        if let Some(pid) = get_tmux_pane_pid(tmux_session) {
+            return pid;
+        }
+    }
+    String::new()
 }
 
 fn prd_session_name(target_dir: &Path) -> Result<String, CliError> {
