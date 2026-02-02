@@ -1,0 +1,29 @@
+ARCHITECTURE.md
+  c81740f03d66d871 23
+CHANGELOG.md
+  c81740f03d66d871 17-28
+src/verifier.rs
+  c81740f03d66d871 2012-2562,5747-6100
+PRD.ultimate.md
+  c81740f03d66d871 394
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "e64f0af549fd5ad252fb6042553613c6e2846db4",
+  "prompts": {
+    "c81740f03d66d871": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aa4a133f-4456-4871-a852-bb29aea996c6",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 920,
+      "total_deletions": 3,
+      "accepted_lines": 919,
+      "overriden_lines": 0
+    }
+  }
+}
