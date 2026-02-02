@@ -14,6 +14,12 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-3 Initialize TypeScript/React frontend workspace with Vite build system.
+- MC-3 Add frontend package.json with React 18, TypeScript 5, and Vite 5 dependencies.
+- MC-3 Add TypeScript configuration with strict mode enabled.
+- MC-3 Add ESLint configuration with react-hooks and react-refresh plugins.
+- MC-3 Add Vite configuration to build frontend to assets directory.
+- MC-3 Update CI workflow to build frontend before Rust tests.
 - MC-1 Add static file serving to Axum server from embedded assets directory.
 - MC-1 Add health check endpoint (`/health`) that returns 200 OK with healthy status.
 - MC-1 Add rust-embed dependency for bundling static assets at compile time.

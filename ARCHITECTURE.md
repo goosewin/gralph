@@ -27,6 +27,14 @@ doctor diagnostics.
 `src/backend` defines the backend trait and CLI-backed implementations (`backend/mod.rs` plus `backend/claude.rs`, `backend/opencode.rs`, `backend/gemini.rs`, `backend/codex.rs`).
 `src/notify.rs` formats and sends webhook notifications via reqwest.
 
+## Frontend
+
+`frontend/` contains the TypeScript/React Mission Control web UI.
+`frontend/src/main.tsx` is the React entry point that renders the App component.
+`frontend/src/App.tsx` is the root React component.
+`frontend/vite.config.ts` configures Vite to build production assets to `assets/`.
+The Axum server serves these static files via rust-embed at compile time.
+
 ## Runtime Flow
 
 `src/main.rs` calls `cli_entrypoint` in `src/lib.rs`, which parses CLI
@@ -64,12 +72,14 @@ written to `.gralph/<session>.log` inside the target project directory.
 
 ## Quality Gates
 
-CI workflows live in `.github/workflows/` (notably `ci.yml`). Tests and
-coverage checks are required before merge; coverage must remain at or
-above 90%. CI runs `cargo test --workspace` and
-`cargo tarpaulin --workspace --fail-under 60 --exclude-files src/main.rs
-src/core.rs src/notify.rs src/server.rs src/backend/*`. Release and smoke
-workflows assume CI is green. The verifier mirrors these gates, adds static
-checks, and enforces the review gate before merge. The verifier can also emit
-a non-blocking warning when coverage falls below the soft target configured in
-`verifier.coverage_warn`.
+CI workflows live in `.github/workflows/` (notably `ci.yml`). The `frontend`
+job runs first, building the React app and uploading assets as an artifact.
+The `test` and `coverage` jobs depend on `frontend` and download the built
+assets before running Rust tests. Tests and coverage checks are required
+before merge; coverage must remain at or above 90%. CI runs
+`cargo test --workspace` and `cargo tarpaulin --workspace --fail-under 60
+--exclude-files src/main.rs src/core.rs src/notify.rs src/server.rs src/backend/*`.
+Release and smoke workflows assume CI is green. The verifier mirrors these
+gates, adds static checks, and enforces the review gate before merge. The
+verifier can also emit a non-blocking warning when coverage falls below the
+soft target configured in `verifier.coverage_warn`.

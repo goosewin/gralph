@@ -164,7 +164,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Vite builds to assets directory.
   * CI builds frontend before Rust.
 - **Dependencies** MC-1
-- [ ] MC-3 Initialize TypeScript/React frontend workspace
+- [x] MC-3 Initialize TypeScript/React frontend workspace
 ---
 
 ### Task MC-4
