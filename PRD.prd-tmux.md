@@ -75,7 +75,7 @@ Each task block must contain exactly one unchecked task line.
   * The function compiles without unused field warnings.
 - **Dependencies** PRD-1
 
-- [ ] PRD-2 Remove multiline and interactive usage from cmd_prd_create
+- [x] PRD-2 Remove multiline and interactive usage from cmd_prd_create
 ### Task PRD-3
 
 - **ID** PRD-3
