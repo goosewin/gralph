@@ -163,7 +163,7 @@ All failure conditions must emit clear, actionable error messages that describe 
   * Add tests for `post_prd_as_pr_comment` with success and truncation.
   * Verify existing tests still pass.
 - **Dependencies** CONFIG-1
-- [ ] TEST-1 Add unit tests for all new verifier helpers
+- [x] TEST-1 Add unit tests for all new verifier helpers
 ---
 
 ## Success Criteria

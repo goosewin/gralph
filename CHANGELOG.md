@@ -20,6 +20,7 @@ CI=<status/link>; PR=<link if final PRD task>
 - PRURL-1 Improve PR creation to reliably return URL or actionable error with gh stderr included.
 - PRCOMMENT-1 Add PRD content as PR comment with configurable verifier.post_prd_comment option and 65000 char truncation.
 - CONFIG-1 Document new verifier config options (delete_prd_on_complete, post_prd_comment, fmt_command) in default.yaml and README.
+- TEST-1 Add unit tests for verifier helpers: ensure_git_clean_for_pr, resolve_task_prd_path, run_verifier_fmt_check, and post_prd_as_pr_comment with mocked git and gh commands.
 
 ### Changed
 
