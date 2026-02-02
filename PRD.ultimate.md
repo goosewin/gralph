@@ -178,7 +178,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Status badges render correctly.
   * Component tests with mock data pass.
 - **Dependencies** MC-2, MC-3
-- [ ] MC-4 Build real-time session dashboard component
+- [x] MC-4 Build real-time session dashboard component
 ---
 
 ### Task MC-5

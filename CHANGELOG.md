@@ -14,6 +14,13 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-4 Add SessionDashboard component displaying all sessions with real-time updates via WebSocket.
+- MC-4 Add StatusBadge component with running/stopped/failed/completed/stale status indicators.
+- MC-4 Add SessionCard component with session details, progress bar, and stop functionality.
+- MC-4 Add useWebSocket hook for real-time WebSocket connection with reconnection handling.
+- MC-4 Add useSessions hook for REST API session fetching and stop operations.
+- MC-4 Add Session TypeScript types matching backend API response.
+- MC-4 Add Vitest testing setup with React Testing Library and 34 component tests.
 - MC-3 Initialize TypeScript/React frontend workspace with Vite build system.
 - MC-3 Add frontend package.json with React 18, TypeScript 5, and Vite 5 dependencies.
 - MC-3 Add TypeScript configuration with strict mode enabled.
