@@ -1,0 +1,31 @@
+src/server.rs
+  b6050d4de53dbc2a 1-2,7,15,117-135,137-193,198,205-206,208-209,226,232-325,830-837,1234,1260,1290,1320,1350,1381,1411,1436,1472,1505,1541,1583,1624,1675,1720,1754,1835,1868,1901,1936,1973,2023,2070,2106,2139,2171,2204,2239,2276,2310,2590,2622,2654,2685,2721,2777-3015
+CHANGELOG.md
+  b6050d4de53dbc2a 20-23
+Cargo.toml
+  b6050d4de53dbc2a 12,24-26
+PRD.ultimate.md
+  b6050d4de53dbc2a 153
+ARCHITECTURE.md
+  b6050d4de53dbc2a 19,50-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "b56cddce60af609f7c0aaff8f3744f3fbb9f246a",
+  "prompts": {
+    "b6050d4de53dbc2a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "957d9685-ea9a-45f5-9481-533e3a4ae606",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 488,
+      "total_deletions": 36,
+      "accepted_lines": 484,
+      "overriden_lines": 0
+    }
+  }
+}
