@@ -4667,4 +4667,341 @@ mod tests {
         assert!(!detection.evidence.is_empty());
         assert!(detection.evidence[0].contains("test.txt"));
     }
+
+    // COV90-PRD-1: Tests for PRD validation error paths and sanitize behavior
+
+    #[test]
+    fn prd_validate_file_reports_missing_id_field() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("context.md"), "ok").unwrap();
+
+        let prd = base.join("prd.md");
+        fs::write(
+            &prd,
+            "# PRD\n\n### Task M-1\n- **Context Bundle** `docs/context.md`\n- **DoD** Test missing ID.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] M-1 Task\n",
+        )
+        .unwrap();
+
+        let err = prd_validate_file(&prd, false, None).unwrap_err();
+        assert!(
+            err.messages
+                .iter()
+                .any(|m| m.contains("Missing required field: ID"))
+        );
+    }
+
+    #[test]
+    fn prd_validate_file_reports_missing_checklist_field() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("context.md"), "ok").unwrap();
+
+        let prd = base.join("prd.md");
+        fs::write(
+            &prd,
+            "# PRD\n\n### Task M-2\n- **ID** M-2\n- **Context Bundle** `docs/context.md`\n- **DoD** Test missing Checklist.\n- **Dependencies** None\n- [ ] M-2 Task\n",
+        )
+        .unwrap();
+
+        let err = prd_validate_file(&prd, false, None).unwrap_err();
+        assert!(
+            err.messages
+                .iter()
+                .any(|m| m.contains("Missing required field: Checklist"))
+        );
+    }
+
+    #[test]
+    fn prd_validate_file_reports_missing_dependencies_field() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("context.md"), "ok").unwrap();
+
+        let prd = base.join("prd.md");
+        fs::write(
+            &prd,
+            "# PRD\n\n### Task M-3\n- **ID** M-3\n- **Context Bundle** `docs/context.md`\n- **DoD** Test missing Dependencies.\n- **Checklist**\n  * Work.\n- [ ] M-3 Task\n",
+        )
+        .unwrap();
+
+        let err = prd_validate_file(&prd, false, None).unwrap_err();
+        assert!(
+            err.messages
+                .iter()
+                .any(|m| m.contains("Missing required field: Dependencies"))
+        );
+    }
+
+    #[test]
+    fn prd_validate_file_reports_missing_unchecked_task_line() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("context.md"), "ok").unwrap();
+
+        let prd = base.join("prd.md");
+        fs::write(
+            &prd,
+            "# PRD\n\n### Task M-4\n- **ID** M-4\n- **Context Bundle** `docs/context.md`\n- **DoD** Test missing unchecked line.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n",
+        )
+        .unwrap();
+
+        let err = prd_validate_file(&prd, false, None).unwrap_err();
+        assert!(
+            err.messages
+                .iter()
+                .any(|m| m.contains("Missing unchecked task line"))
+        );
+    }
+
+    #[test]
+    fn prd_validate_file_reports_empty_context_bundle() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+
+        let prd = base.join("prd.md");
+        fs::write(
+            &prd,
+            "# PRD\n\n### Task M-5\n- **ID** M-5\n- **Context Bundle**\n- **DoD** Test empty context bundle.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] M-5 Task\n",
+        )
+        .unwrap();
+
+        let err = prd_validate_file(&prd, false, None).unwrap_err();
+        assert!(
+            err.messages
+                .iter()
+                .any(|m| m.contains("Context Bundle must include at least one file path"))
+        );
+    }
+
+    #[test]
+    fn prd_sanitize_removes_open_questions_and_stray_checkboxes_integration() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("allowed.md"), "ok").unwrap();
+
+        let allowed = base.join("allowed.txt");
+        fs::write(&allowed, "docs/allowed.md\n").unwrap();
+
+        let prd = base.join("prd.md");
+        // Create a PRD with stray checkbox before Open Questions, Open Questions section,
+        // and multiple unchecked lines. Note: content between Open Questions and the next
+        // heading is removed, so we place the stray checkbox BEFORE Open Questions.
+        fs::write(
+            &prd,
+            "Preamble noise\n# PRD\n\n- [ ] Stray checkbox before\n\n## Open Questions\n- Question one?\n- Question two?\n\n## Implementation\n\n### Task SAN-1\n- **ID** SAN-1\n- **Context Bundle** `docs/allowed.md`, `missing.md`\n- **DoD** Test sanitization integration.\n- **Checklist**\n  * Work done.\n- **Dependencies** None\n- [ ] SAN-1 First task\n- [ ] SAN-1 Second task\n\n---\n\n- [ ] Stray checkbox after\n",
+        )
+        .unwrap();
+
+        // Sanitize the PRD
+        prd_sanitize_generated_file(&prd, Some(base), Some(&allowed)).unwrap();
+        let sanitized = fs::read_to_string(&prd).unwrap();
+
+        // Verify Open Questions section removed
+        assert!(!sanitized.contains("Open Questions"));
+        assert!(!sanitized.contains("Question one"));
+        assert!(!sanitized.contains("Question two"));
+
+        // Verify stray checkboxes converted to regular list items
+        assert!(!sanitized.contains("- [ ] Stray checkbox before"));
+        assert!(sanitized.contains("- Stray checkbox before"));
+        assert!(!sanitized.contains("- [ ] Stray checkbox after"));
+        assert!(sanitized.contains("- Stray checkbox after"));
+
+        // Verify only one unchecked task line remains
+        let unchecked_count = sanitized
+            .lines()
+            .filter(|line| is_unchecked_line(line))
+            .count();
+        assert_eq!(unchecked_count, 1);
+        assert!(sanitized.contains("- [ ] SAN-1 First task"));
+        assert!(sanitized.contains("- SAN-1 Second task"));
+        assert!(!sanitized.contains("- [ ] SAN-1 Second task"));
+
+        // Verify preamble removed
+        assert!(!sanitized.contains("Preamble noise"));
+
+        // Verify context filtered to allowed list only
+        assert!(sanitized.contains("- **Context Bundle** `docs/allowed.md`"));
+        assert!(!sanitized.contains("missing.md"));
+    }
+
+    #[test]
+    fn prd_validation_passes_after_sanitize_with_allowed_context() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("context.md"), "ok").unwrap();
+
+        let allowed = base.join("allowed.txt");
+        fs::write(&allowed, "docs/context.md\n").unwrap();
+
+        let prd = base.join("prd.md");
+        // Create an invalid PRD that would fail validation
+        fs::write(
+            &prd,
+            "Noise before heading\n# PRD\n\n## Open Questions\n- Should remove\n\n- [ ] Stray outside\n\n### Task VAL-1\n- **ID** VAL-1\n- **Context Bundle** `missing.md`, `docs/context.md`\n- **DoD** Verify validation after sanitize.\n- **Checklist**\n  * Done.\n- **Dependencies** None\n- [ ] VAL-1 First\n- [ ] VAL-1 Extra\n",
+        )
+        .unwrap();
+
+        // Before sanitization, validation should fail
+        let pre_result = prd_validate_file(&prd, false, Some(base));
+        assert!(pre_result.is_err());
+        let pre_err = pre_result.unwrap_err();
+        // Should report Open Questions and stray unchecked
+        assert!(
+            pre_err
+                .messages
+                .iter()
+                .any(|m| m.contains("Open Questions"))
+        );
+        assert!(
+            pre_err
+                .messages
+                .iter()
+                .any(|m| m.contains("Unchecked task line outside"))
+        );
+
+        // Sanitize the PRD
+        prd_sanitize_generated_file(&prd, Some(base), Some(&allowed)).unwrap();
+
+        // After sanitization, validation should pass
+        let post_result = prd_validate_file(&prd, false, Some(base));
+        assert!(
+            post_result.is_ok(),
+            "Validation should pass after sanitize: {:?}",
+            post_result
+        );
+    }
+
+    #[test]
+    fn prd_sanitize_filters_context_and_validation_passes() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("valid.md"), "ok").unwrap();
+        fs::write(docs.join("other.md"), "ok").unwrap();
+
+        let allowed = base.join("allowed.txt");
+        fs::write(&allowed, "docs/valid.md\ndocs/other.md\n").unwrap();
+
+        let prd = base.join("prd.md");
+        // PRD with mixed valid/invalid context entries
+        fs::write(
+            &prd,
+            "# PRD\n\n### Task CTX-1\n- **ID** CTX-1\n- **Context Bundle** `docs/valid.md`, `nonexistent.md`\n- **DoD** Context filtering test.\n- **Checklist**\n  * Check.\n- **Dependencies** None\n- [ ] CTX-1 Task\n",
+        )
+        .unwrap();
+
+        // Before sanitization, validation fails due to missing context
+        assert!(prd_validate_file(&prd, false, Some(base)).is_err());
+
+        // Sanitize removes invalid context entries
+        prd_sanitize_generated_file(&prd, Some(base), Some(&allowed)).unwrap();
+
+        // After sanitization, validation passes
+        let result = prd_validate_file(&prd, false, Some(base));
+        assert!(
+            result.is_ok(),
+            "Should pass after context filtering: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn prd_sanitize_dedupes_multiple_unchecked_and_validation_passes() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("context.md"), "ok").unwrap();
+
+        let prd = base.join("prd.md");
+        // PRD with multiple unchecked lines in a task block
+        fs::write(
+            &prd,
+            "# PRD\n\n### Task DUP-1\n- **ID** DUP-1\n- **Context Bundle** `docs/context.md`\n- **DoD** Test multiple unchecked.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] DUP-1 First\n- [ ] DUP-1 Second\n- [ ] DUP-1 Third\n",
+        )
+        .unwrap();
+
+        // Before sanitization, validation fails due to multiple unchecked lines
+        let pre_result = prd_validate_file(&prd, false, Some(base));
+        assert!(pre_result.is_err());
+        assert!(
+            pre_result
+                .unwrap_err()
+                .messages
+                .iter()
+                .any(|m| m.contains("Multiple unchecked task lines"))
+        );
+
+        // Sanitize dedupes unchecked lines
+        prd_sanitize_generated_file(&prd, Some(base), None).unwrap();
+
+        // After sanitization, validation passes
+        let result = prd_validate_file(&prd, false, Some(base));
+        assert!(
+            result.is_ok(),
+            "Should pass after unchecked dedup: {:?}",
+            result
+        );
+
+        // Verify only one unchecked line remains
+        let sanitized = fs::read_to_string(&prd).unwrap();
+        let unchecked_count = sanitized
+            .lines()
+            .filter(|line| is_unchecked_line(line))
+            .count();
+        assert_eq!(unchecked_count, 1);
+    }
+
+    #[test]
+    fn prd_sanitize_falls_back_to_allowed_context_and_validation_passes() {
+        let temp = tempdir().unwrap();
+        let base = temp.path();
+        let docs = base.join("docs");
+        fs::create_dir_all(&docs).unwrap();
+        fs::write(docs.join("fallback.md"), "ok").unwrap();
+
+        let allowed = base.join("allowed.txt");
+        fs::write(&allowed, "docs/fallback.md\n").unwrap();
+
+        let prd = base.join("prd.md");
+        // PRD with only invalid context that will be filtered out
+        fs::write(
+            &prd,
+            "# PRD\n\n### Task FB-1\n- **ID** FB-1\n- **Context Bundle** `nonexistent.md`\n- **DoD** Test fallback context.\n- **Checklist**\n  * Work.\n- **Dependencies** None\n- [ ] FB-1 Task\n",
+        )
+        .unwrap();
+
+        // Before sanitization, validation fails
+        assert!(prd_validate_file(&prd, false, Some(base)).is_err());
+
+        // Sanitize uses fallback from allowed context list
+        prd_sanitize_generated_file(&prd, Some(base), Some(&allowed)).unwrap();
+
+        // After sanitization, validation passes
+        let result = prd_validate_file(&prd, false, Some(base));
+        assert!(
+            result.is_ok(),
+            "Should pass with fallback context: {:?}",
+            result
+        );
+
+        // Verify fallback context is used
+        let sanitized = fs::read_to_string(&prd).unwrap();
+        assert!(sanitized.contains("- **Context Bundle** `docs/fallback.md`"));
+    }
 }

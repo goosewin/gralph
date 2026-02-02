@@ -16,6 +16,9 @@ CI=<status/link>; PR=<link if final PRD task>
 
 - TMUX-3 Add attach command for tmux sessions.
 - COV80-WT-1 Add worktree git helper tests for git_output_in_dir, create_worktree_at, cmd_worktree_finish, and validate_task_id.
+- COV90-PRD-1 Add PRD validation and sanitize tests covering missing required fields, Open Questions removal, stray checkbox handling, and validation after sanitize with allowed context.
+- COV90-VER-1 Add verifier static file inclusion and ignore pattern tests; add coverage parsing tests for tarpaulin output formats including fail-under, verbose, workspace, zero, and hundred percent cases.
+- COV90-FINAL-1 Verified coverage target: tests passed (1359 tests), tarpaulin coverage 84.76% (3716/4384 lines covered) with CI threshold (60%) met.
 
 ### Changed
 

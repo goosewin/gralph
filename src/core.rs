@@ -1480,6 +1480,53 @@ mod tests {
     }
 
     #[test]
+    fn check_completion_errors_when_task_file_is_empty_path() {
+        let result = check_completion(Path::new(""), "<promise>COMPLETE</promise>", "COMPLETE");
+        assert!(matches!(
+            result,
+            Err(CoreError::InvalidInput(message))
+                if message.contains("task_file is required")
+        ));
+    }
+
+    #[test]
+    fn count_remaining_tasks_returns_zero_for_empty_path() {
+        let count = count_remaining_tasks(Path::new(""));
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn count_remaining_tasks_returns_zero_for_missing_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("missing.md");
+        let count = count_remaining_tasks(&path);
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn count_remaining_tasks_uses_fallback_when_no_headers() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        let contents = "- [ ] First task\n- [x] Done task\n- [ ] Second task\n";
+        fs::write(&path, contents).unwrap();
+
+        let count = count_remaining_tasks(&path);
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn count_remaining_tasks_counts_unchecked_within_headers() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("PRD.md");
+        let contents =
+            "### Task A\n- [ ] First\n- [ ] Second\n---\n### Task B\n- [x] Done\n- [ ] Third\n";
+        fs::write(&path, contents).unwrap();
+
+        let count = count_remaining_tasks(&path);
+        assert_eq!(count, 3);
+    }
+
+    #[test]
     fn get_task_blocks_extracts_blocks() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("PRD.md");

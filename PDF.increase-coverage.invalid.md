@@ -59,7 +59,7 @@ Each task block must contain exactly one unchecked task line.
   * Cover count_remaining_tasks with header and non-header formats.
   * Cover check_completion with success and failure cases.
 - **Dependencies** None
-- [ ] COV90-CORE-1 Add core loop validation tests
+- [x] COV90-CORE-1 Add core loop validation tests
 
 ---
 
@@ -73,7 +73,7 @@ Each task block must contain exactly one unchecked task line.
   * Cover sanitize removal of Open Questions and stray checkboxes.
   * Verify validation passes after sanitize with allowed context.
 - **Dependencies** COV90-CORE-1
-- [ ] COV90-PRD-1 Add PRD validation and sanitize tests
+- [x] COV90-PRD-1 Add PRD validation and sanitize tests
 
 ---
 
@@ -87,7 +87,7 @@ Each task block must contain exactly one unchecked task line.
   * Cover coverage parsing for tarpaulin output.
   * Record verification results in CHANGELOG.md.
 - **Dependencies** COV90-PRD-1
-- [ ] COV90-VER-1 Add verifier static check and coverage tests
+- [x] COV90-VER-1 Add verifier static check and coverage tests
 
 ---
 
@@ -101,7 +101,7 @@ Each task block must contain exactly one unchecked task line.
   * Run the configured tarpaulin command and confirm >= 90%.
   * Add verification line to CHANGELOG.md.
 - **Dependencies** COV90-CORE-1, COV90-PRD-1, COV90-VER-1
-- [ ] COV90-FINAL-1 Verify coverage target
+- [x] COV90-FINAL-1 Verify coverage target
 
 ---
 
