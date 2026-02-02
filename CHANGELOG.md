@@ -14,6 +14,14 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-13 Add DependencyGraph struct for task dependency analysis with graph representation.
+- MC-13 Add DependencyGraph.from_prd() for extracting task relationships from PRD content.
+- MC-13 Add DependencyGraph.get_execution_levels() for identifying parallel task groups using topological sort.
+- MC-13 Add DependencyGraph.get_ready_tasks() and schedule_tasks() for concurrent task scheduling.
+- MC-13 Add DependencyGraph.validate_no_cycles() for cycle detection with error reporting.
+- MC-13 Add DependencyGraph.max_parallelism() and critical_path_length() for scheduling optimization.
+- MC-13 Add DependencyGraphStats for graph statistics (task count, root count, parallelism, critical path).
+- MC-13 Add 30 new unit tests for DependencyGraph covering edge cases, cycles, and parallel patterns.
 - MC-12 Add AgentWorktreeManager for thread-safe creation and cleanup of isolated agent worktrees.
 - MC-12 Add Coordinator.with_worktree_manager() for creating coordinators with worktree isolation.
 - MC-12 Add Coordinator.spawn_agent_with_isolated_worktree() to spawn agents with unique worktrees.

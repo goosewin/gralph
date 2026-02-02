@@ -307,7 +307,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Independent tasks scheduled concurrently.
   * Unit tests cover graph edge cases.
 - **Dependencies** MC-11
-- [ ] MC-13 Add task dependency graph analysis
+- [x] MC-13 Add task dependency graph analysis
 ---
 
 ### Task MC-14

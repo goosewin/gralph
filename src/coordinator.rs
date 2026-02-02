@@ -846,6 +846,265 @@ pub fn find_independent_tasks<'a>(tasks: &'a [TaskNode], completed: &HashSet<Str
         .collect()
 }
 
+/// Represents the dependency graph for task scheduling and parallel execution analysis.
+///
+/// The `DependencyGraph` provides methods to analyze task dependencies, identify
+/// independent task blocks that can run in parallel, and order execution based
+/// on dependency relationships.
+#[derive(Debug, Clone)]
+pub struct DependencyGraph {
+    /// All tasks in the graph indexed by their ID.
+    tasks: HashMap<String, TaskNode>,
+    /// Adjacency list: task ID -> list of tasks that depend on it (reverse edges).
+    dependents: HashMap<String, Vec<String>>,
+    /// Number of unresolved dependencies for each task.
+    in_degree: HashMap<String, usize>,
+}
+
+impl DependencyGraph {
+    /// Creates a new dependency graph from a list of task nodes.
+    ///
+    /// Only includes dependencies that reference tasks within the provided list.
+    /// External dependencies (referencing tasks not in the list) are ignored.
+    pub fn new(tasks: Vec<TaskNode>) -> Self {
+        let task_ids: HashSet<_> = tasks.iter().map(|t| t.id.clone()).collect();
+
+        let mut tasks_map = HashMap::new();
+        let mut dependents: HashMap<String, Vec<String>> = HashMap::new();
+        let mut in_degree: HashMap<String, usize> = HashMap::new();
+
+        // Initialize all tasks with zero in-degree and empty dependents
+        for task in &tasks {
+            in_degree.insert(task.id.clone(), 0);
+            dependents.insert(task.id.clone(), Vec::new());
+        }
+
+        // Build the graph
+        for task in &tasks {
+            let mut valid_dep_count = 0;
+            for dep in &task.dependencies {
+                // Only count dependencies that are part of the task set
+                if task_ids.contains(dep) {
+                    valid_dep_count += 1;
+                    dependents
+                        .get_mut(dep)
+                        .unwrap()
+                        .push(task.id.clone());
+                }
+            }
+            *in_degree.get_mut(&task.id).unwrap() = valid_dep_count;
+            tasks_map.insert(task.id.clone(), task.clone());
+        }
+
+        Self {
+            tasks: tasks_map,
+            dependents,
+            in_degree,
+        }
+    }
+
+    /// Creates a dependency graph from PRD content.
+    ///
+    /// Parses the PRD to extract unchecked tasks with their dependencies.
+    pub fn from_prd(prd_content: &str) -> Self {
+        let tasks = tasks_from_prd(prd_content);
+        Self::new(tasks)
+    }
+
+    /// Returns the number of tasks in the graph.
+    pub fn task_count(&self) -> usize {
+        self.tasks.len()
+    }
+
+    /// Returns a reference to a task by its ID.
+    pub fn get_task(&self, id: &str) -> Option<&TaskNode> {
+        self.tasks.get(id)
+    }
+
+    /// Returns all task IDs in the graph.
+    pub fn task_ids(&self) -> Vec<String> {
+        self.tasks.keys().cloned().collect()
+    }
+
+    /// Checks if the graph contains a dependency cycle.
+    ///
+    /// Returns `Ok(())` if no cycle exists, or `Err(CoordinatorError::DependencyCycle)`
+    /// with the tasks involved in the cycle.
+    pub fn validate_no_cycles(&self) -> Result<(), CoordinatorError> {
+        let tasks: Vec<_> = self.tasks.values().cloned().collect();
+        topological_sort(&tasks).map(|_| ())
+    }
+
+    /// Returns the in-degree (number of unresolved dependencies) for a task.
+    pub fn get_in_degree(&self, task_id: &str) -> usize {
+        self.in_degree.get(task_id).copied().unwrap_or(0)
+    }
+
+    /// Returns a list of task IDs that directly depend on the given task.
+    pub fn get_dependents(&self, task_id: &str) -> Vec<String> {
+        self.dependents.get(task_id).cloned().unwrap_or_default()
+    }
+
+    /// Returns all tasks with no dependencies (in-degree of 0).
+    ///
+    /// These tasks can be executed immediately without waiting for any prerequisites.
+    pub fn get_root_tasks(&self) -> Vec<&TaskNode> {
+        self.tasks
+            .values()
+            .filter(|task| self.in_degree.get(&task.id).copied().unwrap_or(0) == 0)
+            .collect()
+    }
+
+    /// Computes execution levels for parallel scheduling.
+    ///
+    /// Returns a vector of task ID groups, where each group represents tasks
+    /// that can be executed in parallel. Groups are ordered by execution level:
+    /// - Level 0: Tasks with no dependencies (can start immediately)
+    /// - Level 1: Tasks whose dependencies are all in level 0
+    /// - Level N: Tasks whose dependencies are all in levels 0..N-1
+    ///
+    /// Returns an error if a cycle is detected.
+    pub fn get_execution_levels(&self) -> Result<Vec<Vec<String>>, CoordinatorError> {
+        if self.tasks.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Validate no cycles first
+        self.validate_no_cycles()?;
+
+        let mut levels: Vec<Vec<String>> = Vec::new();
+        let mut remaining_in_degree = self.in_degree.clone();
+        let mut scheduled: HashSet<String> = HashSet::new();
+
+        loop {
+            // Find all tasks with in-degree 0 that haven't been scheduled
+            let ready: Vec<String> = remaining_in_degree
+                .iter()
+                .filter(|(id, degree)| **degree == 0 && !scheduled.contains(*id))
+                .map(|(id, _)| id.clone())
+                .collect();
+
+            if ready.is_empty() {
+                break;
+            }
+
+            // Mark all ready tasks as scheduled
+            for task_id in &ready {
+                scheduled.insert(task_id.clone());
+
+                // Decrement in-degree of all dependents
+                if let Some(deps) = self.dependents.get(task_id) {
+                    for dep_id in deps {
+                        if let Some(degree) = remaining_in_degree.get_mut(dep_id) {
+                            *degree = degree.saturating_sub(1);
+                        }
+                    }
+                }
+            }
+
+            levels.push(ready);
+        }
+
+        Ok(levels)
+    }
+
+    /// Returns the maximum parallelism achievable at any execution level.
+    ///
+    /// This is the maximum number of tasks that can run concurrently.
+    pub fn max_parallelism(&self) -> Result<usize, CoordinatorError> {
+        let levels = self.get_execution_levels()?;
+        Ok(levels.iter().map(|level| level.len()).max().unwrap_or(0))
+    }
+
+    /// Identifies independent task blocks for parallel execution.
+    ///
+    /// Given a set of already-completed tasks, returns tasks that can be
+    /// scheduled concurrently because all their dependencies are satisfied.
+    pub fn get_ready_tasks(&self, completed: &HashSet<String>) -> Vec<&TaskNode> {
+        self.tasks
+            .values()
+            .filter(|task| {
+                !completed.contains(&task.id)
+                    && task.dependencies.iter().all(|dep| {
+                        // Dependency is satisfied if:
+                        // 1. It's completed, OR
+                        // 2. It's not part of this graph (external dependency)
+                        completed.contains(dep) || !self.tasks.contains_key(dep)
+                    })
+            })
+            .collect()
+    }
+
+    /// Schedules tasks for execution, respecting dependencies and capacity limits.
+    ///
+    /// Returns up to `max_concurrent` tasks that can be executed in parallel,
+    /// given the set of already-completed tasks and currently in-progress tasks.
+    pub fn schedule_tasks(
+        &self,
+        completed: &HashSet<String>,
+        in_progress: &HashSet<String>,
+        max_concurrent: usize,
+    ) -> Vec<&TaskNode> {
+        if max_concurrent == 0 {
+            return Vec::new();
+        }
+
+        let available_slots = max_concurrent.saturating_sub(in_progress.len());
+        if available_slots == 0 {
+            return Vec::new();
+        }
+
+        let ready = self.get_ready_tasks(completed);
+        ready
+            .into_iter()
+            .filter(|task| !in_progress.contains(&task.id))
+            .take(available_slots)
+            .collect()
+    }
+
+    /// Computes the critical path length (longest dependency chain).
+    ///
+    /// This represents the minimum number of sequential execution steps required,
+    /// assuming unlimited parallelism.
+    pub fn critical_path_length(&self) -> Result<usize, CoordinatorError> {
+        let levels = self.get_execution_levels()?;
+        Ok(levels.len())
+    }
+
+    /// Returns statistics about the dependency graph.
+    pub fn stats(&self) -> DependencyGraphStats {
+        let task_count = self.tasks.len();
+        let root_count = self.get_root_tasks().len();
+        let max_parallelism = self.max_parallelism().unwrap_or(0);
+        let critical_path = self.critical_path_length().unwrap_or(0);
+
+        let total_edges: usize = self.tasks.values().map(|t| t.dependencies.len()).sum();
+
+        DependencyGraphStats {
+            task_count,
+            root_count,
+            max_parallelism,
+            critical_path_length: critical_path,
+            total_dependency_edges: total_edges,
+        }
+    }
+}
+
+/// Statistics about a dependency graph.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DependencyGraphStats {
+    /// Total number of tasks in the graph.
+    pub task_count: usize,
+    /// Number of tasks with no dependencies (can start immediately).
+    pub root_count: usize,
+    /// Maximum number of tasks that can run concurrently at any level.
+    pub max_parallelism: usize,
+    /// Minimum number of sequential steps required (critical path).
+    pub critical_path_length: usize,
+    /// Total number of dependency edges in the graph.
+    pub total_dependency_edges: usize,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1734,5 +1993,470 @@ mod tests {
         fs::write(dir.join("README.md"), "init\n").unwrap();
         run_git(dir, &["add", "."]);
         run_git(dir, &["commit", "-m", "init"]);
+    }
+
+    // DependencyGraph tests
+
+    #[test]
+    fn dependency_graph_empty() {
+        let graph = DependencyGraph::new(Vec::new());
+        assert_eq!(graph.task_count(), 0);
+        assert!(graph.get_root_tasks().is_empty());
+        assert_eq!(graph.get_execution_levels().unwrap(), Vec::<Vec<String>>::new());
+        assert_eq!(graph.max_parallelism().unwrap(), 0);
+        assert_eq!(graph.critical_path_length().unwrap(), 0);
+    }
+
+    #[test]
+    fn dependency_graph_single_task_no_deps() {
+        let tasks = vec![TaskNode::new("T-1".to_string(), "content".to_string())];
+        let graph = DependencyGraph::new(tasks);
+
+        assert_eq!(graph.task_count(), 1);
+        assert_eq!(graph.get_root_tasks().len(), 1);
+
+        let levels = graph.get_execution_levels().unwrap();
+        assert_eq!(levels.len(), 1);
+        assert_eq!(levels[0], vec!["T-1".to_string()]);
+
+        assert_eq!(graph.max_parallelism().unwrap(), 1);
+        assert_eq!(graph.critical_path_length().unwrap(), 1);
+    }
+
+    #[test]
+    fn dependency_graph_multiple_independent_tasks() {
+        let tasks = vec![
+            TaskNode::new("T-1".to_string(), "".to_string()),
+            TaskNode::new("T-2".to_string(), "".to_string()),
+            TaskNode::new("T-3".to_string(), "".to_string()),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        assert_eq!(graph.task_count(), 3);
+        assert_eq!(graph.get_root_tasks().len(), 3);
+
+        let levels = graph.get_execution_levels().unwrap();
+        assert_eq!(levels.len(), 1);
+        assert_eq!(levels[0].len(), 3);
+
+        assert_eq!(graph.max_parallelism().unwrap(), 3);
+        assert_eq!(graph.critical_path_length().unwrap(), 1);
+    }
+
+    #[test]
+    fn dependency_graph_linear_chain() {
+        let tasks = vec![
+            TaskNode::new("T-1".to_string(), "".to_string()),
+            TaskNode::new("T-2".to_string(), "".to_string())
+                .with_dependencies(vec!["T-1".to_string()]),
+            TaskNode::new("T-3".to_string(), "".to_string())
+                .with_dependencies(vec!["T-2".to_string()]),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        assert_eq!(graph.task_count(), 3);
+        assert_eq!(graph.get_root_tasks().len(), 1);
+        assert_eq!(graph.get_root_tasks()[0].id, "T-1");
+
+        let levels = graph.get_execution_levels().unwrap();
+        assert_eq!(levels.len(), 3);
+        assert_eq!(levels[0], vec!["T-1".to_string()]);
+        assert_eq!(levels[1], vec!["T-2".to_string()]);
+        assert_eq!(levels[2], vec!["T-3".to_string()]);
+
+        assert_eq!(graph.max_parallelism().unwrap(), 1);
+        assert_eq!(graph.critical_path_length().unwrap(), 3);
+    }
+
+    #[test]
+    fn dependency_graph_diamond_pattern() {
+        // T-1 -> T-2, T-3 -> T-4
+        //        T-2 --|
+        //              +-> T-4
+        //        T-3 --|
+        let tasks = vec![
+            TaskNode::new("T-1".to_string(), "".to_string()),
+            TaskNode::new("T-2".to_string(), "".to_string())
+                .with_dependencies(vec!["T-1".to_string()]),
+            TaskNode::new("T-3".to_string(), "".to_string())
+                .with_dependencies(vec!["T-1".to_string()]),
+            TaskNode::new("T-4".to_string(), "".to_string())
+                .with_dependencies(vec!["T-2".to_string(), "T-3".to_string()]),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        assert_eq!(graph.task_count(), 4);
+        assert_eq!(graph.get_root_tasks().len(), 1);
+
+        let levels = graph.get_execution_levels().unwrap();
+        assert_eq!(levels.len(), 3);
+        assert_eq!(levels[0], vec!["T-1".to_string()]);
+        assert_eq!(levels[1].len(), 2);
+        assert!(levels[1].contains(&"T-2".to_string()));
+        assert!(levels[1].contains(&"T-3".to_string()));
+        assert_eq!(levels[2], vec!["T-4".to_string()]);
+
+        assert_eq!(graph.max_parallelism().unwrap(), 2);
+        assert_eq!(graph.critical_path_length().unwrap(), 3);
+    }
+
+    #[test]
+    fn dependency_graph_detects_cycle() {
+        let tasks = vec![
+            TaskNode::new("T-1".to_string(), "".to_string())
+                .with_dependencies(vec!["T-2".to_string()]),
+            TaskNode::new("T-2".to_string(), "".to_string())
+                .with_dependencies(vec!["T-1".to_string()]),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        assert!(graph.validate_no_cycles().is_err());
+        assert!(graph.get_execution_levels().is_err());
+    }
+
+    #[test]
+    fn dependency_graph_ignores_external_deps() {
+        // T-2 depends on T-1, but T-1 is not in the graph
+        let tasks = vec![TaskNode::new("T-2".to_string(), "".to_string())
+            .with_dependencies(vec!["T-1".to_string()])];
+        let graph = DependencyGraph::new(tasks);
+
+        assert_eq!(graph.task_count(), 1);
+        // T-2 should be a root since T-1 is external
+        assert_eq!(graph.get_root_tasks().len(), 1);
+        assert_eq!(graph.get_in_degree("T-2"), 0);
+
+        let levels = graph.get_execution_levels().unwrap();
+        assert_eq!(levels.len(), 1);
+    }
+
+    #[test]
+    fn dependency_graph_get_dependents() {
+        let tasks = vec![
+            TaskNode::new("T-1".to_string(), "".to_string()),
+            TaskNode::new("T-2".to_string(), "".to_string())
+                .with_dependencies(vec!["T-1".to_string()]),
+            TaskNode::new("T-3".to_string(), "".to_string())
+                .with_dependencies(vec!["T-1".to_string()]),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        let deps = graph.get_dependents("T-1");
+        assert_eq!(deps.len(), 2);
+        assert!(deps.contains(&"T-2".to_string()));
+        assert!(deps.contains(&"T-3".to_string()));
+
+        assert!(graph.get_dependents("T-2").is_empty());
+        assert!(graph.get_dependents("T-3").is_empty());
+        assert!(graph.get_dependents("nonexistent").is_empty());
+    }
+
+    #[test]
+    fn dependency_graph_get_ready_tasks() {
+        let tasks = vec![
+            TaskNode::new("T-1".to_string(), "".to_string()),
+            TaskNode::new("T-2".to_string(), "".to_string())
+                .with_dependencies(vec!["T-1".to_string()]),
+            TaskNode::new("T-3".to_string(), "".to_string()),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        let completed = HashSet::new();
+        let ready = graph.get_ready_tasks(&completed);
+        let ready_ids: Vec<_> = ready.iter().map(|t| &t.id).collect();
+        assert_eq!(ready.len(), 2);
+        assert!(ready_ids.contains(&&"T-1".to_string()));
+        assert!(ready_ids.contains(&&"T-3".to_string()));
+
+        let mut completed = HashSet::new();
+        completed.insert("T-1".to_string());
+        let ready = graph.get_ready_tasks(&completed);
+        let ready_ids: Vec<_> = ready.iter().map(|t| &t.id).collect();
+        assert_eq!(ready.len(), 2);
+        assert!(ready_ids.contains(&&"T-2".to_string()));
+        assert!(ready_ids.contains(&&"T-3".to_string()));
+    }
+
+    #[test]
+    fn dependency_graph_schedule_tasks_respects_capacity() {
+        let tasks = vec![
+            TaskNode::new("T-1".to_string(), "".to_string()),
+            TaskNode::new("T-2".to_string(), "".to_string()),
+            TaskNode::new("T-3".to_string(), "".to_string()),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        let completed = HashSet::new();
+        let in_progress = HashSet::new();
+
+        // Request at most 2
+        let scheduled = graph.schedule_tasks(&completed, &in_progress, 2);
+        assert_eq!(scheduled.len(), 2);
+
+        // Request 0
+        let scheduled = graph.schedule_tasks(&completed, &in_progress, 0);
+        assert!(scheduled.is_empty());
+    }
+
+    #[test]
+    fn dependency_graph_schedule_tasks_excludes_in_progress() {
+        let tasks = vec![
+            TaskNode::new("T-1".to_string(), "".to_string()),
+            TaskNode::new("T-2".to_string(), "".to_string()),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        let completed = HashSet::new();
+        let mut in_progress = HashSet::new();
+        in_progress.insert("T-1".to_string());
+
+        let scheduled = graph.schedule_tasks(&completed, &in_progress, 5);
+        assert_eq!(scheduled.len(), 1);
+        assert_eq!(scheduled[0].id, "T-2");
+    }
+
+    #[test]
+    fn dependency_graph_schedule_tasks_respects_slots() {
+        let tasks = vec![
+            TaskNode::new("T-1".to_string(), "".to_string()),
+            TaskNode::new("T-2".to_string(), "".to_string()),
+            TaskNode::new("T-3".to_string(), "".to_string()),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        let completed = HashSet::new();
+        let mut in_progress = HashSet::new();
+        in_progress.insert("T-1".to_string());
+
+        // max_concurrent=2, 1 in progress, so only 1 slot available
+        let scheduled = graph.schedule_tasks(&completed, &in_progress, 2);
+        assert_eq!(scheduled.len(), 1);
+    }
+
+    #[test]
+    fn dependency_graph_stats() {
+        let tasks = vec![
+            TaskNode::new("T-1".to_string(), "".to_string()),
+            TaskNode::new("T-2".to_string(), "".to_string())
+                .with_dependencies(vec!["T-1".to_string()]),
+            TaskNode::new("T-3".to_string(), "".to_string())
+                .with_dependencies(vec!["T-1".to_string()]),
+            TaskNode::new("T-4".to_string(), "".to_string())
+                .with_dependencies(vec!["T-2".to_string(), "T-3".to_string()]),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        let stats = graph.stats();
+        assert_eq!(stats.task_count, 4);
+        assert_eq!(stats.root_count, 1);
+        assert_eq!(stats.max_parallelism, 2);
+        assert_eq!(stats.critical_path_length, 3);
+        assert_eq!(stats.total_dependency_edges, 4); // T-2->T-1, T-3->T-1, T-4->T-2, T-4->T-3
+    }
+
+    #[test]
+    fn dependency_graph_from_prd() {
+        let prd = r#"# PRD
+
+### Task T-1
+- **ID** T-1
+- **Dependencies** None
+- [ ] T-1 First task
+---
+### Task T-2
+- **ID** T-2
+- **Dependencies** T-1
+- [ ] T-2 Second task
+---
+### Task T-3
+- **ID** T-3
+- **Dependencies** None
+- [ ] T-3 Third task
+---
+### Task T-4
+- **ID** T-4
+- **Dependencies** T-2, T-3
+- [ ] T-4 Fourth task
+"#;
+
+        let graph = DependencyGraph::from_prd(prd);
+        assert_eq!(graph.task_count(), 4);
+
+        let levels = graph.get_execution_levels().unwrap();
+        assert_eq!(levels.len(), 3);
+
+        // Level 0: T-1 and T-3 (no deps)
+        assert_eq!(levels[0].len(), 2);
+        assert!(levels[0].contains(&"T-1".to_string()));
+        assert!(levels[0].contains(&"T-3".to_string()));
+
+        // Level 1: T-2 (depends on T-1)
+        assert_eq!(levels[1], vec!["T-2".to_string()]);
+
+        // Level 2: T-4 (depends on T-2, T-3)
+        assert_eq!(levels[2], vec!["T-4".to_string()]);
+    }
+
+    #[test]
+    fn dependency_graph_complex_parallel() {
+        // Complex graph with multiple parallel branches
+        // T-1 ---> T-2 ---> T-5
+        // T-3 ---> T-4 --/
+        let tasks = vec![
+            TaskNode::new("T-1".to_string(), "".to_string()),
+            TaskNode::new("T-2".to_string(), "".to_string())
+                .with_dependencies(vec!["T-1".to_string()]),
+            TaskNode::new("T-3".to_string(), "".to_string()),
+            TaskNode::new("T-4".to_string(), "".to_string())
+                .with_dependencies(vec!["T-3".to_string()]),
+            TaskNode::new("T-5".to_string(), "".to_string())
+                .with_dependencies(vec!["T-2".to_string(), "T-4".to_string()]),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        let levels = graph.get_execution_levels().unwrap();
+        assert_eq!(levels.len(), 3);
+
+        // Level 0: T-1, T-3
+        assert_eq!(levels[0].len(), 2);
+        assert!(levels[0].contains(&"T-1".to_string()));
+        assert!(levels[0].contains(&"T-3".to_string()));
+
+        // Level 1: T-2, T-4
+        assert_eq!(levels[1].len(), 2);
+        assert!(levels[1].contains(&"T-2".to_string()));
+        assert!(levels[1].contains(&"T-4".to_string()));
+
+        // Level 2: T-5
+        assert_eq!(levels[2], vec!["T-5".to_string()]);
+
+        assert_eq!(graph.max_parallelism().unwrap(), 2);
+    }
+
+    #[test]
+    fn dependency_graph_get_task() {
+        let tasks = vec![
+            TaskNode::new("T-1".to_string(), "content1".to_string()),
+            TaskNode::new("T-2".to_string(), "content2".to_string()),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        let task = graph.get_task("T-1").unwrap();
+        assert_eq!(task.id, "T-1");
+        assert_eq!(task.content, "content1");
+
+        assert!(graph.get_task("nonexistent").is_none());
+    }
+
+    #[test]
+    fn dependency_graph_task_ids() {
+        let tasks = vec![
+            TaskNode::new("T-1".to_string(), "".to_string()),
+            TaskNode::new("T-2".to_string(), "".to_string()),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        let ids = graph.task_ids();
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&"T-1".to_string()));
+        assert!(ids.contains(&"T-2".to_string()));
+    }
+
+    #[test]
+    fn dependency_graph_three_level_cycle() {
+        // T-1 -> T-2 -> T-3 -> T-1 (cycle)
+        let tasks = vec![
+            TaskNode::new("T-1".to_string(), "".to_string())
+                .with_dependencies(vec!["T-3".to_string()]),
+            TaskNode::new("T-2".to_string(), "".to_string())
+                .with_dependencies(vec!["T-1".to_string()]),
+            TaskNode::new("T-3".to_string(), "".to_string())
+                .with_dependencies(vec!["T-2".to_string()]),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        let result = graph.validate_no_cycles();
+        assert!(matches!(result, Err(CoordinatorError::DependencyCycle(_))));
+    }
+
+    #[test]
+    fn dependency_graph_partial_cycle() {
+        // T-1 (no deps), T-2 -> T-3 -> T-2 (cycle)
+        let tasks = vec![
+            TaskNode::new("T-1".to_string(), "".to_string()),
+            TaskNode::new("T-2".to_string(), "".to_string())
+                .with_dependencies(vec!["T-3".to_string()]),
+            TaskNode::new("T-3".to_string(), "".to_string())
+                .with_dependencies(vec!["T-2".to_string()]),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        // T-1 is a root and can be scheduled
+        assert_eq!(graph.get_root_tasks().len(), 1);
+        assert_eq!(graph.get_root_tasks()[0].id, "T-1");
+
+        // But validation should fail due to cycle in T-2, T-3
+        let result = graph.validate_no_cycles();
+        assert!(matches!(result, Err(CoordinatorError::DependencyCycle(_))));
+    }
+
+    #[test]
+    fn dependency_graph_wide_parallel() {
+        // All tasks at level 0, then all depend on all at level 1
+        let tasks = vec![
+            TaskNode::new("A-1".to_string(), "".to_string()),
+            TaskNode::new("A-2".to_string(), "".to_string()),
+            TaskNode::new("A-3".to_string(), "".to_string()),
+            TaskNode::new("A-4".to_string(), "".to_string()),
+            TaskNode::new("A-5".to_string(), "".to_string()),
+            TaskNode::new("B-1".to_string(), "".to_string())
+                .with_dependencies(vec!["A-1".to_string(), "A-2".to_string(), "A-3".to_string(), "A-4".to_string(), "A-5".to_string()]),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        assert_eq!(graph.get_root_tasks().len(), 5);
+        assert_eq!(graph.max_parallelism().unwrap(), 5);
+        assert_eq!(graph.critical_path_length().unwrap(), 2);
+
+        let levels = graph.get_execution_levels().unwrap();
+        assert_eq!(levels[0].len(), 5);
+        assert_eq!(levels[1].len(), 1);
+    }
+
+    #[test]
+    fn dependency_graph_stats_empty() {
+        let graph = DependencyGraph::new(Vec::new());
+        let stats = graph.stats();
+
+        assert_eq!(stats.task_count, 0);
+        assert_eq!(stats.root_count, 0);
+        assert_eq!(stats.max_parallelism, 0);
+        assert_eq!(stats.critical_path_length, 0);
+        assert_eq!(stats.total_dependency_edges, 0);
+    }
+
+    #[test]
+    fn dependency_graph_with_completed_external_deps() {
+        // T-2 depends on T-1 (external), T-3 depends on T-2
+        let tasks = vec![
+            TaskNode::new("T-2".to_string(), "".to_string())
+                .with_dependencies(vec!["T-1".to_string()]),
+            TaskNode::new("T-3".to_string(), "".to_string())
+                .with_dependencies(vec!["T-2".to_string()]),
+        ];
+        let graph = DependencyGraph::new(tasks);
+
+        // T-2 should be ready since T-1 is external
+        let completed = HashSet::new();
+        let ready = graph.get_ready_tasks(&completed);
+        assert_eq!(ready.len(), 1);
+        assert_eq!(ready[0].id, "T-2");
+
+        // After completing T-2, T-3 should be ready
+        let mut completed = HashSet::new();
+        completed.insert("T-2".to_string());
+        let ready = graph.get_ready_tasks(&completed);
+        assert_eq!(ready.len(), 1);
+        assert_eq!(ready[0].id, "T-3");
     }
 }
