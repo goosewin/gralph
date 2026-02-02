@@ -1,0 +1,49 @@
+PRD.ultimate.md
+  9c437e48c2ce4b0d 266
+frontend/src/components/Sidebar.tsx
+  9c437e48c2ce4b0d 4
+frontend/src/components/SessionDashboard.tsx
+  9c437e48c2ce4b0d 14,26,128
+frontend/src/index.css
+  9c437e48c2ce4b0d 1615-1949
+frontend/src/hooks/useLogs.test.ts
+  9c437e48c2ce4b0d 1-238
+frontend/src/types/session.ts
+  9c437e48c2ce4b0d 72-82
+frontend/src/components/SessionCard.tsx
+  9c437e48c2ce4b0d 8,32,129,136-142
+frontend/src/hooks/useLogs.ts
+  9c437e48c2ce4b0d 1-134
+frontend/src/components/SessionLogViewer.tsx
+  9c437e48c2ce4b0d 1-451
+ARCHITECTURE.md
+  9c437e48c2ce4b0d 53,55-56
+CHANGELOG.md
+  9c437e48c2ce4b0d 17-25
+frontend/src/App.tsx
+  9c437e48c2ce4b0d 7,11,41,85-90,105-127,137-141,151-163,165,202-208,306-315,333,349-360
+src/server.rs
+  9c437e48c2ce4b0d 234-237,654-777
+frontend/src/components/SessionLogViewer.test.tsx
+  9c437e48c2ce4b0d 1-285
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "b6fb79f40a6caa9088323d8e031a7f381fb61eab",
+  "prompts": {
+    "9c437e48c2ce4b0d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "03436a8c-fa9b-4909-90fa-7fe71bb37a14",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 1702,
+      "total_deletions": 15,
+      "accepted_lines": 1698,
+      "overriden_lines": 0
+    }
+  }
+}
