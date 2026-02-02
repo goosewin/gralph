@@ -1,0 +1,39 @@
+frontend/src/hooks/useLocalStorage.ts
+  875e61074c6d797c 1-56
+frontend/src/components/Sidebar.tsx
+  875e61074c6d797c 1-212
+PRD.ultimate.md
+  875e61074c6d797c 252
+frontend/src/hooks/useLocalStorage.test.ts
+  875e61074c6d797c 1-251
+frontend/src/components/Sidebar.test.tsx
+  875e61074c6d797c 1-475
+frontend/src/App.tsx
+  875e61074c6d797c 7,36,38,46,49,53-54,57-58,101,108-110,123-175,178,182-189,191,193-198,201-206,209-219,221,223-237,241-253,255-274,278-295,297-298
+ARCHITECTURE.md
+  875e61074c6d797c 52-53
+CHANGELOG.md
+  875e61074c6d797c 17-22
+frontend/src/index.css
+  875e61074c6d797c 1296-1614
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "f5a1bcd859bea11a0b91d3aab401bdf025e0c631",
+  "prompts": {
+    "875e61074c6d797c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6ae8bbc9-4e84-4cdd-a937-e1f3f04c938e",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 1507,
+      "total_deletions": 94,
+      "accepted_lines": 1492,
+      "overriden_lines": 0
+    }
+  }
+}
