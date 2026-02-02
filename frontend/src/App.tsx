@@ -1,8 +1,10 @@
 import { useCallback, useMemo, useState } from 'react';
 import { KanbanBoard } from './components/KanbanBoard';
 import { SessionDashboard } from './components/SessionDashboard';
+import { ThemeToggle } from './components/ThemeToggle';
 import { useSessions } from './hooks/useSessions';
 import { useTasks } from './hooks/useTasks';
+import { useTheme } from './hooks/useTheme';
 import { useWebSocket } from './hooks/useWebSocket';
 
 function getWebSocketUrl(): string {
@@ -29,6 +31,8 @@ function App() {
 
   const [activeTab, setActiveTab] = useState<Tab>('sessions');
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
+
+  const { theme, setTheme } = useTheme();
 
   const {
     loading: sessionsLoading,
@@ -96,27 +100,30 @@ function App() {
     <div className="app">
       <header className="header">
         <h1>Gralph Mission Control</h1>
-        <nav className="header__nav" role="tablist" aria-label="Main navigation">
-          <button
-            role="tab"
-            aria-selected={activeTab === 'sessions'}
-            aria-controls="panel-sessions"
-            className={`header__tab ${activeTab === 'sessions' ? 'header__tab--active' : ''}`}
-            onClick={() => handleTabChange('sessions')}
-          >
-            Sessions
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === 'tasks'}
-            aria-controls="panel-tasks"
-            className={`header__tab ${activeTab === 'tasks' ? 'header__tab--active' : ''}`}
-            onClick={() => handleTabChange('tasks')}
-            disabled={!effectiveSelectedSession}
-          >
-            Tasks {effectiveSelectedSession ? `(${effectiveSelectedSession})` : ''}
-          </button>
-        </nav>
+        <div className="header__right">
+          <nav className="header__nav" role="tablist" aria-label="Main navigation">
+            <button
+              role="tab"
+              aria-selected={activeTab === 'sessions'}
+              aria-controls="panel-sessions"
+              className={`header__tab ${activeTab === 'sessions' ? 'header__tab--active' : ''}`}
+              onClick={() => handleTabChange('sessions')}
+            >
+              Sessions
+            </button>
+            <button
+              role="tab"
+              aria-selected={activeTab === 'tasks'}
+              aria-controls="panel-tasks"
+              className={`header__tab ${activeTab === 'tasks' ? 'header__tab--active' : ''}`}
+              onClick={() => handleTabChange('tasks')}
+              disabled={!effectiveSelectedSession}
+            >
+              Tasks {effectiveSelectedSession ? `(${effectiveSelectedSession})` : ''}
+            </button>
+          </nav>
+          <ThemeToggle theme={theme} onThemeChange={setTheme} />
+        </div>
       </header>
       <main className="main">
         {activeTab === 'sessions' && (

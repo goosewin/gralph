@@ -41,6 +41,8 @@ doctor diagnostics.
 `frontend/src/hooks/useWebSocket.ts` manages WebSocket connection with reconnection handling.
 `frontend/src/hooks/useSessions.ts` provides REST API hooks for fetching and stopping sessions.
 `frontend/src/hooks/useTasks.ts` provides REST API hooks for fetching tasks and updating task status.
+`frontend/src/hooks/useTheme.ts` manages theme state with localStorage persistence and system preference detection.
+`frontend/src/components/ThemeToggle.tsx` provides light/dark/system theme selection buttons.
 `frontend/src/types/session.ts` defines TypeScript types matching backend API responses, including Task types.
 `frontend/vite.config.ts` configures Vite to build production assets to `assets/`.
 The Axum server serves these static files via rust-embed at compile time.

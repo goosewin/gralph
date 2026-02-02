@@ -1,18 +1,96 @@
+/* CSS Custom Properties for Theming */
 :root {
+  /* Base font settings */
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Light theme (default) */
+  --color-bg: #ffffff;
+  --color-bg-secondary: rgba(0, 0, 0, 0.02);
+  --color-bg-tertiary: rgba(0, 0, 0, 0.05);
+  --color-bg-hover: rgba(0, 0, 0, 0.08);
+  --color-text: #213547;
+  --color-text-secondary: rgba(0, 0, 0, 0.6);
+  --color-text-muted: rgba(0, 0, 0, 0.4);
+  --color-border: rgba(0, 0, 0, 0.1);
+  --color-border-hover: rgba(0, 0, 0, 0.2);
+
+  /* Status colors */
+  --color-running: #22c55e;
+  --color-running-bg: rgba(34, 197, 94, 0.15);
+  --color-stopped: #9ca3af;
+  --color-stopped-bg: rgba(156, 163, 175, 0.15);
+  --color-failed: #ef4444;
+  --color-failed-bg: rgba(239, 68, 68, 0.15);
+  --color-completed: #3b82f6;
+  --color-completed-bg: rgba(59, 130, 246, 0.15);
+  --color-stale: #f59e0b;
+  --color-stale-bg: rgba(245, 158, 11, 0.15);
+  --color-unknown: #6b7280;
+  --color-unknown-bg: rgba(107, 114, 128, 0.15);
+
+  /* UI colors */
+  --color-primary: #3b82f6;
+  --color-primary-bg: rgba(59, 130, 246, 0.15);
+  --color-primary-hover: rgba(59, 130, 246, 0.25);
+  --color-error: #ef4444;
+  --color-error-bg: rgba(239, 68, 68, 0.1);
+  --color-error-text: #dc2626;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+  color-scheme: light;
 }
 
+/* Dark theme */
+[data-theme="dark"] {
+  --color-bg: #242424;
+  --color-bg-secondary: rgba(255, 255, 255, 0.05);
+  --color-bg-tertiary: rgba(255, 255, 255, 0.08);
+  --color-bg-hover: rgba(255, 255, 255, 0.1);
+  --color-text: rgba(255, 255, 255, 0.87);
+  --color-text-secondary: rgba(255, 255, 255, 0.6);
+  --color-text-muted: rgba(255, 255, 255, 0.4);
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-border-hover: rgba(255, 255, 255, 0.2);
+
+  /* Error colors in dark mode */
+  --color-error-text: #fca5a5;
+
+  /* Shadows for dark mode */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+
+  color-scheme: dark;
+}
+
+/* System preference fallback when JS is disabled */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --color-bg: #242424;
+    --color-bg-secondary: rgba(255, 255, 255, 0.05);
+    --color-bg-tertiary: rgba(255, 255, 255, 0.08);
+    --color-bg-hover: rgba(255, 255, 255, 0.1);
+    --color-text: rgba(255, 255, 255, 0.87);
+    --color-text-secondary: rgba(255, 255, 255, 0.6);
+    --color-text-muted: rgba(255, 255, 255, 0.4);
+    --color-border: rgba(255, 255, 255, 0.1);
+    --color-border-hover: rgba(255, 255, 255, 0.2);
+    --color-error-text: #fca5a5;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+    color-scheme: dark;
+  }
+}
+
+/* Reset and base styles */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -22,8 +100,24 @@
 body {
   min-width: 320px;
   min-height: 100vh;
+  background-color: var(--color-bg);
+  color: var(--color-text);
 }
 
+/* Screen reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* App layout */
 .app {
   max-width: 1280px;
   margin: 0 auto;
@@ -31,6 +125,11 @@ body {
 }
 
 .header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
   margin-bottom: 2rem;
 }
 
@@ -39,15 +138,82 @@ body {
   font-weight: 600;
 }
 
+.header__nav {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.header__tab {
+  padding: 0.5rem 1rem;
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.header__tab:hover:not(:disabled) {
+  background-color: var(--color-bg-hover);
+  color: var(--color-text);
+}
+
+.header__tab--active {
+  background-color: var(--color-primary-bg);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.header__tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.header__right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
 .main {
   padding: 1rem;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
+/* Theme Toggle */
+.theme-toggle {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background-color: var(--color-bg-secondary);
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+}
+
+.theme-toggle__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.theme-toggle__button:hover {
+  background-color: var(--color-bg-hover);
+}
+
+.theme-toggle__button--active {
+  background-color: var(--color-primary-bg);
+}
+
+.theme-toggle__icon {
+  font-size: 1rem;
 }
 
 /* Status Badge */
@@ -70,58 +236,58 @@ body {
 }
 
 .status-badge--running {
-  background-color: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
+  background-color: var(--color-running-bg);
+  color: var(--color-running);
 }
 
 .status-badge--running .status-badge__indicator {
-  background-color: #22c55e;
+  background-color: var(--color-running);
   animation: pulse 2s infinite;
 }
 
 .status-badge--stopped {
-  background-color: rgba(156, 163, 175, 0.15);
-  color: #9ca3af;
+  background-color: var(--color-stopped-bg);
+  color: var(--color-stopped);
 }
 
 .status-badge--stopped .status-badge__indicator {
-  background-color: #9ca3af;
+  background-color: var(--color-stopped);
 }
 
 .status-badge--failed {
-  background-color: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  background-color: var(--color-failed-bg);
+  color: var(--color-failed);
 }
 
 .status-badge--failed .status-badge__indicator {
-  background-color: #ef4444;
+  background-color: var(--color-failed);
 }
 
 .status-badge--completed {
-  background-color: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+  background-color: var(--color-completed-bg);
+  color: var(--color-completed);
 }
 
 .status-badge--completed .status-badge__indicator {
-  background-color: #3b82f6;
+  background-color: var(--color-completed);
 }
 
 .status-badge--stale {
-  background-color: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
+  background-color: var(--color-stale-bg);
+  color: var(--color-stale);
 }
 
 .status-badge--stale .status-badge__indicator {
-  background-color: #f59e0b;
+  background-color: var(--color-stale);
 }
 
 .status-badge--unknown {
-  background-color: rgba(107, 114, 128, 0.15);
-  color: #6b7280;
+  background-color: var(--color-unknown-bg);
+  color: var(--color-unknown);
 }
 
 .status-badge--unknown .status-badge__indicator {
-  background-color: #6b7280;
+  background-color: var(--color-unknown);
 }
 
 @keyframes pulse {
@@ -135,8 +301,8 @@ body {
 
 /* Session Card */
 .session-card {
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   padding: 1rem;
   display: flex;
@@ -171,7 +337,7 @@ body {
 }
 
 .session-card__details dt {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
 }
 
 .session-card__details dd {
@@ -194,14 +360,14 @@ body {
 .session-card__progress-bar {
   flex: 1;
   height: 0.5rem;
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--color-bg-tertiary);
   border-radius: 9999px;
   overflow: hidden;
 }
 
 .session-card__progress-fill {
   height: 100%;
-  background-color: #3b82f6;
+  background-color: var(--color-primary);
   border-radius: 9999px;
   transition: width 0.3s ease;
 }
@@ -222,12 +388,12 @@ body {
 }
 
 .session-card__log {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--color-bg-tertiary);
 }
 
 .session-card__error {
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #fca5a5;
+  background-color: var(--color-error-bg);
+  color: var(--color-error-text);
 }
 
 .session-card__log-label,
@@ -247,7 +413,7 @@ body {
   justify-content: flex-end;
   gap: 0.5rem;
   padding-top: 0.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--color-border);
 }
 
 .session-card__button {
@@ -261,12 +427,21 @@ body {
 }
 
 .session-card__button--stop {
-  background-color: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
+  background-color: var(--color-failed-bg);
+  color: var(--color-failed);
 }
 
 .session-card__button--stop:hover {
-  background-color: rgba(239, 68, 68, 0.3);
+  background-color: rgba(239, 68, 68, 0.25);
+}
+
+.session-card__button--view {
+  background-color: var(--color-primary-bg);
+  color: var(--color-primary);
+}
+
+.session-card__button--view:hover {
+  background-color: var(--color-primary-hover);
 }
 
 /* Session Dashboard */
@@ -303,24 +478,24 @@ body {
 }
 
 .connection-indicator--connecting {
-  background-color: #f59e0b;
+  background-color: var(--color-stale);
   animation: pulse 1s infinite;
 }
 
 .connection-indicator--connected {
-  background-color: #22c55e;
+  background-color: var(--color-running);
 }
 
 .connection-indicator--disconnected {
-  background-color: #9ca3af;
+  background-color: var(--color-stopped);
 }
 
 .connection-indicator--error {
-  background-color: #ef4444;
+  background-color: var(--color-failed);
 }
 
 .connection-label {
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
   text-transform: capitalize;
 }
 
@@ -329,10 +504,10 @@ body {
   align-items: center;
   gap: 1rem;
   padding: 0.75rem 1rem;
-  background-color: rgba(239, 68, 68, 0.1);
+  background-color: var(--color-error-bg);
   border: 1px solid rgba(239, 68, 68, 0.3);
   border-radius: 0.5rem;
-  color: #fca5a5;
+  color: var(--color-error-text);
 }
 
 .session-dashboard__error-message {
@@ -341,8 +516,8 @@ body {
 
 .session-dashboard__error-action {
   padding: 0.375rem 0.75rem;
-  background-color: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
+  background-color: var(--color-failed-bg);
+  color: var(--color-failed);
   border: none;
   border-radius: 0.25rem;
   cursor: pointer;
@@ -350,7 +525,7 @@ body {
 }
 
 .session-dashboard__error-action:hover {
-  background-color: rgba(239, 68, 68, 0.3);
+  background-color: rgba(239, 68, 68, 0.25);
 }
 
 .session-dashboard__stats {
@@ -364,7 +539,7 @@ body {
   flex-direction: column;
   align-items: center;
   padding: 0.75rem 1.5rem;
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--color-bg-secondary);
   border-radius: 0.5rem;
   min-width: 80px;
 }
@@ -376,25 +551,25 @@ body {
 
 .stat-label {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .stat-item--running .stat-value {
-  color: #22c55e;
+  color: var(--color-running);
 }
 
 .stat-item--completed .stat-value {
-  color: #3b82f6;
+  color: var(--color-completed);
 }
 
 .stat-item--stopped .stat-value {
-  color: #9ca3af;
+  color: var(--color-stopped);
 }
 
 .stat-item--failed .stat-value {
-  color: #ef4444;
+  color: var(--color-failed);
 }
 
 .session-dashboard__actions {
@@ -404,8 +579,8 @@ body {
 
 .session-dashboard__refresh {
   padding: 0.5rem 1rem;
-  background-color: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
+  background-color: var(--color-primary-bg);
+  color: var(--color-primary);
   border: none;
   border-radius: 0.375rem;
   cursor: pointer;
@@ -414,7 +589,7 @@ body {
 }
 
 .session-dashboard__refresh:hover:not(:disabled) {
-  background-color: rgba(59, 130, 246, 0.3);
+  background-color: var(--color-primary-hover);
 }
 
 .session-dashboard__refresh:disabled {
@@ -425,7 +600,7 @@ body {
 .session-dashboard__empty {
   text-align: center;
   padding: 3rem 1rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--color-text-secondary);
 }
 
 .session-dashboard__empty-hint {
@@ -434,7 +609,7 @@ body {
 }
 
 .session-dashboard__empty-hint code {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--color-bg-tertiary);
   padding: 0.125rem 0.375rem;
   border-radius: 0.25rem;
   font-family: monospace;
@@ -446,46 +621,233 @@ body {
   gap: 1rem;
 }
 
-/* Light mode overrides */
-@media (prefers-color-scheme: light) {
-  .session-card {
-    background-color: rgba(0, 0, 0, 0.02);
-    border-color: rgba(0, 0, 0, 0.1);
+/* Kanban Board */
+.kanban-board {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.kanban-board__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.kanban-board__title {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.kanban-board__connection {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.kanban-board__error {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background-color: var(--color-error-bg);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 0.5rem;
+  color: var(--color-error-text);
+}
+
+.kanban-board__error-message {
+  flex: 1;
+}
+
+.kanban-board__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.kanban-board__refresh {
+  padding: 0.5rem 1rem;
+  background-color: var(--color-primary-bg);
+  color: var(--color-primary);
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background-color 0.15s ease;
+}
+
+.kanban-board__refresh:hover:not(:disabled) {
+  background-color: var(--color-primary-hover);
+}
+
+.kanban-board__refresh:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.kanban-board__instructions {
+  padding: 0.75rem 1rem;
+  background-color: var(--color-bg-secondary);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+}
+
+.kanban-board__columns {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  min-height: 400px;
+}
+
+.kanban-board__empty {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--color-text-secondary);
+}
+
+/* Kanban Column */
+.kanban-column {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-bg-secondary);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  min-height: 200px;
+}
+
+.kanban-column--drag-over {
+  background-color: var(--color-bg-hover);
+  outline: 2px dashed var(--color-primary);
+  outline-offset: -2px;
+}
+
+.kanban-column__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.kanban-column__title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.kanban-column__count {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.5rem;
+  background-color: var(--color-bg-tertiary);
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.kanban-column__tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.kanban-column__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  font-style: italic;
+}
+
+/* Task Card */
+.task-card {
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  cursor: grab;
+  transition: all 0.15s ease;
+}
+
+.task-card:hover {
+  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.task-card:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.task-card--dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+.task-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.task-card__id {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.task-card__title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.task-card__dod {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.task-card__dod-label {
+  font-weight: 500;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .app {
+    padding: 1rem;
   }
 
-  .session-card__details dt {
-    color: rgba(0, 0, 0, 0.6);
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
-  .session-card__progress-bar {
-    background-color: rgba(0, 0, 0, 0.1);
+  .header h1 {
+    font-size: 1.75rem;
   }
 
-  .session-card__log {
-    background-color: rgba(0, 0, 0, 0.05);
+  .kanban-board__columns {
+    grid-template-columns: 1fr;
   }
 
-  .session-card__footer {
-    border-top-color: rgba(0, 0, 0, 0.1);
-  }
-
-  .stat-item {
-    background-color: rgba(0, 0, 0, 0.02);
-  }
-
-  .stat-label {
-    color: rgba(0, 0, 0, 0.6);
-  }
-
-  .connection-label {
-    color: rgba(0, 0, 0, 0.6);
-  }
-
-  .session-dashboard__empty {
-    color: rgba(0, 0, 0, 0.6);
-  }
-
-  .session-dashboard__empty-hint code {
-    background-color: rgba(0, 0, 0, 0.1);
+  .session-dashboard__grid {
+    grid-template-columns: 1fr;
   }
 }

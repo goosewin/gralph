@@ -207,7 +207,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * All components respect theme.
   * System preference detection works.
 - **Dependencies** MC-3
-- [ ] MC-6 Add dark mode support to frontend
+- [x] MC-6 Add dark mode support to frontend
 ---
 
 ### Task MC-7

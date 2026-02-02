@@ -14,6 +14,12 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-6 Add dark mode support with theme toggle in header.
+- MC-6 Add useTheme hook for theme state management with localStorage persistence.
+- MC-6 Add system preference detection (prefers-color-scheme) for automatic theme selection.
+- MC-6 Add CSS variables for light/dark theme colors throughout UI.
+- MC-6 Add ThemeToggle component with light/dark/system options.
+- MC-6 Add 23 new tests for ThemeToggle component and useTheme hook.
 - MC-5 Add KanbanBoard component for PRD task visualization with drag-and-drop status transitions.
 - MC-5 Add TaskCard component displaying task ID, title, status, and definition of done.
 - MC-5 Add KanbanColumn component for grouping tasks by pending/in_progress/completed status.
