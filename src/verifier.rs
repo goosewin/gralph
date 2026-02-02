@@ -1560,11 +1560,11 @@ fn run_gh_pr_create(
 ) -> Result<String, CliError> {
     let output = match template_path {
         Some(template_path) => {
+            // Omit title from log to avoid leaking sensitive info in CI logs
             println!(
-                "$ gh pr create --base {} --head {} --title {} --body-file {}",
+                "$ gh pr create --base {} --head {} --title <redacted> --body-file {}",
                 base,
                 head,
-                title,
                 template_path.display()
             );
             ProcCommand::new("gh")
@@ -1583,9 +1583,10 @@ fn run_gh_pr_create(
                 .map_err(map_gh_error)?
         }
         None => {
+            // Omit title from log to avoid leaking sensitive info in CI logs
             println!(
-                "$ gh pr create --base {} --head {} --title {} --body ''",
-                base, head, title
+                "$ gh pr create --base {} --head {} --title <redacted> --body ''",
+                base, head
             );
             ProcCommand::new("gh")
                 .arg("pr")
