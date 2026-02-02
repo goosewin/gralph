@@ -363,7 +363,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Timeout handling for stuck agents.
   * Integration tests verify messaging.
 - **Dependencies** MC-16
-- [ ] MC-17 Implement inter-agent communication
+- [x] MC-17 Implement inter-agent communication
 ---
 
 ### Task MC-18

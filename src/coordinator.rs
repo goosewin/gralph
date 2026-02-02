@@ -2848,6 +2848,1084 @@ impl fmt::Display for ConflictDetectionError {
 
 impl Error for ConflictDetectionError {}
 
+// ============================================================================
+// Inter-Agent Communication Protocol (MC-17)
+// ============================================================================
+
+/// Message types for inter-agent communication.
+///
+/// Messages enable specialized agents to coordinate handoffs,
+/// share results, and signal task transitions.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AgentMessageType {
+    /// Request handoff to another agent with optional specialization requirement.
+    HandoffRequest {
+        /// Target specialization for the handoff (None means any agent).
+        target_specialization: Option<AgentSpecialization>,
+        /// Context data to pass to the receiving agent.
+        context: String,
+    },
+    /// Acknowledgment of received handoff.
+    HandoffAck {
+        /// Whether the handoff was accepted.
+        accepted: bool,
+        /// Reason for rejection if not accepted.
+        reason: Option<String>,
+    },
+    /// Task result notification from completed work.
+    TaskResult {
+        /// The task ID that was completed.
+        task_id: String,
+        /// Whether the task succeeded.
+        success: bool,
+        /// Result summary or error message.
+        summary: String,
+    },
+    /// Status query to check if an agent is alive.
+    Ping,
+    /// Response to a ping.
+    Pong,
+    /// Request to cancel current work.
+    CancelRequest {
+        /// Reason for cancellation.
+        reason: String,
+    },
+    /// Custom message for extensibility.
+    Custom {
+        /// Message type identifier.
+        message_type: String,
+        /// Payload data.
+        payload: String,
+    },
+}
+
+impl fmt::Display for AgentMessageType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AgentMessageType::HandoffRequest { target_specialization, .. } => {
+                if let Some(spec) = target_specialization {
+                    write!(f, "HandoffRequest(target={})", spec)
+                } else {
+                    write!(f, "HandoffRequest(target=any)")
+                }
+            }
+            AgentMessageType::HandoffAck { accepted, .. } => {
+                write!(f, "HandoffAck(accepted={})", accepted)
+            }
+            AgentMessageType::TaskResult { task_id, success, .. } => {
+                write!(f, "TaskResult(task={}, success={})", task_id, success)
+            }
+            AgentMessageType::Ping => write!(f, "Ping"),
+            AgentMessageType::Pong => write!(f, "Pong"),
+            AgentMessageType::CancelRequest { .. } => write!(f, "CancelRequest"),
+            AgentMessageType::Custom { message_type, .. } => {
+                write!(f, "Custom({})", message_type)
+            }
+        }
+    }
+}
+
+/// A message sent between agents.
+#[derive(Debug, Clone)]
+pub struct AgentMessage {
+    /// Unique message identifier.
+    pub id: u64,
+    /// Sending agent ID.
+    pub from: AgentId,
+    /// Receiving agent ID.
+    pub to: AgentId,
+    /// Message type and payload.
+    pub message_type: AgentMessageType,
+    /// Timestamp when the message was created.
+    pub timestamp: Instant,
+    /// Optional correlation ID for request-response patterns.
+    pub correlation_id: Option<u64>,
+}
+
+impl AgentMessage {
+    /// Creates a new agent message.
+    pub fn new(id: u64, from: AgentId, to: AgentId, message_type: AgentMessageType) -> Self {
+        Self {
+            id,
+            from,
+            to,
+            message_type,
+            timestamp: Instant::now(),
+            correlation_id: None,
+        }
+    }
+
+    /// Creates a new message with a correlation ID for response matching.
+    pub fn with_correlation(mut self, correlation_id: u64) -> Self {
+        self.correlation_id = Some(correlation_id);
+        self
+    }
+
+    /// Returns the age of the message.
+    pub fn age(&self) -> Duration {
+        self.timestamp.elapsed()
+    }
+
+    /// Checks if the message has timed out.
+    pub fn is_timed_out(&self, timeout: Duration) -> bool {
+        self.age() > timeout
+    }
+}
+
+/// Configuration for the agent message channel.
+#[derive(Debug, Clone)]
+pub struct MessageChannelConfig {
+    /// Maximum number of messages per agent inbox.
+    pub max_inbox_size: usize,
+    /// Default timeout for message delivery confirmation.
+    pub delivery_timeout: Duration,
+    /// Timeout for ping/pong health checks.
+    pub ping_timeout: Duration,
+    /// Whether to drop old messages when inbox is full.
+    pub drop_on_overflow: bool,
+    /// Maximum age for messages before auto-cleanup.
+    pub message_ttl: Duration,
+}
+
+impl Default for MessageChannelConfig {
+    fn default() -> Self {
+        Self {
+            max_inbox_size: 1000,
+            delivery_timeout: Duration::from_secs(30),
+            ping_timeout: Duration::from_secs(5),
+            drop_on_overflow: true,
+            message_ttl: Duration::from_secs(300),
+        }
+    }
+}
+
+impl MessageChannelConfig {
+    /// Creates a new config with the specified inbox size.
+    pub fn with_inbox_size(mut self, size: usize) -> Self {
+        self.max_inbox_size = size;
+        self
+    }
+
+    /// Sets the delivery timeout.
+    pub fn with_delivery_timeout(mut self, timeout: Duration) -> Self {
+        self.delivery_timeout = timeout;
+        self
+    }
+
+    /// Sets the ping timeout.
+    pub fn with_ping_timeout(mut self, timeout: Duration) -> Self {
+        self.ping_timeout = timeout;
+        self
+    }
+}
+
+/// Error types for message channel operations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MessageChannelError {
+    /// The target agent does not exist.
+    AgentNotFound(AgentId),
+    /// The agent's inbox is full.
+    InboxFull(AgentId),
+    /// Message delivery timed out.
+    DeliveryTimeout,
+    /// The agent did not respond to a ping.
+    AgentUnresponsive(AgentId),
+    /// The channel has been shut down.
+    ChannelClosed,
+    /// Invalid message format or content.
+    InvalidMessage(String),
+}
+
+impl fmt::Display for MessageChannelError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MessageChannelError::AgentNotFound(id) => {
+                write!(f, "agent {} not found", id.0)
+            }
+            MessageChannelError::InboxFull(id) => {
+                write!(f, "agent {} inbox is full", id.0)
+            }
+            MessageChannelError::DeliveryTimeout => {
+                write!(f, "message delivery timed out")
+            }
+            MessageChannelError::AgentUnresponsive(id) => {
+                write!(f, "agent {} is unresponsive", id.0)
+            }
+            MessageChannelError::ChannelClosed => {
+                write!(f, "message channel is closed")
+            }
+            MessageChannelError::InvalidMessage(msg) => {
+                write!(f, "invalid message: {}", msg)
+            }
+        }
+    }
+}
+
+impl Error for MessageChannelError {}
+
+/// Statistics for an agent's message inbox.
+#[derive(Debug, Clone, Default)]
+pub struct InboxStats {
+    /// Total messages received.
+    pub total_received: u64,
+    /// Messages currently in inbox.
+    pub current_size: usize,
+    /// Messages dropped due to overflow.
+    pub dropped: u64,
+    /// Messages expired due to TTL.
+    pub expired: u64,
+}
+
+/// An agent's message inbox.
+#[derive(Debug)]
+struct AgentInbox {
+    /// Queue of pending messages.
+    messages: VecDeque<AgentMessage>,
+    /// Statistics for this inbox.
+    stats: InboxStats,
+    /// Last activity timestamp.
+    last_activity: Instant,
+}
+
+impl AgentInbox {
+    fn new() -> Self {
+        Self {
+            messages: VecDeque::new(),
+            stats: InboxStats::default(),
+            last_activity: Instant::now(),
+        }
+    }
+
+    fn push(&mut self, message: AgentMessage, max_size: usize, drop_on_overflow: bool) -> bool {
+        self.stats.total_received += 1;
+        self.last_activity = Instant::now();
+
+        if self.messages.len() >= max_size {
+            if drop_on_overflow {
+                // Drop oldest message
+                self.messages.pop_front();
+                self.stats.dropped += 1;
+            } else {
+                return false;
+            }
+        }
+
+        self.messages.push_back(message);
+        self.stats.current_size = self.messages.len();
+        true
+    }
+
+    fn pop(&mut self) -> Option<AgentMessage> {
+        let msg = self.messages.pop_front();
+        self.stats.current_size = self.messages.len();
+        if msg.is_some() {
+            self.last_activity = Instant::now();
+        }
+        msg
+    }
+
+    fn peek(&self) -> Option<&AgentMessage> {
+        self.messages.front()
+    }
+
+    fn cleanup_expired(&mut self, ttl: Duration) -> usize {
+        let before = self.messages.len();
+        self.messages.retain(|m| m.age() <= ttl);
+        let removed = before - self.messages.len();
+        self.stats.expired += removed as u64;
+        self.stats.current_size = self.messages.len();
+        removed
+    }
+
+    fn len(&self) -> usize {
+        self.messages.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.messages.is_empty()
+    }
+}
+
+/// Message channel for inter-agent communication.
+///
+/// The `AgentMessageChannel` provides a message passing infrastructure for agents
+/// to communicate with each other. Each agent has an inbox where messages are
+/// delivered, and agents can send messages to other agents by their ID.
+///
+/// Features:
+/// - Per-agent message inboxes with configurable size limits.
+/// - Message timeout and TTL support.
+/// - Handoff coordination between specialized agents.
+/// - Health check via ping/pong.
+/// - Automatic cleanup of expired messages.
+#[derive(Debug)]
+pub struct AgentMessageChannel {
+    /// Message inboxes indexed by agent ID.
+    inboxes: RwLock<HashMap<AgentId, AgentInbox>>,
+    /// Configuration for the channel.
+    config: MessageChannelConfig,
+    /// Next message ID for unique identification.
+    next_message_id: AtomicU64,
+    /// Whether the channel is closed.
+    closed: AtomicBool,
+    /// Total messages sent through this channel.
+    total_sent: AtomicU64,
+    /// Total messages delivered.
+    total_delivered: AtomicU64,
+}
+
+impl AgentMessageChannel {
+    /// Creates a new message channel with default configuration.
+    pub fn new() -> Self {
+        Self::with_config(MessageChannelConfig::default())
+    }
+
+    /// Creates a new message channel with custom configuration.
+    pub fn with_config(config: MessageChannelConfig) -> Self {
+        Self {
+            inboxes: RwLock::new(HashMap::new()),
+            config,
+            next_message_id: AtomicU64::new(1),
+            closed: AtomicBool::new(false),
+            total_sent: AtomicU64::new(0),
+            total_delivered: AtomicU64::new(0),
+        }
+    }
+
+    /// Registers an agent with the message channel.
+    ///
+    /// Creates an inbox for the agent to receive messages.
+    pub fn register_agent(&self, agent_id: AgentId) {
+        let mut inboxes = self.inboxes.write().unwrap();
+        inboxes.entry(agent_id).or_insert_with(AgentInbox::new);
+    }
+
+    /// Unregisters an agent from the message channel.
+    ///
+    /// Removes the agent's inbox and any pending messages.
+    pub fn unregister_agent(&self, agent_id: AgentId) -> Option<InboxStats> {
+        let mut inboxes = self.inboxes.write().unwrap();
+        inboxes.remove(&agent_id).map(|inbox| inbox.stats)
+    }
+
+    /// Sends a message to another agent.
+    ///
+    /// Returns the message ID on success.
+    pub fn send(
+        &self,
+        from: AgentId,
+        to: AgentId,
+        message_type: AgentMessageType,
+    ) -> Result<u64, MessageChannelError> {
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(MessageChannelError::ChannelClosed);
+        }
+
+        let message_id = self.next_message_id.fetch_add(1, Ordering::SeqCst);
+        let message = AgentMessage::new(message_id, from, to, message_type);
+
+        self.deliver(message)
+    }
+
+    /// Sends a message with a correlation ID for request-response patterns.
+    pub fn send_with_correlation(
+        &self,
+        from: AgentId,
+        to: AgentId,
+        message_type: AgentMessageType,
+        correlation_id: u64,
+    ) -> Result<u64, MessageChannelError> {
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(MessageChannelError::ChannelClosed);
+        }
+
+        let message_id = self.next_message_id.fetch_add(1, Ordering::SeqCst);
+        let message = AgentMessage::new(message_id, from, to, message_type)
+            .with_correlation(correlation_id);
+
+        self.deliver(message)
+    }
+
+    /// Delivers a message to the recipient's inbox.
+    fn deliver(&self, message: AgentMessage) -> Result<u64, MessageChannelError> {
+        let message_id = message.id;
+        let to = message.to;
+
+        self.total_sent.fetch_add(1, Ordering::SeqCst);
+
+        let mut inboxes = self.inboxes.write().unwrap();
+        let inbox = inboxes
+            .get_mut(&to)
+            .ok_or(MessageChannelError::AgentNotFound(to))?;
+
+        if inbox.push(message, self.config.max_inbox_size, self.config.drop_on_overflow) {
+            self.total_delivered.fetch_add(1, Ordering::SeqCst);
+            Ok(message_id)
+        } else {
+            Err(MessageChannelError::InboxFull(to))
+        }
+    }
+
+    /// Receives the next message from an agent's inbox.
+    ///
+    /// Returns `None` if the inbox is empty.
+    pub fn receive(&self, agent_id: AgentId) -> Result<Option<AgentMessage>, MessageChannelError> {
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(MessageChannelError::ChannelClosed);
+        }
+
+        let mut inboxes = self.inboxes.write().unwrap();
+        let inbox = inboxes
+            .get_mut(&agent_id)
+            .ok_or(MessageChannelError::AgentNotFound(agent_id))?;
+
+        Ok(inbox.pop())
+    }
+
+    /// Peeks at the next message without removing it.
+    pub fn peek(&self, agent_id: AgentId) -> Result<Option<AgentMessage>, MessageChannelError> {
+        if self.closed.load(Ordering::SeqCst) {
+            return Err(MessageChannelError::ChannelClosed);
+        }
+
+        let inboxes = self.inboxes.read().unwrap();
+        let inbox = inboxes
+            .get(&agent_id)
+            .ok_or(MessageChannelError::AgentNotFound(agent_id))?;
+
+        Ok(inbox.peek().cloned())
+    }
+
+    /// Returns the number of pending messages for an agent.
+    pub fn inbox_size(&self, agent_id: AgentId) -> Result<usize, MessageChannelError> {
+        let inboxes = self.inboxes.read().unwrap();
+        let inbox = inboxes
+            .get(&agent_id)
+            .ok_or(MessageChannelError::AgentNotFound(agent_id))?;
+        Ok(inbox.len())
+    }
+
+    /// Returns inbox statistics for an agent.
+    pub fn inbox_stats(&self, agent_id: AgentId) -> Result<InboxStats, MessageChannelError> {
+        let inboxes = self.inboxes.read().unwrap();
+        let inbox = inboxes
+            .get(&agent_id)
+            .ok_or(MessageChannelError::AgentNotFound(agent_id))?;
+        Ok(inbox.stats.clone())
+    }
+
+    /// Checks if an agent has pending messages.
+    pub fn has_messages(&self, agent_id: AgentId) -> bool {
+        let inboxes = self.inboxes.read().unwrap();
+        inboxes
+            .get(&agent_id)
+            .map(|inbox| !inbox.is_empty())
+            .unwrap_or(false)
+    }
+
+    /// Sends a ping to check if an agent is responsive.
+    pub fn ping(&self, from: AgentId, to: AgentId) -> Result<u64, MessageChannelError> {
+        self.send(from, to, AgentMessageType::Ping)
+    }
+
+    /// Sends a pong response to a ping.
+    pub fn pong(&self, from: AgentId, to: AgentId, correlation_id: u64) -> Result<u64, MessageChannelError> {
+        self.send_with_correlation(from, to, AgentMessageType::Pong, correlation_id)
+    }
+
+    /// Cleans up expired messages from all inboxes.
+    ///
+    /// Returns the total number of messages cleaned up.
+    pub fn cleanup_expired(&self) -> usize {
+        let mut inboxes = self.inboxes.write().unwrap();
+        let mut total_cleaned = 0;
+        for inbox in inboxes.values_mut() {
+            total_cleaned += inbox.cleanup_expired(self.config.message_ttl);
+        }
+        total_cleaned
+    }
+
+    /// Returns the number of registered agents.
+    pub fn agent_count(&self) -> usize {
+        self.inboxes.read().unwrap().len()
+    }
+
+    /// Returns total messages sent through this channel.
+    pub fn total_sent(&self) -> u64 {
+        self.total_sent.load(Ordering::SeqCst)
+    }
+
+    /// Returns total messages successfully delivered.
+    pub fn total_delivered(&self) -> u64 {
+        self.total_delivered.load(Ordering::SeqCst)
+    }
+
+    /// Closes the message channel.
+    ///
+    /// After closing, no new messages can be sent.
+    pub fn close(&self) {
+        self.closed.store(true, Ordering::SeqCst);
+    }
+
+    /// Checks if the channel is closed.
+    pub fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::SeqCst)
+    }
+
+    /// Gets a list of all registered agent IDs.
+    pub fn registered_agents(&self) -> Vec<AgentId> {
+        self.inboxes.read().unwrap().keys().copied().collect()
+    }
+}
+
+impl Default for AgentMessageChannel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Handoff coordinator for managing task transitions between agents.
+///
+/// The `HandoffCoordinator` builds on the message channel to provide
+/// higher-level handoff management, including:
+/// - Initiating handoffs on task completion.
+/// - Matching requests with available agents.
+/// - Timeout handling for stuck agents.
+/// - Tracking handoff state and history.
+#[derive(Debug)]
+pub struct HandoffCoordinator {
+    /// The underlying message channel.
+    channel: Arc<AgentMessageChannel>,
+    /// Active handoff requests awaiting acceptance.
+    pending_handoffs: RwLock<HashMap<u64, PendingHandoff>>,
+    /// Completed handoffs for history.
+    completed_handoffs: RwLock<VecDeque<CompletedHandoff>>,
+    /// Maximum handoffs to keep in history.
+    max_history: usize,
+    /// Timeout for handoff acceptance.
+    handoff_timeout: Duration,
+    /// Next handoff ID.
+    next_handoff_id: AtomicU64,
+}
+
+/// A pending handoff request.
+#[derive(Debug, Clone)]
+pub struct PendingHandoff {
+    /// Unique handoff ID.
+    pub id: u64,
+    /// Source agent initiating the handoff.
+    pub from_agent: AgentId,
+    /// Target agent (if specified).
+    pub to_agent: Option<AgentId>,
+    /// Target specialization (if specified).
+    pub target_specialization: Option<AgentSpecialization>,
+    /// Task ID being handed off.
+    pub task_id: String,
+    /// Context data for the handoff.
+    pub context: String,
+    /// When the handoff was initiated.
+    pub initiated_at: Instant,
+    /// Message ID of the handoff request.
+    pub message_id: u64,
+}
+
+impl PendingHandoff {
+    /// Checks if the handoff has timed out.
+    pub fn is_timed_out(&self, timeout: Duration) -> bool {
+        self.initiated_at.elapsed() > timeout
+    }
+
+    /// Returns the age of the handoff.
+    pub fn age(&self) -> Duration {
+        self.initiated_at.elapsed()
+    }
+}
+
+/// A completed handoff.
+#[derive(Debug, Clone)]
+pub struct CompletedHandoff {
+    /// Unique handoff ID.
+    pub id: u64,
+    /// Source agent.
+    pub from_agent: AgentId,
+    /// Target agent that accepted.
+    pub to_agent: AgentId,
+    /// Task ID.
+    pub task_id: String,
+    /// Whether the handoff was successful.
+    pub success: bool,
+    /// Duration from initiation to completion.
+    pub duration: Duration,
+    /// When the handoff completed.
+    pub completed_at: Instant,
+}
+
+/// Result of a handoff operation.
+#[derive(Debug, Clone)]
+pub enum HandoffResult {
+    /// Handoff was accepted by the target agent.
+    Accepted {
+        handoff_id: u64,
+        accepting_agent: AgentId,
+    },
+    /// Handoff was rejected.
+    Rejected {
+        handoff_id: u64,
+        reason: String,
+    },
+    /// Handoff timed out waiting for acceptance.
+    TimedOut {
+        handoff_id: u64,
+    },
+    /// No suitable agent available for the handoff.
+    NoAgentAvailable {
+        handoff_id: u64,
+    },
+}
+
+/// Error types for handoff operations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HandoffError {
+    /// The handoff request was not found.
+    HandoffNotFound(u64),
+    /// The source agent was not found.
+    SourceAgentNotFound(AgentId),
+    /// The target agent was not found.
+    TargetAgentNotFound(AgentId),
+    /// The handoff timed out.
+    Timeout(u64),
+    /// Channel error during handoff.
+    ChannelError(String),
+}
+
+impl fmt::Display for HandoffError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HandoffError::HandoffNotFound(id) => {
+                write!(f, "handoff {} not found", id)
+            }
+            HandoffError::SourceAgentNotFound(id) => {
+                write!(f, "source agent {} not found", id.0)
+            }
+            HandoffError::TargetAgentNotFound(id) => {
+                write!(f, "target agent {} not found", id.0)
+            }
+            HandoffError::Timeout(id) => {
+                write!(f, "handoff {} timed out", id)
+            }
+            HandoffError::ChannelError(msg) => {
+                write!(f, "channel error: {}", msg)
+            }
+        }
+    }
+}
+
+impl Error for HandoffError {}
+
+impl HandoffCoordinator {
+    /// Creates a new handoff coordinator.
+    pub fn new(channel: Arc<AgentMessageChannel>) -> Self {
+        Self {
+            channel,
+            pending_handoffs: RwLock::new(HashMap::new()),
+            completed_handoffs: RwLock::new(VecDeque::new()),
+            max_history: 100,
+            handoff_timeout: Duration::from_secs(60),
+            next_handoff_id: AtomicU64::new(1),
+        }
+    }
+
+    /// Sets the handoff timeout duration.
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.handoff_timeout = timeout;
+        self
+    }
+
+    /// Sets the maximum history size.
+    pub fn with_max_history(mut self, max_history: usize) -> Self {
+        self.max_history = max_history;
+        self
+    }
+
+    /// Initiates a handoff from one agent to another.
+    ///
+    /// If `to_agent` is None, the handoff can be accepted by any available agent
+    /// matching the target specialization.
+    pub fn initiate_handoff(
+        &self,
+        from_agent: AgentId,
+        to_agent: Option<AgentId>,
+        task_id: String,
+        target_specialization: Option<AgentSpecialization>,
+        context: String,
+    ) -> Result<u64, HandoffError> {
+        let handoff_id = self.next_handoff_id.fetch_add(1, Ordering::SeqCst);
+
+        let message_type = AgentMessageType::HandoffRequest {
+            target_specialization,
+            context: context.clone(),
+        };
+
+        // If a specific target is specified, send directly
+        // Otherwise, this would need to be broadcast or picked up by a scheduler
+        let message_id = if let Some(target) = to_agent {
+            self.channel
+                .send(from_agent, target, message_type)
+                .map_err(|e| HandoffError::ChannelError(e.to_string()))?
+        } else {
+            // For broadcast handoffs, we still need a message ID
+            // In a real implementation, this would be sent to a scheduler agent
+            handoff_id
+        };
+
+        let pending = PendingHandoff {
+            id: handoff_id,
+            from_agent,
+            to_agent,
+            target_specialization,
+            task_id,
+            context,
+            initiated_at: Instant::now(),
+            message_id,
+        };
+
+        let mut pending_handoffs = self.pending_handoffs.write().unwrap();
+        pending_handoffs.insert(handoff_id, pending);
+
+        Ok(handoff_id)
+    }
+
+    /// Accepts a pending handoff.
+    pub fn accept_handoff(
+        &self,
+        handoff_id: u64,
+        accepting_agent: AgentId,
+    ) -> Result<HandoffResult, HandoffError> {
+        let pending = {
+            let mut pending_handoffs = self.pending_handoffs.write().unwrap();
+            pending_handoffs
+                .remove(&handoff_id)
+                .ok_or(HandoffError::HandoffNotFound(handoff_id))?
+        };
+
+        // Send acknowledgment
+        let ack = AgentMessageType::HandoffAck {
+            accepted: true,
+            reason: None,
+        };
+
+        let _ = self.channel.send_with_correlation(
+            accepting_agent,
+            pending.from_agent,
+            ack,
+            pending.message_id,
+        );
+
+        // Record completion
+        let duration = pending.age();
+        let completed = CompletedHandoff {
+            id: handoff_id,
+            from_agent: pending.from_agent,
+            to_agent: accepting_agent,
+            task_id: pending.task_id,
+            success: true,
+            duration,
+            completed_at: Instant::now(),
+        };
+
+        self.record_completed(completed);
+
+        Ok(HandoffResult::Accepted {
+            handoff_id,
+            accepting_agent,
+        })
+    }
+
+    /// Rejects a pending handoff.
+    pub fn reject_handoff(
+        &self,
+        handoff_id: u64,
+        rejecting_agent: AgentId,
+        reason: String,
+    ) -> Result<HandoffResult, HandoffError> {
+        let pending = {
+            let pending_handoffs = self.pending_handoffs.read().unwrap();
+            pending_handoffs
+                .get(&handoff_id)
+                .cloned()
+                .ok_or(HandoffError::HandoffNotFound(handoff_id))?
+        };
+
+        // Send rejection acknowledgment
+        let ack = AgentMessageType::HandoffAck {
+            accepted: false,
+            reason: Some(reason.clone()),
+        };
+
+        let _ = self.channel.send_with_correlation(
+            rejecting_agent,
+            pending.from_agent,
+            ack,
+            pending.message_id,
+        );
+
+        // Note: We don't remove the pending handoff on rejection
+        // It can still be accepted by another agent
+
+        Ok(HandoffResult::Rejected {
+            handoff_id,
+            reason,
+        })
+    }
+
+    /// Checks for timed out handoffs and handles them.
+    ///
+    /// Returns the IDs of handoffs that timed out.
+    pub fn check_timeouts(&self) -> Vec<u64> {
+        let mut timed_out = Vec::new();
+
+        let mut pending_handoffs = self.pending_handoffs.write().unwrap();
+        let timeout = self.handoff_timeout;
+
+        pending_handoffs.retain(|id, handoff| {
+            if handoff.is_timed_out(timeout) {
+                timed_out.push(*id);
+                false
+            } else {
+                true
+            }
+        });
+
+        // Record timed out handoffs
+        for id in &timed_out {
+            let completed = CompletedHandoff {
+                id: *id,
+                from_agent: AgentId(0), // Unknown, as we don't have the handoff anymore
+                to_agent: AgentId(0),
+                task_id: String::new(),
+                success: false,
+                duration: timeout,
+                completed_at: Instant::now(),
+            };
+            self.record_completed(completed);
+        }
+
+        timed_out
+    }
+
+    /// Gets a pending handoff by ID.
+    pub fn get_pending(&self, handoff_id: u64) -> Option<PendingHandoff> {
+        self.pending_handoffs.read().unwrap().get(&handoff_id).cloned()
+    }
+
+    /// Returns the number of pending handoffs.
+    pub fn pending_count(&self) -> usize {
+        self.pending_handoffs.read().unwrap().len()
+    }
+
+    /// Returns recent completed handoffs.
+    pub fn recent_completed(&self, limit: usize) -> Vec<CompletedHandoff> {
+        let completed = self.completed_handoffs.read().unwrap();
+        completed.iter().take(limit).cloned().collect()
+    }
+
+    /// Records a completed handoff in history.
+    fn record_completed(&self, completed: CompletedHandoff) {
+        let mut history = self.completed_handoffs.write().unwrap();
+        history.push_front(completed);
+        while history.len() > self.max_history {
+            history.pop_back();
+        }
+    }
+
+    /// Returns statistics about handoffs.
+    pub fn stats(&self) -> HandoffStats {
+        let pending = self.pending_handoffs.read().unwrap();
+        let completed = self.completed_handoffs.read().unwrap();
+
+        let successful = completed.iter().filter(|h| h.success).count();
+        let failed = completed.len() - successful;
+
+        let avg_duration = if !completed.is_empty() {
+            let total_ms: u128 = completed.iter().map(|h| h.duration.as_millis()).sum();
+            Duration::from_millis((total_ms / completed.len() as u128) as u64)
+        } else {
+            Duration::ZERO
+        };
+
+        HandoffStats {
+            pending: pending.len(),
+            completed: completed.len(),
+            successful,
+            failed,
+            average_duration: avg_duration,
+        }
+    }
+}
+
+/// Statistics about handoff operations.
+#[derive(Debug, Clone)]
+pub struct HandoffStats {
+    /// Number of pending handoffs.
+    pub pending: usize,
+    /// Total completed handoffs in history.
+    pub completed: usize,
+    /// Number of successful handoffs.
+    pub successful: usize,
+    /// Number of failed handoffs (rejections and timeouts).
+    pub failed: usize,
+    /// Average handoff duration.
+    pub average_duration: Duration,
+}
+
+/// Agent timeout tracker for detecting stuck agents.
+///
+/// Tracks agent activity and identifies agents that have not
+/// responded or made progress within configured timeouts.
+#[derive(Debug)]
+pub struct AgentTimeoutTracker {
+    /// Last activity timestamp per agent.
+    last_activity: RwLock<HashMap<AgentId, Instant>>,
+    /// Timeout threshold for considering an agent stuck.
+    timeout_threshold: Duration,
+    /// Warning threshold before timeout.
+    warning_threshold: Duration,
+}
+
+impl AgentTimeoutTracker {
+    /// Creates a new timeout tracker with the specified thresholds.
+    pub fn new(timeout_threshold: Duration, warning_threshold: Duration) -> Self {
+        Self {
+            last_activity: RwLock::new(HashMap::new()),
+            timeout_threshold,
+            warning_threshold,
+        }
+    }
+
+    /// Creates a tracker with default thresholds (5 minutes timeout, 3 minutes warning).
+    pub fn with_defaults() -> Self {
+        Self::new(Duration::from_secs(300), Duration::from_secs(180))
+    }
+
+    /// Records activity for an agent.
+    pub fn record_activity(&self, agent_id: AgentId) {
+        let mut activity = self.last_activity.write().unwrap();
+        activity.insert(agent_id, Instant::now());
+    }
+
+    /// Removes an agent from tracking.
+    pub fn remove_agent(&self, agent_id: AgentId) {
+        let mut activity = self.last_activity.write().unwrap();
+        activity.remove(&agent_id);
+    }
+
+    /// Gets the time since last activity for an agent.
+    pub fn time_since_activity(&self, agent_id: AgentId) -> Option<Duration> {
+        let activity = self.last_activity.read().unwrap();
+        activity.get(&agent_id).map(|t| t.elapsed())
+    }
+
+    /// Checks if an agent is stuck (exceeded timeout).
+    pub fn is_stuck(&self, agent_id: AgentId) -> bool {
+        self.time_since_activity(agent_id)
+            .map(|d| d > self.timeout_threshold)
+            .unwrap_or(false)
+    }
+
+    /// Checks if an agent is approaching timeout (in warning zone).
+    pub fn is_warning(&self, agent_id: AgentId) -> bool {
+        self.time_since_activity(agent_id)
+            .map(|d| d > self.warning_threshold && d <= self.timeout_threshold)
+            .unwrap_or(false)
+    }
+
+    /// Returns a list of stuck agents.
+    pub fn stuck_agents(&self) -> Vec<AgentId> {
+        let activity = self.last_activity.read().unwrap();
+        activity
+            .iter()
+            .filter(|(_, t)| t.elapsed() > self.timeout_threshold)
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    /// Returns a list of agents in warning zone.
+    pub fn warning_agents(&self) -> Vec<AgentId> {
+        let activity = self.last_activity.read().unwrap();
+        activity
+            .iter()
+            .filter(|(_, t)| {
+                let elapsed = t.elapsed();
+                elapsed > self.warning_threshold && elapsed <= self.timeout_threshold
+            })
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
+    /// Returns the number of tracked agents.
+    pub fn tracked_count(&self) -> usize {
+        self.last_activity.read().unwrap().len()
+    }
+
+    /// Returns status for all tracked agents.
+    pub fn agent_statuses(&self) -> Vec<AgentTimeoutStatus> {
+        let activity = self.last_activity.read().unwrap();
+        activity
+            .iter()
+            .map(|(id, t)| {
+                let elapsed = t.elapsed();
+                let status = if elapsed > self.timeout_threshold {
+                    TimeoutState::Stuck
+                } else if elapsed > self.warning_threshold {
+                    TimeoutState::Warning
+                } else {
+                    TimeoutState::Active
+                };
+                AgentTimeoutStatus {
+                    agent_id: *id,
+                    last_activity: *t,
+                    time_since_activity: elapsed,
+                    status,
+                }
+            })
+            .collect()
+    }
+}
+
+/// Timeout state for an agent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimeoutState {
+    /// Agent is active within normal bounds.
+    Active,
+    /// Agent is approaching timeout threshold.
+    Warning,
+    /// Agent has exceeded timeout threshold.
+    Stuck,
+}
+
+impl fmt::Display for TimeoutState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TimeoutState::Active => write!(f, "active"),
+            TimeoutState::Warning => write!(f, "warning"),
+            TimeoutState::Stuck => write!(f, "stuck"),
+        }
+    }
+}
+
+/// Status of an agent in the timeout tracker.
+#[derive(Debug, Clone)]
+pub struct AgentTimeoutStatus {
+    /// Agent ID.
+    pub agent_id: AgentId,
+    /// Last activity timestamp.
+    pub last_activity: Instant,
+    /// Time since last activity.
+    pub time_since_activity: Duration,
+    /// Current timeout state.
+    pub status: TimeoutState,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5864,5 +6942,780 @@ mod tests {
         // No idle agents
         let result = coordinator.assign_task_by_specialization();
         assert!(result.is_none());
+    }
+
+    // ========================================================================
+    // Inter-Agent Communication Tests (MC-17)
+    // ========================================================================
+
+    #[test]
+    fn agent_message_type_display() {
+        let handoff = AgentMessageType::HandoffRequest {
+            target_specialization: Some(AgentSpecialization::Testing),
+            context: "test context".to_string(),
+        };
+        assert_eq!(format!("{}", handoff), "HandoffRequest(target=testing)");
+
+        let handoff_any = AgentMessageType::HandoffRequest {
+            target_specialization: None,
+            context: "".to_string(),
+        };
+        assert_eq!(format!("{}", handoff_any), "HandoffRequest(target=any)");
+
+        let ack = AgentMessageType::HandoffAck {
+            accepted: true,
+            reason: None,
+        };
+        assert_eq!(format!("{}", ack), "HandoffAck(accepted=true)");
+
+        let result = AgentMessageType::TaskResult {
+            task_id: "T-1".to_string(),
+            success: true,
+            summary: "done".to_string(),
+        };
+        assert_eq!(format!("{}", result), "TaskResult(task=T-1, success=true)");
+
+        assert_eq!(format!("{}", AgentMessageType::Ping), "Ping");
+        assert_eq!(format!("{}", AgentMessageType::Pong), "Pong");
+
+        let cancel = AgentMessageType::CancelRequest {
+            reason: "stop".to_string(),
+        };
+        assert_eq!(format!("{}", cancel), "CancelRequest");
+
+        let custom = AgentMessageType::Custom {
+            message_type: "my_type".to_string(),
+            payload: "data".to_string(),
+        };
+        assert_eq!(format!("{}", custom), "Custom(my_type)");
+    }
+
+    #[test]
+    fn agent_message_creation_and_correlation() {
+        let msg = AgentMessage::new(
+            1,
+            AgentId(0),
+            AgentId(1),
+            AgentMessageType::Ping,
+        );
+        assert_eq!(msg.id, 1);
+        assert_eq!(msg.from, AgentId(0));
+        assert_eq!(msg.to, AgentId(1));
+        assert!(msg.correlation_id.is_none());
+
+        let msg_with_correlation = msg.with_correlation(42);
+        assert_eq!(msg_with_correlation.correlation_id, Some(42));
+    }
+
+    #[test]
+    fn agent_message_timeout_detection() {
+        let msg = AgentMessage::new(
+            1,
+            AgentId(0),
+            AgentId(1),
+            AgentMessageType::Ping,
+        );
+
+        // Message just created, should not be timed out
+        assert!(!msg.is_timed_out(Duration::from_secs(1)));
+
+        // With zero timeout, should be timed out immediately after creation
+        // (allowing for small time passage)
+        std::thread::sleep(Duration::from_millis(10));
+        assert!(msg.is_timed_out(Duration::from_millis(1)));
+    }
+
+    #[test]
+    fn message_channel_config_defaults() {
+        let config = MessageChannelConfig::default();
+        assert_eq!(config.max_inbox_size, 1000);
+        assert_eq!(config.delivery_timeout, Duration::from_secs(30));
+        assert_eq!(config.ping_timeout, Duration::from_secs(5));
+        assert!(config.drop_on_overflow);
+    }
+
+    #[test]
+    fn message_channel_config_builder() {
+        let config = MessageChannelConfig::default()
+            .with_inbox_size(500)
+            .with_delivery_timeout(Duration::from_secs(10))
+            .with_ping_timeout(Duration::from_secs(2));
+
+        assert_eq!(config.max_inbox_size, 500);
+        assert_eq!(config.delivery_timeout, Duration::from_secs(10));
+        assert_eq!(config.ping_timeout, Duration::from_secs(2));
+    }
+
+    #[test]
+    fn message_channel_error_display() {
+        assert_eq!(
+            format!("{}", MessageChannelError::AgentNotFound(AgentId(5))),
+            "agent 5 not found"
+        );
+        assert_eq!(
+            format!("{}", MessageChannelError::InboxFull(AgentId(3))),
+            "agent 3 inbox is full"
+        );
+        assert_eq!(
+            format!("{}", MessageChannelError::DeliveryTimeout),
+            "message delivery timed out"
+        );
+        assert_eq!(
+            format!("{}", MessageChannelError::AgentUnresponsive(AgentId(2))),
+            "agent 2 is unresponsive"
+        );
+        assert_eq!(
+            format!("{}", MessageChannelError::ChannelClosed),
+            "message channel is closed"
+        );
+        assert_eq!(
+            format!("{}", MessageChannelError::InvalidMessage("bad format".to_string())),
+            "invalid message: bad format"
+        );
+    }
+
+    #[test]
+    fn message_channel_register_and_unregister() {
+        let channel = AgentMessageChannel::new();
+
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+        assert_eq!(channel.agent_count(), 2);
+
+        let stats = channel.unregister_agent(AgentId(0));
+        assert!(stats.is_some());
+        assert_eq!(channel.agent_count(), 1);
+
+        // Unregistering non-existent agent returns None
+        let stats = channel.unregister_agent(AgentId(99));
+        assert!(stats.is_none());
+    }
+
+    #[test]
+    fn message_channel_send_and_receive() {
+        let channel = AgentMessageChannel::new();
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+
+        // Send a message
+        let msg_id = channel
+            .send(AgentId(0), AgentId(1), AgentMessageType::Ping)
+            .unwrap();
+        assert_eq!(msg_id, 1);
+
+        // Check inbox size
+        assert_eq!(channel.inbox_size(AgentId(1)).unwrap(), 1);
+        assert!(channel.has_messages(AgentId(1)));
+
+        // Receive the message
+        let msg = channel.receive(AgentId(1)).unwrap().unwrap();
+        assert_eq!(msg.from, AgentId(0));
+        assert_eq!(msg.to, AgentId(1));
+        assert!(matches!(msg.message_type, AgentMessageType::Ping));
+
+        // Inbox should be empty now
+        assert_eq!(channel.inbox_size(AgentId(1)).unwrap(), 0);
+        assert!(!channel.has_messages(AgentId(1)));
+    }
+
+    #[test]
+    fn message_channel_send_to_unregistered() {
+        let channel = AgentMessageChannel::new();
+        channel.register_agent(AgentId(0));
+
+        let result = channel.send(AgentId(0), AgentId(99), AgentMessageType::Ping);
+        assert!(matches!(result, Err(MessageChannelError::AgentNotFound(_))));
+    }
+
+    #[test]
+    fn message_channel_receive_from_unregistered() {
+        let channel = AgentMessageChannel::new();
+
+        let result = channel.receive(AgentId(99));
+        assert!(matches!(result, Err(MessageChannelError::AgentNotFound(_))));
+    }
+
+    #[test]
+    fn message_channel_send_with_correlation() {
+        let channel = AgentMessageChannel::new();
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+
+        let msg_id = channel
+            .send_with_correlation(
+                AgentId(0),
+                AgentId(1),
+                AgentMessageType::Pong,
+                42,
+            )
+            .unwrap();
+
+        let msg = channel.receive(AgentId(1)).unwrap().unwrap();
+        assert_eq!(msg.id, msg_id);
+        assert_eq!(msg.correlation_id, Some(42));
+    }
+
+    #[test]
+    fn message_channel_peek() {
+        let channel = AgentMessageChannel::new();
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+
+        channel.send(AgentId(0), AgentId(1), AgentMessageType::Ping).unwrap();
+
+        // Peek should return the message without removing it
+        let peeked = channel.peek(AgentId(1)).unwrap();
+        assert!(peeked.is_some());
+        assert_eq!(channel.inbox_size(AgentId(1)).unwrap(), 1);
+
+        // Receive should remove it
+        let _ = channel.receive(AgentId(1)).unwrap();
+        assert_eq!(channel.inbox_size(AgentId(1)).unwrap(), 0);
+    }
+
+    #[test]
+    fn message_channel_ping_pong() {
+        let channel = AgentMessageChannel::new();
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+
+        // Agent 0 pings Agent 1
+        let ping_id = channel.ping(AgentId(0), AgentId(1)).unwrap();
+
+        // Agent 1 receives ping
+        let msg = channel.receive(AgentId(1)).unwrap().unwrap();
+        assert!(matches!(msg.message_type, AgentMessageType::Ping));
+
+        // Agent 1 responds with pong
+        channel.pong(AgentId(1), AgentId(0), ping_id).unwrap();
+
+        // Agent 0 receives pong
+        let pong = channel.receive(AgentId(0)).unwrap().unwrap();
+        assert!(matches!(pong.message_type, AgentMessageType::Pong));
+        assert_eq!(pong.correlation_id, Some(ping_id));
+    }
+
+    #[test]
+    fn message_channel_inbox_stats() {
+        let channel = AgentMessageChannel::new();
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+
+        // Send multiple messages
+        for _ in 0..5 {
+            channel.send(AgentId(0), AgentId(1), AgentMessageType::Ping).unwrap();
+        }
+
+        let stats = channel.inbox_stats(AgentId(1)).unwrap();
+        assert_eq!(stats.total_received, 5);
+        assert_eq!(stats.current_size, 5);
+        assert_eq!(stats.dropped, 0);
+    }
+
+    #[test]
+    fn message_channel_inbox_overflow_drop() {
+        let config = MessageChannelConfig::default()
+            .with_inbox_size(3);
+        let channel = AgentMessageChannel::with_config(config);
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+
+        // Send more messages than inbox can hold
+        for _ in 0..5 {
+            channel.send(AgentId(0), AgentId(1), AgentMessageType::Ping).unwrap();
+        }
+
+        // Inbox should be at max size
+        assert_eq!(channel.inbox_size(AgentId(1)).unwrap(), 3);
+
+        let stats = channel.inbox_stats(AgentId(1)).unwrap();
+        assert_eq!(stats.total_received, 5);
+        assert_eq!(stats.dropped, 2); // 2 oldest dropped
+    }
+
+    #[test]
+    fn message_channel_close() {
+        let channel = AgentMessageChannel::new();
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+
+        assert!(!channel.is_closed());
+
+        channel.close();
+        assert!(channel.is_closed());
+
+        // Sending after close should fail
+        let result = channel.send(AgentId(0), AgentId(1), AgentMessageType::Ping);
+        assert!(matches!(result, Err(MessageChannelError::ChannelClosed)));
+
+        // Receiving after close should fail
+        let result = channel.receive(AgentId(1));
+        assert!(matches!(result, Err(MessageChannelError::ChannelClosed)));
+    }
+
+    #[test]
+    fn message_channel_registered_agents() {
+        let channel = AgentMessageChannel::new();
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+        channel.register_agent(AgentId(2));
+
+        let agents = channel.registered_agents();
+        assert_eq!(agents.len(), 3);
+        assert!(agents.contains(&AgentId(0)));
+        assert!(agents.contains(&AgentId(1)));
+        assert!(agents.contains(&AgentId(2)));
+    }
+
+    #[test]
+    fn message_channel_total_sent_delivered() {
+        let channel = AgentMessageChannel::new();
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+
+        assert_eq!(channel.total_sent(), 0);
+        assert_eq!(channel.total_delivered(), 0);
+
+        channel.send(AgentId(0), AgentId(1), AgentMessageType::Ping).unwrap();
+        channel.send(AgentId(0), AgentId(1), AgentMessageType::Pong).unwrap();
+
+        assert_eq!(channel.total_sent(), 2);
+        assert_eq!(channel.total_delivered(), 2);
+    }
+
+    #[test]
+    fn handoff_coordinator_initiate_and_accept() {
+        let channel = Arc::new(AgentMessageChannel::new());
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+
+        let coordinator = HandoffCoordinator::new(channel.clone());
+
+        // Initiate handoff from agent 0 to agent 1
+        let handoff_id = coordinator
+            .initiate_handoff(
+                AgentId(0),
+                Some(AgentId(1)),
+                "T-1".to_string(),
+                Some(AgentSpecialization::Testing),
+                "run tests".to_string(),
+            )
+            .unwrap();
+
+        assert_eq!(coordinator.pending_count(), 1);
+
+        // Accept the handoff
+        let result = coordinator.accept_handoff(handoff_id, AgentId(1)).unwrap();
+        assert!(matches!(result, HandoffResult::Accepted { .. }));
+
+        assert_eq!(coordinator.pending_count(), 0);
+    }
+
+    #[test]
+    fn handoff_coordinator_reject() {
+        let channel = Arc::new(AgentMessageChannel::new());
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+
+        let coordinator = HandoffCoordinator::new(channel.clone());
+
+        let handoff_id = coordinator
+            .initiate_handoff(
+                AgentId(0),
+                Some(AgentId(1)),
+                "T-1".to_string(),
+                None,
+                "context".to_string(),
+            )
+            .unwrap();
+
+        // Reject the handoff
+        let result = coordinator
+            .reject_handoff(handoff_id, AgentId(1), "busy".to_string())
+            .unwrap();
+
+        assert!(matches!(
+            result,
+            HandoffResult::Rejected { reason, .. } if reason == "busy"
+        ));
+
+        // Pending handoff still exists (can be accepted by another agent)
+        assert_eq!(coordinator.pending_count(), 1);
+    }
+
+    #[test]
+    fn handoff_coordinator_get_pending() {
+        let channel = Arc::new(AgentMessageChannel::new());
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+
+        let coordinator = HandoffCoordinator::new(channel.clone());
+
+        let handoff_id = coordinator
+            .initiate_handoff(
+                AgentId(0),
+                Some(AgentId(1)),
+                "T-1".to_string(),
+                Some(AgentSpecialization::CodeGen),
+                "implement feature".to_string(),
+            )
+            .unwrap();
+
+        let pending = coordinator.get_pending(handoff_id);
+        assert!(pending.is_some());
+
+        let pending = pending.unwrap();
+        assert_eq!(pending.from_agent, AgentId(0));
+        assert_eq!(pending.to_agent, Some(AgentId(1)));
+        assert_eq!(pending.task_id, "T-1");
+        assert_eq!(pending.target_specialization, Some(AgentSpecialization::CodeGen));
+    }
+
+    #[test]
+    fn handoff_coordinator_stats() {
+        let channel = Arc::new(AgentMessageChannel::new());
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+
+        let coordinator = HandoffCoordinator::new(channel.clone());
+
+        // Initiate and accept one handoff
+        let id1 = coordinator
+            .initiate_handoff(AgentId(0), Some(AgentId(1)), "T-1".to_string(), None, "".to_string())
+            .unwrap();
+        coordinator.accept_handoff(id1, AgentId(1)).unwrap();
+
+        // Initiate another that stays pending
+        let _id2 = coordinator
+            .initiate_handoff(AgentId(0), Some(AgentId(1)), "T-2".to_string(), None, "".to_string())
+            .unwrap();
+
+        let stats = coordinator.stats();
+        assert_eq!(stats.pending, 1);
+        assert_eq!(stats.completed, 1);
+        assert_eq!(stats.successful, 1);
+        assert_eq!(stats.failed, 0);
+    }
+
+    #[test]
+    fn handoff_coordinator_recent_completed() {
+        let channel = Arc::new(AgentMessageChannel::new());
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+
+        let coordinator = HandoffCoordinator::new(channel.clone());
+
+        for i in 0..3 {
+            let id = coordinator
+                .initiate_handoff(
+                    AgentId(0),
+                    Some(AgentId(1)),
+                    format!("T-{}", i),
+                    None,
+                    "".to_string(),
+                )
+                .unwrap();
+            coordinator.accept_handoff(id, AgentId(1)).unwrap();
+        }
+
+        let recent = coordinator.recent_completed(2);
+        assert_eq!(recent.len(), 2);
+    }
+
+    #[test]
+    fn handoff_error_display() {
+        assert_eq!(
+            format!("{}", HandoffError::HandoffNotFound(42)),
+            "handoff 42 not found"
+        );
+        assert_eq!(
+            format!("{}", HandoffError::SourceAgentNotFound(AgentId(5))),
+            "source agent 5 not found"
+        );
+        assert_eq!(
+            format!("{}", HandoffError::TargetAgentNotFound(AgentId(3))),
+            "target agent 3 not found"
+        );
+        assert_eq!(
+            format!("{}", HandoffError::Timeout(99)),
+            "handoff 99 timed out"
+        );
+        assert_eq!(
+            format!("{}", HandoffError::ChannelError("fail".to_string())),
+            "channel error: fail"
+        );
+    }
+
+    #[test]
+    fn pending_handoff_timeout_check() {
+        let pending = PendingHandoff {
+            id: 1,
+            from_agent: AgentId(0),
+            to_agent: Some(AgentId(1)),
+            target_specialization: None,
+            task_id: "T-1".to_string(),
+            context: "".to_string(),
+            initiated_at: Instant::now(),
+            message_id: 1,
+        };
+
+        // Just created, should not be timed out
+        assert!(!pending.is_timed_out(Duration::from_secs(60)));
+
+        // Should be timed out with very short timeout
+        std::thread::sleep(Duration::from_millis(10));
+        assert!(pending.is_timed_out(Duration::from_millis(1)));
+    }
+
+    #[test]
+    fn agent_timeout_tracker_creation() {
+        let tracker = AgentTimeoutTracker::with_defaults();
+        assert_eq!(tracker.tracked_count(), 0);
+    }
+
+    #[test]
+    fn agent_timeout_tracker_record_activity() {
+        let tracker = AgentTimeoutTracker::new(
+            Duration::from_millis(100),
+            Duration::from_millis(50),
+        );
+
+        tracker.record_activity(AgentId(0));
+        tracker.record_activity(AgentId(1));
+
+        assert_eq!(tracker.tracked_count(), 2);
+
+        // Just recorded, should be active
+        assert!(!tracker.is_stuck(AgentId(0)));
+        assert!(!tracker.is_warning(AgentId(0)));
+    }
+
+    #[test]
+    fn agent_timeout_tracker_detect_stuck() {
+        let tracker = AgentTimeoutTracker::new(
+            Duration::from_millis(50),
+            Duration::from_millis(25),
+        );
+
+        tracker.record_activity(AgentId(0));
+
+        // Wait for timeout
+        std::thread::sleep(Duration::from_millis(60));
+
+        assert!(tracker.is_stuck(AgentId(0)));
+        assert!(!tracker.is_warning(AgentId(0))); // Past warning, into stuck
+    }
+
+    #[test]
+    fn agent_timeout_tracker_detect_warning() {
+        let tracker = AgentTimeoutTracker::new(
+            Duration::from_millis(100),
+            Duration::from_millis(30),
+        );
+
+        tracker.record_activity(AgentId(0));
+
+        // Wait for warning but not timeout
+        std::thread::sleep(Duration::from_millis(40));
+
+        assert!(tracker.is_warning(AgentId(0)));
+        assert!(!tracker.is_stuck(AgentId(0)));
+    }
+
+    #[test]
+    fn agent_timeout_tracker_stuck_agents_list() {
+        let tracker = AgentTimeoutTracker::new(
+            Duration::from_millis(30),
+            Duration::from_millis(15),
+        );
+
+        tracker.record_activity(AgentId(0));
+        tracker.record_activity(AgentId(1));
+
+        std::thread::sleep(Duration::from_millis(40));
+
+        let stuck = tracker.stuck_agents();
+        assert_eq!(stuck.len(), 2);
+        assert!(stuck.contains(&AgentId(0)));
+        assert!(stuck.contains(&AgentId(1)));
+    }
+
+    #[test]
+    fn agent_timeout_tracker_remove_agent() {
+        let tracker = AgentTimeoutTracker::with_defaults();
+
+        tracker.record_activity(AgentId(0));
+        tracker.record_activity(AgentId(1));
+        assert_eq!(tracker.tracked_count(), 2);
+
+        tracker.remove_agent(AgentId(0));
+        assert_eq!(tracker.tracked_count(), 1);
+
+        // Removed agent should not be found
+        assert!(tracker.time_since_activity(AgentId(0)).is_none());
+    }
+
+    #[test]
+    fn agent_timeout_tracker_agent_statuses() {
+        let tracker = AgentTimeoutTracker::new(
+            Duration::from_millis(100),
+            Duration::from_millis(50),
+        );
+
+        tracker.record_activity(AgentId(0));
+        tracker.record_activity(AgentId(1));
+
+        let statuses = tracker.agent_statuses();
+        assert_eq!(statuses.len(), 2);
+
+        for status in &statuses {
+            assert_eq!(status.status, TimeoutState::Active);
+        }
+    }
+
+    #[test]
+    fn timeout_state_display() {
+        assert_eq!(format!("{}", TimeoutState::Active), "active");
+        assert_eq!(format!("{}", TimeoutState::Warning), "warning");
+        assert_eq!(format!("{}", TimeoutState::Stuck), "stuck");
+    }
+
+    #[test]
+    fn message_channel_cleanup_expired() {
+        let config = MessageChannelConfig {
+            message_ttl: Duration::from_millis(20),
+            ..MessageChannelConfig::default()
+        };
+        let channel = AgentMessageChannel::with_config(config);
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+
+        // Send messages
+        channel.send(AgentId(0), AgentId(1), AgentMessageType::Ping).unwrap();
+        channel.send(AgentId(0), AgentId(1), AgentMessageType::Pong).unwrap();
+
+        assert_eq!(channel.inbox_size(AgentId(1)).unwrap(), 2);
+
+        // Wait for TTL to expire
+        std::thread::sleep(Duration::from_millis(30));
+
+        let cleaned = channel.cleanup_expired();
+        assert_eq!(cleaned, 2);
+        assert_eq!(channel.inbox_size(AgentId(1)).unwrap(), 0);
+    }
+
+    #[test]
+    fn handoff_coordinator_builder_methods() {
+        let channel = Arc::new(AgentMessageChannel::new());
+        let coordinator = HandoffCoordinator::new(channel)
+            .with_timeout(Duration::from_secs(120))
+            .with_max_history(50);
+
+        // Verify coordinator was built (no direct access to fields in tests)
+        assert_eq!(coordinator.pending_count(), 0);
+    }
+
+    #[test]
+    fn message_channel_multiple_message_types() {
+        let channel = AgentMessageChannel::new();
+        channel.register_agent(AgentId(0));
+        channel.register_agent(AgentId(1));
+
+        // Send various message types
+        channel.send(
+            AgentId(0),
+            AgentId(1),
+            AgentMessageType::HandoffRequest {
+                target_specialization: Some(AgentSpecialization::Review),
+                context: "review code".to_string(),
+            },
+        ).unwrap();
+
+        channel.send(
+            AgentId(0),
+            AgentId(1),
+            AgentMessageType::TaskResult {
+                task_id: "T-1".to_string(),
+                success: true,
+                summary: "completed".to_string(),
+            },
+        ).unwrap();
+
+        channel.send(
+            AgentId(0),
+            AgentId(1),
+            AgentMessageType::CancelRequest {
+                reason: "user abort".to_string(),
+            },
+        ).unwrap();
+
+        channel.send(
+            AgentId(0),
+            AgentId(1),
+            AgentMessageType::Custom {
+                message_type: "metrics".to_string(),
+                payload: "{\"cpu\": 50}".to_string(),
+            },
+        ).unwrap();
+
+        assert_eq!(channel.inbox_size(AgentId(1)).unwrap(), 4);
+
+        // Receive and verify each type
+        let msg1 = channel.receive(AgentId(1)).unwrap().unwrap();
+        assert!(matches!(msg1.message_type, AgentMessageType::HandoffRequest { .. }));
+
+        let msg2 = channel.receive(AgentId(1)).unwrap().unwrap();
+        assert!(matches!(msg2.message_type, AgentMessageType::TaskResult { .. }));
+
+        let msg3 = channel.receive(AgentId(1)).unwrap().unwrap();
+        assert!(matches!(msg3.message_type, AgentMessageType::CancelRequest { .. }));
+
+        let msg4 = channel.receive(AgentId(1)).unwrap().unwrap();
+        assert!(matches!(msg4.message_type, AgentMessageType::Custom { .. }));
+    }
+
+    #[test]
+    fn handoff_coordinator_broadcast_handoff() {
+        let channel = Arc::new(AgentMessageChannel::new());
+        channel.register_agent(AgentId(0));
+
+        let coordinator = HandoffCoordinator::new(channel.clone());
+
+        // Initiate broadcast handoff (no specific target)
+        let handoff_id = coordinator
+            .initiate_handoff(
+                AgentId(0),
+                None, // No specific target
+                "T-1".to_string(),
+                Some(AgentSpecialization::Testing),
+                "run tests".to_string(),
+            )
+            .unwrap();
+
+        let pending = coordinator.get_pending(handoff_id).unwrap();
+        assert!(pending.to_agent.is_none());
+        assert_eq!(pending.target_specialization, Some(AgentSpecialization::Testing));
+    }
+
+    #[test]
+    fn handoff_accept_not_found() {
+        let channel = Arc::new(AgentMessageChannel::new());
+        channel.register_agent(AgentId(0));
+
+        let coordinator = HandoffCoordinator::new(channel.clone());
+
+        let result = coordinator.accept_handoff(999, AgentId(0));
+        assert!(matches!(result, Err(HandoffError::HandoffNotFound(999))));
+    }
+
+    #[test]
+    fn handoff_reject_not_found() {
+        let channel = Arc::new(AgentMessageChannel::new());
+        channel.register_agent(AgentId(0));
+
+        let coordinator = HandoffCoordinator::new(channel.clone());
+
+        let result = coordinator.reject_handoff(999, AgentId(0), "reason".to_string());
+        assert!(matches!(result, Err(HandoffError::HandoffNotFound(999))));
     }
 }

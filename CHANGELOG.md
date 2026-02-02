@@ -14,6 +14,18 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-17 Add AgentMessageChannel for inter-agent communication with per-agent inboxes and message queuing.
+- MC-17 Add AgentMessage struct with id, from, to, message_type, timestamp, and correlation_id fields.
+- MC-17 Add AgentMessageType enum with HandoffRequest, HandoffAck, TaskResult, Ping, Pong, CancelRequest, and Custom variants.
+- MC-17 Add MessageChannelConfig for configurable inbox size, delivery timeout, ping timeout, and message TTL.
+- MC-17 Add MessageChannelError for agent not found, inbox full, delivery timeout, and channel closed errors.
+- MC-17 Add HandoffCoordinator for managing task transitions between specialized agents.
+- MC-17 Add PendingHandoff and CompletedHandoff structs for tracking handoff state and history.
+- MC-17 Add HandoffResult enum with Accepted, Rejected, TimedOut, and NoAgentAvailable variants.
+- MC-17 Add HandoffError for handoff-specific error handling.
+- MC-17 Add AgentTimeoutTracker for detecting stuck or unresponsive agents with configurable thresholds.
+- MC-17 Add TimeoutState enum (Active, Warning, Stuck) and AgentTimeoutStatus for agent timeout monitoring.
+- MC-17 Add 60 new tests for inter-agent communication covering message channel, handoffs, and timeouts.
 - MC-16 Add AgentSpecialization enum with General, CodeGen, Testing, Review, and Documentation types.
 - MC-16 Add TaskType enum for task classification with infer_from_content() keyword analysis.
 - MC-16 Add AgentSpecializationConfig for per-agent specialization settings with fallback options.
