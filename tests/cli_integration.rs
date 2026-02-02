@@ -162,6 +162,7 @@ fn cli_prd_create_writes_generated_file() {
     let prd_output = project.join("PRD.generated.md");
     let prd_contents = "# Project Requirements Document\n\n## Overview\n\nTest.\n\n## Implementation Tasks\n\n### Task TST-1\n\n- **ID** TST-1\n- **Context Bundle** `ARCHITECTURE.md`\n- **DoD** Example.\n- **Checklist**\n  * Example\n- **Dependencies** None\n- [ ] TST-1 Example task\n";
     let fake = FakeCli::new("codex", prd_contents, "", 0).unwrap();
+    let _ = fake.command();
     let _path_guard = fake.prepend_to_path().unwrap();
 
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("gralph");
