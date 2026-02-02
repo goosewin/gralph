@@ -1,0 +1,31 @@
+PRD.ultimate.md
+  b8c84188d6c450cc 528
+src/totp.rs
+  b8c84188d6c450cc 1-1430
+src/lib.rs
+  b8c84188d6c450cc 18
+ARCHITECTURE.md
+  b8c84188d6c450cc 17
+CHANGELOG.md
+  b8c84188d6c450cc 17-38
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "883dcd738b3491479b83fef2009f2b6442f92afb",
+  "prompts": {
+    "b8c84188d6c450cc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c99313f4-1f72-41bd-a017-b23f4201b6dd",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 1455,
+      "total_deletions": 1,
+      "accepted_lines": 1455,
+      "overriden_lines": 0
+    }
+  }
+}
