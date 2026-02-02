@@ -14,6 +14,8 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- CLEAN-1 Add pre-PR git clean status check with actionable error listing dirty file paths.
+
 ### Changed
 
 ### Fixed

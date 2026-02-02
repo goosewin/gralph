@@ -87,7 +87,7 @@ All failure conditions must emit clear, actionable error messages that describe 
   * Error message includes "Commit or stash changes before PR creation" hint.
   * Add unit test for dirty detection with mock git output.
 - **Dependencies** None
-- [ ] CLEAN-1 Add pre-PR git clean status check with actionable error
+- [x] CLEAN-1 Add pre-PR git clean status check with actionable error
 ### Task PRD-DEL-1
 
 - **ID** PRD-DEL-1

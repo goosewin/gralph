@@ -475,6 +475,8 @@ fn run_verifier_pr_create(dir: &Path, config: &Config) -> Result<Option<String>,
         ));
     }
 
+    ensure_git_clean_for_pr(&repo_root)?;
+
     let branch_output = git_output_in_dir(dir, ["rev-parse", "--abbrev-ref", "HEAD"])?;
     let branch = branch_output.trim();
     if branch.is_empty() {
@@ -1241,6 +1243,31 @@ fn resolve_pr_template_path(repo_root: &Path) -> Option<PathBuf> {
         }
     }
     None
+}
+
+fn ensure_git_clean_for_pr(dir: &Path) -> Result<(), CliError> {
+    let output = ProcCommand::new("git")
+        .arg("-C")
+        .arg(dir)
+        .arg("status")
+        .arg("--porcelain")
+        .output()
+        .map_err(CliError::Io)?;
+    if !output.status.success() {
+        return Err(CliError::Message(
+            "Unable to check git status.".to_string(),
+        ));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let dirty_files: Vec<&str> = stdout.lines().filter(|line| !line.is_empty()).collect();
+    if dirty_files.is_empty() {
+        return Ok(());
+    }
+    let file_list = dirty_files.join("\n  ");
+    Err(CliError::Message(format!(
+        "Git working tree is not clean. Commit or stash changes before PR creation.\n  {}",
+        file_list
+    )))
 }
 
 fn ensure_gh_authenticated(dir: &Path) -> Result<(), CliError> {
@@ -3973,6 +4000,131 @@ Coverage Results: 75.00%
         let path = Path::new("/other/src/main.rs");
         let formatted = format_static_violation_path(root, path, 10);
         assert_eq!(formatted, "/other/src/main.rs:10");
+    }
+
+    // CLEAN-1: Pre-PR git clean status check tests
+
+    #[test]
+    fn ensure_git_clean_for_pr_succeeds_on_clean_repo() {
+        let _guard = env_guard();
+        let repo = init_git_repo("main");
+
+        let result = ensure_git_clean_for_pr(repo.path());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn ensure_git_clean_for_pr_fails_on_dirty_repo_with_file_list() {
+        let _guard = env_guard();
+        let repo = init_git_repo("main");
+        // Make the repo dirty by modifying a tracked file
+        fs::write(repo.path().join("README.md"), "dirty content\n").unwrap();
+
+        let err = ensure_git_clean_for_pr(repo.path()).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(
+                    message.contains("Git working tree is not clean"),
+                    "expected clean status error, got: {}",
+                    message
+                );
+                assert!(
+                    message.contains("Commit or stash changes before PR creation"),
+                    "expected hint message, got: {}",
+                    message
+                );
+                assert!(
+                    message.contains("README.md"),
+                    "expected dirty file path, got: {}",
+                    message
+                );
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ensure_git_clean_for_pr_fails_on_untracked_files() {
+        let _guard = env_guard();
+        let repo = init_git_repo("main");
+        // Add an untracked file
+        fs::write(repo.path().join("untracked.txt"), "new file\n").unwrap();
+
+        let err = ensure_git_clean_for_pr(repo.path()).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(
+                    message.contains("Git working tree is not clean"),
+                    "expected clean status error, got: {}",
+                    message
+                );
+                assert!(
+                    message.contains("untracked.txt"),
+                    "expected untracked file path, got: {}",
+                    message
+                );
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ensure_git_clean_for_pr_lists_multiple_dirty_files() {
+        let _guard = env_guard();
+        let repo = init_git_repo("main");
+        // Make multiple files dirty
+        fs::write(repo.path().join("README.md"), "dirty content\n").unwrap();
+        fs::write(repo.path().join("new_file.txt"), "new file\n").unwrap();
+        fs::write(repo.path().join("another.rs"), "// code\n").unwrap();
+
+        let err = ensure_git_clean_for_pr(repo.path()).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(
+                    message.contains("README.md"),
+                    "expected README.md in file list, got: {}",
+                    message
+                );
+                assert!(
+                    message.contains("new_file.txt"),
+                    "expected new_file.txt in file list, got: {}",
+                    message
+                );
+                assert!(
+                    message.contains("another.rs"),
+                    "expected another.rs in file list, got: {}",
+                    message
+                );
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn run_verifier_pr_create_fails_on_dirty_repo() {
+        let _guard = env_guard();
+        let repo = init_git_repo("feature-branch");
+        // Make the repo dirty
+        fs::write(repo.path().join("README.md"), "dirty content\n").unwrap();
+
+        let config = load_project_config("verifier:\n  pr:\n    base: main\n");
+
+        let err = run_verifier_pr_create(repo.path(), &config).unwrap_err();
+        match err {
+            CliError::Message(message) => {
+                assert!(
+                    message.contains("Git working tree is not clean"),
+                    "expected clean status error, got: {}",
+                    message
+                );
+                assert!(
+                    message.contains("Commit or stash changes before PR creation"),
+                    "expected hint message, got: {}",
+                    message
+                );
+            }
+            other => panic!("expected message error, got {other:?}"),
+        }
     }
 
     // COV80-VER-2: PR creation flow tests
