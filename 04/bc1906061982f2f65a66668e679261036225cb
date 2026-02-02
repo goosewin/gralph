@@ -1,0 +1,29 @@
+PRD.loop-verifier-hardening.md
+  8183d54e455c40b2 116
+CHANGELOG.md
+  8183d54e455c40b2 19
+config/default.yaml
+  8183d54e455c40b2 24-25
+src/verifier.rs
+  8183d54e455c40b2 36,120-121,251-358,4425-4523
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "04bc1906061982f2f65a66668e679261036225cb",
+  "prompts": {
+    "8183d54e455c40b2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6971556a-67ad-4838-99bf-f57d26a09f23",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 214,
+      "total_deletions": 1,
+      "accepted_lines": 214,
+      "overriden_lines": 0
+    }
+  }
+}
