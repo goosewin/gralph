@@ -708,6 +708,76 @@ impl UserStore {
         users.insert(user.id.clone(), user.clone());
         Ok(())
     }
+
+    /// List all users with optional pagination.
+    pub fn list_users(&self, offset: usize, limit: usize) -> Vec<User> {
+        let users = self.users.read().unwrap();
+        let mut user_list: Vec<User> = users.values().cloned().collect();
+        // Sort by created_at descending (newest first)
+        user_list.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        user_list.into_iter().skip(offset).take(limit).collect()
+    }
+
+    /// Get total count of users.
+    pub fn count(&self) -> usize {
+        let users = self.users.read().unwrap();
+        users.len()
+    }
+
+    /// Search users by email or name pattern.
+    pub fn search(&self, query: &str, offset: usize, limit: usize) -> (Vec<User>, usize) {
+        let query_lower = query.to_lowercase();
+        let users = self.users.read().unwrap();
+        let matching: Vec<User> = users
+            .values()
+            .filter(|u| u.email.to_lowercase().contains(&query_lower))
+            .cloned()
+            .collect();
+        let total = matching.len();
+        let mut result: Vec<User> = matching;
+        result.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        let paginated = result.into_iter().skip(offset).take(limit).collect();
+        (paginated, total)
+    }
+
+    /// Update a user's role.
+    pub fn update_role(&self, user_id: &str, new_role: UserRole) -> Result<User, AuthError> {
+        let mut users = self.users.write().unwrap();
+        match users.get_mut(user_id) {
+            Some(user) => {
+                user.role = new_role;
+                user.updated_at = current_timestamp();
+                Ok(user.clone())
+            }
+            None => Err(AuthError::UserNotFound),
+        }
+    }
+
+    /// Bulk update roles for multiple users.
+    pub fn bulk_update_roles(
+        &self,
+        user_ids: &[String],
+        new_role: UserRole,
+    ) -> Vec<Result<User, AuthError>> {
+        user_ids
+            .iter()
+            .map(|id| self.update_role(id, new_role))
+            .collect()
+    }
+
+    /// Delete a user by ID.
+    pub fn delete(&self, user_id: &str) -> Result<User, AuthError> {
+        let mut users = self.users.write().unwrap();
+        let mut email_index = self.email_index.write().unwrap();
+
+        match users.remove(user_id) {
+            Some(user) => {
+                email_index.remove(&user.email.to_lowercase());
+                Ok(user)
+            }
+            None => Err(AuthError::UserNotFound),
+        }
+    }
 }
 
 impl Default for UserStore {

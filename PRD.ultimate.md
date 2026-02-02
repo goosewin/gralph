@@ -554,7 +554,7 @@ All existing CLI commands continue to function without breaking changes. New fea
   * Bulk role assignment.
   * Admin-only access enforced.
 - **Dependencies** MC-22, MC-3
-- [ ] MC-30 Build admin user management page
+- [x] MC-30 Build admin user management page
 ---
 
 ### Phase 4: Team Collaboration

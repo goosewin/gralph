@@ -327,6 +327,23 @@ fn build_router(state: Arc<AppState>) -> Router {
             "/audit/stats",
             get(audit_stats_handler).options(options_handler),
         )
+        // Admin user management endpoints
+        .route(
+            "/admin/users",
+            get(admin_users_list_handler).options(options_handler),
+        )
+        .route(
+            "/admin/users/:user_id/role",
+            put(admin_user_role_handler).options(options_handler),
+        )
+        .route(
+            "/admin/users/:user_id",
+            axum::routing::delete(admin_user_delete_handler).options(options_handler),
+        )
+        .route(
+            "/admin/users/bulk-role",
+            post(admin_users_bulk_role_handler).options(options_handler),
+        )
         // SAML SSO endpoints
         .route(
             "/saml/metadata",
@@ -1410,6 +1427,7 @@ fn parse_audit_action(action: &str) -> Option<AuditAction> {
         "task.update" => Some(AuditAction::TaskUpdate),
         "logs.view" => Some(AuditAction::LogsView),
         "orchestration.view" => Some(AuditAction::OrchestrationView),
+        "user.view" => Some(AuditAction::UserView),
         "user.create" => Some(AuditAction::UserCreate),
         "user.update" => Some(AuditAction::UserUpdate),
         "user.delete" => Some(AuditAction::UserDelete),
@@ -1578,6 +1596,458 @@ async fn audit_stats_handler(
                 "max_age_secs": state.audit_log.config().max_age_secs,
                 "retention_days": state.audit_log.config().max_age_secs / (24 * 60 * 60),
             },
+        }),
+        cors_origin,
+    )
+}
+
+// --- Admin User Management Handlers ---
+
+/// Query parameters for admin user list endpoint.
+#[derive(Debug, serde::Deserialize)]
+struct AdminUsersQueryParams {
+    offset: Option<usize>,
+    limit: Option<usize>,
+    search: Option<String>,
+}
+
+/// Request body for updating a user's role.
+#[derive(Debug, serde::Deserialize)]
+struct UpdateRoleRequest {
+    role: String,
+}
+
+/// Request body for bulk role update.
+#[derive(Debug, serde::Deserialize)]
+struct BulkRoleRequest {
+    user_ids: Vec<String>,
+    role: String,
+}
+
+/// Parse role string to UserRole enum.
+fn parse_user_role(role_str: &str) -> Option<crate::auth::UserRole> {
+    match role_str.to_lowercase().as_str() {
+        "admin" => Some(crate::auth::UserRole::Admin),
+        "developer" => Some(crate::auth::UserRole::Developer),
+        "viewer" => Some(crate::auth::UserRole::Viewer),
+        _ => None,
+    }
+}
+
+/// Admin user list endpoint with pagination and search.
+async fn admin_users_list_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(params): Query<AdminUsersQueryParams>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+
+    // Check bearer token auth first (for legacy/API key auth)
+    if let Some(response) = check_auth(&headers, &state, cors_origin.as_deref()) {
+        return response;
+    }
+
+    // For JWT auth, check permission - require UserRead and Admin role
+    let actor_info = extract_actor_info(&headers, &state);
+    if let Some((ref actor_id, ref actor_email, role)) = actor_info {
+        // Require admin role for user management
+        if role != crate::auth::UserRole::Admin {
+            // Record the denied access attempt
+            let client_ip = get_client_ip(&headers, connect_info.as_ref().map(|c| &c.0));
+            state.audit_log.record(
+                AuditEntry::new(
+                    Some(actor_id.clone()),
+                    Some(actor_email.clone()),
+                    client_ip,
+                    AuditAction::UserView,
+                    AuditOutcome::Denied,
+                )
+                .with_details("Admin role required for user management"),
+            );
+
+            return error_response(
+                StatusCode::FORBIDDEN,
+                "Permission denied: admin role required".to_string(),
+                cors_origin,
+            );
+        }
+    } else {
+        return error_response(
+            StatusCode::UNAUTHORIZED,
+            "Authentication required".to_string(),
+            cors_origin,
+        );
+    }
+
+    let offset = params.offset.unwrap_or(0);
+    let limit = params.limit.unwrap_or(50).min(100); // Max 100 users per page
+
+    let (users, total) = if let Some(search) = params.search.as_ref() {
+        state.auth_service.user_store.search(search, offset, limit)
+    } else {
+        let users = state.auth_service.user_store.list_users(offset, limit);
+        let total = state.auth_service.user_store.count();
+        (users, total)
+    };
+
+    // Map users to response without password hashes
+    let user_responses: Vec<Value> = users
+        .iter()
+        .map(|u| {
+            json!({
+                "id": u.id,
+                "email": u.email,
+                "role": u.role,
+                "created_at": u.created_at,
+                "updated_at": u.updated_at,
+            })
+        })
+        .collect();
+
+    // Record audit log
+    if let Some((actor_id, actor_email, _)) = actor_info {
+        let client_ip = get_client_ip(&headers, connect_info.as_ref().map(|c| &c.0));
+        state.audit_log.record(
+            AuditEntry::new(
+                Some(actor_id),
+                Some(actor_email),
+                client_ip,
+                AuditAction::UserView,
+                AuditOutcome::Success,
+            )
+            .with_details(&format!(
+                "Listed {} users (offset={}, limit={})",
+                users.len(),
+                offset,
+                limit
+            )),
+        );
+    }
+
+    json_response(
+        StatusCode::OK,
+        json!({
+            "users": user_responses,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+        }),
+        cors_origin,
+    )
+}
+
+/// Admin endpoint to update a user's role.
+async fn admin_user_role_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(user_id): Path<String>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    Json(body): Json<UpdateRoleRequest>,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+
+    // Check bearer token auth first
+    if let Some(response) = check_auth(&headers, &state, cors_origin.as_deref()) {
+        return response;
+    }
+
+    // For JWT auth, check permission - require Admin role
+    let actor_info = extract_actor_info(&headers, &state);
+    let (actor_id, actor_email) = match actor_info {
+        Some((id, email, role)) if role == crate::auth::UserRole::Admin => (id, email),
+        Some((id, email, _)) => {
+            let client_ip = get_client_ip(&headers, connect_info.as_ref().map(|c| &c.0));
+            state.audit_log.record(
+                AuditEntry::new(
+                    Some(id),
+                    Some(email),
+                    client_ip,
+                    AuditAction::RoleChange,
+                    AuditOutcome::Denied,
+                )
+                .with_resource("user", &user_id)
+                .with_details("Admin role required for role changes"),
+            );
+            return error_response(
+                StatusCode::FORBIDDEN,
+                "Permission denied: admin role required".to_string(),
+                cors_origin,
+            );
+        }
+        None => {
+            return error_response(
+                StatusCode::UNAUTHORIZED,
+                "Authentication required".to_string(),
+                cors_origin,
+            );
+        }
+    };
+
+    // Parse the new role
+    let new_role = match parse_user_role(&body.role) {
+        Some(role) => role,
+        None => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                format!("Invalid role: {}. Must be admin, developer, or viewer", body.role),
+                cors_origin,
+            );
+        }
+    };
+
+    // Update the user's role
+    match state.auth_service.user_store.update_role(&user_id, new_role) {
+        Ok(updated_user) => {
+            let client_ip = get_client_ip(&headers, connect_info.as_ref().map(|c| &c.0));
+            state.audit_log.record(
+                AuditEntry::new(
+                    Some(actor_id),
+                    Some(actor_email),
+                    client_ip,
+                    AuditAction::RoleChange,
+                    AuditOutcome::Success,
+                )
+                .with_resource("user", &user_id)
+                .with_details(&format!("Changed role to {}", new_role)),
+            );
+
+            json_response(
+                StatusCode::OK,
+                json!({
+                    "id": updated_user.id,
+                    "email": updated_user.email,
+                    "role": updated_user.role,
+                    "created_at": updated_user.created_at,
+                    "updated_at": updated_user.updated_at,
+                }),
+                cors_origin,
+            )
+        }
+        Err(crate::auth::AuthError::UserNotFound) => error_response(
+            StatusCode::NOT_FOUND,
+            format!("User not found: {}", user_id),
+            cors_origin,
+        ),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to update role: {}", e),
+            cors_origin,
+        ),
+    }
+}
+
+/// Admin endpoint to delete a user.
+async fn admin_user_delete_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(user_id): Path<String>,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+
+    // Check bearer token auth first
+    if let Some(response) = check_auth(&headers, &state, cors_origin.as_deref()) {
+        return response;
+    }
+
+    // For JWT auth, check permission - require Admin role
+    let actor_info = extract_actor_info(&headers, &state);
+    let (actor_id, actor_email) = match actor_info {
+        Some((id, email, role)) if role == crate::auth::UserRole::Admin => (id, email),
+        Some((id, email, _)) => {
+            let client_ip = get_client_ip(&headers, connect_info.as_ref().map(|c| &c.0));
+            state.audit_log.record(
+                AuditEntry::new(
+                    Some(id),
+                    Some(email),
+                    client_ip,
+                    AuditAction::UserDelete,
+                    AuditOutcome::Denied,
+                )
+                .with_resource("user", &user_id)
+                .with_details("Admin role required for user deletion"),
+            );
+            return error_response(
+                StatusCode::FORBIDDEN,
+                "Permission denied: admin role required".to_string(),
+                cors_origin,
+            );
+        }
+        None => {
+            return error_response(
+                StatusCode::UNAUTHORIZED,
+                "Authentication required".to_string(),
+                cors_origin,
+            );
+        }
+    };
+
+    // Prevent self-deletion
+    if actor_id == user_id {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "Cannot delete your own account".to_string(),
+            cors_origin,
+        );
+    }
+
+    // Delete the user
+    match state.auth_service.user_store.delete(&user_id) {
+        Ok(deleted_user) => {
+            let client_ip = get_client_ip(&headers, connect_info.as_ref().map(|c| &c.0));
+            state.audit_log.record(
+                AuditEntry::new(
+                    Some(actor_id),
+                    Some(actor_email),
+                    client_ip,
+                    AuditAction::UserDelete,
+                    AuditOutcome::Success,
+                )
+                .with_resource("user", &user_id)
+                .with_details(&format!("Deleted user: {}", deleted_user.email)),
+            );
+
+            json_response(
+                StatusCode::OK,
+                json!({
+                    "message": "User deleted successfully",
+                    "deleted_user": {
+                        "id": deleted_user.id,
+                        "email": deleted_user.email,
+                    },
+                }),
+                cors_origin,
+            )
+        }
+        Err(crate::auth::AuthError::UserNotFound) => error_response(
+            StatusCode::NOT_FOUND,
+            format!("User not found: {}", user_id),
+            cors_origin,
+        ),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to delete user: {}", e),
+            cors_origin,
+        ),
+    }
+}
+
+/// Admin endpoint for bulk role updates.
+async fn admin_users_bulk_role_handler(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    connect_info: Option<ConnectInfo<SocketAddr>>,
+    Json(body): Json<BulkRoleRequest>,
+) -> Response {
+    let cors_origin = resolve_cors_origin(&headers, &state.config);
+
+    // Check bearer token auth first
+    if let Some(response) = check_auth(&headers, &state, cors_origin.as_deref()) {
+        return response;
+    }
+
+    // For JWT auth, check permission - require Admin role
+    let actor_info = extract_actor_info(&headers, &state);
+    let (actor_id, actor_email) = match actor_info {
+        Some((id, email, role)) if role == crate::auth::UserRole::Admin => (id, email),
+        Some((id, email, _)) => {
+            let client_ip = get_client_ip(&headers, connect_info.as_ref().map(|c| &c.0));
+            state.audit_log.record(
+                AuditEntry::new(
+                    Some(id),
+                    Some(email),
+                    client_ip,
+                    AuditAction::RoleChange,
+                    AuditOutcome::Denied,
+                )
+                .with_details("Admin role required for bulk role changes"),
+            );
+            return error_response(
+                StatusCode::FORBIDDEN,
+                "Permission denied: admin role required".to_string(),
+                cors_origin,
+            );
+        }
+        None => {
+            return error_response(
+                StatusCode::UNAUTHORIZED,
+                "Authentication required".to_string(),
+                cors_origin,
+            );
+        }
+    };
+
+    // Parse the new role
+    let new_role = match parse_user_role(&body.role) {
+        Some(role) => role,
+        None => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                format!("Invalid role: {}. Must be admin, developer, or viewer", body.role),
+                cors_origin,
+            );
+        }
+    };
+
+    // Prevent changing own role
+    if body.user_ids.contains(&actor_id) {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "Cannot change your own role in bulk operations".to_string(),
+            cors_origin,
+        );
+    }
+
+    // Perform bulk update
+    let results = state
+        .auth_service
+        .user_store
+        .bulk_update_roles(&body.user_ids, new_role);
+
+    let mut success_count = 0;
+    let mut failures: Vec<Value> = Vec::new();
+
+    for (user_id, result) in body.user_ids.iter().zip(results.iter()) {
+        match result {
+            Ok(_) => success_count += 1,
+            Err(e) => {
+                failures.push(json!({
+                    "user_id": user_id,
+                    "error": e.to_string(),
+                }));
+            }
+        }
+    }
+
+    // Record audit log
+    let client_ip = get_client_ip(&headers, connect_info.as_ref().map(|c| &c.0));
+    state.audit_log.record(
+        AuditEntry::new(
+            Some(actor_id),
+            Some(actor_email),
+            client_ip,
+            AuditAction::RoleChange,
+            if failures.is_empty() {
+                AuditOutcome::Success
+            } else {
+                AuditOutcome::Failure
+            },
+        )
+        .with_details(&format!(
+            "Bulk role change to {}: {} success, {} failed",
+            new_role,
+            success_count,
+            failures.len()
+        )),
+    );
+
+    json_response(
+        StatusCode::OK,
+        json!({
+            "success_count": success_count,
+            "failure_count": failures.len(),
+            "failures": failures,
         }),
         cors_origin,
     )

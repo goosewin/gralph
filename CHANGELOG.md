@@ -14,6 +14,23 @@ CI=<status/link>; PR=<link if final PRD task>
 
 ### Added
 
+- MC-30 Add admin user management page with user list, search, role assignment, and bulk operations.
+- MC-30 Add GET /admin/users endpoint for paginated user list with search support.
+- MC-30 Add PUT /admin/users/:user_id/role endpoint for updating individual user roles.
+- MC-30 Add DELETE /admin/users/:user_id endpoint for deleting users (admin only).
+- MC-30 Add POST /admin/users/bulk-role endpoint for bulk role assignment.
+- MC-30 Add UserStore.list_users() for paginated user listing sorted by creation date.
+- MC-30 Add UserStore.count() for total user count.
+- MC-30 Add UserStore.search() for user search by email pattern.
+- MC-30 Add UserStore.update_role() for updating individual user roles.
+- MC-30 Add UserStore.bulk_update_roles() for updating multiple user roles.
+- MC-30 Add UserStore.delete() for removing users from the store.
+- MC-30 Add AuditAction::UserView for audit logging of user list access.
+- MC-30 Add AdminUserManagement component for admin user management UI.
+- MC-30 Add useAdminUsers hook for admin user management API calls.
+- MC-30 Add admin-users route to sidebar navigation under Administration section.
+- MC-30 Add 41 tests for AdminUserManagement component.
+- MC-30 Add 30 tests for useAdminUsers hook.
 - MC-28 Add two-factor authentication module (`src/totp.rs`) with TOTP and backup codes.
 - MC-28 Add TwoFactorStatus enum (Disabled, Pending, Enabled) for tracking 2FA state.
 - MC-28 Add TwoFactorData struct for per-user 2FA configuration storage.

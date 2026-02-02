@@ -37,6 +37,7 @@ pub enum AuditAction {
     OrchestrationView,
 
     // User management actions
+    UserView,
     UserCreate,
     UserUpdate,
     UserDelete,
@@ -68,6 +69,7 @@ impl std::fmt::Display for AuditAction {
             AuditAction::TaskUpdate => write!(f, "task.update"),
             AuditAction::LogsView => write!(f, "logs.view"),
             AuditAction::OrchestrationView => write!(f, "orchestration.view"),
+            AuditAction::UserView => write!(f, "user.view"),
             AuditAction::UserCreate => write!(f, "user.create"),
             AuditAction::UserUpdate => write!(f, "user.update"),
             AuditAction::UserDelete => write!(f, "user.delete"),

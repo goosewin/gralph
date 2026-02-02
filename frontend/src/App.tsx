@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AdminUserManagement } from './components/AdminUserManagement';
 import { AgentOrchestrationDashboard } from './components/AgentOrchestrationDashboard';
 import { HamburgerMenu } from './components/HamburgerMenu';
 import { InstallPrompt } from './components/InstallPrompt';
@@ -245,6 +246,19 @@ function App() {
         ],
       },
       {
+        id: 'admin',
+        title: 'Administration',
+        icon: '🔐',
+        items: [
+          {
+            id: 'admin-users',
+            label: 'User Management',
+            route: 'admin-users' as Route,
+            icon: '👥',
+          },
+        ],
+      },
+      {
         id: 'preferences',
         title: 'Preferences',
         icon: '⚙️',
@@ -411,6 +425,11 @@ function App() {
                 loading={orchestrationLoading}
                 onRefresh={fetchOrchestration}
               />
+            </div>
+          )}
+          {activeRoute === 'admin-users' && (
+            <div id="panel-admin-users" role="tabpanel" aria-labelledby="tab-admin-users">
+              <AdminUserManagement baseUrl={baseUrl} token={token} />
             </div>
           )}
           {activeRoute === 'user-settings' && (

@@ -59,7 +59,9 @@ doctor diagnostics.
 `frontend/src/components/Sidebar.tsx` provides navigation sidebar with collapsible sections and route highlighting.
 `frontend/src/components/SessionLogViewer.tsx` displays full session log output with syntax highlighting, virtualized scrolling, search, and auto-scroll toggle.
 `frontend/src/components/AgentOrchestrationDashboard.tsx` displays real-time agent orchestration visualization with task flow diagram, agent nodes, dependency edges, and animated status transitions. The dashboard shows agent status (idle/working/failed), specialization (general/code-gen/testing/review/documentation), current task assignments, and task dependencies. Layout uses SVG with topological sort for task positioning and supports up to 20 agents with performant rendering.
+`frontend/src/components/AdminUserManagement.tsx` provides admin user management UI with paginated user list, search by email, role dropdown per user, bulk role assignment, and delete functionality. Admin-only access enforced via backend RBAC checks.
 `frontend/src/hooks/useLocalStorage.ts` syncs React state with localStorage for persistence across sessions.
+`frontend/src/hooks/useAdminUsers.ts` provides REST API hooks for admin user management including user list, search, role updates, bulk role updates, and user deletion.
 `frontend/src/hooks/useLogs.ts` provides REST API hooks for fetching session logs with pagination support.
 `frontend/src/hooks/useOrchestration.ts` provides REST API hooks for fetching agent orchestration state with polling support and auto-fetch options.
 `frontend/src/types/session.ts` defines TypeScript types matching backend API responses, including Task, LogsResponse, Agent, TaskNode, OrchestrationState, and OrchestrationResponse types.
