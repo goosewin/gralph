@@ -21,6 +21,8 @@ verifier:
   coverage_min: 90
   coverage_warn: 80
   auto_run: true
+  # Format check command for Rust stacks (skipped for non-Rust)
+  fmt_command: cargo fmt --check
   pr:
     base: main
     title: "chore: verifier run"

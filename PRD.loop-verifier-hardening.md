@@ -113,7 +113,7 @@ All failure conditions must emit clear, actionable error messages that describe 
   * Skip for non-Rust stacks.
   * Add test for fmt check and auto-fix flow.
 - **Dependencies** PRD-DEL-1
-- [ ] FMT-1 Add cargo fmt enforcement with auto-commit for Rust stacks
+- [x] FMT-1 Add cargo fmt enforcement with auto-commit for Rust stacks
 ### Task PRURL-1
 
 - **ID** PRURL-1

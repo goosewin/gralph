@@ -16,6 +16,7 @@ CI=<status/link>; PR=<link if final PRD task>
 
 - CLEAN-1 Add pre-PR git clean status check with actionable error listing dirty file paths.
 - PRD-DEL-1 Add task PRD deletion from final commit before PR creation with configurable delete_prd_on_complete option.
+- FMT-1 Add cargo fmt enforcement with auto-commit for Rust stacks via verifier.fmt_command config.
 
 ### Changed
 
