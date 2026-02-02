@@ -148,7 +148,7 @@ Each task block must contain exactly one unchecked task line.
   * Describes retry loop feature.
   * References PRD_SPEC.md.
 - **Dependencies** PRD-5
-- [ ] PRD-7 Update CHANGELOG with retry feature
+- [x] PRD-7 Update CHANGELOG with retry feature
 ---
 
 ## Success Criteria
