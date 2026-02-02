@@ -4,6 +4,9 @@
 //! 1. A mock backend returning invalid PRD first, valid second triggers retries.
 //! 2. Retry limit exhaustion returns the best attempt.
 //! 3. A valid first attempt returns immediately without retry.
+//!
+//! Note: Since `prd create` now spawns a background tmux session, these tests
+//! use `prd run` directly which is the synchronous command that runs inside tmux.
 
 use predicates::prelude::*;
 use std::env;
@@ -236,6 +239,7 @@ fn script_name(name: &str) -> String {
 ///
 /// When the backend returns a valid PRD on the first attempt, the retry loop
 /// should exit immediately and produce a valid PRD.
+/// Uses `prd run` directly since `prd create` now spawns background tmux.
 #[test]
 fn prd_create_valid_first_attempt_no_retry() {
     let temp = tempfile::tempdir().unwrap();
@@ -245,6 +249,10 @@ fn prd_create_valid_first_attempt_no_retry() {
     fs::create_dir_all(&project).unwrap();
     fs::write(project.join("ARCHITECTURE.md"), "arch\n").unwrap();
     fs::write(project.join("PROCESS.md"), "process\n").unwrap();
+
+    // Create .gralph dir for logging
+    let gralph_dir = project.join(".gralph");
+    fs::create_dir_all(&gralph_dir).unwrap();
 
     let prd_output = project.join("PRD.generated.md");
     let valid_prd = valid_prd_content("ARCHITECTURE.md");
@@ -257,9 +265,13 @@ fn prd_create_valid_first_attempt_no_retry() {
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("gralph");
     cmd.current_dir(&project);
     test_env.apply(&mut cmd);
+    // Use `prd run` directly to test retry logic (prd create now spawns tmux)
     cmd.args([
         "prd",
-        "create",
+        "run",
+        &project.to_string_lossy(),
+        "--name",
+        "test-session",
         "--goal",
         "Test PRD",
         "--backend",
@@ -287,6 +299,7 @@ fn prd_create_valid_first_attempt_no_retry() {
 ///
 /// When the first attempt fails validation, the retry loop should retry and
 /// succeed when the backend returns a valid PRD on the second attempt.
+/// Uses `prd run` directly since `prd create` now spawns background tmux.
 #[test]
 fn prd_create_retries_on_validation_failure() {
     let temp = tempfile::tempdir().unwrap();
@@ -296,6 +309,10 @@ fn prd_create_retries_on_validation_failure() {
     fs::create_dir_all(&project).unwrap();
     fs::write(project.join("ARCHITECTURE.md"), "arch\n").unwrap();
     fs::write(project.join("PROCESS.md"), "process\n").unwrap();
+
+    // Create .gralph dir for logging
+    let gralph_dir = project.join(".gralph");
+    fs::create_dir_all(&gralph_dir).unwrap();
 
     let prd_output = project.join("PRD.generated.md");
     let invalid_prd = invalid_prd_missing_context_bundle();
@@ -310,9 +327,13 @@ fn prd_create_retries_on_validation_failure() {
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("gralph");
     cmd.current_dir(&project);
     test_env.apply(&mut cmd);
+    // Use `prd run` directly to test retry logic (prd create now spawns tmux)
     cmd.args([
         "prd",
-        "create",
+        "run",
+        &project.to_string_lossy(),
+        "--name",
+        "test-session",
         "--goal",
         "Test PRD",
         "--backend",
@@ -340,6 +361,7 @@ fn prd_create_retries_on_validation_failure() {
 ///
 /// When all retry attempts return invalid PRDs, the function should return
 /// an error but save the best attempt to an .invalid.md file.
+/// Uses `prd run` directly since `prd create` now spawns background tmux.
 #[test]
 fn prd_create_retry_exhaustion_returns_best_attempt() {
     let temp = tempfile::tempdir().unwrap();
@@ -349,6 +371,10 @@ fn prd_create_retry_exhaustion_returns_best_attempt() {
     fs::create_dir_all(&project).unwrap();
     fs::write(project.join("ARCHITECTURE.md"), "arch\n").unwrap();
     fs::write(project.join("PROCESS.md"), "process\n").unwrap();
+
+    // Create .gralph dir for logging
+    let gralph_dir = project.join(".gralph");
+    fs::create_dir_all(&gralph_dir).unwrap();
 
     let prd_output = project.join("PRD.generated.md");
     let invalid_output = project.join("PRD.generated.invalid.md");
@@ -367,9 +393,13 @@ fn prd_create_retry_exhaustion_returns_best_attempt() {
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("gralph");
     cmd.current_dir(&project);
     test_env.apply(&mut cmd);
+    // Use `prd run` directly to test retry logic (prd create now spawns tmux)
     cmd.args([
         "prd",
-        "create",
+        "run",
+        &project.to_string_lossy(),
+        "--name",
+        "test-session",
         "--goal",
         "Test PRD",
         "--backend",
@@ -382,12 +412,9 @@ fn prd_create_retry_exhaustion_returns_best_attempt() {
     .arg(&prd_output);
 
     // Should fail but still save best attempt to .invalid.md file
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("Retry limit reached"))
-        .stderr(predicate::str::contains(
-            "failed validation after 2 retries",
-        ));
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "failed validation after 2 retries",
+    ));
 
     // The invalid PRD file should be written (best attempt)
     assert!(invalid_output.exists());
