@@ -1,0 +1,51 @@
+frontend/src/components/KanbanColumn.tsx
+  bcfed41071ccd3e3 9,15,29,35,81,85
+frontend/src/components/TaskCard.tsx
+  bcfed41071ccd3e3 6,10,23,27,46-56,59,64,67,69
+frontend/src/App.tsx
+  bcfed41071ccd3e3 1-2,6,36,39-54,105,109,121-128,130-139,142-143
+frontend/src/hooks/useMediaQuery.ts
+  bcfed41071ccd3e3 1-78
+frontend/src/test/setup.ts
+  bcfed41071ccd3e3 2-16
+frontend/src/components/HamburgerMenu.tsx
+  bcfed41071ccd3e3 1-26
+CHANGELOG.md
+  bcfed41071ccd3e3 17-23
+frontend/src/components/KanbanBoard.tsx
+  bcfed41071ccd3e3 2-3,39,41,71-112,263-267,270-280,289,295
+PRD.ultimate.md
+  bcfed41071ccd3e3 224
+frontend/src/hooks/useTouchSwipe.test.ts
+  bcfed41071ccd3e3 1-313
+ARCHITECTURE.md
+  bcfed41071ccd3e3 45-46,48
+frontend/src/hooks/useTouchSwipe.ts
+  bcfed41071ccd3e3 1-151
+frontend/src/hooks/useMediaQuery.test.ts
+  bcfed41071ccd3e3 1-241
+frontend/src/components/HamburgerMenu.test.tsx
+  bcfed41071ccd3e3 1-77
+frontend/src/index.css
+  bcfed41071ccd3e3 797-802,837-998,1003-1026,1029-1039,1041-1042,1046-1062,1066,1070-1085,1089,1093-1138
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.0.40",
+  "base_commit_sha": "287b03f61ec2c3c90ffded45f66183a31a66f9e1",
+  "prompts": {
+    "bcfed41071ccd3e3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "716a27a8-01d6-42cc-bee1-c75a864c643f",
+        "model": "claude-opus-4-5-20251101"
+      },
+      "human_author": "goosewin <daniel@webline.app>",
+      "messages": [],
+      "total_additions": 1357,
+      "total_deletions": 28,
+      "accepted_lines": 1339,
+      "overriden_lines": 0
+    }
+  }
+}
