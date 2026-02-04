@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 /** User profile data */
 export interface UserProfile {
@@ -181,6 +181,14 @@ export function useUserSettings({
       setLoading(false);
     }
   }, [baseUrl, token]);
+
+  useEffect(() => {
+    if (!autoFetch) {
+      return;
+    }
+    fetchProfile();
+    fetchLinkedAccounts();
+  }, [autoFetch, fetchProfile, fetchLinkedAccounts]);
 
   const unlinkAccount = useCallback(
     async (provider: string): Promise<boolean> => {

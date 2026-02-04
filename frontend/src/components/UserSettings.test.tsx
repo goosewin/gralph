@@ -1,11 +1,11 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { UserSettings } from './UserSettings';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+const originalFetch = globalThis.fetch;
 
 describe('UserSettings', () => {
   const mockProfile = {
@@ -39,6 +39,7 @@ describe('UserSettings', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    globalThis.fetch = mockFetch as typeof fetch;
     mockFetch.mockImplementation((url: string) => {
       if (url.includes('/auth/me')) {
         return Promise.resolve({
@@ -73,6 +74,7 @@ describe('UserSettings', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    globalThis.fetch = originalFetch;
   });
 
   describe('rendering', () => {

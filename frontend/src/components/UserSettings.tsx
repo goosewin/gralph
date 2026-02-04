@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  useUserSettings,
-  type LinkedAccount,
-  type UserProfile,
-} from '../hooks/useUserSettings';
+import { useUserSettings } from '../hooks/useUserSettings';
 
 export interface UserSettingsProps {
   baseUrl?: string;
@@ -45,10 +41,8 @@ export function UserSettings({ baseUrl = '', token }: UserSettingsProps) {
     linkedAccounts,
     loading,
     error,
-    fetchProfile,
     updateProfile,
     changePassword,
-    fetchLinkedAccounts,
     unlinkAccount,
   } = useUserSettings({ baseUrl, token });
 
@@ -73,12 +67,6 @@ export function UserSettings({ baseUrl = '', token }: UserSettingsProps) {
 
   // Unlink confirmation
   const [unlinkingProvider, setUnlinkingProvider] = useState<string | null>(null);
-
-  // Fetch profile and linked accounts on mount
-  useEffect(() => {
-    fetchProfile();
-    fetchLinkedAccounts();
-  }, [fetchProfile, fetchLinkedAccounts]);
 
   // Update form data when profile loads
   useEffect(() => {

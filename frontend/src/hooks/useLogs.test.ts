@@ -4,15 +4,15 @@ import { useLogs } from './useLogs';
 
 describe('useLogs', () => {
   const mockFetch = vi.fn();
-  const originalFetch = global.fetch;
+  const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
-    global.fetch = mockFetch;
+    globalThis.fetch = mockFetch as typeof fetch;
     mockFetch.mockReset();
   });
 
   afterEach(() => {
-    global.fetch = originalFetch;
+    globalThis.fetch = originalFetch;
     vi.useRealTimers();
   });
 
@@ -93,9 +93,7 @@ describe('useLogs', () => {
       json: () => Promise.resolve({ ...mockLogsResponse, raw: true }),
     });
 
-    const { result } = renderHook(() =>
-      useLogs({ sessionName: 'test-session', raw: true, autoFetch: true })
-    );
+    renderHook(() => useLogs({ sessionName: 'test-session', raw: true, autoFetch: true }));
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalled();
@@ -130,9 +128,7 @@ describe('useLogs', () => {
       json: () => Promise.resolve(mockLogsResponse),
     });
 
-    const { result } = renderHook(() =>
-      useLogs({ sessionName: 'test-session', token: 'my-token', autoFetch: true })
-    );
+    renderHook(() => useLogs({ sessionName: 'test-session', token: 'my-token', autoFetch: true }));
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalled();
@@ -182,7 +178,7 @@ describe('useLogs', () => {
       json: () => Promise.resolve(mockLogsResponse),
     });
 
-    const { result } = renderHook(() =>
+    renderHook(() =>
       useLogs({
         baseUrl: 'http://localhost:8080',
         sessionName: 'test-session',
@@ -204,9 +200,7 @@ describe('useLogs', () => {
       json: () => Promise.resolve(mockLogsResponse),
     });
 
-    const { result } = renderHook(() =>
-      useLogs({ sessionName: 'session with spaces', autoFetch: true })
-    );
+    renderHook(() => useLogs({ sessionName: 'session with spaces', autoFetch: true }));
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalled();

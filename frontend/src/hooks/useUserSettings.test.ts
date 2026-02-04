@@ -1,10 +1,10 @@
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useUserSettings } from './useUserSettings';
 
 // Mock fetch globally
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+const originalFetch = globalThis.fetch;
 
 describe('useUserSettings', () => {
   const mockProfile = {
@@ -31,6 +31,7 @@ describe('useUserSettings', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    globalThis.fetch = mockFetch as typeof fetch;
     mockFetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({}),
@@ -39,6 +40,7 @@ describe('useUserSettings', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    globalThis.fetch = originalFetch;
   });
 
   describe('initial state', () => {

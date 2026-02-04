@@ -19,20 +19,28 @@ function createMockInstallEvent(outcome: 'accepted' | 'dismissed' = 'accepted'):
 }
 
 describe('InstallPrompt', () => {
-  let matchMediaMock: ReturnType<typeof vi.fn>;
+  let matchMediaMock: ReturnType<typeof vi.fn<[string], MediaQueryList>>;
+
+  const createMatchMediaResult = (matches: boolean, query = ''): MediaQueryList => ({
+    matches,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  });
 
   beforeEach(() => {
     // Clear sessionStorage
     sessionStorage.clear();
 
     // Mock matchMedia for standalone mode detection
-    matchMediaMock = vi.fn().mockReturnValue({
-      matches: false,
-      media: '',
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    });
-    window.matchMedia = matchMediaMock;
+    matchMediaMock = vi
+      .fn<[string], MediaQueryList>()
+      .mockImplementation((query) => createMatchMediaResult(false, query));
+    window.matchMedia = matchMediaMock as unknown as typeof window.matchMedia;
   });
 
   afterEach(() => {
@@ -46,12 +54,7 @@ describe('InstallPrompt', () => {
   });
 
   it('renders nothing when already in standalone mode', () => {
-    matchMediaMock.mockReturnValue({
-      matches: true,
-      media: '(display-mode: standalone)',
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    });
+    matchMediaMock.mockImplementation((query) => createMatchMediaResult(true, query));
 
     const { container } = render(<InstallPrompt />);
     expect(container.firstChild).toBeNull();

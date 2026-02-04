@@ -2,9 +2,28 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useServiceWorker } from './useServiceWorker';
 
+type MutableServiceWorkerRegistration = Omit<ServiceWorkerRegistration, 'waiting' | 'installing'> & {
+  waiting: ServiceWorker | null;
+  installing: ServiceWorker | null;
+};
+
+const invokeEventListener = (
+  listener: EventListenerOrEventListenerObject | null,
+  event: Event
+) => {
+  if (!listener) {
+    return;
+  }
+  if (typeof listener === 'function') {
+    listener(event);
+    return;
+  }
+  listener.handleEvent(event);
+};
+
 describe('useServiceWorker', () => {
   let originalServiceWorker: ServiceWorkerContainer | undefined;
-  let mockRegistration: ServiceWorkerRegistration;
+  let mockRegistration: MutableServiceWorkerRegistration;
   let mockServiceWorker: ServiceWorker;
 
   beforeEach(() => {
@@ -28,7 +47,7 @@ describe('useServiceWorker', () => {
       updateViaCache: 'none',
       update: vi.fn(),
       unregister: vi.fn(),
-    } as unknown as ServiceWorkerRegistration;
+    } as MutableServiceWorkerRegistration;
   });
 
   afterEach(() => {
@@ -58,7 +77,7 @@ describe('useServiceWorker', () => {
   });
 
   it('registers service worker on mount', async () => {
-    const registerMock = vi.fn().mockResolvedValue(mockRegistration);
+    const registerMock = vi.fn().mockResolvedValue(mockRegistration as ServiceWorkerRegistration);
 
     Object.defineProperty(navigator, 'serviceWorker', {
       value: {
@@ -112,7 +131,7 @@ describe('useServiceWorker', () => {
     } as unknown as ServiceWorker;
 
     mockRegistration.waiting = waitingWorker;
-    const registerMock = vi.fn().mockResolvedValue(mockRegistration);
+    const registerMock = vi.fn().mockResolvedValue(mockRegistration as ServiceWorkerRegistration);
 
     Object.defineProperty(navigator, 'serviceWorker', {
       value: {
@@ -139,7 +158,7 @@ describe('useServiceWorker', () => {
     } as unknown as ServiceWorker;
 
     mockRegistration.waiting = waitingWorker;
-    const registerMock = vi.fn().mockResolvedValue(mockRegistration);
+    const registerMock = vi.fn().mockResolvedValue(mockRegistration as ServiceWorkerRegistration);
 
     Object.defineProperty(navigator, 'serviceWorker', {
       value: {
@@ -165,8 +184,8 @@ describe('useServiceWorker', () => {
   });
 
   it('handles updatefound event and tracks installing worker', async () => {
-    let updateFoundCallback: (() => void) | null = null;
-    let stateChangeCallback: (() => void) | null = null;
+    let updateFoundCallback: EventListenerOrEventListenerObject | null = null;
+    let stateChangeCallback: EventListenerOrEventListenerObject | null = null;
 
     const installingWorker = {
       addEventListener: vi.fn((event, callback) => {
@@ -184,7 +203,7 @@ describe('useServiceWorker', () => {
       }
     });
 
-    const registerMock = vi.fn().mockResolvedValue(mockRegistration);
+    const registerMock = vi.fn().mockResolvedValue(mockRegistration as ServiceWorkerRegistration);
 
     Object.defineProperty(navigator, 'serviceWorker', {
       value: {
@@ -205,12 +224,12 @@ describe('useServiceWorker', () => {
     // Simulate updatefound event
     mockRegistration.installing = installingWorker;
     act(() => {
-      updateFoundCallback?.();
+      invokeEventListener(updateFoundCallback, new Event('updatefound'));
     });
 
     // Simulate worker installed state change
     act(() => {
-      stateChangeCallback?.();
+      invokeEventListener(stateChangeCallback, new Event('statechange'));
     });
 
     await waitFor(() => {
@@ -219,9 +238,9 @@ describe('useServiceWorker', () => {
   });
 
   it('sets up controllerchange listener', async () => {
-    let controllerChangeCallback: (() => void) | null = null;
+    let controllerChangeCallback: EventListenerOrEventListenerObject | null = null;
 
-    const registerMock = vi.fn().mockResolvedValue(mockRegistration);
+    const registerMock = vi.fn().mockResolvedValue(mockRegistration as ServiceWorkerRegistration);
     const addEventListenerMock = vi.fn((event, callback) => {
       if (event === 'controllerchange') {
         controllerChangeCallback = callback;
@@ -248,7 +267,7 @@ describe('useServiceWorker', () => {
   });
 
   it('cleans up controllerchange listener on unmount', async () => {
-    const registerMock = vi.fn().mockResolvedValue(mockRegistration);
+    const registerMock = vi.fn().mockResolvedValue(mockRegistration as ServiceWorkerRegistration);
     const removeEventListenerMock = vi.fn();
 
     Object.defineProperty(navigator, 'serviceWorker', {
