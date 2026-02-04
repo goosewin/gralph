@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 /** User profile data */
 export interface UserProfile {
@@ -73,12 +73,15 @@ export function useUserSettings({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-  };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  const headers: HeadersInit = useMemo(() => {
+    const baseHeaders: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      baseHeaders['Authorization'] = `Bearer ${token}`;
+    }
+    return baseHeaders;
+  }, [token]);
 
   const fetchProfile = useCallback(async () => {
     setLoading(true);
@@ -101,7 +104,7 @@ export function useUserSettings({
     } finally {
       setLoading(false);
     }
-  }, [baseUrl, token]);
+  }, [baseUrl, headers]);
 
   const updateProfile = useCallback(
     async (data: UpdateProfileRequest): Promise<boolean> => {
@@ -129,7 +132,7 @@ export function useUserSettings({
         setLoading(false);
       }
     },
-    [baseUrl, token]
+    [baseUrl, headers]
   );
 
   const changePassword = useCallback(
@@ -156,7 +159,7 @@ export function useUserSettings({
         setLoading(false);
       }
     },
-    [baseUrl, token]
+    [baseUrl, headers]
   );
 
   const fetchLinkedAccounts = useCallback(async () => {
@@ -180,7 +183,7 @@ export function useUserSettings({
     } finally {
       setLoading(false);
     }
-  }, [baseUrl, token]);
+  }, [baseUrl, headers]);
 
   useEffect(() => {
     if (!autoFetch) {
@@ -215,7 +218,7 @@ export function useUserSettings({
         setLoading(false);
       }
     },
-    [baseUrl, token]
+    [baseUrl, headers]
   );
 
   return {

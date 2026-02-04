@@ -179,7 +179,7 @@ describe('AdminUserManagement', () => {
     });
 
     it('updates user role on selection change', async () => {
-      mockFetch.mockImplementation((url: string, _options?: RequestInit) => {
+      mockFetch.mockImplementation((url: string) => {
         if (url.includes('/admin/users') && url.includes('/role')) {
           return Promise.resolve({
             ok: true,
@@ -278,7 +278,7 @@ describe('AdminUserManagement', () => {
 
   describe('bulk role update', () => {
     it('calls bulk update API with selected users', async () => {
-      mockFetch.mockImplementation((url: string, _options?: RequestInit) => {
+      mockFetch.mockImplementation((url: string) => {
         if (url.includes('/admin/users/bulk-role')) {
           return Promise.resolve({
             ok: true,

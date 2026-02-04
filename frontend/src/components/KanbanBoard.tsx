@@ -113,21 +113,25 @@ export function KanbanBoard({
   }, []);
 
   // Drag and drop handlers
-  const handleDragStart = useCallback((taskId: string, _event: React.DragEvent) => {
+  const handleDragStart = useCallback((taskId: string, event: React.DragEvent) => {
     setDraggingTaskId(taskId);
+    event.dataTransfer.effectAllowed = 'move';
     const task = tasks.find((t) => t.id === taskId);
     if (task) {
       announce(`Picked up task ${task.id}: ${task.title}`);
     }
   }, [tasks, announce]);
 
-  const handleDragEnd = useCallback((_event: React.DragEvent) => {
+  const handleDragEnd = useCallback((event: React.DragEvent) => {
     setDraggingTaskId(null);
+    event.dataTransfer.clearData();
     announce('Dropped');
   }, [announce]);
 
-  const handleDragOver = useCallback((_status: TaskStatus, _event: React.DragEvent) => {
+  const handleDragOver = useCallback((status: TaskStatus, event: React.DragEvent) => {
     // Handled in column component
+    void status;
+    void event;
   }, []);
 
   const handleDrop = useCallback(async (targetStatus: TaskStatus, event: React.DragEvent) => {

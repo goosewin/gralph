@@ -98,7 +98,8 @@ export function useTouchSwipe({
   );
 
   const handleTouchEnd = useCallback(
-    (_e: React.TouchEvent) => {
+    (event: React.TouchEvent) => {
+      void event;
       if (!enabled || !touchState.current) {
         setSwiping(false);
         return;
