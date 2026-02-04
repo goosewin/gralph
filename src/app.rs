@@ -403,10 +403,10 @@ fn cmd_doctor(args: DoctorArgs, deps: &Deps) -> Result<(), CliError> {
         .unwrap_or_else(|| "claude".to_string());
     let default_backend = default_backend_raw.trim().to_string();
     let backend_choices = [
-        ("claude", "npm install -g @anthropic-ai/claude-code"),
-        ("opencode", "npm install -g opencode-ai"),
-        ("gemini", "npm install -g @google/gemini-cli"),
-        ("codex", "npm install -g @openai/codex"),
+        ("claude", "bun add -g @anthropic-ai/claude-code"),
+        ("opencode", "bun add -g opencode-ai"),
+        ("gemini", "bun add -g @google/gemini-cli"),
+        ("codex", "bun add -g @openai/codex"),
     ];
 
     let mut required_backend = None;
@@ -3666,10 +3666,7 @@ mod tests {
             })
         }
 
-        fn parse_text(
-            &self,
-            response_file: &Path,
-        ) -> Result<String, crate::backend::BackendError> {
+        fn parse_text(&self, response_file: &Path) -> Result<String, crate::backend::BackendError> {
             fs::read_to_string(response_file).map_err(|source| crate::backend::BackendError::Io {
                 path: response_file.to_path_buf(),
                 source,
@@ -3915,11 +3912,7 @@ Test project.
     fn prd_create_with_retry_empty_output_exhausts_retries() {
         let temp = tempfile::tempdir().unwrap();
 
-        let backend = RetryTestBackend::new(vec![
-            "".to_string(),
-            "".to_string(),
-            "".to_string(),
-        ]);
+        let backend = RetryTestBackend::new(vec!["".to_string(), "".to_string(), "".to_string()]);
 
         let result = prd_init::prd_create_with_retry(
             &backend,

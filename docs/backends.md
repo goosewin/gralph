@@ -5,7 +5,7 @@ Gralph supports multiple AI coding assistants.
 ## Claude Code (Default)
 
 ```bash
-npm install -g @anthropic-ai/claude-code
+bun add -g @anthropic-ai/claude-code
 gralph start .
 gralph start . --backend claude
 ```
@@ -15,7 +15,7 @@ gralph start . --backend claude
 ## OpenCode
 
 ```bash
-npm install -g opencode-ai
+bun add -g opencode-ai
 gralph start . --backend opencode
 gralph start . --backend opencode --model google/gemini-1.5-pro
 ```
@@ -28,7 +28,7 @@ gralph start . --backend opencode --model google/gemini-1.5-pro
 ## Gemini CLI
 
 ```bash
-npm install -g @google/gemini-cli
+bun add -g @google/gemini-cli
 gralph start . --backend gemini
 ```
 
@@ -37,7 +37,7 @@ gralph start . --backend gemini
 ## Codex CLI
 
 ```bash
-npm install -g @openai/codex
+bun add -g @openai/codex
 gralph start . --backend codex
 ```
 

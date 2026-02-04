@@ -282,11 +282,7 @@ pub fn prd_create_with_retry(
     loop {
         attempt += 1;
         let total_attempts = max_retries.saturating_add(1);
-        info!(
-            "PRD generation attempt {}/{}",
-            attempt,
-            total_attempts
-        );
+        info!("PRD generation attempt {}/{}", attempt, total_attempts);
         eprintln!("PRD generation attempt {}/{}", attempt, total_attempts);
 
         // Generate PRD
@@ -297,13 +293,7 @@ pub fn prd_create_with_retry(
             attempt
         ));
         backend
-            .run_iteration(
-                &current_prompt,
-                model,
-                variant,
-                &output_file,
-                working_dir,
-            )
+            .run_iteration(&current_prompt, model, variant, &output_file, working_dir)
             .map_err(|err| CliError::Message(err.to_string()))?;
 
         let result = backend

@@ -26,10 +26,10 @@ irm https://raw.githubusercontent.com/goosewin/gralph/main/install.ps1 | iex
 ## Requirements
 
 - One AI backend CLI:
-  - `claude` (Claude Code) - `npm install -g @anthropic-ai/claude-code`
-  - `opencode` - `npm install -g opencode-ai`
-  - `gemini` - `npm install -g @google/gemini-cli`
-  - `codex` - `npm install -g @openai/codex`
+  - `claude` (Claude Code) - `bun add -g @anthropic-ai/claude-code`
+  - `opencode` - `bun add -g opencode-ai`
+  - `gemini` - `bun add -g @google/gemini-cli`
+  - `codex` - `bun add -g @openai/codex`
 - `tmux` for background sessions (required)
 
 ## Basic Commands

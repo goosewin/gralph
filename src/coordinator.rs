@@ -125,7 +125,14 @@ impl TaskType {
         let lower = content.to_lowercase();
 
         // Check for testing keywords first (more specific)
-        let testing_keywords = ["test", "coverage", "spec", "assert", "unit test", "integration test"];
+        let testing_keywords = [
+            "test",
+            "coverage",
+            "spec",
+            "assert",
+            "unit test",
+            "integration test",
+        ];
         if testing_keywords.iter().any(|kw| lower.contains(kw)) {
             return TaskType::Testing;
         }
@@ -137,13 +144,28 @@ impl TaskType {
         }
 
         // Check for documentation keywords
-        let doc_keywords = ["doc", "readme", "comment", "guide", "tutorial", "documentation"];
+        let doc_keywords = [
+            "doc",
+            "readme",
+            "comment",
+            "guide",
+            "tutorial",
+            "documentation",
+        ];
         if doc_keywords.iter().any(|kw| lower.contains(kw)) {
             return TaskType::Documentation;
         }
 
         // Check for code generation keywords
-        let codegen_keywords = ["implement", "add", "create", "build", "fix", "feat", "refactor"];
+        let codegen_keywords = [
+            "implement",
+            "add",
+            "create",
+            "build",
+            "fix",
+            "feat",
+            "refactor",
+        ];
         if codegen_keywords.iter().any(|kw| lower.contains(kw)) {
             return TaskType::CodeGen;
         }
@@ -293,11 +315,7 @@ impl SpecializationRouter {
     ///
     /// The `available_agents` parameter should contain agent IDs that are
     /// currently available (idle) for task assignment.
-    pub fn route_task(
-        &self,
-        task_content: &str,
-        available_agents: &[AgentId],
-    ) -> Option<AgentId> {
+    pub fn route_task(&self, task_content: &str, available_agents: &[AgentId]) -> Option<AgentId> {
         if available_agents.is_empty() {
             return None;
         }
@@ -344,7 +362,10 @@ impl SpecializationRouter {
     }
 
     /// Gets all agents with a specific specialization.
-    pub fn get_agents_by_specialization(&self, specialization: AgentSpecialization) -> Vec<AgentId> {
+    pub fn get_agents_by_specialization(
+        &self,
+        specialization: AgentSpecialization,
+    ) -> Vec<AgentId> {
         let specs = self.agent_specializations.read().unwrap();
         specs
             .iter()
@@ -364,11 +385,26 @@ impl SpecializationRouter {
 
         SpecializationRouterStats {
             total_agents: specs.len(),
-            general_agents: counts.get(&AgentSpecialization::General).copied().unwrap_or(0),
-            codegen_agents: counts.get(&AgentSpecialization::CodeGen).copied().unwrap_or(0),
-            testing_agents: counts.get(&AgentSpecialization::Testing).copied().unwrap_or(0),
-            review_agents: counts.get(&AgentSpecialization::Review).copied().unwrap_or(0),
-            documentation_agents: counts.get(&AgentSpecialization::Documentation).copied().unwrap_or(0),
+            general_agents: counts
+                .get(&AgentSpecialization::General)
+                .copied()
+                .unwrap_or(0),
+            codegen_agents: counts
+                .get(&AgentSpecialization::CodeGen)
+                .copied()
+                .unwrap_or(0),
+            testing_agents: counts
+                .get(&AgentSpecialization::Testing)
+                .copied()
+                .unwrap_or(0),
+            review_agents: counts
+                .get(&AgentSpecialization::Review)
+                .copied()
+                .unwrap_or(0),
+            documentation_agents: counts
+                .get(&AgentSpecialization::Documentation)
+                .copied()
+                .unwrap_or(0),
         }
     }
 
@@ -793,7 +829,12 @@ impl AgentWorktreeManager {
         // Try force removal to handle locked/incomplete worktrees
         let result = Self::git_cmd_in_dir(
             &self.repo_root,
-            ["worktree", "remove", "--force", path.to_string_lossy().as_ref()],
+            [
+                "worktree",
+                "remove",
+                "--force",
+                path.to_string_lossy().as_ref(),
+            ],
         );
 
         // If worktree is already gone or doesn't exist, that's fine
@@ -949,7 +990,10 @@ impl Coordinator {
     /// Spawns a new specialized agent.
     ///
     /// Creates an agent with the specified specialization for task routing.
-    pub fn spawn_specialized_agent(&mut self, specialization: AgentSpecialization) -> Option<AgentId> {
+    pub fn spawn_specialized_agent(
+        &mut self,
+        specialization: AgentSpecialization,
+    ) -> Option<AgentId> {
         if self.agents.len() >= self.max_agents {
             return None;
         }
@@ -989,10 +1033,9 @@ impl Coordinator {
             return Err(CoordinatorError::NoAvailableAgents);
         }
 
-        let manager = self
-            .worktree_manager
-            .as_ref()
-            .ok_or_else(|| CoordinatorError::WorktreeError("no worktree manager configured".to_string()))?;
+        let manager = self.worktree_manager.as_ref().ok_or_else(|| {
+            CoordinatorError::WorktreeError("no worktree manager configured".to_string())
+        })?;
 
         let id = AgentId(self.next_agent_id.fetch_add(1, Ordering::SeqCst));
 
@@ -1044,9 +1087,7 @@ impl Coordinator {
     }
 
     pub fn get_idle_agent(&self) -> Option<&Agent> {
-        self.agents
-            .iter()
-            .find(|a| a.status == AgentStatus::Idle)
+        self.agents.iter().find(|a| a.status == AgentStatus::Idle)
     }
 
     pub fn get_idle_agent_id(&self) -> Option<AgentId> {
@@ -1144,7 +1185,8 @@ impl Coordinator {
     ///
     /// Returns None if no suitable idle agent is available.
     pub fn find_best_agent_for_task_type(&self, task_type: TaskType) -> Option<AgentId> {
-        let idle_agents: Vec<&Agent> = self.agents
+        let idle_agents: Vec<&Agent> = self
+            .agents
             .iter()
             .filter(|a| a.status == AgentStatus::Idle)
             .collect();
@@ -1171,7 +1213,10 @@ impl Coordinator {
     }
 
     /// Gets all idle agents with a specific specialization.
-    pub fn get_idle_agents_by_specialization(&self, specialization: AgentSpecialization) -> Vec<AgentId> {
+    pub fn get_idle_agents_by_specialization(
+        &self,
+        specialization: AgentSpecialization,
+    ) -> Vec<AgentId> {
         self.agents
             .iter()
             .filter(|a| a.status == AgentStatus::Idle && a.specialization == specialization)
@@ -1364,7 +1409,10 @@ pub fn topological_sort(tasks: &[TaskNode]) -> Result<Vec<String>, CoordinatorEr
     Ok(sorted)
 }
 
-pub fn find_independent_tasks<'a>(tasks: &'a [TaskNode], completed: &HashSet<String>) -> Vec<&'a TaskNode> {
+pub fn find_independent_tasks<'a>(
+    tasks: &'a [TaskNode],
+    completed: &HashSet<String>,
+) -> Vec<&'a TaskNode> {
     tasks
         .iter()
         .filter(|task| {
@@ -1414,10 +1462,7 @@ impl DependencyGraph {
                 // Only count dependencies that are part of the task set
                 if task_ids.contains(dep) {
                     valid_dep_count += 1;
-                    dependents
-                        .get_mut(dep)
-                        .unwrap()
-                        .push(task.id.clone());
+                    dependents.get_mut(dep).unwrap().push(task.id.clone());
                 }
             }
             *in_degree.get_mut(&task.id).unwrap() = valid_dep_count;
@@ -1855,7 +1900,8 @@ impl LoadBalancer {
         let mut agents = self.agents.write().unwrap();
         if agents.insert(agent_id, metadata).is_none() {
             // Only add weight if this is a new agent
-            self.total_weight.fetch_add(effective_weight, Ordering::SeqCst);
+            self.total_weight
+                .fetch_add(effective_weight, Ordering::SeqCst);
         }
     }
 
@@ -1864,7 +1910,10 @@ impl LoadBalancer {
         let mut agents = self.agents.write().unwrap();
         if let Some(metadata) = agents.remove(&agent_id) {
             let weight = metadata.effective_weight();
-            self.total_weight.fetch_sub(weight.min(self.total_weight.load(Ordering::SeqCst)), Ordering::SeqCst);
+            self.total_weight.fetch_sub(
+                weight.min(self.total_weight.load(Ordering::SeqCst)),
+                Ordering::SeqCst,
+            );
         }
     }
 
@@ -1917,7 +1966,10 @@ impl LoadBalancer {
             return None;
         }
 
-        let total_weight: u64 = available.iter().map(|m| u64::from(m.effective_weight())).sum();
+        let total_weight: u64 = available
+            .iter()
+            .map(|m| u64::from(m.effective_weight()))
+            .sum();
         if total_weight == 0 {
             // Fall back to round-robin if all weights are zero
             return self.select_round_robin(available);
@@ -1986,7 +2038,8 @@ impl LoadBalancer {
                     metadata.mark_healthy();
                     if was_unhealthy {
                         // Re-add weight when agent becomes healthy
-                        self.total_weight.fetch_add(metadata.weight, Ordering::SeqCst);
+                        self.total_weight
+                            .fetch_add(metadata.weight, Ordering::SeqCst);
                     }
                     false
                 } else {
@@ -1995,7 +2048,10 @@ impl LoadBalancer {
                     if was_healthy {
                         // Remove weight when agent becomes unhealthy
                         let weight = metadata.weight;
-                        self.total_weight.fetch_sub(weight.min(self.total_weight.load(Ordering::SeqCst)), Ordering::SeqCst);
+                        self.total_weight.fetch_sub(
+                            weight.min(self.total_weight.load(Ordering::SeqCst)),
+                            Ordering::SeqCst,
+                        );
                     }
                     self.config.auto_remove_unhealthy
                         && metadata.consecutive_failures >= self.config.max_consecutive_failures
@@ -2085,9 +2141,18 @@ impl LoadBalancer {
     pub fn stats(&self) -> LoadBalancerStats {
         let agents = self.agents.read().unwrap();
         let total_agents = agents.len();
-        let healthy_agents = agents.values().filter(|m| m.health_status == HealthStatus::Healthy).count();
-        let unhealthy_agents = agents.values().filter(|m| m.health_status == HealthStatus::Unhealthy).count();
-        let unknown_agents = agents.values().filter(|m| m.health_status == HealthStatus::Unknown).count();
+        let healthy_agents = agents
+            .values()
+            .filter(|m| m.health_status == HealthStatus::Healthy)
+            .count();
+        let unhealthy_agents = agents
+            .values()
+            .filter(|m| m.health_status == HealthStatus::Unhealthy)
+            .count();
+        let unknown_agents = agents
+            .values()
+            .filter(|m| m.health_status == HealthStatus::Unknown)
+            .count();
         let total_tasks_completed: u64 = agents.values().map(|m| m.tasks_completed).sum();
         let total_tasks_failed: u64 = agents.values().map(|m| m.tasks_failed).sum();
         let total_active_tasks: u32 = agents.values().map(|m| m.active_tasks).sum();
@@ -2256,7 +2321,12 @@ impl ConflictReport {
         }
         self.total_lines += conflict.lines_a.len() + conflict.lines_b.len();
         self.conflicts.push(conflict);
-        self.total_files = self.conflicts.iter().map(|c| &c.file_path).collect::<std::collections::HashSet<_>>().len();
+        self.total_files = self
+            .conflicts
+            .iter()
+            .map(|c| &c.file_path)
+            .collect::<std::collections::HashSet<_>>()
+            .len();
     }
 
     /// Returns true if any conflicts were detected.
@@ -2455,13 +2525,9 @@ impl ConflictDetector {
             let lines_a = changes_a.get(*file_path).unwrap();
             let lines_b = changes_b.get(*file_path).unwrap();
 
-            if let Some(conflict) = self.analyze_file_conflict(
-                file_path,
-                agent_a,
-                agent_b,
-                lines_a,
-                lines_b,
-            ) {
+            if let Some(conflict) =
+                self.analyze_file_conflict(file_path, agent_a, agent_b, lines_a, lines_b)
+            {
                 report.add_conflict(conflict);
             }
         }
@@ -2500,14 +2566,22 @@ impl ConflictDetector {
     }
 
     /// Gets the list of changed files and their modified lines in a worktree.
-    fn get_changes(&self, worktree: &Path) -> Result<HashMap<String, Vec<LineChange>>, ConflictDetectionError> {
+    fn get_changes(
+        &self,
+        worktree: &Path,
+    ) -> Result<HashMap<String, Vec<LineChange>>, ConflictDetectionError> {
         // Get the diff between base and worktree HEAD
         let diff_output = self.git_diff(worktree, &self.base_ref, "HEAD")?;
         self.parse_diff_output(&diff_output)
     }
 
     /// Runs git diff between two refs in a worktree.
-    fn git_diff(&self, worktree: &Path, from: &str, to: &str) -> Result<String, ConflictDetectionError> {
+    fn git_diff(
+        &self,
+        worktree: &Path,
+        from: &str,
+        to: &str,
+    ) -> Result<String, ConflictDetectionError> {
         let output = ProcCommand::new("git")
             .arg("-C")
             .arg(worktree)
@@ -2524,7 +2598,10 @@ impl ConflictDetector {
     }
 
     /// Parses git diff output into a map of file paths to line changes.
-    fn parse_diff_output(&self, diff: &str) -> Result<HashMap<String, Vec<LineChange>>, ConflictDetectionError> {
+    fn parse_diff_output(
+        &self,
+        diff: &str,
+    ) -> Result<HashMap<String, Vec<LineChange>>, ConflictDetectionError> {
         let mut changes: HashMap<String, Vec<LineChange>> = HashMap::new();
         let mut current_file: Option<String> = None;
 
@@ -2657,7 +2734,13 @@ impl ConflictDetector {
         lines_b: &[LineChange],
     ) -> ConflictSeverity {
         // Critical files
-        let critical_patterns = ["Cargo.toml", "Cargo.lock", "package.json", "go.mod", "pyproject.toml"];
+        let critical_patterns = [
+            "Cargo.toml",
+            "Cargo.lock",
+            "package.json",
+            "go.mod",
+            "pyproject.toml",
+        ];
         if critical_patterns.iter().any(|p| file_path.ends_with(p)) {
             return ConflictSeverity::Critical;
         }
@@ -2723,7 +2806,9 @@ impl ConflictDetector {
         }
 
         if report.max_severity >= ConflictSeverity::High {
-            report.add_suggestion("High severity conflicts detected. Manual review recommended.".to_string());
+            report.add_suggestion(
+                "High severity conflicts detected. Manual review recommended.".to_string(),
+            );
         }
 
         if report.critical_count() > 0 {
@@ -2738,7 +2823,8 @@ impl ConflictDetector {
         if overlapping_count == 0 && report.has_conflicts() {
             report.add_suggestion(
                 "All conflicts are in adjacent (non-overlapping) regions. \
-                Consider using MergeNonOverlapping strategy.".to_string()
+                Consider using MergeNonOverlapping strategy."
+                    .to_string(),
             );
         }
     }
@@ -2753,7 +2839,9 @@ impl ConflictDetector {
         worktree_a: &Path,
         worktree_b: &Path,
     ) -> Result<HashMap<String, String>, ConflictDetectionError> {
-        if !report.can_auto_resolve && report.resolution_strategy != ConflictResolutionStrategy::Manual {
+        if !report.can_auto_resolve
+            && report.resolution_strategy != ConflictResolutionStrategy::Manual
+        {
             return Err(ConflictDetectionError::CannotAutoResolve);
         }
 
@@ -2902,7 +2990,10 @@ pub enum AgentMessageType {
 impl fmt::Display for AgentMessageType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AgentMessageType::HandoffRequest { target_specialization, .. } => {
+            AgentMessageType::HandoffRequest {
+                target_specialization,
+                ..
+            } => {
                 if let Some(spec) = target_specialization {
                     write!(f, "HandoffRequest(target={})", spec)
                 } else {
@@ -2912,7 +3003,9 @@ impl fmt::Display for AgentMessageType {
             AgentMessageType::HandoffAck { accepted, .. } => {
                 write!(f, "HandoffAck(accepted={})", accepted)
             }
-            AgentMessageType::TaskResult { task_id, success, .. } => {
+            AgentMessageType::TaskResult {
+                task_id, success, ..
+            } => {
                 write!(f, "TaskResult(task={}, success={})", task_id, success)
             }
             AgentMessageType::Ping => write!(f, "Ping"),
@@ -3240,8 +3333,8 @@ impl AgentMessageChannel {
         }
 
         let message_id = self.next_message_id.fetch_add(1, Ordering::SeqCst);
-        let message = AgentMessage::new(message_id, from, to, message_type)
-            .with_correlation(correlation_id);
+        let message =
+            AgentMessage::new(message_id, from, to, message_type).with_correlation(correlation_id);
 
         self.deliver(message)
     }
@@ -3258,7 +3351,11 @@ impl AgentMessageChannel {
             .get_mut(&to)
             .ok_or(MessageChannelError::AgentNotFound(to))?;
 
-        if inbox.push(message, self.config.max_inbox_size, self.config.drop_on_overflow) {
+        if inbox.push(
+            message,
+            self.config.max_inbox_size,
+            self.config.drop_on_overflow,
+        ) {
             self.total_delivered.fetch_add(1, Ordering::SeqCst);
             Ok(message_id)
         } else {
@@ -3329,7 +3426,12 @@ impl AgentMessageChannel {
     }
 
     /// Sends a pong response to a ping.
-    pub fn pong(&self, from: AgentId, to: AgentId, correlation_id: u64) -> Result<u64, MessageChannelError> {
+    pub fn pong(
+        &self,
+        from: AgentId,
+        to: AgentId,
+        correlation_id: u64,
+    ) -> Result<u64, MessageChannelError> {
         self.send_with_correlation(from, to, AgentMessageType::Pong, correlation_id)
     }
 
@@ -3469,18 +3571,11 @@ pub enum HandoffResult {
         accepting_agent: AgentId,
     },
     /// Handoff was rejected.
-    Rejected {
-        handoff_id: u64,
-        reason: String,
-    },
+    Rejected { handoff_id: u64, reason: String },
     /// Handoff timed out waiting for acceptance.
-    TimedOut {
-        handoff_id: u64,
-    },
+    TimedOut { handoff_id: u64 },
     /// No suitable agent available for the handoff.
-    NoAgentAvailable {
-        handoff_id: u64,
-    },
+    NoAgentAvailable { handoff_id: u64 },
 }
 
 /// Error types for handoff operations.
@@ -3672,10 +3767,7 @@ impl HandoffCoordinator {
         // Note: We don't remove the pending handoff on rejection
         // It can still be accepted by another agent
 
-        Ok(HandoffResult::Rejected {
-            handoff_id,
-            reason,
-        })
+        Ok(HandoffResult::Rejected { handoff_id, reason })
     }
 
     /// Checks for timed out handoffs and handles them.
@@ -3715,7 +3807,11 @@ impl HandoffCoordinator {
 
     /// Gets a pending handoff by ID.
     pub fn get_pending(&self, handoff_id: u64) -> Option<PendingHandoff> {
-        self.pending_handoffs.read().unwrap().get(&handoff_id).cloned()
+        self.pending_handoffs
+            .read()
+            .unwrap()
+            .get(&handoff_id)
+            .cloned()
     }
 
     /// Returns the number of pending handoffs.
@@ -4010,8 +4106,8 @@ impl RetryConfig {
     /// Uses exponential backoff with optional jitter.
     pub fn calculate_delay(&self, attempt: u32) -> Duration {
         // Calculate base delay with exponential backoff
-        let base_delay_ms = self.initial_delay.as_millis() as f64
-            * self.backoff_multiplier.powi(attempt as i32);
+        let base_delay_ms =
+            self.initial_delay.as_millis() as f64 * self.backoff_multiplier.powi(attempt as i32);
 
         // Cap at max delay
         let capped_delay_ms = base_delay_ms.min(self.max_delay.as_millis() as f64);
@@ -4647,6 +4743,21 @@ pub struct ResilientExecutorStats {
 mod tests {
     use super::*;
 
+    fn wait_for_condition<F: Fn() -> bool>(
+        timeout: Duration,
+        poll: Duration,
+        condition: F,
+    ) -> bool {
+        let start = Instant::now();
+        while start.elapsed() < timeout {
+            if condition() {
+                return true;
+            }
+            std::thread::sleep(poll);
+        }
+        condition()
+    }
+
     #[test]
     fn coordinator_spawns_agents_up_to_max() {
         let mut coordinator = Coordinator::new(3);
@@ -4704,8 +4815,8 @@ mod tests {
         let mut queue = WorkQueue::new();
 
         let task1 = TaskNode::new("T-1".to_string(), "content1".to_string());
-        let task2 =
-            TaskNode::new("T-2".to_string(), "content2".to_string()).with_dependencies(vec!["T-1".to_string()]);
+        let task2 = TaskNode::new("T-2".to_string(), "content2".to_string())
+            .with_dependencies(vec!["T-1".to_string()]);
 
         queue.add_task(task2.clone());
         queue.add_task(task1);
@@ -5041,10 +5152,8 @@ mod tests {
 
     #[test]
     fn topological_sort_handles_external_dependencies() {
-        let tasks = vec![
-            TaskNode::new("T-2".to_string(), "".to_string())
-                .with_dependencies(vec!["T-1".to_string()]),
-        ];
+        let tasks = vec![TaskNode::new("T-2".to_string(), "".to_string())
+            .with_dependencies(vec!["T-1".to_string()])];
 
         let sorted = topological_sort(&tasks).unwrap();
         assert_eq!(sorted, vec!["T-2".to_string()]);
@@ -5055,7 +5164,8 @@ mod tests {
         let err = WorktreeError::GitError("failed".to_string());
         assert_eq!(err.to_string(), "git error: failed");
 
-        let err = WorktreeError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "missing"));
+        let err =
+            WorktreeError::IoError(std::io::Error::new(std::io::ErrorKind::NotFound, "missing"));
         assert!(err.to_string().contains("io error:"));
 
         let err = WorktreeError::AlreadyExists(AgentId(1));
@@ -5425,12 +5535,9 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         init_test_repo(temp.path());
 
-        let manager = AgentWorktreeManager::new(
-            temp.path().to_path_buf(),
-            None,
-            Some("worker".to_string()),
-        )
-        .unwrap();
+        let manager =
+            AgentWorktreeManager::new(temp.path().to_path_buf(), None, Some("worker".to_string()))
+                .unwrap();
 
         let path = manager.create_worktree_for_agent(AgentId(0), None).unwrap();
 
@@ -5540,7 +5647,10 @@ mod tests {
         let graph = DependencyGraph::new(Vec::new());
         assert_eq!(graph.task_count(), 0);
         assert!(graph.get_root_tasks().is_empty());
-        assert_eq!(graph.get_execution_levels().unwrap(), Vec::<Vec<String>>::new());
+        assert_eq!(
+            graph.get_execution_levels().unwrap(),
+            Vec::<Vec<String>>::new()
+        );
         assert_eq!(graph.max_parallelism().unwrap(), 0);
         assert_eq!(graph.critical_path_length().unwrap(), 0);
     }
@@ -5947,8 +6057,13 @@ mod tests {
             TaskNode::new("A-3".to_string(), "".to_string()),
             TaskNode::new("A-4".to_string(), "".to_string()),
             TaskNode::new("A-5".to_string(), "".to_string()),
-            TaskNode::new("B-1".to_string(), "".to_string())
-                .with_dependencies(vec!["A-1".to_string(), "A-2".to_string(), "A-3".to_string(), "A-4".to_string(), "A-5".to_string()]),
+            TaskNode::new("B-1".to_string(), "".to_string()).with_dependencies(vec![
+                "A-1".to_string(),
+                "A-2".to_string(),
+                "A-3".to_string(),
+                "A-4".to_string(),
+                "A-5".to_string(),
+            ]),
         ];
         let graph = DependencyGraph::new(tasks);
 
@@ -6102,7 +6217,10 @@ mod tests {
         lb.register_agent(AgentId(0));
 
         lb.health_check(AgentId(0), false);
-        assert_eq!(lb.get_agent_health(AgentId(0)), Some(HealthStatus::Unhealthy));
+        assert_eq!(
+            lb.get_agent_health(AgentId(0)),
+            Some(HealthStatus::Unhealthy)
+        );
     }
 
     #[test]
@@ -6118,7 +6236,7 @@ mod tests {
         // Fail agent 0 three times
         assert!(!lb.health_check(AgentId(0), false)); // 1st failure
         assert!(!lb.health_check(AgentId(0), false)); // 2nd failure
-        assert!(lb.health_check(AgentId(0), false));  // 3rd failure - removed
+        assert!(lb.health_check(AgentId(0), false)); // 3rd failure - removed
 
         // Agent 0 should be removed
         assert_eq!(lb.agent_count(), 1);
@@ -6227,7 +6345,10 @@ mod tests {
 
         lb.register_agent(AgentId(0));
         lb.health_check(AgentId(0), false);
-        assert_eq!(lb.get_agent_health(AgentId(0)), Some(HealthStatus::Unhealthy));
+        assert_eq!(
+            lb.get_agent_health(AgentId(0)),
+            Some(HealthStatus::Unhealthy)
+        );
         assert!(lb.select_agent().is_none());
 
         // Agent recovers
@@ -6278,8 +6399,8 @@ mod tests {
 
     #[test]
     fn load_balancer_agents_needing_health_check() {
-        let config = LoadBalancerConfig::default()
-            .with_health_check_interval(Duration::from_millis(10));
+        let config =
+            LoadBalancerConfig::default().with_health_check_interval(Duration::from_millis(10));
         let lb = LoadBalancer::new(config);
 
         lb.register_agent(AgentId(0));
@@ -6411,8 +6532,7 @@ mod tests {
 
     #[test]
     fn load_balancer_integration_weighted_distribution() {
-        let config = LoadBalancerConfig::default()
-            .with_strategy(LoadBalanceStrategy::Weighted);
+        let config = LoadBalancerConfig::default().with_strategy(LoadBalanceStrategy::Weighted);
         let lb = LoadBalancer::new(config);
 
         // Agent 0: weight 1, Agent 1: weight 4 (4x more likely)
@@ -6589,9 +6709,11 @@ mod tests {
 
     #[test]
     fn conflict_report_with_strategy() {
-        let report = ConflictReport::new()
-            .with_strategy(ConflictResolutionStrategy::FirstWins);
-        assert_eq!(report.resolution_strategy, ConflictResolutionStrategy::FirstWins);
+        let report = ConflictReport::new().with_strategy(ConflictResolutionStrategy::FirstWins);
+        assert_eq!(
+            report.resolution_strategy,
+            ConflictResolutionStrategy::FirstWins
+        );
     }
 
     #[test]
@@ -6621,7 +6743,10 @@ mod tests {
             .with_strict_mode(true)
             .with_ignore_patterns(vec!["*.bak".to_string()]);
 
-        assert_eq!(config.default_strategy, ConflictResolutionStrategy::LastWins);
+        assert_eq!(
+            config.default_strategy,
+            ConflictResolutionStrategy::LastWins
+        );
         assert!(config.auto_resolve);
         assert_eq!(config.context_lines, 5);
         assert!(config.strict_mode);
@@ -6706,7 +6831,9 @@ mod tests {
         assert!(io_err.to_string().contains("i/o error"));
 
         let auto_err = ConflictDetectionError::CannotAutoResolve;
-        assert!(auto_err.to_string().contains("cannot be automatically resolved"));
+        assert!(auto_err
+            .to_string()
+            .contains("cannot be automatically resolved"));
 
         let manual_err = ConflictDetectionError::ManualResolutionRequired;
         assert!(manual_err.to_string().contains("manual resolution"));
@@ -6720,10 +6847,8 @@ mod tests {
         let config = ConflictDetectionConfig::default()
             .with_strategy(ConflictResolutionStrategy::MergeNonOverlapping);
 
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        ).with_config(config);
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string())
+            .with_config(config);
 
         assert_eq!(
             detector.config().default_strategy,
@@ -6837,10 +6962,7 @@ mod tests {
 
     #[test]
     fn conflict_detector_parse_hunk_header_basic() {
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        );
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string());
 
         // Test "@@ -10,5 +15,7 @@" format
         let result = detector.parse_hunk_header("@@ -10,5 +15,7 @@");
@@ -6852,10 +6974,7 @@ mod tests {
 
     #[test]
     fn conflict_detector_parse_hunk_header_single_line() {
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        );
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string());
 
         // Test "@@ -10,1 +15 @@" format (single line addition)
         let result = detector.parse_hunk_header("@@ -10,1 +15 @@");
@@ -6867,10 +6986,7 @@ mod tests {
 
     #[test]
     fn conflict_detector_parse_hunk_header_addition() {
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        );
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string());
 
         // Test "@@ -10,0 +15,3 @@" format (pure addition)
         let result = detector.parse_hunk_header("@@ -10,0 +15,3 @@");
@@ -6881,10 +6997,7 @@ mod tests {
 
     #[test]
     fn conflict_detector_parse_hunk_header_deletion() {
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        );
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string());
 
         // Test "@@ -10,3 +10,0 @@" format (pure deletion)
         let result = detector.parse_hunk_header("@@ -10,3 +10,0 @@");
@@ -6893,17 +7006,14 @@ mod tests {
 
     #[test]
     fn conflict_detector_should_ignore_patterns() {
-        let config = ConflictDetectionConfig::default()
-            .with_ignore_patterns(vec![
-                "*.lock".to_string(),
-                "*-lock*".to_string(),
-                ".gitignore".to_string(),
-            ]);
+        let config = ConflictDetectionConfig::default().with_ignore_patterns(vec![
+            "*.lock".to_string(),
+            "*-lock*".to_string(),
+            ".gitignore".to_string(),
+        ]);
 
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        ).with_config(config);
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string())
+            .with_config(config);
 
         assert!(detector.should_ignore("Cargo.lock"));
         assert!(detector.should_ignore("package-lock.json"));
@@ -6914,10 +7024,7 @@ mod tests {
 
     #[test]
     fn conflict_detector_assess_severity_critical_files() {
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        );
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string());
 
         let severity = detector.assess_severity("Cargo.toml", &[], &[]);
         assert_eq!(severity, ConflictSeverity::Critical);
@@ -6931,10 +7038,7 @@ mod tests {
 
     #[test]
     fn conflict_detector_assess_severity_config_files() {
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        );
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string());
 
         let severity = detector.assess_severity("config.yml", &[], &[]);
         assert_eq!(severity, ConflictSeverity::High);
@@ -6945,10 +7049,7 @@ mod tests {
 
     #[test]
     fn conflict_detector_assess_severity_by_line_count() {
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        );
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string());
 
         // Few lines = Low severity
         let lines_a = vec![LineChange {
@@ -6961,28 +7062,29 @@ mod tests {
         assert_eq!(severity, ConflictSeverity::Low);
 
         // Many lines = High severity
-        let lines_a: Vec<_> = (0..15).map(|i| LineChange {
-            start_line: i + 1,
-            end_line: i + 1,
-            change_type: ChangeType::Modified,
-            content: None,
-        }).collect();
-        let lines_b: Vec<_> = (0..10).map(|i| LineChange {
-            start_line: i + 20,
-            end_line: i + 20,
-            change_type: ChangeType::Modified,
-            content: None,
-        }).collect();
+        let lines_a: Vec<_> = (0..15)
+            .map(|i| LineChange {
+                start_line: i + 1,
+                end_line: i + 1,
+                change_type: ChangeType::Modified,
+                content: None,
+            })
+            .collect();
+        let lines_b: Vec<_> = (0..10)
+            .map(|i| LineChange {
+                start_line: i + 20,
+                end_line: i + 20,
+                change_type: ChangeType::Modified,
+                content: None,
+            })
+            .collect();
         let severity = detector.assess_severity("src/main.rs", &lines_a, &lines_b);
         assert_eq!(severity, ConflictSeverity::High);
     }
 
     #[test]
     fn conflict_detector_analyze_file_conflict_overlapping() {
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        );
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string());
 
         let lines_a = vec![LineChange {
             start_line: 10,
@@ -7013,10 +7115,7 @@ mod tests {
 
     #[test]
     fn conflict_detector_analyze_file_conflict_non_overlapping() {
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        );
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string());
 
         let lines_a = vec![LineChange {
             start_line: 10,
@@ -7046,13 +7145,10 @@ mod tests {
 
     #[test]
     fn conflict_detector_analyze_file_conflict_strict_mode() {
-        let config = ConflictDetectionConfig::default()
-            .with_strict_mode(true);
+        let config = ConflictDetectionConfig::default().with_strict_mode(true);
 
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        ).with_config(config);
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string())
+            .with_config(config);
 
         let lines_a = vec![LineChange {
             start_line: 10,
@@ -7083,13 +7179,9 @@ mod tests {
 
     #[test]
     fn conflict_detector_resolve_manual_returns_error() {
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        );
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string());
 
-        let report = ConflictReport::new()
-            .with_strategy(ConflictResolutionStrategy::Manual);
+        let report = ConflictReport::new().with_strategy(ConflictResolutionStrategy::Manual);
 
         let result = detector.resolve(
             &report,
@@ -7097,18 +7189,17 @@ mod tests {
             Path::new("/tmp/worktree_b"),
         );
 
-        assert!(matches!(result, Err(ConflictDetectionError::ManualResolutionRequired)));
+        assert!(matches!(
+            result,
+            Err(ConflictDetectionError::ManualResolutionRequired)
+        ));
     }
 
     #[test]
     fn conflict_detector_resolve_cannot_auto_resolve() {
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        );
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string());
 
-        let mut report = ConflictReport::new()
-            .with_strategy(ConflictResolutionStrategy::FirstWins);
+        let mut report = ConflictReport::new().with_strategy(ConflictResolutionStrategy::FirstWins);
 
         // Add an overlapping conflict (can't auto-resolve)
         report.add_conflict(FileConflict {
@@ -7127,15 +7218,15 @@ mod tests {
             Path::new("/tmp/worktree_b"),
         );
 
-        assert!(matches!(result, Err(ConflictDetectionError::CannotAutoResolve)));
+        assert!(matches!(
+            result,
+            Err(ConflictDetectionError::CannotAutoResolve)
+        ));
     }
 
     #[test]
     fn conflict_detector_parse_diff_output_empty() {
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        );
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string());
 
         let result = detector.parse_diff_output("");
         assert!(result.is_ok());
@@ -7144,10 +7235,7 @@ mod tests {
 
     #[test]
     fn conflict_detector_parse_diff_output_single_file() {
-        let detector = ConflictDetector::new(
-            PathBuf::from("/tmp/repo"),
-            "main".to_string(),
-        );
+        let detector = ConflictDetector::new(PathBuf::from("/tmp/repo"), "main".to_string());
 
         let diff = r#"diff --git a/src/main.rs b/src/main.rs
 --- a/src/main.rs
@@ -7212,24 +7300,54 @@ mod tests {
 
     #[test]
     fn agent_specialization_priority_exact_match_highest() {
-        assert_eq!(AgentSpecialization::CodeGen.priority_for(TaskType::CodeGen), 0);
-        assert_eq!(AgentSpecialization::Testing.priority_for(TaskType::Testing), 0);
-        assert_eq!(AgentSpecialization::Review.priority_for(TaskType::Review), 0);
-        assert_eq!(AgentSpecialization::Documentation.priority_for(TaskType::Documentation), 0);
+        assert_eq!(
+            AgentSpecialization::CodeGen.priority_for(TaskType::CodeGen),
+            0
+        );
+        assert_eq!(
+            AgentSpecialization::Testing.priority_for(TaskType::Testing),
+            0
+        );
+        assert_eq!(
+            AgentSpecialization::Review.priority_for(TaskType::Review),
+            0
+        );
+        assert_eq!(
+            AgentSpecialization::Documentation.priority_for(TaskType::Documentation),
+            0
+        );
     }
 
     #[test]
     fn agent_specialization_priority_general_lower() {
-        assert_eq!(AgentSpecialization::General.priority_for(TaskType::CodeGen), 1);
-        assert_eq!(AgentSpecialization::General.priority_for(TaskType::Testing), 1);
-        assert_eq!(AgentSpecialization::General.priority_for(TaskType::Review), 1);
-        assert_eq!(AgentSpecialization::General.priority_for(TaskType::Documentation), 1);
+        assert_eq!(
+            AgentSpecialization::General.priority_for(TaskType::CodeGen),
+            1
+        );
+        assert_eq!(
+            AgentSpecialization::General.priority_for(TaskType::Testing),
+            1
+        );
+        assert_eq!(
+            AgentSpecialization::General.priority_for(TaskType::Review),
+            1
+        );
+        assert_eq!(
+            AgentSpecialization::General.priority_for(TaskType::Documentation),
+            1
+        );
     }
 
     #[test]
     fn agent_specialization_priority_mismatch_max() {
-        assert_eq!(AgentSpecialization::CodeGen.priority_for(TaskType::Testing), u8::MAX);
-        assert_eq!(AgentSpecialization::Testing.priority_for(TaskType::Review), u8::MAX);
+        assert_eq!(
+            AgentSpecialization::CodeGen.priority_for(TaskType::Testing),
+            u8::MAX
+        );
+        assert_eq!(
+            AgentSpecialization::Testing.priority_for(TaskType::Review),
+            u8::MAX
+        );
     }
 
     #[test]
@@ -7238,7 +7356,10 @@ mod tests {
         assert_eq!(format!("{}", AgentSpecialization::CodeGen), "code-gen");
         assert_eq!(format!("{}", AgentSpecialization::Testing), "testing");
         assert_eq!(format!("{}", AgentSpecialization::Review), "review");
-        assert_eq!(format!("{}", AgentSpecialization::Documentation), "documentation");
+        assert_eq!(
+            format!("{}", AgentSpecialization::Documentation),
+            "documentation"
+        );
     }
 
     #[test]
@@ -7248,43 +7369,103 @@ mod tests {
 
     #[test]
     fn task_type_infer_testing() {
-        assert_eq!(TaskType::infer_from_content("Add unit tests for the module"), TaskType::Testing);
-        assert_eq!(TaskType::infer_from_content("Increase test coverage"), TaskType::Testing);
-        assert_eq!(TaskType::infer_from_content("Write spec for parser"), TaskType::Testing);
-        assert_eq!(TaskType::infer_from_content("Add assert statements"), TaskType::Testing);
+        assert_eq!(
+            TaskType::infer_from_content("Add unit tests for the module"),
+            TaskType::Testing
+        );
+        assert_eq!(
+            TaskType::infer_from_content("Increase test coverage"),
+            TaskType::Testing
+        );
+        assert_eq!(
+            TaskType::infer_from_content("Write spec for parser"),
+            TaskType::Testing
+        );
+        assert_eq!(
+            TaskType::infer_from_content("Add assert statements"),
+            TaskType::Testing
+        );
     }
 
     #[test]
     fn task_type_infer_review() {
-        assert_eq!(TaskType::infer_from_content("Review the pull request"), TaskType::Review);
-        assert_eq!(TaskType::infer_from_content("Audit security of module"), TaskType::Review);
-        assert_eq!(TaskType::infer_from_content("Analyze code quality"), TaskType::Review);
-        assert_eq!(TaskType::infer_from_content("Code review for changes"), TaskType::Review);
+        assert_eq!(
+            TaskType::infer_from_content("Review the pull request"),
+            TaskType::Review
+        );
+        assert_eq!(
+            TaskType::infer_from_content("Audit security of module"),
+            TaskType::Review
+        );
+        assert_eq!(
+            TaskType::infer_from_content("Analyze code quality"),
+            TaskType::Review
+        );
+        assert_eq!(
+            TaskType::infer_from_content("Code review for changes"),
+            TaskType::Review
+        );
     }
 
     #[test]
     fn task_type_infer_documentation() {
-        assert_eq!(TaskType::infer_from_content("Update documentation"), TaskType::Documentation);
-        assert_eq!(TaskType::infer_from_content("Write README for project"), TaskType::Documentation);
-        assert_eq!(TaskType::infer_from_content("Add code comments"), TaskType::Documentation);
-        assert_eq!(TaskType::infer_from_content("Create user guide"), TaskType::Documentation);
+        assert_eq!(
+            TaskType::infer_from_content("Update documentation"),
+            TaskType::Documentation
+        );
+        assert_eq!(
+            TaskType::infer_from_content("Write README for project"),
+            TaskType::Documentation
+        );
+        assert_eq!(
+            TaskType::infer_from_content("Add code comments"),
+            TaskType::Documentation
+        );
+        assert_eq!(
+            TaskType::infer_from_content("Create user guide"),
+            TaskType::Documentation
+        );
     }
 
     #[test]
     fn task_type_infer_codegen() {
-        assert_eq!(TaskType::infer_from_content("Implement new feature"), TaskType::CodeGen);
-        assert_eq!(TaskType::infer_from_content("Add login functionality"), TaskType::CodeGen);
-        assert_eq!(TaskType::infer_from_content("Create API endpoint"), TaskType::CodeGen);
-        assert_eq!(TaskType::infer_from_content("Build user interface"), TaskType::CodeGen);
-        assert_eq!(TaskType::infer_from_content("Fix bug in parser"), TaskType::CodeGen);
-        assert_eq!(TaskType::infer_from_content("Refactor database module"), TaskType::CodeGen);
+        assert_eq!(
+            TaskType::infer_from_content("Implement new feature"),
+            TaskType::CodeGen
+        );
+        assert_eq!(
+            TaskType::infer_from_content("Add login functionality"),
+            TaskType::CodeGen
+        );
+        assert_eq!(
+            TaskType::infer_from_content("Create API endpoint"),
+            TaskType::CodeGen
+        );
+        assert_eq!(
+            TaskType::infer_from_content("Build user interface"),
+            TaskType::CodeGen
+        );
+        assert_eq!(
+            TaskType::infer_from_content("Fix bug in parser"),
+            TaskType::CodeGen
+        );
+        assert_eq!(
+            TaskType::infer_from_content("Refactor database module"),
+            TaskType::CodeGen
+        );
     }
 
     #[test]
     fn task_type_infer_general_fallback() {
-        assert_eq!(TaskType::infer_from_content("Do something"), TaskType::General);
+        assert_eq!(
+            TaskType::infer_from_content("Do something"),
+            TaskType::General
+        );
         assert_eq!(TaskType::infer_from_content(""), TaskType::General);
-        assert_eq!(TaskType::infer_from_content("Random task"), TaskType::General);
+        assert_eq!(
+            TaskType::infer_from_content("Random task"),
+            TaskType::General
+        );
     }
 
     #[test]
@@ -7313,8 +7494,8 @@ mod tests {
 
     #[test]
     fn agent_specialization_config_with_fallback() {
-        let config = AgentSpecializationConfig::new(AgentSpecialization::Testing)
-            .with_fallback(false);
+        let config =
+            AgentSpecializationConfig::new(AgentSpecialization::Testing).with_fallback(false);
         assert!(!config.allow_fallback_to_general);
     }
 
@@ -7354,8 +7535,8 @@ mod tests {
     #[test]
     fn specialization_router_get_agent_config() {
         let router = SpecializationRouter::new();
-        let config = AgentSpecializationConfig::new(AgentSpecialization::Review)
-            .with_fallback(false);
+        let config =
+            AgentSpecializationConfig::new(AgentSpecialization::Review).with_fallback(false);
         router.register_agent(AgentId(0), config);
 
         let retrieved = router.get_agent_config(AgentId(0)).unwrap();
@@ -7381,7 +7562,10 @@ mod tests {
     fn specialization_router_infer_task_type() {
         let router = SpecializationRouter::new();
         assert_eq!(router.infer_task_type("Add unit tests"), TaskType::Testing);
-        assert_eq!(router.infer_task_type("Implement feature"), TaskType::CodeGen);
+        assert_eq!(
+            router.infer_task_type("Implement feature"),
+            TaskType::CodeGen
+        );
     }
 
     #[test]
@@ -7489,7 +7673,9 @@ mod tests {
     #[test]
     fn coordinator_spawn_specialized_agent() {
         let mut coordinator = Coordinator::new(5);
-        let id = coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen).unwrap();
+        let id = coordinator
+            .spawn_specialized_agent(AgentSpecialization::CodeGen)
+            .unwrap();
 
         let agent = coordinator.get_agent(id).unwrap();
         assert_eq!(agent.specialization, AgentSpecialization::CodeGen);
@@ -7499,10 +7685,9 @@ mod tests {
     fn coordinator_spawn_specialized_agent_with_worktree() {
         let mut coordinator = Coordinator::new(5);
         let path = PathBuf::from("/tmp/worktree-test");
-        let id = coordinator.spawn_specialized_agent_with_worktree(
-            AgentSpecialization::Testing,
-            path.clone(),
-        ).unwrap();
+        let id = coordinator
+            .spawn_specialized_agent_with_worktree(AgentSpecialization::Testing, path.clone())
+            .unwrap();
 
         let agent = coordinator.get_agent(id).unwrap();
         assert_eq!(agent.specialization, AgentSpecialization::Testing);
@@ -7541,7 +7726,9 @@ mod tests {
     #[test]
     fn coordinator_find_best_agent_no_idle() {
         let mut coordinator = Coordinator::new(5);
-        let id = coordinator.spawn_specialized_agent(AgentSpecialization::Testing).unwrap();
+        let id = coordinator
+            .spawn_specialized_agent(AgentSpecialization::Testing)
+            .unwrap();
 
         // Mark agent as working
         coordinator.get_agent_mut(id).unwrap().status = AgentStatus::Working;
@@ -7553,14 +7740,19 @@ mod tests {
     #[test]
     fn coordinator_get_idle_agents_by_specialization() {
         let mut coordinator = Coordinator::new(5);
-        let id1 = coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen).unwrap();
-        let id2 = coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen).unwrap();
+        let id1 = coordinator
+            .spawn_specialized_agent(AgentSpecialization::CodeGen)
+            .unwrap();
+        let id2 = coordinator
+            .spawn_specialized_agent(AgentSpecialization::CodeGen)
+            .unwrap();
         coordinator.spawn_specialized_agent(AgentSpecialization::Testing);
 
         // Mark one as working
         coordinator.get_agent_mut(id1).unwrap().status = AgentStatus::Working;
 
-        let idle_codegen = coordinator.get_idle_agents_by_specialization(AgentSpecialization::CodeGen);
+        let idle_codegen =
+            coordinator.get_idle_agents_by_specialization(AgentSpecialization::CodeGen);
         assert_eq!(idle_codegen.len(), 1);
         assert!(idle_codegen.contains(&id2));
     }
@@ -7583,7 +7775,9 @@ mod tests {
     #[test]
     fn coordinator_idle_specialization_counts() {
         let mut coordinator = Coordinator::new(10);
-        let id1 = coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen).unwrap();
+        let id1 = coordinator
+            .spawn_specialized_agent(AgentSpecialization::CodeGen)
+            .unwrap();
         coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen);
         coordinator.spawn_specialized_agent(AgentSpecialization::Testing);
 
@@ -7649,7 +7843,9 @@ mod tests {
     #[test]
     fn coordinator_assign_task_by_specialization_no_suitable_agent() {
         let mut coordinator = Coordinator::new(5);
-        let id = coordinator.spawn_specialized_agent(AgentSpecialization::CodeGen).unwrap();
+        let id = coordinator
+            .spawn_specialized_agent(AgentSpecialization::CodeGen)
+            .unwrap();
         // Mark as working
         coordinator.get_agent_mut(id).unwrap().status = AgentStatus::Working;
 
@@ -7709,12 +7905,7 @@ mod tests {
 
     #[test]
     fn agent_message_creation_and_correlation() {
-        let msg = AgentMessage::new(
-            1,
-            AgentId(0),
-            AgentId(1),
-            AgentMessageType::Ping,
-        );
+        let msg = AgentMessage::new(1, AgentId(0), AgentId(1), AgentMessageType::Ping);
         assert_eq!(msg.id, 1);
         assert_eq!(msg.from, AgentId(0));
         assert_eq!(msg.to, AgentId(1));
@@ -7726,12 +7917,7 @@ mod tests {
 
     #[test]
     fn agent_message_timeout_detection() {
-        let msg = AgentMessage::new(
-            1,
-            AgentId(0),
-            AgentId(1),
-            AgentMessageType::Ping,
-        );
+        let msg = AgentMessage::new(1, AgentId(0), AgentId(1), AgentMessageType::Ping);
 
         // Message just created, should not be timed out
         assert!(!msg.is_timed_out(Duration::from_secs(1)));
@@ -7786,7 +7972,10 @@ mod tests {
             "message channel is closed"
         );
         assert_eq!(
-            format!("{}", MessageChannelError::InvalidMessage("bad format".to_string())),
+            format!(
+                "{}",
+                MessageChannelError::InvalidMessage("bad format".to_string())
+            ),
             "invalid message: bad format"
         );
     }
@@ -7859,12 +8048,7 @@ mod tests {
         channel.register_agent(AgentId(1));
 
         let msg_id = channel
-            .send_with_correlation(
-                AgentId(0),
-                AgentId(1),
-                AgentMessageType::Pong,
-                42,
-            )
+            .send_with_correlation(AgentId(0), AgentId(1), AgentMessageType::Pong, 42)
             .unwrap();
 
         let msg = channel.receive(AgentId(1)).unwrap().unwrap();
@@ -7878,7 +8062,9 @@ mod tests {
         channel.register_agent(AgentId(0));
         channel.register_agent(AgentId(1));
 
-        channel.send(AgentId(0), AgentId(1), AgentMessageType::Ping).unwrap();
+        channel
+            .send(AgentId(0), AgentId(1), AgentMessageType::Ping)
+            .unwrap();
 
         // Peek should return the message without removing it
         let peeked = channel.peek(AgentId(1)).unwrap();
@@ -7920,7 +8106,9 @@ mod tests {
 
         // Send multiple messages
         for _ in 0..5 {
-            channel.send(AgentId(0), AgentId(1), AgentMessageType::Ping).unwrap();
+            channel
+                .send(AgentId(0), AgentId(1), AgentMessageType::Ping)
+                .unwrap();
         }
 
         let stats = channel.inbox_stats(AgentId(1)).unwrap();
@@ -7931,15 +8119,16 @@ mod tests {
 
     #[test]
     fn message_channel_inbox_overflow_drop() {
-        let config = MessageChannelConfig::default()
-            .with_inbox_size(3);
+        let config = MessageChannelConfig::default().with_inbox_size(3);
         let channel = AgentMessageChannel::with_config(config);
         channel.register_agent(AgentId(0));
         channel.register_agent(AgentId(1));
 
         // Send more messages than inbox can hold
         for _ in 0..5 {
-            channel.send(AgentId(0), AgentId(1), AgentMessageType::Ping).unwrap();
+            channel
+                .send(AgentId(0), AgentId(1), AgentMessageType::Ping)
+                .unwrap();
         }
 
         // Inbox should be at max size
@@ -7993,8 +8182,12 @@ mod tests {
         assert_eq!(channel.total_sent(), 0);
         assert_eq!(channel.total_delivered(), 0);
 
-        channel.send(AgentId(0), AgentId(1), AgentMessageType::Ping).unwrap();
-        channel.send(AgentId(0), AgentId(1), AgentMessageType::Pong).unwrap();
+        channel
+            .send(AgentId(0), AgentId(1), AgentMessageType::Ping)
+            .unwrap();
+        channel
+            .send(AgentId(0), AgentId(1), AgentMessageType::Pong)
+            .unwrap();
 
         assert_eq!(channel.total_sent(), 2);
         assert_eq!(channel.total_delivered(), 2);
@@ -8085,7 +8278,10 @@ mod tests {
         assert_eq!(pending.from_agent, AgentId(0));
         assert_eq!(pending.to_agent, Some(AgentId(1)));
         assert_eq!(pending.task_id, "T-1");
-        assert_eq!(pending.target_specialization, Some(AgentSpecialization::CodeGen));
+        assert_eq!(
+            pending.target_specialization,
+            Some(AgentSpecialization::CodeGen)
+        );
     }
 
     #[test]
@@ -8098,13 +8294,25 @@ mod tests {
 
         // Initiate and accept one handoff
         let id1 = coordinator
-            .initiate_handoff(AgentId(0), Some(AgentId(1)), "T-1".to_string(), None, "".to_string())
+            .initiate_handoff(
+                AgentId(0),
+                Some(AgentId(1)),
+                "T-1".to_string(),
+                None,
+                "".to_string(),
+            )
             .unwrap();
         coordinator.accept_handoff(id1, AgentId(1)).unwrap();
 
         // Initiate another that stays pending
         let _id2 = coordinator
-            .initiate_handoff(AgentId(0), Some(AgentId(1)), "T-2".to_string(), None, "".to_string())
+            .initiate_handoff(
+                AgentId(0),
+                Some(AgentId(1)),
+                "T-2".to_string(),
+                None,
+                "".to_string(),
+            )
             .unwrap();
 
         let stats = coordinator.stats();
@@ -8192,10 +8400,8 @@ mod tests {
 
     #[test]
     fn agent_timeout_tracker_record_activity() {
-        let tracker = AgentTimeoutTracker::new(
-            Duration::from_millis(100),
-            Duration::from_millis(50),
-        );
+        let tracker =
+            AgentTimeoutTracker::new(Duration::from_millis(100), Duration::from_millis(50));
 
         tracker.record_activity(AgentId(0));
         tracker.record_activity(AgentId(1));
@@ -8209,42 +8415,40 @@ mod tests {
 
     #[test]
     fn agent_timeout_tracker_detect_stuck() {
-        let tracker = AgentTimeoutTracker::new(
-            Duration::from_millis(50),
-            Duration::from_millis(25),
-        );
+        let tracker =
+            AgentTimeoutTracker::new(Duration::from_millis(200), Duration::from_millis(100));
 
         tracker.record_activity(AgentId(0));
 
-        // Wait for timeout
-        std::thread::sleep(Duration::from_millis(60));
+        let stuck =
+            wait_for_condition(Duration::from_millis(350), Duration::from_millis(5), || {
+                tracker.is_stuck(AgentId(0))
+            });
 
-        assert!(tracker.is_stuck(AgentId(0)));
+        assert!(stuck);
         assert!(!tracker.is_warning(AgentId(0))); // Past warning, into stuck
     }
 
     #[test]
     fn agent_timeout_tracker_detect_warning() {
-        let tracker = AgentTimeoutTracker::new(
-            Duration::from_millis(100),
-            Duration::from_millis(30),
-        );
+        let tracker =
+            AgentTimeoutTracker::new(Duration::from_millis(500), Duration::from_millis(150));
 
         tracker.record_activity(AgentId(0));
 
-        // Wait for warning but not timeout
-        std::thread::sleep(Duration::from_millis(40));
+        let warning =
+            wait_for_condition(Duration::from_millis(300), Duration::from_millis(5), || {
+                tracker.is_warning(AgentId(0))
+            });
 
-        assert!(tracker.is_warning(AgentId(0)));
+        assert!(warning);
         assert!(!tracker.is_stuck(AgentId(0)));
     }
 
     #[test]
     fn agent_timeout_tracker_stuck_agents_list() {
-        let tracker = AgentTimeoutTracker::new(
-            Duration::from_millis(30),
-            Duration::from_millis(15),
-        );
+        let tracker =
+            AgentTimeoutTracker::new(Duration::from_millis(30), Duration::from_millis(15));
 
         tracker.record_activity(AgentId(0));
         tracker.record_activity(AgentId(1));
@@ -8274,10 +8478,8 @@ mod tests {
 
     #[test]
     fn agent_timeout_tracker_agent_statuses() {
-        let tracker = AgentTimeoutTracker::new(
-            Duration::from_millis(100),
-            Duration::from_millis(50),
-        );
+        let tracker =
+            AgentTimeoutTracker::new(Duration::from_millis(100), Duration::from_millis(50));
 
         tracker.record_activity(AgentId(0));
         tracker.record_activity(AgentId(1));
@@ -8308,8 +8510,12 @@ mod tests {
         channel.register_agent(AgentId(1));
 
         // Send messages
-        channel.send(AgentId(0), AgentId(1), AgentMessageType::Ping).unwrap();
-        channel.send(AgentId(0), AgentId(1), AgentMessageType::Pong).unwrap();
+        channel
+            .send(AgentId(0), AgentId(1), AgentMessageType::Ping)
+            .unwrap();
+        channel
+            .send(AgentId(0), AgentId(1), AgentMessageType::Pong)
+            .unwrap();
 
         assert_eq!(channel.inbox_size(AgentId(1)).unwrap(), 2);
 
@@ -8339,53 +8545,70 @@ mod tests {
         channel.register_agent(AgentId(1));
 
         // Send various message types
-        channel.send(
-            AgentId(0),
-            AgentId(1),
-            AgentMessageType::HandoffRequest {
-                target_specialization: Some(AgentSpecialization::Review),
-                context: "review code".to_string(),
-            },
-        ).unwrap();
+        channel
+            .send(
+                AgentId(0),
+                AgentId(1),
+                AgentMessageType::HandoffRequest {
+                    target_specialization: Some(AgentSpecialization::Review),
+                    context: "review code".to_string(),
+                },
+            )
+            .unwrap();
 
-        channel.send(
-            AgentId(0),
-            AgentId(1),
-            AgentMessageType::TaskResult {
-                task_id: "T-1".to_string(),
-                success: true,
-                summary: "completed".to_string(),
-            },
-        ).unwrap();
+        channel
+            .send(
+                AgentId(0),
+                AgentId(1),
+                AgentMessageType::TaskResult {
+                    task_id: "T-1".to_string(),
+                    success: true,
+                    summary: "completed".to_string(),
+                },
+            )
+            .unwrap();
 
-        channel.send(
-            AgentId(0),
-            AgentId(1),
-            AgentMessageType::CancelRequest {
-                reason: "user abort".to_string(),
-            },
-        ).unwrap();
+        channel
+            .send(
+                AgentId(0),
+                AgentId(1),
+                AgentMessageType::CancelRequest {
+                    reason: "user abort".to_string(),
+                },
+            )
+            .unwrap();
 
-        channel.send(
-            AgentId(0),
-            AgentId(1),
-            AgentMessageType::Custom {
-                message_type: "metrics".to_string(),
-                payload: "{\"cpu\": 50}".to_string(),
-            },
-        ).unwrap();
+        channel
+            .send(
+                AgentId(0),
+                AgentId(1),
+                AgentMessageType::Custom {
+                    message_type: "metrics".to_string(),
+                    payload: "{\"cpu\": 50}".to_string(),
+                },
+            )
+            .unwrap();
 
         assert_eq!(channel.inbox_size(AgentId(1)).unwrap(), 4);
 
         // Receive and verify each type
         let msg1 = channel.receive(AgentId(1)).unwrap().unwrap();
-        assert!(matches!(msg1.message_type, AgentMessageType::HandoffRequest { .. }));
+        assert!(matches!(
+            msg1.message_type,
+            AgentMessageType::HandoffRequest { .. }
+        ));
 
         let msg2 = channel.receive(AgentId(1)).unwrap().unwrap();
-        assert!(matches!(msg2.message_type, AgentMessageType::TaskResult { .. }));
+        assert!(matches!(
+            msg2.message_type,
+            AgentMessageType::TaskResult { .. }
+        ));
 
         let msg3 = channel.receive(AgentId(1)).unwrap().unwrap();
-        assert!(matches!(msg3.message_type, AgentMessageType::CancelRequest { .. }));
+        assert!(matches!(
+            msg3.message_type,
+            AgentMessageType::CancelRequest { .. }
+        ));
 
         let msg4 = channel.receive(AgentId(1)).unwrap().unwrap();
         assert!(matches!(msg4.message_type, AgentMessageType::Custom { .. }));
@@ -8411,7 +8634,10 @@ mod tests {
 
         let pending = coordinator.get_pending(handoff_id).unwrap();
         assert!(pending.to_agent.is_none());
-        assert_eq!(pending.target_specialization, Some(AgentSpecialization::Testing));
+        assert_eq!(
+            pending.target_specialization,
+            Some(AgentSpecialization::Testing)
+        );
     }
 
     #[test]
@@ -8708,8 +8934,7 @@ mod tests {
 
     #[test]
     fn circuit_breaker_opens_on_threshold() {
-        let config = CircuitBreakerConfig::new(3)
-            .with_sampling_duration(Duration::from_secs(60));
+        let config = CircuitBreakerConfig::new(3).with_sampling_duration(Duration::from_secs(60));
         let cb = CircuitBreaker::new(config);
 
         assert_eq!(cb.state(), CircuitState::Closed);
@@ -8956,8 +9181,7 @@ mod tests {
 
     #[test]
     fn circuit_breaker_half_open_reopens_on_failure() {
-        let config = CircuitBreakerConfig::new(1)
-            .with_reset_timeout(Duration::from_millis(1));
+        let config = CircuitBreakerConfig::new(1).with_reset_timeout(Duration::from_millis(1));
         let cb = CircuitBreaker::new(config);
 
         // Open circuit
@@ -8972,8 +9196,7 @@ mod tests {
 
     #[test]
     fn circuit_breaker_time_until_half_open() {
-        let config = CircuitBreakerConfig::new(1)
-            .with_reset_timeout(Duration::from_secs(30));
+        let config = CircuitBreakerConfig::new(1).with_reset_timeout(Duration::from_secs(30));
         let cb = CircuitBreaker::new(config);
 
         // Before opening, no time remaining
@@ -9002,8 +9225,7 @@ mod tests {
     fn circuit_breaker_success_resets_failure_count() {
         // The circuit breaker uses windowed counting, so we need a short window
         // to test the reset behavior properly
-        let config = CircuitBreakerConfig::new(5)
-            .with_sampling_duration(Duration::from_millis(50));
+        let config = CircuitBreakerConfig::new(5).with_sampling_duration(Duration::from_millis(50));
         let cb = CircuitBreaker::new(config);
 
         // Record some failures

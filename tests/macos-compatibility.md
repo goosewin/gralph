@@ -25,7 +25,7 @@ cargo test --workspace
 |------------|--------------|-------|
 | Rust toolchain | ✅ Available | Install via rustup |
 | tmux | ✅ Available | `brew install tmux` (optional) |
-| claude CLI | ✅ Available | `npm install -g @anthropic-ai/claude-code` |
+| claude CLI | ✅ Available | `bun add -g @anthropic-ai/claude-code` |
 
 ### ✅ Passed: Shell Completions
 

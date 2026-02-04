@@ -1,5 +1,5 @@
 use crate::app::worktree::git_output_in_dir;
-use crate::app::{CliError, join_or_none, normalize_csv, parse_bool_value};
+use crate::app::{join_or_none, normalize_csv, parse_bool_value, CliError};
 use crate::config::Config;
 use crate::prd;
 use std::collections::{BTreeMap, HashMap};
@@ -2089,11 +2089,7 @@ impl AggregatedVerificationResult {
             total_covered += result.covered_lines;
             total_lines += result.total_lines;
             for error in &result.errors {
-                errors.push(format!(
-                    "[{}] {}",
-                    result.worktree_path.display(),
-                    error
-                ));
+                errors.push(format!("[{}] {}", result.worktree_path.display(), error));
             }
         }
 
@@ -2306,10 +2302,7 @@ fn extract_fraction_from_line(line: &str) -> Option<(usize, usize)> {
         if left == idx {
             continue;
         }
-        let numerator: usize = std::str::from_utf8(&bytes[left..idx])
-            .ok()?
-            .parse()
-            .ok()?;
+        let numerator: usize = std::str::from_utf8(&bytes[left..idx]).ok()?.parse().ok()?;
 
         // Parse number after slash
         let mut right = idx + 1;
@@ -2348,10 +2341,7 @@ pub fn aggregate_coverage_results(results: &[WorktreeVerificationResult]) -> (f6
         (total_covered as f64 / total_lines as f64) * 100.0
     } else {
         // Fall back to averaging percentages if line counts not available
-        let valid_percents: Vec<f64> = results
-            .iter()
-            .filter_map(|r| r.coverage_percent)
-            .collect();
+        let valid_percents: Vec<f64> = results.iter().filter_map(|r| r.coverage_percent).collect();
         if valid_percents.is_empty() {
             0.0
         } else {
@@ -2440,7 +2430,10 @@ pub fn run_multi_agent_verifier_pipeline(
             total
         )));
     }
-    println!("Aggregated tests OK: {}/{} worktree(s) passed.", passed, total);
+    println!(
+        "Aggregated tests OK: {}/{} worktree(s) passed.",
+        passed, total
+    );
 
     // Check coverage threshold
     if aggregated.aggregated_coverage_percent + f64::EPSILON < config.coverage_min {
@@ -2487,7 +2480,10 @@ pub fn merge_worktree_changes(
     }
 
     // Create merge branch from base
-    let checkout_output = git_output_in_dir(repo_root, ["checkout", "-b", merge_branch_name, base_branch]);
+    let checkout_output = git_output_in_dir(
+        repo_root,
+        ["checkout", "-b", merge_branch_name, base_branch],
+    );
     if let Err(err) = checkout_output {
         return Err(CliError::Message(format!(
             "Failed to create merge branch '{}': {}",
@@ -2500,7 +2496,13 @@ pub fn merge_worktree_changes(
         println!("Merging branch: {}", branch);
         let merge_result = git_output_in_dir(
             repo_root,
-            ["merge", "--no-ff", "-m", &format!("Merge {} into {}", branch, merge_branch_name), branch],
+            [
+                "merge",
+                "--no-ff",
+                "-m",
+                &format!("Merge {} into {}", branch, merge_branch_name),
+                branch,
+            ],
         );
         if let Err(err) = merge_result {
             // Abort the merge and switch back
@@ -2551,7 +2553,11 @@ impl From<&AggregatedVerificationResult> for MultiAgentVerifierStats {
     fn from(result: &AggregatedVerificationResult) -> Self {
         Self {
             worktree_count: result.worktree_count(),
-            tests_passed_count: result.worktree_results.iter().filter(|r| r.tests_passed).count(),
+            tests_passed_count: result
+                .worktree_results
+                .iter()
+                .filter(|r| r.tests_passed)
+                .count(),
             aggregated_coverage: result.aggregated_coverage_percent,
             total_covered_lines: result.total_covered_lines,
             total_lines: result.total_lines,
@@ -4233,7 +4239,7 @@ mod tests {
             ids: vec!["JavaScript".to_string()],
             languages: vec![],
             frameworks: vec![],
-            tools: vec!["npm".to_string()],
+            tools: vec!["bun".to_string()],
             runtimes: vec![],
             package_managers: vec![],
             evidence: vec![],
@@ -4313,13 +4319,13 @@ Coverage Results: 75.00%
         let temp = tempfile::tempdir().unwrap();
         fs::write(
             temp.path().join(".gralph.yaml"),
-            "verifier:\n  test_command: \"npm test\"\n",
+            "verifier:\n  test_command: \"bun test\"\n",
         )
         .unwrap();
         let config = Config::load(Some(temp.path())).unwrap();
         let command =
             resolve_verifier_command(None, &config, "verifier.test_command", "", true).unwrap();
-        assert_eq!(command, "npm test");
+        assert_eq!(command, "bun test");
     }
 
     #[test]
@@ -4328,7 +4334,7 @@ Coverage Results: 75.00%
         let temp = tempfile::tempdir().unwrap();
         fs::write(
             temp.path().join(".gralph.yaml"),
-            "verifier:\n  test_command: \"npm test\"\n",
+            "verifier:\n  test_command: \"bun test\"\n",
         )
         .unwrap();
         let config = Config::load(Some(temp.path())).unwrap();
@@ -4736,12 +4742,10 @@ Coverage Results: 75.00%
         .unwrap();
         let resolved = resolve_pr_template_path(temp.path());
         assert!(resolved.is_some());
-        assert!(
-            resolved
-                .unwrap()
-                .to_string_lossy()
-                .contains("pull_request_template.md")
-        );
+        assert!(resolved
+            .unwrap()
+            .to_string_lossy()
+            .contains("pull_request_template.md"));
     }
 
     #[test]
@@ -6028,12 +6032,7 @@ Coverage Results: 85.50% (171/200 lines)
         let temp = tempfile::tempdir().unwrap();
         let global_config = Config::load(None).unwrap();
 
-        let result = run_multi_agent_verifier_pipeline(
-            &[],
-            &config,
-            temp.path(),
-            &global_config,
-        );
+        let result = run_multi_agent_verifier_pipeline(&[], &config, temp.path(), &global_config);
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -6055,12 +6054,7 @@ Coverage Results: 85.50% (171/200 lines)
     #[test]
     fn merge_worktree_changes_fails_with_empty_branches() {
         let temp = tempfile::tempdir().unwrap();
-        let result = merge_worktree_changes(
-            temp.path(),
-            &[],
-            "main",
-            "merge-branch",
-        );
+        let result = merge_worktree_changes(temp.path(), &[], "main", "merge-branch");
 
         assert!(result.is_err());
         match result.unwrap_err() {

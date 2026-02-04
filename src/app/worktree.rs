@@ -1,4 +1,4 @@
-use super::{CliError, parse_bool_value, sanitize_session_name};
+use super::{parse_bool_value, sanitize_session_name, CliError};
 use crate::cli::{self, RunLoopArgs, WorktreeCommand, WorktreeCreateArgs, WorktreeFinishArgs};
 use crate::config::Config;
 use std::ffi::OsStr;
