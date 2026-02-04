@@ -87,7 +87,7 @@ All failure conditions must emit clear, actionable error messages that describe 
   * Error message includes "Commit or stash changes before PR creation" hint.
   * Add unit test for dirty detection with mock git output.
 - **Dependencies** None
-- [ ] CLEAN-1 Add pre-PR git clean status check with actionable error
+- [x] CLEAN-1 Add pre-PR git clean status check with actionable error
 ### Task PRD-DEL-1
 
 - **ID** PRD-DEL-1
@@ -100,7 +100,7 @@ All failure conditions must emit clear, actionable error messages that describe 
   * Skip silently if file does not exist or config is false.
   * Add test for PRD deletion flow.
 - **Dependencies** CLEAN-1
-- [ ] PRD-DEL-1 Delete task PRD from final commit before PR creation
+- [x] PRD-DEL-1 Delete task PRD from final commit before PR creation
 ### Task FMT-1
 
 - **ID** FMT-1
@@ -113,7 +113,7 @@ All failure conditions must emit clear, actionable error messages that describe 
   * Skip for non-Rust stacks.
   * Add test for fmt check and auto-fix flow.
 - **Dependencies** PRD-DEL-1
-- [ ] FMT-1 Add cargo fmt enforcement with auto-commit for Rust stacks
+- [x] FMT-1 Add cargo fmt enforcement with auto-commit for Rust stacks
 ### Task PRURL-1
 
 - **ID** PRURL-1
@@ -126,7 +126,7 @@ All failure conditions must emit clear, actionable error messages that describe 
   * If URL missing but exit code zero, return error stating URL not found.
   * Add test for various gh output scenarios.
 - **Dependencies** FMT-1
-- [ ] PRURL-1 Improve PR creation to reliably return URL or actionable error
+- [x] PRURL-1 Improve PR creation to reliably return URL or actionable error
 ### Task PRCOMMENT-1
 
 - **ID** PRCOMMENT-1
@@ -139,7 +139,7 @@ All failure conditions must emit clear, actionable error messages that describe 
   * Log warning but do not fail if comment posting fails.
   * Add test for comment posting flow.
 - **Dependencies** PRURL-1
-- [ ] PRCOMMENT-1 Post PRD content as PR comment for review context
+- [x] PRCOMMENT-1 Post PRD content as PR comment for review context
 ### Task CONFIG-1
 
 - **ID** CONFIG-1
@@ -150,7 +150,7 @@ All failure conditions must emit clear, actionable error messages that describe 
   * Update README verifier pipeline section with new config options.
   * Verify config loading works with new keys.
 - **Dependencies** PRCOMMENT-1
-- [ ] CONFIG-1 Document new verifier config options in default.yaml and README
+- [x] CONFIG-1 Document new verifier config options in default.yaml and README
 ### Task TEST-1
 
 - **ID** TEST-1
@@ -163,7 +163,7 @@ All failure conditions must emit clear, actionable error messages that describe 
   * Add tests for `post_prd_as_pr_comment` with success and truncation.
   * Verify existing tests still pass.
 - **Dependencies** CONFIG-1
-- [ ] TEST-1 Add unit tests for all new verifier helpers
+- [x] TEST-1 Add unit tests for all new verifier helpers
 ---
 
 ## Success Criteria

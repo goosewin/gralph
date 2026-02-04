@@ -1,14 +1,16 @@
-use super::{join_or_none, normalize_csv, CliError};
-use crate::backend::{backend_from_name, Backend};
-use crate::cli::{InitArgs, PrdArgs, PrdCheckArgs, PrdCommand, PrdCreateArgs};
+use super::{CliError, join_or_none, normalize_csv};
+use crate::backend::{Backend, backend_from_name};
+use crate::cli::{InitArgs, PrdArgs, PrdCheckArgs, PrdCommand, PrdCreateArgs, PrdRunArgs};
 use crate::config::Config;
 use crate::prd::{self, PrdValidationError};
+use crate::state::StateStore;
 use log::{debug, info};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
+use std::process::{Command as ProcCommand, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -19,6 +21,192 @@ pub(super) fn cmd_prd(args: PrdArgs) -> Result<(), CliError> {
     match args.command {
         PrdCommand::Check(args) => cmd_prd_check(args),
         PrdCommand::Create(args) => cmd_prd_create(args),
+        PrdCommand::Run(args) => cmd_prd_run(args),
+    }
+}
+
+pub(super) fn cmd_prd_run(args: PrdRunArgs) -> Result<(), CliError> {
+    use crate::state::StateStore;
+
+    let store = StateStore::new_from_env();
+    store
+        .init_state()
+        .map_err(|err| CliError::Message(err.to_string()))?;
+
+    let target_dir = args.dir.clone();
+    if !target_dir.is_dir() {
+        update_session_state(&store, &args.name, "failed");
+        return Err(CliError::Message(format!(
+            "Directory does not exist: {}",
+            target_dir.display()
+        )));
+    }
+
+    let gralph_dir = target_dir.join(".gralph");
+    fs::create_dir_all(&gralph_dir).map_err(|err| {
+        update_session_state(&store, &args.name, "failed");
+        CliError::Io(err)
+    })?;
+    let log_file = gralph_dir.join(format!("{}.log", args.name));
+
+    let result = run_prd_generation(&args, &target_dir, &log_file);
+    match &result {
+        Ok(output_path) => {
+            log_to_file(
+                &log_file,
+                &format!("PRD created: {}", output_path.display()),
+            );
+            update_session_state(&store, &args.name, "complete");
+            println!("PRD created: {}", output_path.display());
+        }
+        Err(err) => {
+            log_to_file(&log_file, &format!("PRD generation failed: {}", err));
+            update_session_state(&store, &args.name, "failed");
+        }
+    }
+    result.map(|_| ())
+}
+
+fn run_prd_generation(
+    args: &PrdRunArgs,
+    target_dir: &Path,
+    log_file: &Path,
+) -> Result<PathBuf, CliError> {
+    let goal = args
+        .goal
+        .clone()
+        .ok_or_else(|| CliError::Message("Goal is required. Use --goal.".to_string()))?;
+
+    let constraints = args
+        .constraints
+        .clone()
+        .unwrap_or_else(|| "None.".to_string());
+
+    let output_path = resolve_prd_output(target_dir, args.output.clone(), args.force)?;
+    log_to_file(log_file, &format!("Output path: {}", output_path.display()));
+
+    let config =
+        Config::load(Some(target_dir)).map_err(|err| CliError::Message(err.to_string()))?;
+    let backend_name = args
+        .backend
+        .clone()
+        .or_else(|| config.get("defaults.backend"))
+        .unwrap_or_else(|| "claude".to_string());
+    let mut model = args.model.clone().or_else(|| config.get("defaults.model"));
+    if model.as_deref().unwrap_or("").is_empty() && backend_name == "opencode" {
+        model = config.get("opencode.default_model");
+    }
+
+    let backend = backend_from_name(&backend_name).map_err(CliError::Message)?;
+    if !backend.check_installed() {
+        return Err(CliError::Message(format!(
+            "Backend is not installed: {}",
+            backend_name
+        )));
+    }
+    log_to_file(log_file, &format!("Using backend: {}", backend_name));
+
+    let stack = prd::prd_detect_stack(target_dir);
+    let stack_summary = prd::prd_format_stack_summary(&stack, 2);
+
+    let context_files = build_context_file_list(
+        target_dir,
+        args.context.as_deref(),
+        config.get("defaults.context_files").as_deref(),
+    );
+    let context_section = if context_files.is_empty() {
+        "None.".to_string()
+    } else {
+        context_files.join("\n")
+    };
+
+    let sources_section = match args.sources.as_deref() {
+        Some(value) if !value.trim().is_empty() => normalize_csv(value).join("\n"),
+        _ => "None.".to_string(),
+    };
+
+    let warnings_section = if sources_section == "None." {
+        "No reliable external sources were provided. Verify requirements and stack assumptions before implementation."
+            .to_string()
+    } else {
+        "None.".to_string()
+    };
+
+    let template_text = read_prd_template(target_dir)?;
+    let spec_text = read_prd_spec(target_dir)?;
+    let prompt = format!(
+        "You are generating a gralph PRD in markdown. The output must be spec-compliant and grounded in the repository.\n\nProject directory: {dir}\n\nGoal:\n{goal}\n\nConstraints:\n{constraints}\n\nDetected stack summary (from repository files):\n{stack_summary}\n\nSources (authoritative URLs or references):\n{sources}\n\nWarnings (only include in the PRD if Sources is empty):\n{warnings}\n\nContext files (read these first if present):\n{context}\n\n## PRD Specification\n\nYou MUST follow these validation rules exactly. Any violation will cause the PRD to fail validation:\n\n{spec}\n\nRequirements:\n- Output only the PRD markdown with no commentary or code fences.\n- Use ASCII only.\n- Do not include an \"Open Questions\" section.\n- Do not use any checkboxes outside task blocks.\n- Context Bundle entries must be real files in the repo and must be selected from the Context files list above.\n- If a task creates new files, do not list the new files in Context Bundle; cite the closest existing files instead.\n- Use atomic, granular tasks grounded in the repo and context files.\n- Each task block must use a '### Task <ID>' header and include **ID**, **Context Bundle**, **DoD**, **Checklist**, **Dependencies**.\n- Each task block must contain exactly one unchecked task line like '- [ ] <ID> <summary>'.\n- If Sources is empty, include a 'Warnings' section with the warning text above and no checkboxes.\n- Do not invent stack, frameworks, or files not supported by the context files and stack summary.\n\nTemplate:\n{template}\n",
+        dir = target_dir.display(),
+        goal = goal,
+        constraints = constraints,
+        stack_summary = stack_summary,
+        sources = sources_section,
+        warnings = warnings_section,
+        context = context_section,
+        spec = spec_text,
+        template = template_text
+    );
+
+    // Get max retries from CLI, config, or use default
+    let max_retries = args
+        .max_retries
+        .or_else(|| {
+            config
+                .get("defaults.prd_create_max_retries")
+                .and_then(|v| v.parse::<u32>().ok())
+        })
+        .unwrap_or(DEFAULT_PRD_CREATE_MAX_RETRIES);
+
+    log_to_file(
+        log_file,
+        &format!(
+            "Running backend iteration with up to {} retries...",
+            max_retries
+        ),
+    );
+
+    let allowed_context_file = write_allowed_context(&context_files)?;
+
+    let result = prd_create_with_retry(
+        backend.as_ref(),
+        &prompt,
+        model.as_deref(),
+        args.variant.as_deref(),
+        target_dir,
+        target_dir,
+        allowed_context_file.as_deref(),
+        args.allow_missing_context,
+        max_retries,
+    )?;
+
+    // Handle result based on validation status
+    if let Some(errors) = result.validation_errors {
+        let invalid_path = invalid_prd_path(&output_path, args.force);
+        fs::write(&invalid_path, &result.content).map_err(CliError::Io)?;
+        return Err(CliError::Message(format!(
+            "Generated PRD failed validation after {} retries. Saved to {}. Details:\n{}",
+            max_retries,
+            invalid_path.display(),
+            errors
+        )));
+    }
+
+    fs::write(&output_path, &result.content).map_err(CliError::Io)?;
+    log_to_file(log_file, "PRD validation passed.");
+    Ok(output_path)
+}
+
+fn update_session_state(store: &crate::state::StateStore, name: &str, status: &str) {
+    let _ = store.set_session(name, &[("status", status)]);
+}
+
+fn log_to_file(path: &Path, message: &str) {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        let _ = writeln!(file, "[{}] {}", timestamp, message);
     }
 }
 
@@ -106,7 +294,15 @@ pub(super) fn cmd_prd_check(args: PrdCheckArgs) -> Result<(), CliError> {
 pub(super) fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
     let target_dir = args
         .dir
+        .clone()
         .unwrap_or_else(|| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let target_dir = if target_dir.is_absolute() {
+        target_dir
+    } else {
+        env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(&target_dir)
+    };
     if !target_dir.is_dir() {
         return Err(CliError::Message(format!(
             "Directory does not exist: {}",
@@ -114,18 +310,17 @@ pub(super) fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
         )));
     }
 
-    let goal = args
-        .goal
-        .clone()
-        .ok_or_else(|| CliError::Message("Goal is required. Use --goal.".to_string()))?;
+    // Validate goal upfront before spawning background process
+    if args.goal.is_none() {
+        return Err(CliError::Message(
+            "Goal is required. Use --goal.".to_string(),
+        ));
+    }
 
-    let constraints = args
-        .constraints
-        .clone()
-        .unwrap_or_else(|| "None.".to_string());
-
+    // Validate output path upfront
     let output_path = resolve_prd_output(&target_dir, args.output.clone(), args.force)?;
 
+    // Check backend is available
     let config =
         Config::load(Some(&target_dir)).map_err(|err| CliError::Message(err.to_string()))?;
     let backend_name = args
@@ -133,11 +328,6 @@ pub(super) fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
         .clone()
         .or_else(|| config.get("defaults.backend"))
         .unwrap_or_else(|| "claude".to_string());
-    let mut model = args.model.clone().or_else(|| config.get("defaults.model"));
-    if model.as_deref().unwrap_or("").is_empty() && backend_name == "opencode" {
-        model = config.get("opencode.default_model");
-    }
-
     let backend = backend_from_name(&backend_name).map_err(CliError::Message)?;
     if !backend.check_installed() {
         return Err(CliError::Message(format!(
@@ -146,86 +336,223 @@ pub(super) fn cmd_prd_create(args: PrdCreateArgs) -> Result<(), CliError> {
         )));
     }
 
-    let stack = prd::prd_detect_stack(&target_dir);
-    let stack_summary = prd::prd_format_stack_summary(&stack, 2);
+    ensure_tmux_available()?;
+    let session_name = prd_session_name(&target_dir)?;
+    let tmux_session = unique_prd_tmux_session_name(&session_name)?;
 
-    let context_files = build_context_file_list(
-        &target_dir,
-        args.context.as_deref(),
-        config.get("defaults.context_files").as_deref(),
-    );
-    let context_section = if context_files.is_empty() {
-        "None.".to_string()
+    let gralph_dir = target_dir.join(".gralph");
+    fs::create_dir_all(&gralph_dir).map_err(CliError::Io)?;
+    let log_file = gralph_dir.join(format!("{}.log", session_name));
+
+    let _child = spawn_prd_run(&args, &target_dir, &session_name, &tmux_session)?;
+
+    // Get the actual PID of the process running inside tmux with exponential backoff
+    let pane_pid = get_tmux_pane_pid_with_retry(&tmux_session);
+
+    let store = StateStore::new_from_env();
+    store
+        .init_state()
+        .map_err(|err| CliError::Message(err.to_string()))?;
+
+    let now = chrono::Local::now().to_rfc3339();
+    store
+        .set_session(
+            &session_name,
+            &[
+                ("dir", &target_dir.to_string_lossy()),
+                ("pid", &pane_pid),
+                ("tmux_session", &tmux_session),
+                ("started_at", &now),
+                ("status", "running"),
+                ("log_file", &log_file.to_string_lossy()),
+                ("output_file", &output_path.to_string_lossy()),
+                ("type", "prd"),
+            ],
+        )
+        .map_err(|err| CliError::Message(err.to_string()))?;
+
+    let pid_msg = if pane_pid.is_empty() {
+        "unknown".to_string()
     } else {
-        context_files.join("\n")
+        pane_pid.clone()
     };
+    println!("PRD generation started in background (PID: {}).", pid_msg);
+    println!("Session: {}", session_name);
+    println!("Tmux session: {}", tmux_session);
+    println!("Output: {}", output_path.display());
+    println!("Logs: {}", log_file.display());
+    println!("Check status: gralph status");
+    Ok(())
+}
 
-    let sources_section = match args.sources.as_deref() {
-        Some(value) if !value.trim().is_empty() => normalize_csv(value).join("\n"),
-        _ => "None.".to_string(),
-    };
+fn ensure_tmux_available() -> Result<(), CliError> {
+    let status = ProcCommand::new("tmux")
+        .arg("-V")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    match status {
+        Ok(status) if status.success() => Ok(()),
+        Ok(_) => Err(CliError::Message(
+            "tmux is required; install tmux and try again".to_string(),
+        )),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Err(CliError::Message(
+            "tmux is required but was not found on PATH".to_string(),
+        )),
+        Err(err) => Err(CliError::Message(format!(
+            "failed to check tmux availability: {}",
+            err
+        ))),
+    }
+}
 
-    let warnings_section = if sources_section == "None." {
-        "No reliable external sources were provided. Verify requirements and stack assumptions before implementation."
-            .to_string()
+/// Get the PID of the process running in a tmux session's pane.
+fn get_tmux_pane_pid(tmux_session: &str) -> Option<String> {
+    let output = ProcCommand::new("tmux")
+        .args(["list-panes", "-t", tmux_session, "-F", "#{pane_pid}"])
+        .output()
+        .ok()?;
+
+    if output.status.success() {
+        let pid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if pid.is_empty() { None } else { Some(pid) }
     } else {
-        "None.".to_string()
-    };
+        None
+    }
+}
 
-    let template_text = read_prd_template(&target_dir)?;
-    let spec_text = read_prd_spec(&target_dir)?;
-    let prompt = format!(
-        "You are generating a gralph PRD in markdown. The output must be spec-compliant and grounded in the repository.\n\nProject directory: {dir}\n\nGoal:\n{goal}\n\nConstraints:\n{constraints}\n\nDetected stack summary (from repository files):\n{stack_summary}\n\nSources (authoritative URLs or references):\n{sources}\n\nWarnings (only include in the PRD if Sources is empty):\n{warnings}\n\nContext files (read these first if present):\n{context}\n\n## PRD Specification\n\nYou MUST follow these validation rules exactly. Any violation will cause the PRD to fail validation:\n\n{spec}\n\nRequirements:\n- Output only the PRD markdown with no commentary or code fences.\n- Use ASCII only.\n- Do not include an \"Open Questions\" section.\n- Do not use any checkboxes outside task blocks.\n- Context Bundle entries must be real files in the repo and must be selected from the Context files list above.\n- If a task creates new files, do not list the new files in Context Bundle; cite the closest existing files instead.\n- Use atomic, granular tasks grounded in the repo and context files.\n- Each task block must use a '### Task <ID>' header and include **ID**, **Context Bundle**, **DoD**, **Checklist**, **Dependencies**.\n- Each task block must contain exactly one unchecked task line like '- [ ] <ID> <summary>'.\n- If Sources is empty, include a 'Warnings' section with the warning text above and no checkboxes.\n- Do not invent stack, frameworks, or files not supported by the context files and stack summary.\n\nTemplate:\n{template}\n",
-        dir = target_dir.display(),
-        goal = goal,
-        constraints = constraints,
-        stack_summary = stack_summary,
-        sources = sources_section,
-        warnings = warnings_section,
-        context = context_section,
-        spec = spec_text,
-        template = template_text
-    );
+/// Get the PID of the process running in a tmux session's pane with exponential backoff.
+/// Retries up to 3 times with delays of 100ms, 200ms, and 400ms.
+fn get_tmux_pane_pid_with_retry(tmux_session: &str) -> String {
+    let delays = [100, 200, 400];
+    for delay_ms in delays {
+        std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+        if let Some(pid) = get_tmux_pane_pid(tmux_session) {
+            return pid;
+        }
+    }
+    String::new()
+}
 
-    // Get max retries from CLI, config, or use default
-    let max_retries = args
-        .max_retries
-        .or_else(|| {
-            config
-                .get("defaults.prd_create_max_retries")
-                .and_then(|v| v.parse::<u32>().ok())
+fn prd_session_name(target_dir: &Path) -> Result<String, CliError> {
+    let dir_name = target_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("prd");
+    let sanitized = dir_name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '-' {
+                c
+            } else {
+                '-'
+            }
         })
-        .unwrap_or(DEFAULT_PRD_CREATE_MAX_RETRIES);
+        .collect::<String>();
+    let base = if sanitized.is_empty() || sanitized == "-" {
+        "prd".to_string()
+    } else {
+        format!("prd-{}", sanitized)
+    };
+    Ok(base)
+}
 
-    let allowed_context_file = write_allowed_context(&context_files)?;
+fn unique_prd_tmux_session_name(base: &str) -> Result<String, CliError> {
+    let timestamp = super::worktree::worktree_timestamp_slug();
+    let mut candidate = if base.trim().is_empty() {
+        format!("gralph-prd-{}", timestamp)
+    } else {
+        format!("{}-{}", base, timestamp)
+    };
+    let base_candidate = candidate.clone();
+    let mut suffix = 2;
+    while tmux_session_exists(&candidate)? {
+        candidate = format!("{}-{}", base_candidate, suffix);
+        suffix += 1;
+    }
+    Ok(candidate)
+}
 
-    let result = prd_create_with_retry(
-        backend.as_ref(),
-        &prompt,
-        model.as_deref(),
-        args.variant.as_deref(),
-        &target_dir,
-        &target_dir,
-        allowed_context_file.as_deref(),
-        args.allow_missing_context,
-        max_retries,
-    )?;
+fn tmux_session_exists(name: &str) -> Result<bool, CliError> {
+    let status = ProcCommand::new("tmux")
+        .arg("has-session")
+        .arg("-t")
+        .arg(name)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    match status {
+        Ok(status) => Ok(status.success()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Err(CliError::Message(
+            "tmux is required but was not found on PATH".to_string(),
+        )),
+        Err(err) => Err(CliError::Message(format!(
+            "failed to check tmux session: {}",
+            err
+        ))),
+    }
+}
 
-    // Handle result based on validation status
-    if let Some(errors) = result.validation_errors {
-        let invalid_path = invalid_prd_path(&output_path, args.force);
-        fs::write(&invalid_path, &result.content).map_err(CliError::Io)?;
-        return Err(CliError::Message(format!(
-            "Generated PRD failed validation after {} retries. Saved to {}. Details:\n{}",
-            max_retries,
-            invalid_path.display(),
-            errors
-        )));
+fn spawn_prd_run(
+    args: &PrdCreateArgs,
+    target_dir: &Path,
+    session_name: &str,
+    tmux_session: &str,
+) -> Result<std::process::Child, CliError> {
+    let exe = env::current_exe().map_err(CliError::Io)?;
+
+    let mut cmd = ProcCommand::new("tmux");
+    cmd.arg("new-session")
+        .arg("-d")
+        .arg("-s")
+        .arg(tmux_session)
+        .arg(&exe)
+        .arg("prd")
+        .arg("run")
+        .arg(target_dir.to_string_lossy().as_ref())
+        .arg("--name")
+        .arg(session_name);
+
+    if let Some(output) = &args.output {
+        cmd.arg("--output").arg(output);
+    }
+    if let Some(goal) = &args.goal {
+        cmd.arg("--goal").arg(goal);
+    }
+    if let Some(constraints) = &args.constraints {
+        cmd.arg("--constraints").arg(constraints);
+    }
+    if let Some(context) = &args.context {
+        cmd.arg("--context").arg(context);
+    }
+    if let Some(sources) = &args.sources {
+        cmd.arg("--sources").arg(sources);
+    }
+    if let Some(backend) = &args.backend {
+        cmd.arg("--backend").arg(backend);
+    }
+    if let Some(model) = &args.model {
+        cmd.arg("--model").arg(model);
+    }
+    if let Some(variant) = &args.variant {
+        cmd.arg("--variant").arg(variant);
+    }
+    if let Some(max_retries) = args.max_retries {
+        cmd.arg("--max-retries").arg(max_retries.to_string());
+    }
+    if args.allow_missing_context {
+        cmd.arg("--allow-missing-context");
+    }
+    if args.force {
+        cmd.arg("--force");
     }
 
-    fs::write(&output_path, &result.content).map_err(CliError::Io)?;
-    println!("PRD created: {}", output_path.display());
-    Ok(())
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+
+    cmd.spawn()
+        .map_err(|err| CliError::Message(format!("Failed to start PRD generation: {}", err)))
 }
 
 /// Result of a single PRD generation attempt.
@@ -605,10 +932,10 @@ pub(super) fn default_context_files() -> [&'static str; 5] {
 }
 
 pub(super) fn is_markdown_path(path: &Path) -> bool {
-    match path.extension().and_then(|ext| ext.to_str()) {
-        Some("md") | Some("markdown") => true,
-        _ => false,
-    }
+    matches!(
+        path.extension().and_then(|ext| ext.to_str()),
+        Some("md") | Some("markdown")
+    )
 }
 
 pub(super) fn format_display_path(path: &Path, base: &Path) -> String {
@@ -666,11 +993,9 @@ pub(super) fn build_context_file_list(
     let mut entries: Vec<String> = Vec::new();
     let mut seen: BTreeMap<String, bool> = BTreeMap::new();
 
-    for raw in [config_list, user_list] {
-        if let Some(list) = raw {
-            for item in normalize_csv(list) {
-                add_context_entry(target_dir, &item, &mut entries, &mut seen);
-            }
+    for list in [config_list, user_list].into_iter().flatten() {
+        for item in normalize_csv(list) {
+            add_context_entry(target_dir, &item, &mut entries, &mut seen);
         }
     }
 

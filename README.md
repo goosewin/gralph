@@ -132,6 +132,14 @@ It is warning-only, does not change `verifier.coverage_min`, and never blocks
 merges. The target was staged from 65 to 70 percent during ramp-up, then raised
 to 80 percent after coverage stayed stable for at least two consecutive cycles.
 
+**Additional verifier config options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `verifier.fmt_command` | `cargo fmt --check` | Format check command for Rust stacks. If check fails, runs `cargo fmt` and auto-commits. Skipped for non-Rust stacks. |
+| `verifier.delete_prd_on_complete` | `true` | Delete task PRD file from final commit before PR creation. |
+| `verifier.post_prd_comment` | `true` | Post PRD content as PR comment for review context. Truncated to 65000 chars if needed. |
+
 ## Commit Conventions
 
 Use lower-case conventional commits for all loop work and verifier-generated

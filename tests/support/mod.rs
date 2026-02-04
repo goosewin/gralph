@@ -3,11 +3,13 @@ use std::io;
 use std::path::Path;
 use tempfile::TempDir;
 
+#[allow(dead_code)]
 pub struct FakeCli {
     temp_dir: TempDir,
     bin_name: String,
 }
 
+#[allow(dead_code)]
 impl FakeCli {
     pub fn new(name: &str, stdout: &str, stderr: &str, exit_code: i32) -> io::Result<Self> {
         let temp_dir = tempfile::tempdir()?;
@@ -63,6 +65,7 @@ impl FakeCli {
     }
 }
 
+#[allow(dead_code)]
 fn script_name(name: &str) -> String {
     if cfg!(windows) {
         format!("{}.cmd", name)
@@ -71,6 +74,7 @@ fn script_name(name: &str) -> String {
     }
 }
 
+#[allow(dead_code)]
 fn render_script(stdout: &str, stderr: &str, exit_code: i32) -> String {
     if cfg!(windows) {
         render_windows_script(stdout, stderr, exit_code)
@@ -79,12 +83,14 @@ fn render_script(stdout: &str, stderr: &str, exit_code: i32) -> String {
     }
 }
 
+#[allow(dead_code)]
 fn render_unix_script(stdout: &str, stderr: &str, exit_code: i32) -> String {
     format!(
         "#!/bin/sh\ncat <<'STDOUT'\n{stdout}\nSTDOUT\ncat <<'STDERR' 1>&2\n{stderr}\nSTDERR\nexit {exit_code}\n"
     )
 }
 
+#[allow(dead_code)]
 fn render_windows_script(stdout: &str, stderr: &str, exit_code: i32) -> String {
     let mut script = String::from("@echo off\r\n");
     for line in stdout.lines() {
