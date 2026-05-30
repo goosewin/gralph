@@ -1,0 +1,11 @@
+when:
+  event: [push, pull_request, manual]
+
+steps:
+  critical:
+    image: rust:1-bookworm
+    commands:
+      - rustup component add rustfmt clippy
+      - cargo fmt --all -- --check
+      - cargo clippy --all-targets --all-features -- -D warnings
+      - cargo test --all-features
